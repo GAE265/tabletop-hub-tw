@@ -1,0 +1,31 @@
+flowchart TD
+    A["1. 開功能分支，開 Draft MR<br/>這時還沒有程式碼"]:::neutral
+    B["2. 列測試案例表格<br/>組員確認「要做對什麼」"]:::human
+    C["3. 寫測試程式並提交<br/>結果是紅燈，這是正常的"]:::red
+    D["4. 寫功能<br/>目標：讓紅燈變綠燈"]:::green
+    E{"5. 發 MR 前自我檢查<br/>全部綠燈了嗎？<br/>ruff、pytest、flutter"}:::green
+    F["6. 改成 Ready for review<br/>CI 自動重新檢查"]:::human
+    G["7. CI 通過 + 組員審核<br/>合併到 dev"]:::neutral
+
+    A --> B --> C --> D --> E
+    E -- "還有紅燈" --> D
+    E -- "全部綠燈" --> F --> G
+
+    subgraph draft ["Draft 期間：紅燈沒關係"]
+        A
+        B
+        C
+        D
+        E
+    end
+    subgraph ready ["Ready 之後：必須全部綠燈"]
+        F
+        G
+    end
+
+    style draft fill:#FFFFFF,stroke:#993C1D,stroke-dasharray:5 5
+    style ready fill:#FFFFFF,stroke:#0F6E56,stroke-dasharray:5 5
+    classDef neutral fill:#F1EFE8,stroke:#5F5E5A,color:#2C2C2A
+    classDef human fill:#EEEDFE,stroke:#534AB7,color:#26215C
+    classDef red fill:#FAECE7,stroke:#993C1D,color:#4A1B0C
+    classDef green fill:#E1F5EE,stroke:#0F6E56,color:#04342C

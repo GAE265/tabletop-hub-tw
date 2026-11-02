@@ -1,32 +1,22 @@
 schema: spec-driven
 
-# Project context (optional)
-# Add only constraints that should guide OpenSpec artifacts and workflows.
-# Include constraints an agent cannot infer by reading the code.
-# Keep general project documentation and discoverable codebase facts out.
-# Example:
-#   context: |
-#     Designs and tasks must cover Windows, macOS, and Linux
-#     Write all artifacts in Spanish
+context: |
+  所有團隊規則以根目錄的 AGENTS.md 為準，與本檔衝突時以 AGENTS.md 為準。
 
-# Per-artifact rules (optional)
-# Add custom rules for specific artifacts.
-# Example:
-#   rules:
-#     proposal:
-#       - Keep proposals under 500 words
-#       - Always state what is out of scope
-#     tasks:
-#       - Break tasks into chunks of max 2 hours
+  遊任有娛（tabletop-hub-tw）：桌遊三方平台（玩家、開團主、桌遊店）。
+  - 後端：Python 3.12、FastAPI、SQLAlchemy 2、Alembic
+  - 前端：Flutter（先做 Web，之後出 Android／iOS）
+  - 資料庫：PostgreSQL 16 + pgvector
 
-# Per-operation guidance (optional)
-# Add advisory guidance for how apply and archive work should be conducted.
-# This is separate from artifact rules above.
-# Example:
-#   operations:
-#     apply:
-#       guidance:
-#         - Keep test summaries concise
-#     archive:
-#       guidance:
-#         - Summarize the archive outcome before finishing
+rules:
+  proposal:
+    - 標明受影響的 domain 與主責（AGENTS.md 第 3 節）；動到共用區要寫出原因（第 2 節規則 3）
+    - 標明是否改動契約與是否含 migration（第 4.3、4.4、7.1 節）
+  specs:
+    - 每個 scenario 就是測試案例，涵蓋項目依 AGENTS.md 第 7.2、7.3 節
+    - 命名依第 10 節術語表；權限情境依第 4.5 節
+  design:
+    - 遵守第 4.2 節（後端依賴方向與 LLM 介面）與第 5.3 節（前端分層）
+  tasks:
+    - 依第 7.2 節，測試案例與測試程式排在功能實作之前
+    - 發 MR 前自我檢查依第 2 節規則 7 與第 8.3 節
