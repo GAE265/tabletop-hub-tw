@@ -332,6 +332,10 @@ main  ← 只放可以 Demo 的版本，由組長（新善）從 dev 合併
 
 - **從 `dev` 開分支，MR 合併回 `dev`。** 至少一位其他組員審核通過才能合併；動到 API 契約的 MR 要 @ 系統整合主責（立倫）；有 migration 的 MR 要 @ 瑋鋐。
 - **`dev` 合併到 `main` 只由組長執行**，合併前確認 `dev` 上所有測試通過、可以正常啟動。
+- **合併方式：**
+  - 功能分支合併到 `dev`：使用 **Squash and merge**，整個 MR 壓成一個 commit，標題沿用 MR 標題（符合 8.2 的 commit 格式）。合併後刪除功能分支。
+  - `dev` 合併到 `main`：使用 **Create a merge commit**，不要用 Squash，否則 `main` 與 `dev` 的歷史會分岔。
+- 審核通過、CI 全綠後，由 MR 作者按下合併。
 - 不直接推到 `main` 或 `dev`。
 - 開分支前先 `git pull` 更新 `dev`，減少衝突。
 
