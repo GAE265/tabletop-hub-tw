@@ -30,7 +30,7 @@ LLM 目前先使用雲端 API，地端 LLM 列為加分項目，之後再做（�
 3. **只改你被指派的 domain。** 需要改別人的 domain 或共用區（`core/`、`integrations/`），在 MR 說明中寫出原因並 @ 該 domain 主責。
 4. **不擅自新增頂層資料夾或套件。** 新增第三方套件要在 MR 說明寫理由。
 5. **新功能與契約變更，先寫測試案例再寫程式。** 細節見第 7 節。
-6. **小步提交。** 一個 MR 只做一件事，盡量在 400 行變更以內。
+6. **一個 MR 只做一件事。** 一個 MR 裡可以有多個 commit，不限制變更行數；但不要把不相關的修改混在同一個 MR。
 7. **發 MR 前自我檢查：** 後端在 `backend/` 跑 `uv run ruff check .`、`uv run ruff format --check .`、`uv run pytest`；前端在 `frontend/` 跑 `flutter analyze`、`flutter test`。全部通過才能發 MR。功能分支開發途中的 commit 允許測試失敗（見 7.2）。
 8. **用語統一。** 程式命名與文件用詞依第 10 節術語表，不要自己發明同義詞。
 
