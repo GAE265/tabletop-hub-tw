@@ -41,7 +41,13 @@ uv run uvicorn app.main:create_app --factory --reload # http://localhost:8000/do
 
 `.env` 的 `AUTH_MODE` 請設為 `dev`。測試帳號只存在於後端的 `app/dev/`，前端身分切換器會從 `GET /api/v1/dev/users` 讀取。
 
-前端（`frontend/`）將在後續 MR 加入。
+前端（`frontend/`）將在後續 MR 加入。啟動時請固定 port，才會在後端 CORS 的允許清單內：
+
+```bash
+flutter run -d chrome --web-port 5000
+```
+
+後端允許的前端網址由 `.env` 的 `CORS_ALLOW_ORIGINS` 設定（逗號分隔，預設 `http://localhost:5000`）。
 
 ## 發 MR 前自我檢查
 

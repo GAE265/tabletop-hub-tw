@@ -3,6 +3,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import sessionmaker
 
 from app.core.config import Settings, get_settings
@@ -29,6 +30,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # LLM_PROVIDER 設錯時在啟動就明確報錯
     app.state.llm = get_llm_provider(settings.llm_provider)
 
+    if settings.cors_origins:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=settings.cors_origins,
+            allow_methods=["*"],
+            # 身分走標頭（開發用 X-Dev-User、正式用 Authorization），不使用 cookie
+            allow_headers=["X-Dev-User", "Authorization", "Content-Type", "Accept"],
+        )
     register_error_handlers(app)
     app.include_router(health_router, prefix=API_PREFIX)
 

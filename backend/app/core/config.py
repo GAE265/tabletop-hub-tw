@@ -22,6 +22,13 @@ class Settings(BaseSettings):
     dev_default_user_id: UUID = UUID("11111111-1111-4111-8111-111111111111")
     llm_provider: str = "fake"
     embedding_dim: int = 1536
+    # 允許跨來源呼叫 API 的前端網址，逗號分隔。預設是本機 Flutter Web 固定的 port；
+    # 部署時必須改成實際的前端網址
+    cors_allow_origins: str = "http://localhost:5000"
+
+    @property
+    def cors_origins(self) -> list[str]:
+        return [origin.strip() for origin in self.cors_allow_origins.split(",") if origin.strip()]
 
 
 @lru_cache
