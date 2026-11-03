@@ -4,7 +4,7 @@ context: |
   所有團隊規則以根目錄的 AGENTS.md 為準，與本檔衝突時以 AGENTS.md 為準。
 
   遊任有娛（tabletop-hub-tw）：桌遊三方平台（玩家、開團主、桌遊店）。
-  - 後端：Python 3.12、FastAPI、SQLAlchemy 2、Alembic
+  - 後端：Python 3.13、FastAPI、SQLAlchemy 2、Alembic
   - 前端：Flutter（先做 Web，之後出 Android／iOS）
   - 資料庫：PostgreSQL 16 + pgvector
 

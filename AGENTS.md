@@ -13,7 +13,7 @@
 
 | 元件 | 技術 | 資料夾 |
 |---|---|---|
-| 後端 API | Python 3.12、FastAPI、SQLAlchemy 2、Alembic | `backend/` |
+| 後端 API | Python 3.13、FastAPI、SQLAlchemy 2、Alembic | `backend/` |
 | 資料庫 | PostgreSQL 16 + pgvector（一般資料與向量放同一個資料庫、不同資料表） | `backend/migrations/` |
 | 前端 | Flutter（先做 Web，之後同一套程式出 Android／iOS） | `frontend/` |
 | 發牌機 | Python，跑在樹莓派 5，透過 MQTT 連後端 | `device/` |

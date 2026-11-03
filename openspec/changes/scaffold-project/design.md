@@ -2,7 +2,7 @@
 
 ## Context
 
-repo 為空殼（見 proposal.md - Why）。本機已有 uv 0.13、Docker 29、Python 3.13（專案要求 3.12，由 uv 管理）；Flutter 輸出異常，由使用者先自行處理。現有 `README.md` 僅 2 行。分層規則以 AGENTS.md 第 4、5 節為準（已更新：UUID 主鍵、同步 DB、seed 不進 migration、`app/dev/` 為唯一例外區且任何地方不得 import 它、`GET /api/v1/dev/users`、`core/dev/` 身分切換器讀 API、`health` 由立倫代管、共用區擁有者表），本設計只記錄骨架的具體選擇。
+repo 為空殼（見 proposal.md - Why）。本機已有 uv 0.13、Docker 29、Python 3.13（專案要求同為 3.13）；Flutter 輸出異常，由使用者先自行處理。現有 `README.md` 僅 2 行。分層規則以 AGENTS.md 第 4、5 節為準（已更新：UUID 主鍵、同步 DB、seed 不進 migration、`app/dev/` 為唯一例外區且任何地方不得 import 它、`GET /api/v1/dev/users`、`core/dev/` 身分切換器讀 API、`health` 由立倫代管、共用區擁有者表），本設計只記錄骨架的具體選擇。
 
 ## Goals / Non-Goals
 
@@ -94,7 +94,7 @@ device/
 
 | 位置 | 套件 | 目標版本 | 理由 |
 |---|---|---|---|
-| backend | Python | 3.12 | AGENTS.md 1 |
+| backend | Python | 3.13 | AGENTS.md 1 |
 | backend | fastapi, uvicorn[standard] | 最新穩定 | Web 框架與伺服器 |
 | backend | sqlalchemy | 2.x | AGENTS.md 1 |
 | backend | alembic | 最新穩定 | AGENTS.md 1 |

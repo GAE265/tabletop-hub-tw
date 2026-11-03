@@ -55,7 +55,7 @@
 ## 6. MR 3：device 與 device CI（@ 新善；於 MR 2 合併後從 dev 開分支）
 
 - [ ] 6.1 開 Draft MR 3 並貼上 `device-hardware-abstraction` 與 `ci-checks` 的 device 情境表格，驗證：Draft MR 存在且 @ 新善
-- [ ] 6.2 建立 `device/` README 與 `pyproject.toml`（含 ruff 設定），README 說明用途、測試指令，以及樹莓派上 `picamera2` 以 apt 安裝、虛擬環境需能讀取系統套件（`uv venv --system-site-packages`），驗證：README 含這三項，`uv.lock` 已加入追蹤
+- [ ] 6.2 建立 `device/` README 與 `pyproject.toml`（`requires-python = ">=3.13"`、含 ruff 設定），README 說明用途、測試指令，以及樹莓派上 `picamera2` 以 apt 安裝、虛擬環境需能讀取系統套件（`uv venv --system-site-packages`），驗證：README 含這三項，`uv.lock` 已加入追蹤
 - [ ] 6.3 撰寫測試：mock 攝影機回傳影格、mock 馬達記錄動作、上層只依賴介面，驗證：測試存在且失敗
 - [ ] 6.4 實作攝影機與馬達介面及 mock，驗證：6.3 的測試全過，`device/` 相依不含硬體套件，且在 Windows 開發機可執行
 - [ ] 6.5 在 `ci.yml` 加入 device job（`uv sync`、`ruff check`、`ruff format --check`、`pytest`），驗證：MR 3 上 device job 被觸發並通過；暫時引入失敗時 job 失敗且 backend／frontend job 仍照常執行

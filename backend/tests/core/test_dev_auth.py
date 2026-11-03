@@ -111,5 +111,6 @@ def test_as_player_has_no_shop(client: TestClient, as_player: CurrentUser) -> No
     assert body["shop_id"] == ""
 
 
-def test_settings_default_auth_mode_is_not_dev() -> None:
+def test_settings_default_auth_mode_is_not_dev(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("AUTH_MODE", raising=False)  # CI 會用環境變數設成 dev
     assert Settings(_env_file=None, database_url="postgresql+psycopg://u:p@h/d").auth_mode == "jwt"

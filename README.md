@@ -11,7 +11,7 @@
 
 | 資料夾 | 內容 |
 |---|---|
-| `backend/` | FastAPI + SQLAlchemy 2 + Alembic（Python 3.12，uv 管理） |
+| `backend/` | FastAPI + SQLAlchemy 2 + Alembic（Python 3.13，uv 管理） |
 | `frontend/` | Flutter（先做 Web） |
 | `device/` | 發牌機（樹莓派 5） |
 | `docs/`、`openspec/` | 規格、交接說明、API 說明 |
