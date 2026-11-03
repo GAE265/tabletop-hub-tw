@@ -19,7 +19,9 @@
 ## 需要安裝
 
 - [Docker](https://docs.docker.com/get-docker/)（PostgreSQL 16 + pgvector、Mosquitto）
-- [uv](https://docs.astral.sh/uv/)
+- [uv](https://docs.astral.sh/uv/)（Python 套件管理）
+  - Windows（PowerShell）：`powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"`
+  - Mac：`curl -LsSf https://astral.sh/uv/install.sh | sh`
 - Flutter **stable 3.41.4**（README 與 CI 使用同一版本；不使用 fvm）
 
 ## 本機啟動
@@ -41,7 +43,18 @@ uv run uvicorn app.main:create_app --factory --reload # http://localhost:8000/do
 
 `.env` 的 `AUTH_MODE` 請設為 `dev`。測試帳號只存在於後端的 `app/dev/`，前端身分切換器會從 `GET /api/v1/dev/users` 讀取。
 
-前端（`frontend/`）將在後續 MR 加入。
+```bash
+# 4. 前端（另開終端機；需先完成上面的後端步驟）
+cd frontend
+flutter pub get
+dart run build_runner build --delete-conflicting-outputs   # 產生 *.g.dart／*.freezed.dart（不提交）
+flutter run -d chrome --dart-define=API_BASE_URL=http://localhost:8000 --dart-define=SHOW_PROTOTYPES=true
+```
+
+- `API_BASE_URL`：後端位址，未指定時為 `http://localhost:8000`。
+- `SHOW_PROTOTYPES=true`：才會出現 `/proto/...` 參考畫面（例如 `/#/proto/health`）。
+- 開發建置會在畫面最上方顯示「開發身分」切換器（從 `GET /api/v1/dev/users` 讀取，需後端 `AUTH_MODE=dev` 並已 seed）；release 建置不會顯示。
+- 後端目前沒有設定 CORS，瀏覽器會擋下前端對 `localhost:8000` 的跨來源請求。暫時可在 `flutter run` 加 `--web-browser-flag="--disable-web-security"` 繞過，僅限本機開發。
 
 ## 發 MR 前自我檢查
 
