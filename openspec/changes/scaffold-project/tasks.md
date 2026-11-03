@@ -51,6 +51,7 @@
 - [ ] 5.7 撰寫 `docs/handoff/health.md`（依範本，含截圖），驗證：涵蓋範本所有欄位
 - [ ] 5.8 在 `ci.yml` 加入 frontend job（`subosito/flutter-action`，版本與 README 相同；`flutter analyze`、`flutter test`），驗證：MR 2 上 frontend job 被觸發並通過，且 README 與 `ci.yml` 版本字串一致
 - [ ] 5.9 自我檢查，驗證：本機 `flutter analyze`、`flutter test` 通過、CI 全綠；MR 加 `needs-ui`、改 Ready for review
+- [ ] 5.10 【人工操作，由新善在 GitHub 設定；AI 不執行】MR 2 合併到 `dev` 且 frontend job 實際跑過一次後，到 GitHub Settings → Rulesets，在 `main protect` 與 `dev protect` 兩條 ruleset 的必要檢查（Require status checks）中加入 frontend。原因：GitHub 只能選取實際跑過的檢查；若在檢查存在之前就設為必要，所有 MR 會一直卡在等待該檢查，無法合併。驗證：兩條 ruleset 的必要檢查都列有 frontend，且之後的 MR 會顯示並等待該檢查
 
 ## 6. MR 3：device 與 device CI（@ 新善；於 MR 2 合併後從 dev 開分支）
 
@@ -60,6 +61,7 @@
 - [ ] 6.4 實作攝影機與馬達介面及 mock，驗證：6.3 的測試全過，`device/` 相依不含硬體套件，且在 Windows 開發機可執行
 - [ ] 6.5 在 `ci.yml` 加入 device job（`uv sync`、`ruff check`、`ruff format --check`、`pytest`），驗證：MR 3 上 device job 被觸發並通過；暫時引入失敗時 job 失敗且 backend／frontend job 仍照常執行
 - [ ] 6.6 自我檢查，驗證：本機 device 的 ruff 與 pytest 通過、CI 三個 job 全綠；改 Ready for review
+- [ ] 6.7 【人工操作，由新善在 GitHub 設定；AI 不執行】MR 3 合併到 `dev` 且 device job 實際跑過一次後，到 GitHub Settings → Rulesets，在 `main protect` 與 `dev protect` 兩條 ruleset 的必要檢查（Require status checks）中加入 device。原因：GitHub 只能選取實際跑過的檢查；若在檢查存在之前就設為必要，所有 MR 會一直卡在等待該檢查，無法合併。驗證：兩條 ruleset 的必要檢查都列有 device，且之後的 MR 會顯示並等待該檢查
 
 ## 7. 整合驗收
 
