@@ -36,9 +36,9 @@
 - [x] 4.4 設定 Alembic，新增 `domains/auth/models.py`、`domains/booking/models.py`，產生並整理唯一的 migration（啟用 pgvector、兩表 UUID 主鍵、含 downgrade、不含種子資料），驗證：4.1 的 migration 測試全過
 - [x] 4.5 實作 `core/db.py`（同步 session）與 `domains/health/`（router／schemas／service／repository）並掛載，驗證：4.1 的 health 測試全過，且 `/docs` 顯示 `GET /api/v1/health`
 - [x] 4.6 實作 `app/dev/`（`accounts.py`、`seed.py`、`router.py`），`main.py` 在 `AUTH_MODE=dev` 時以 `importlib` 動態掛載，驗證：4.2、4.3 的測試全過，且依 README 步驟對本機 DB 實跑 seed 兩次結果相同、`curl /api/v1/dev/users` 回 3 筆
-- [ ] 4.7 新增 `.github/workflows/ci.yml` 與 backend job（pull_request 到 dev/main；`pgvector/pgvector:pg16` service；`ruff check`、`ruff format --check`、`pytest`；無秘密），驗證：Draft MR 1 上 backend job 被觸發並通過
-- [ ] 4.8 驗證 backend job 失敗路徑：在暫時分支引入格式錯誤，驗證：job 失敗，修正後轉綠（此提交不留在 MR）
-- [ ] 4.9 自我檢查，驗證：本機 `uv run ruff check .`、`uv run ruff format --check .`、`uv run pytest` 通過、CI 全綠；MR 標明含 migration、改 Ready for review
+- [x] 4.7 新增 `.github/workflows/ci.yml` 與 backend job（pull_request 到 dev/main；`pgvector/pgvector:pg16` service；`ruff check`、`ruff format --check`、`pytest`；無秘密），驗證：Draft MR 1 上 backend job 被觸發並通過
+- [x] 4.8 驗證 backend job 失敗路徑：在暫時分支引入格式錯誤，驗證：job 失敗，修正後轉綠（此提交不留在 MR）
+- [x] 4.9 自我檢查，驗證：本機 `uv run ruff check .`、`uv run ruff format --check .`、`uv run pytest` 通過、CI 全綠；MR 標明含 migration、改 Ready for review
 
 ## 5. MR 2：前端與 frontend CI（@ 永傑；於 MR 1 合併後從 dev 開分支）
 
