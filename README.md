@@ -19,19 +19,52 @@
 ## 需要安裝
 
 - [Docker](https://docs.docker.com/get-docker/)（PostgreSQL 16 + pgvector、Mosquitto）
-- [uv](https://docs.astral.sh/uv/)
+  - Windows／Mac 執行 `docker compose` 前，**要先打開 Docker Desktop** 並等它顯示執行中，否則指令會連不上 Docker。
+- [uv](https://docs.astral.sh/uv/)（Python 套件管理）
+  - Windows（PowerShell）：`powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"`
+  - Mac：`curl -LsSf https://astral.sh/uv/install.sh | sh`
 - Flutter **stable 3.41.4**（README 與 CI 使用同一版本；不使用 fvm）
 
 ## 本機啟動
 
+### 1. 建立並填寫 `.env`（只有第一次要做）
+
+只在 `.env` 不存在時才複製，避免覆蓋已設定好的檔案。從 repo 根目錄執行：
+
+```powershell
+# Windows（PowerShell）
+if (-not (Test-Path .env)) { Copy-Item .env.example .env }
+```
+
 ```bash
-# 1. 設定檔：複製後填入本機值（.env 不會被提交）
-cp .env.example .env
+# Mac／Linux
+[ -f .env ] || cp .env.example .env
+```
 
-# 2. 資料庫與 MQTT
+`.env.example` 依規則只有欄位名、沒有值，複製後請自行填入。本機開發**必須**設定：
+
+| 欄位 | 填法 |
+|---|---|
+| `POSTGRES_USER`、`POSTGRES_PASSWORD`、`POSTGRES_DB` | 自己決定。`docker compose` 建立資料庫時會用這三個值 |
+| `POSTGRES_PORT` | 本機對外埠號，一般填 `5432` |
+| `DATABASE_URL` | 格式 `postgresql+psycopg://<user>:<password>@localhost:<port>/<db>`，其中 `<user>`、`<password>`、`<db>`、`<port>` 要與上面的 `POSTGRES_USER`、`POSTGRES_PASSWORD`、`POSTGRES_DB`、`POSTGRES_PORT` **完全一致** |
+| `AUTH_MODE` | 填 `dev` |
+
+其餘欄位（`LLM_PROVIDER`、`EMBEDDING_DIM`、`CORS_ALLOW_ORIGINS`、`MQTT_*` 等）本機可留空，程式有預設值。**不要把真實密碼寫進 README 或提交 `.env`。**
+
+> 資料庫第一次啟動後，帳號、密碼、資料庫名稱就寫進資料卷了。之後改 `.env` 裡的這三個值不會生效，需要先 `docker compose down -v`（會清空資料庫）再重新啟動。
+
+### 2. 資料庫與 MQTT
+
+先確認 Docker Desktop 已開啟，再從 repo 根目錄執行：
+
+```bash
 docker compose up -d
+```
 
-# 3. 後端
+### 3. 後端
+
+```bash
 cd backend
 uv sync
 uv run alembic upgrade head
@@ -39,21 +72,102 @@ uv run python -m app.dev.seed        # 建立開發用測試帳號（player / sh
 uv run uvicorn app.main:create_app --factory --reload # http://localhost:8000/docs
 ```
 
-`.env` 的 `AUTH_MODE` 請設為 `dev`。測試帳號只存在於後端的 `app/dev/`，前端身分切換器會從 `GET /api/v1/dev/users` 讀取。
+測試帳號只存在於後端的 `app/dev/`，前端身分切換器會從 `GET /api/v1/dev/users` 讀取。
 
-前端（`frontend/`）將在後續 MR 加入。啟動時請固定 port，才會在後端 CORS 的允許清單內：
+### 4. 前端
+
+另開終端機；需先完成上面的後端步驟。
 
 ```bash
-flutter run -d chrome --web-port 5000
+cd frontend
+flutter pub get
+dart run build_runner build --delete-conflicting-outputs   # 產生 *.g.dart／*.freezed.dart（不提交）
+flutter run -d chrome --web-port 5000 --dart-define=API_BASE_URL=http://localhost:8000 --dart-define=SHOW_PROTOTYPES=true
 ```
 
-後端允許的前端網址由 `.env` 的 `CORS_ALLOW_ORIGINS` 設定（逗號分隔，預設 `http://localhost:5000`）。
+- **拉下程式或切換分支後，要先在 `frontend/` 執行 `dart run build_runner build`**，否則缺少 `*.g.dart`／`*.freezed.dart` 會編譯失敗。
+- `--web-port 5000`：請固定 port，才會在後端 CORS 的允許清單內。後端允許的前端網址由 `.env` 的 `CORS_ALLOW_ORIGINS` 設定（逗號分隔，預設 `http://localhost:5000`）。
+- `API_BASE_URL`：後端位址，未指定時為 `http://localhost:8000`。
+- `SHOW_PROTOTYPES=true`：才會出現 `/proto/...` 參考畫面（例如 `/#/proto/health`）。
+- 開發建置會在畫面最上方顯示「開發身分」切換器（從 `GET /api/v1/dev/users` 讀取，需後端 `AUTH_MODE=dev` 並已 seed）；release 建置不會顯示。
+
+### 驗證身分切換
+
+用 Chrome 開發者工具確認切換有生效：按 F12 → Network → 點任一個對後端的請求 → Headers → Request Headers，找 `X-Dev-User`。用身分切換器換身分後再觸發請求，該標頭的值（`<user_uuid>:<role>[:<shop_uuid>]`）應該跟著改變。
+
+## 每天開工
+
+資料庫與測試帳號都會保留，每天只需要三步：
+
+```bash
+# repo 根目錄
+docker compose up -d                                              # 先確認 Docker Desktop 已開啟
+
+# 終端機 A
+cd backend
+uv run uvicorn app.main:create_app --factory --reload
+
+# 終端機 B
+cd frontend
+flutter run -d chrome --web-port 5000 --dart-define=API_BASE_URL=http://localhost:8000 --dart-define=SHOW_PROTOTYPES=true
+```
+
+只有以下情況才需要重跑：
+
+- 後端套件有變動（`pyproject.toml`／`uv.lock` 被改）：`uv sync`（在 `backend/`）。有新的 migration 時也要跑 `uv run alembic upgrade head`。
+- 測試帳號有變動：`uv run python -m app.dev.seed`（在 `backend/`，可重複執行）。
+
+## 結束時怎麼關
+
+1. 前端：在跑 `flutter run` 的終端機按 `q`。
+2. 後端：在跑 `uvicorn` 的終端機按 `Ctrl+C`。
+3. 資料庫與 MQTT（repo 根目錄）：`docker compose down`。資料庫資料會保留；**不要加 `-v`**，否則會連資料一起刪掉。
+
+## 常見問題
+
+**port 8000 或 5000 被占用**（啟動時出現 address already in use／無法綁定）：找出佔用的程式再停掉。
+
+```powershell
+# Windows（PowerShell）：把 8000 換成被占用的 port
+Get-NetTCPConnection -LocalPort 8000 -State Listen | Select-Object LocalPort, OwningProcess
+Get-Process -Id <OwningProcess>    # 確認是哪個程式
+Stop-Process -Id <OwningProcess>
+```
+
+```bash
+# Mac／Linux
+lsof -i :8000
+kill <PID>
+```
+
+**前端顯示連不上後端**：
+
+1. 後端是否已啟動：瀏覽器開 http://localhost:8000/docs 看得到畫面。
+2. 前端是否用 `--web-port 5000` 啟動（其他 port 不在 CORS 允許清單內，請求會被瀏覽器擋掉）。
+3. `--dart-define=API_BASE_URL` 是否指向後端位址。
+
+**切換分支後前端編譯失敗**：在 `frontend/` 重跑 `dart run build_runner build --delete-conflicting-outputs`。
 
 ## 發 MR 前自我檢查
 
+從 repo 根目錄出發，每一行都要通過。
+
+```powershell
+# Windows（PowerShell 5 不支援 &&，逐行執行並確認每行都通過）
+Set-Location backend
+uv run ruff check .
+uv run ruff format --check .
+uv run pytest
+Set-Location ../frontend
+flutter analyze
+flutter test
+Set-Location ..
+```
+
 ```bash
-cd backend && uv run ruff check . && uv run ruff format --check . && uv run pytest
-cd frontend && flutter analyze && flutter test
+# Mac／Linux
+(cd backend && uv run ruff check . && uv run ruff format --check . && uv run pytest)
+(cd frontend && flutter analyze && flutter test)
 ```
 
 ## 分支規則
