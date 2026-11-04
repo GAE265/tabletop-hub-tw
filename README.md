@@ -48,13 +48,14 @@ uv run uvicorn app.main:create_app --factory --reload # http://localhost:8000/do
 cd frontend
 flutter pub get
 dart run build_runner build --delete-conflicting-outputs   # 產生 *.g.dart／*.freezed.dart（不提交）
-flutter run -d chrome --dart-define=API_BASE_URL=http://localhost:8000 --dart-define=SHOW_PROTOTYPES=true
+flutter run -d chrome --web-port 5000 --dart-define=API_BASE_URL=http://localhost:8000 --dart-define=SHOW_PROTOTYPES=true
 ```
 
+- **拉下程式或切換分支後，要先在 `frontend/` 執行 `dart run build_runner build`**，否則缺少 `*.g.dart`／`*.freezed.dart` 會編譯失敗。
+- `--web-port 5000`：請固定 port，才會在後端 CORS 的允許清單內。後端允許的前端網址由 `.env` 的 `CORS_ALLOW_ORIGINS` 設定（逗號分隔，預設 `http://localhost:5000`）。
 - `API_BASE_URL`：後端位址，未指定時為 `http://localhost:8000`。
 - `SHOW_PROTOTYPES=true`：才會出現 `/proto/...` 參考畫面（例如 `/#/proto/health`）。
 - 開發建置會在畫面最上方顯示「開發身分」切換器（從 `GET /api/v1/dev/users` 讀取，需後端 `AUTH_MODE=dev` 並已 seed）；release 建置不會顯示。
-- 後端目前沒有設定 CORS，瀏覽器會擋下前端對 `localhost:8000` 的跨來源請求。暫時可在 `flutter run` 加 `--web-browser-flag="--disable-web-security"` 繞過，僅限本機開發。
 
 ## 發 MR 前自我檢查
 
