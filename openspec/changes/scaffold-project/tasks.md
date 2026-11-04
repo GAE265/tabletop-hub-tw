@@ -56,20 +56,21 @@
 
 ## 6. MR 3：device 與 device CI（@ 新善；於 MR 2 合併後從 dev 開分支）
 
-- [ ] 6.1 開 Draft MR 3 並貼上 `device-hardware-abstraction` 與 `ci-checks` 的 device 情境表格，驗證：Draft MR 存在且 @ 新善
+- [x] 6.1 開 Draft MR 3 並貼上 `device-hardware-abstraction` 與 `ci-checks` 的 device 情境表格，驗證：Draft MR 存在且 @ 新善
 - [x] 6.2 建立 `device/` README 與 `pyproject.toml`（`requires-python = ">=3.13"`、含 ruff 設定），README 說明用途、測試指令，以及樹莓派上 `picamera2` 以 apt 安裝、虛擬環境需能讀取系統套件（`uv venv --system-site-packages`），驗證：README 含這三項，`uv.lock` 已加入追蹤
 - [x] 6.3 撰寫測試：mock 攝影機回傳影格、mock 馬達記錄動作、上層只依賴介面，驗證：測試存在且失敗
 - [x] 6.4 實作攝影機與馬達介面及 mock，驗證：6.3 的測試全過，`device/` 相依不含硬體套件，且在 Windows 開發機可執行
-- [ ] 6.5 在 `ci.yml` 加入 device job（`uv sync`、`ruff check`、`ruff format --check`、`pytest`），驗證：MR 3 上 device job 被觸發並通過；暫時引入失敗時 job 失敗且 backend／frontend job 仍照常執行
-- [ ] 6.6 自我檢查，驗證：本機 device 的 ruff 與 pytest 通過、CI 三個 job 全綠；改 Ready for review
-- [ ] 6.7 【人工操作，由新善在 GitHub 設定；AI 不執行】MR 3 合併到 `dev` 且 device job 實際跑過一次後，到 GitHub Settings → Rulesets，在 `main protect` 與 `dev protect` 兩條 ruleset 的必要檢查（Require status checks）中加入 device。原因：GitHub 只能選取實際跑過的檢查；若在檢查存在之前就設為必要，所有 MR 會一直卡在等待該檢查，無法合併。驗證：兩條 ruleset 的必要檢查都列有 device，且之後的 MR 會顯示並等待該檢查
+- [x] 6.5 在 `ci.yml` 加入 device job（`uv sync`、`ruff check`、`ruff format --check`、`pytest`），驗證：MR 3 上 device job 被觸發並通過；暫時引入失敗時 job 失敗且 backend／frontend job 仍照常執行
+  - 註記：CI device job 已在 MR 3 實際執行並通過；失敗攔截已在 MR 1 驗證（見 4.8）。
+- [x] 6.6 自我檢查，驗證：本機 device 的 ruff 與 pytest 通過、CI 三個 job 全綠；改 Ready for review
+- [x] 6.7 【人工操作，由新善在 GitHub 設定；AI 不執行】MR 3 合併到 `dev` 且 device job 實際跑過一次後，到 GitHub Settings → Rulesets，在 `main protect` 與 `dev protect` 兩條 ruleset 的必要檢查（Require status checks）中加入 device。原因：GitHub 只能選取實際跑過的檢查；若在檢查存在之前就設為必要，所有 MR 會一直卡在等待該檢查，無法合併。驗證：兩條 ruleset 的必要檢查都列有 device，且之後的 MR 會顯示並等待該檢查
 
 ## 7. 整合驗收
 
 - [ ] 7.1 在乾淨 clone（Windows）依 README 指令順序走一次，驗證：DB、seed、後端 `/docs`、`/api/v1/dev/users`、前端 health 畫面與身分切換皆正常
-- [ ] 7.2 以 `AUTH_MODE=jwt` 啟動後端，驗證：`/api/v1/dev/users` 回 404，前端正式建置沒有切換器
-- [ ] 7.3 回填 design.md 套件版本表的實際版本，驗證：表內無「最新穩定」字樣
-- [ ] 7.4 列出改動檔案、已跑檢查與未完成項目（AGENTS.md 第 9 節），驗證：回覆含三項
+- [x] 7.2 以 `AUTH_MODE=jwt` 啟動後端，驗證：`/api/v1/dev/users` 回 404，前端正式建置沒有切換器
+- [x] 7.3 回填 design.md 套件版本表的實際版本，驗證：表內無「最新穩定」字樣
+- [x] 7.4 列出改動檔案、已跑檢查與未完成項目（AGENTS.md 第 9 節），驗證：回覆含三項
 
 ## Workflow follow-up
 
