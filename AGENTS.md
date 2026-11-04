@@ -413,3 +413,15 @@ scope 的寫法：
 | 成員 | `member` | 已加入某個揪團的玩家。開團主建立揪團時自動成為第一位成員，也計入人數 |
 | 報名 | — | 玩家加入揪團的**動作**，不是資料。API 為 `POST /api/v1/groups/{id}/members`，結果是新增一位成員，或在額滿時加入候補 |
 | 候補 | `waitlist` | 揪團人數額滿後，排隊等待遞補的玩家名單。有人退出時，依報名先後通知遞補。額滿時報名 API 的確切回應，由 `groups` 負責人在測試案例中定義 |
+
+## Agent skills
+以下設定給 mattpocock skills 使用（目前只有立倫使用）。組員照 OpenSpec 流程即可。
+
+### Issue tracker
+issue 與 spec 以 local markdown 存在 `.scratch/<feature>/`，不使用 GitHub Issues。詳見 `docs/agents/issue-tracker.md`。
+
+### Triage labels
+使用預設的五個 triage 角色（`needs-triage`、`needs-info`、`ready-for-agent`、`ready-for-human`、`wontfix`），寫在 ticket 檔的 `Status:` 行。詳見 `docs/agents/triage-labels.md`。
+
+### Domain docs
+single-context：正式術語以本檔 §10 為準，根目錄 `GLOSSARY.md` 只放提案中的術語，ADR 放在 `docs/adr/`。詳見 `docs/agents/domain.md`。
