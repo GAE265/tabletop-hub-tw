@@ -43,23 +43,23 @@
 
 ## 5. MR 2：前端與 frontend CI（@ 永傑；於 MR 1 合併後從 dev 開分支）
 
-- [ ] 5.1 開 Draft MR 2 並貼上 `frontend-shell` 情境表格，驗證：Draft MR 存在且 @ 永傑
+- [x] 5.1 開 Draft MR 2 並貼上 `frontend-shell` 情境表格，驗證：Draft MR 存在且 @ 永傑
 - [x] 5.2 `flutter create` 建立 `frontend/`（啟用 web），加入 flutter_riverpod、go_router、dio、freezed、json_serializable、build_runner 與 `analysis_options.yaml`，驗證：`flutter pub get`、`flutter analyze` 成功，`pubspec.lock` 已加入追蹤
 - [x] 5.3 撰寫測試：斷點邊界（599/600/1023/1024）、`SHOW_PROTOTYPES` 開／關路由、`X-Dev-User` 攔截器（開發帶／shop_staff 帶 `:<shop_id>`／正式不帶／清單未載入不帶）、切換器（從 API 載入、選取後標頭變更、載入失敗顯示錯誤與重試、空清單提示、正式環境不顯示且不呼叫 API）、原始碼不含測試帳號 UUID、health state（載入中／成功／錯誤），驗證：測試存在且失敗
 - [x] 5.4 實作 `core/layout/`、`core/api/`（含 `API_BASE_URL`）、`core/platform/` 介面、`core/dev/`（呼叫 `/api/v1/dev/users` 的 data／state、身分 provider、切換器 widget，僅開發環境），驗證：對應測試全過
 - [x] 5.5 實作 `domains/health/data/` 與 `state/`（freezed DTO、provider），驗證：health state 測試全過
 - [x] 5.6 實作 `app/` 路由與 `app/theme/`、`prototypes/health/`、`domains/health/pages/`，並在畫面框架掛上 `core/dev/` 切換器，驗證：`flutter test` 全過，`flutter run -d chrome`（後端 dev 模式且已 seed）手動確認參考畫面、正式頁面、身分切換皆可用
 - [x] 5.7 撰寫 `docs/handoff/health.md`（依範本，含截圖），驗證：涵蓋範本所有欄位
-- [ ] 5.8 在 `ci.yml` 加入 frontend job（`subosito/flutter-action`，版本與 README 相同；`flutter analyze`、`flutter test`），驗證：MR 2 上 frontend job 被觸發並通過，且 README 與 `ci.yml` 版本字串一致
-- [ ] 5.9 自我檢查，驗證：本機 `flutter analyze`、`flutter test` 通過、CI 全綠；MR 加 `needs-ui`、改 Ready for review
-- [ ] 5.10 【人工操作，由新善在 GitHub 設定；AI 不執行】MR 2 合併到 `dev` 且 frontend job 實際跑過一次後，到 GitHub Settings → Rulesets，在 `main protect` 與 `dev protect` 兩條 ruleset 的必要檢查（Require status checks）中加入 frontend。原因：GitHub 只能選取實際跑過的檢查；若在檢查存在之前就設為必要，所有 MR 會一直卡在等待該檢查，無法合併。驗證：兩條 ruleset 的必要檢查都列有 frontend，且之後的 MR 會顯示並等待該檢查
+- [x] 5.8 在 `ci.yml` 加入 frontend job（`subosito/flutter-action`，版本與 README 相同；`flutter analyze`、`flutter test`），驗證：MR 2 上 frontend job 被觸發並通過，且 README 與 `ci.yml` 版本字串一致
+- [x] 5.9 自我檢查，驗證：本機 `flutter analyze`、`flutter test` 通過、CI 全綠；MR 加 `needs-ui`、改 Ready for review
+- [x] 5.10 【人工操作，由新善在 GitHub 設定；AI 不執行】MR 2 合併到 `dev` 且 frontend job 實際跑過一次後，到 GitHub Settings → Rulesets，在 `main protect` 與 `dev protect` 兩條 ruleset 的必要檢查（Require status checks）中加入 frontend。原因：GitHub 只能選取實際跑過的檢查；若在檢查存在之前就設為必要，所有 MR 會一直卡在等待該檢查，無法合併。驗證：兩條 ruleset 的必要檢查都列有 frontend，且之後的 MR 會顯示並等待該檢查
 
 ## 6. MR 3：device 與 device CI（@ 新善；於 MR 2 合併後從 dev 開分支）
 
 - [ ] 6.1 開 Draft MR 3 並貼上 `device-hardware-abstraction` 與 `ci-checks` 的 device 情境表格，驗證：Draft MR 存在且 @ 新善
-- [ ] 6.2 建立 `device/` README 與 `pyproject.toml`（`requires-python = ">=3.13"`、含 ruff 設定），README 說明用途、測試指令，以及樹莓派上 `picamera2` 以 apt 安裝、虛擬環境需能讀取系統套件（`uv venv --system-site-packages`），驗證：README 含這三項，`uv.lock` 已加入追蹤
-- [ ] 6.3 撰寫測試：mock 攝影機回傳影格、mock 馬達記錄動作、上層只依賴介面，驗證：測試存在且失敗
-- [ ] 6.4 實作攝影機與馬達介面及 mock，驗證：6.3 的測試全過，`device/` 相依不含硬體套件，且在 Windows 開發機可執行
+- [x] 6.2 建立 `device/` README 與 `pyproject.toml`（`requires-python = ">=3.13"`、含 ruff 設定），README 說明用途、測試指令，以及樹莓派上 `picamera2` 以 apt 安裝、虛擬環境需能讀取系統套件（`uv venv --system-site-packages`），驗證：README 含這三項，`uv.lock` 已加入追蹤
+- [x] 6.3 撰寫測試：mock 攝影機回傳影格、mock 馬達記錄動作、上層只依賴介面，驗證：測試存在且失敗
+- [x] 6.4 實作攝影機與馬達介面及 mock，驗證：6.3 的測試全過，`device/` 相依不含硬體套件，且在 Windows 開發機可執行
 - [ ] 6.5 在 `ci.yml` 加入 device job（`uv sync`、`ruff check`、`ruff format --check`、`pytest`），驗證：MR 3 上 device job 被觸發並通過；暫時引入失敗時 job 失敗且 backend／frontend job 仍照常執行
 - [ ] 6.6 自我檢查，驗證：本機 device 的 ruff 與 pytest 通過、CI 三個 job 全綠；改 Ready for review
 - [ ] 6.7 【人工操作，由新善在 GitHub 設定；AI 不執行】MR 3 合併到 `dev` 且 device job 實際跑過一次後，到 GitHub Settings → Rulesets，在 `main protect` 與 `dev protect` 兩條 ruleset 的必要檢查（Require status checks）中加入 device。原因：GitHub 只能選取實際跑過的檢查；若在檢查存在之前就設為必要，所有 MR 會一直卡在等待該檢查，無法合併。驗證：兩條 ruleset 的必要檢查都列有 device，且之後的 MR 會顯示並等待該檢查
