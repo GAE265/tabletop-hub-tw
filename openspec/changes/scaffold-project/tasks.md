@@ -6,7 +6,7 @@
 
 - [x] 1.1 Flutter 已確認為 stable 3.41.4（Chrome 可用），README 與 CI 鎖定此版本，驗證：`flutter --version` 輸出為 3.41.4
 - [x] 1.2 確認 `uv --version`、`docker --version` 可用，驗證：指令輸出無錯誤
-- [ ] 1.3 從 `dev` 開分支（例如 `chore/scaffold-root-backend`）並開 Draft MR 1，說明貼入相關 specs 情境表格並 @ 立倫、瑋鋐，驗證：Draft MR 存在
+- [x] 1.3 從 `dev` 開分支（例如 `chore/scaffold-root-backend`）並開 Draft MR 1，說明貼入相關 specs 情境表格並 @ 立倫、瑋鋐，驗證：Draft MR 存在
 
 ## 2. MR 1-A：根目錄檔案
 
@@ -38,17 +38,18 @@
 - [x] 4.6 實作 `app/dev/`（`accounts.py`、`seed.py`、`router.py`），`main.py` 在 `AUTH_MODE=dev` 時以 `importlib` 動態掛載，驗證：4.2、4.3 的測試全過，且依 README 步驟對本機 DB 實跑 seed 兩次結果相同、`curl /api/v1/dev/users` 回 3 筆
 - [x] 4.7 新增 `.github/workflows/ci.yml` 與 backend job（pull_request 到 dev/main；`pgvector/pgvector:pg16` service；`ruff check`、`ruff format --check`、`pytest`；無秘密），驗證：Draft MR 1 上 backend job 被觸發並通過
 - [x] 4.8 驗證 backend job 失敗路徑：在暫時分支引入格式錯誤，驗證：job 失敗，修正後轉綠（此提交不留在 MR）
+  - 註記：以實際 CI 失敗驗證：`test_settings_default_auth_mode_is_not_dev` 受環境變數影響失敗時，CI 擋下合併。
 - [x] 4.9 自我檢查，驗證：本機 `uv run ruff check .`、`uv run ruff format --check .`、`uv run pytest` 通過、CI 全綠；MR 標明含 migration、改 Ready for review
 
 ## 5. MR 2：前端與 frontend CI（@ 永傑；於 MR 1 合併後從 dev 開分支）
 
 - [ ] 5.1 開 Draft MR 2 並貼上 `frontend-shell` 情境表格，驗證：Draft MR 存在且 @ 永傑
-- [ ] 5.2 `flutter create` 建立 `frontend/`（啟用 web），加入 flutter_riverpod、go_router、dio、freezed、json_serializable、build_runner 與 `analysis_options.yaml`，驗證：`flutter pub get`、`flutter analyze` 成功，`pubspec.lock` 已加入追蹤
-- [ ] 5.3 撰寫測試：斷點邊界（599/600/1023/1024）、`SHOW_PROTOTYPES` 開／關路由、`X-Dev-User` 攔截器（開發帶／shop_staff 帶 `:<shop_id>`／正式不帶／清單未載入不帶）、切換器（從 API 載入、選取後標頭變更、載入失敗顯示錯誤與重試、空清單提示、正式環境不顯示且不呼叫 API）、原始碼不含測試帳號 UUID、health state（載入中／成功／錯誤），驗證：測試存在且失敗
-- [ ] 5.4 實作 `core/layout/`、`core/api/`（含 `API_BASE_URL`）、`core/platform/` 介面、`core/dev/`（呼叫 `/api/v1/dev/users` 的 data／state、身分 provider、切換器 widget，僅開發環境），驗證：對應測試全過
-- [ ] 5.5 實作 `domains/health/data/` 與 `state/`（freezed DTO、provider），驗證：health state 測試全過
-- [ ] 5.6 實作 `app/` 路由與 `app/theme/`、`prototypes/health/`、`domains/health/pages/`，並在畫面框架掛上 `core/dev/` 切換器，驗證：`flutter test` 全過，`flutter run -d chrome`（後端 dev 模式且已 seed）手動確認參考畫面、正式頁面、身分切換皆可用
-- [ ] 5.7 撰寫 `docs/handoff/health.md`（依範本，含截圖），驗證：涵蓋範本所有欄位
+- [x] 5.2 `flutter create` 建立 `frontend/`（啟用 web），加入 flutter_riverpod、go_router、dio、freezed、json_serializable、build_runner 與 `analysis_options.yaml`，驗證：`flutter pub get`、`flutter analyze` 成功，`pubspec.lock` 已加入追蹤
+- [x] 5.3 撰寫測試：斷點邊界（599/600/1023/1024）、`SHOW_PROTOTYPES` 開／關路由、`X-Dev-User` 攔截器（開發帶／shop_staff 帶 `:<shop_id>`／正式不帶／清單未載入不帶）、切換器（從 API 載入、選取後標頭變更、載入失敗顯示錯誤與重試、空清單提示、正式環境不顯示且不呼叫 API）、原始碼不含測試帳號 UUID、health state（載入中／成功／錯誤），驗證：測試存在且失敗
+- [x] 5.4 實作 `core/layout/`、`core/api/`（含 `API_BASE_URL`）、`core/platform/` 介面、`core/dev/`（呼叫 `/api/v1/dev/users` 的 data／state、身分 provider、切換器 widget，僅開發環境），驗證：對應測試全過
+- [x] 5.5 實作 `domains/health/data/` 與 `state/`（freezed DTO、provider），驗證：health state 測試全過
+- [x] 5.6 實作 `app/` 路由與 `app/theme/`、`prototypes/health/`、`domains/health/pages/`，並在畫面框架掛上 `core/dev/` 切換器，驗證：`flutter test` 全過，`flutter run -d chrome`（後端 dev 模式且已 seed）手動確認參考畫面、正式頁面、身分切換皆可用
+- [x] 5.7 撰寫 `docs/handoff/health.md`（依範本，含截圖），驗證：涵蓋範本所有欄位
 - [ ] 5.8 在 `ci.yml` 加入 frontend job（`subosito/flutter-action`，版本與 README 相同；`flutter analyze`、`flutter test`），驗證：MR 2 上 frontend job 被觸發並通過，且 README 與 `ci.yml` 版本字串一致
 - [ ] 5.9 自我檢查，驗證：本機 `flutter analyze`、`flutter test` 通過、CI 全綠；MR 加 `needs-ui`、改 Ready for review
 - [ ] 5.10 【人工操作，由新善在 GitHub 設定；AI 不執行】MR 2 合併到 `dev` 且 frontend job 實際跑過一次後，到 GitHub Settings → Rulesets，在 `main protect` 與 `dev protect` 兩條 ruleset 的必要檢查（Require status checks）中加入 frontend。原因：GitHub 只能選取實際跑過的檢查；若在檢查存在之前就設為必要，所有 MR 會一直卡在等待該檢查，無法合併。驗證：兩條 ruleset 的必要檢查都列有 frontend，且之後的 MR 會顯示並等待該檢查
