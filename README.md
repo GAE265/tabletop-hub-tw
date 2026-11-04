@@ -5,6 +5,7 @@
 
 - 團隊規則：[AGENTS.md](AGENTS.md)（所有人與所有 AI 助理開工前必讀）
 - 測試案例優先流程：[docs/test-first-flow.md](docs/test-first-flow.md)
+- MR 審核指南：[docs/review-guide.md](docs/review-guide.md)（被指定為 Reviewer 時必讀）
 - 前端交接說明範本：[docs/handoff/_template.md](docs/handoff/_template.md)
 
 ## 專案結構
