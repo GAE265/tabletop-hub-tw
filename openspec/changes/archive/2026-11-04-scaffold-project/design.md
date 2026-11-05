@@ -92,21 +92,21 @@ device/
 
 ## 套件與版本（apply 時以實際解析結果鎖定並回填此表）
 
-| 位置 | 套件 | 目標版本 | 理由 |
+| 位置 | 套件 | 實際版本（以 `uv.lock`／`pubspec.lock` 為準） | 理由 |
 |---|---|---|---|
-| backend | Python | 3.13 | AGENTS.md 1 |
-| backend | fastapi, uvicorn[standard] | 最新穩定 | Web 框架與伺服器 |
-| backend | sqlalchemy | 2.x | AGENTS.md 1 |
-| backend | alembic | 最新穩定 | AGENTS.md 1 |
-| backend | psycopg[binary] | 3.x | 同步 PG 驅動 |
-| backend | pydantic-settings | 2.x | 讀 .env |
-| backend | pgvector | 最新穩定 | 之後的向量欄位型別 |
-| backend dev | pytest, httpx, ruff | 最新穩定 | 測試、TestClient、lint/format |
-| frontend | Flutter SDK | 單一 stable 版本（apply 時以 `flutter --version` 鎖定，寫入 README 與 CI） | 不用 fvm |
-| frontend | flutter_riverpod, go_router, dio, freezed_annotation, json_annotation | 最新穩定 | 5.1 預設套件 |
-| frontend dev | freezed, json_serializable, build_runner | 與上列相容 | 產碼 |
-| device | pytest（dev） | 最新穩定 | 測試 |
-| infra | pgvector/pgvector:pg16, eclipse-mosquitto:2 | tag 固定，不用 latest | 可重現 |
+| backend | Python | 3.13（`.python-version`；本機 3.13.15） | AGENTS.md 1 |
+| backend | fastapi, uvicorn[standard] | fastapi 0.162.0、uvicorn 0.54.0 | Web 框架與伺服器 |
+| backend | sqlalchemy | 2.1.6 | AGENTS.md 1 |
+| backend | alembic | 1.20.1 | AGENTS.md 1 |
+| backend | psycopg[binary] | psycopg 3.3.6、psycopg-binary 3.3.6 | 同步 PG 驅動 |
+| backend | pydantic-settings | 2.16.2 | 讀 .env |
+| backend | pgvector | 0.5.1 | 之後的向量欄位型別 |
+| backend dev | pytest, httpx, ruff | pytest 9.2.0、httpx 0.28.1、ruff 0.17.3 | 測試、TestClient、lint/format |
+| frontend | Flutter SDK | stable 3.41.4（README 與 CI 相同） | 不用 fvm |
+| frontend | flutter_riverpod, go_router, dio, freezed_annotation, json_annotation | flutter_riverpod 3.3.2、go_router 17.5.0、dio 5.11.1、freezed_annotation 3.1.0、json_annotation 4.12.0 | 5.1 預設套件 |
+| frontend dev | freezed, json_serializable, build_runner | freezed 3.2.5、json_serializable 6.14.1、build_runner 2.15.1 | 產碼 |
+| device | Python、pytest（dev）、ruff（dev） | Python 3.13（本機 3.13.15）、pytest 9.2.0、ruff 0.17.3 | 測試 |
+| infra | pgvector/pgvector:pg16, eclipse-mosquitto:2 | 同左（tag 固定，不用 latest） | 可重現 |
 
 我無法在規劃階段離線確認各套件當下最新版號，apply 第一步以 `uv add`／`flutter pub add` 解析後回填。`uv.lock` 與 `pubspec.lock` 一併提交。
 
