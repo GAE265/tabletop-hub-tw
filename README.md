@@ -20,6 +20,10 @@
 ## 需要安裝
 
 - [Docker](https://docs.docker.com/get-docker/)（PostgreSQL 16 + pgvector、Mosquitto）
+  - **Windows 要先裝 WSL 2**，否則 Docker Desktop 無法啟動：
+    1. 確認 BIOS 已開啟虛擬化（工作管理員 → 效能 → CPU →「虛擬化：已啟用」）
+    2. 用系統管理員身分開 PowerShell，執行 `wsl --install`，完成後重新開機（已裝過但版本舊，改執行 `wsl --update`）
+    3. 安裝 Docker Desktop，安裝時勾選「Use WSL 2 instead of Hyper-V」
   - Windows／Mac 執行 `docker compose` 前，**要先打開 Docker Desktop** 並等它顯示執行中，否則指令會連不上 Docker。
 - [uv](https://docs.astral.sh/uv/)（Python 套件管理）
   - Windows（PowerShell）：`powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"`
@@ -102,7 +106,8 @@ flutter run -d chrome --web-port 5000 --dart-define=API_BASE_URL=http://localhos
 
 ```bash
 # repo 根目錄
-docker compose up -d                                              # 先確認 Docker Desktop 已開啟
+docker compose up -d    # 先確認 Docker Desktop 已開啟
+docker compose ps       # 確認服務都已啟動
 
 # 終端機 A
 cd backend
@@ -115,6 +120,8 @@ flutter run -d chrome --web-port 5000 --dart-define=API_BASE_URL=http://localhos
 
 只有以下情況才需要重跑：
 
+- `docker compose ps`  的 STATUS 欄位要顯示 `Up`（或 `Up (healthy)`），兩個服務都是才算成功。
+如果顯示 `Exited` 或沒有出現，先確認 Docker Desktop 已經打開，再執行 `docker compose logs` 查看錯誤訊息。
 - 後端套件有變動（`pyproject.toml`／`uv.lock` 被改）：`uv sync`（在 `backend/`）。有新的 migration 時也要跑 `uv run alembic upgrade head`。
 - 測試帳號有變動：`uv run python -m app.dev.seed`（在 `backend/`，可重複執行）。
 
