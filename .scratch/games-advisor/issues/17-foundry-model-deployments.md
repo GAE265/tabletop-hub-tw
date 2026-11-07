@@ -22,3 +22,4 @@ Map: [桌遊推薦 Agent + 桌遊 RAG](../map.md)
 - 2026-11-07（來自「[Agent 怎麼追問、什麼時候推薦](07-conversation-flow.md)」）：對話模型要支援 function calling（Responses API 的 tools），也要能在每輪重送的 instructions 下遵守對話規則。
 - 2026-11-07（來自「[條件與偏好怎麼比對桌遊](10-matching-strategy.md)」）：要部署 embedding 模型。批次用在心得摘要（每款 1 段）與心得片段（約幾百段）；線上每次「查桌遊」工具呼叫轉 1 段 `preference_text`，片段查詢沒有偏好時用存好的摘要向量，不另外呼叫。
 - 2026-11-08（來自「[心得怎麼變成標籤](09-review-to-tags-pipeline.md)」）：每次全部重跑的呼叫次數：LLM 約 46 次，另加重試（擷取候選詞 15、合併同義詞 1、上標籤 15、心得摘要 15）；embedding 約 215 段（心得摘要 15、心得片段約 200）。歸納詞彙表通常只跑一次，補心得時重跑上標籤、心得摘要、心得片段。合併同義詞那次的輸入最長（150–300 個候選詞）；擷取候選詞、合併同義詞、上標籤都要 strict JSON schema，上標籤的代碼是 enum。
+- 2026-11-08（來自「[推薦理由要寫什麼、要不要附出處](11-recommendation-reasons.md)」）：對話模型要在同一個 Responses API 請求裡同時支援 function calling 與 structured outputs（最終回覆是 strict JSON schema）。推薦理由要照對話規則只根據工具資料寫，繁中品質會影響情境題組的結果。
