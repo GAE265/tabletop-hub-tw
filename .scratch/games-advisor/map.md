@@ -19,7 +19,7 @@
   - 不 push、不建 GitHub issue、不開 research 分支。
   - 心得原文、抓取的資料、課程教材內容都不進 repo。
   - BGG 的規定（儲存、快取期限、來源標示）不在立倫的處理範圍：不再開核對 BGG 條款的 ticket，以完成 games_advisor 功能為優先。
-  - AI 助理不代抓 robots.txt 擋了 AI 代理的網站（例如 PTT 擋 `Claude-User`），也不繞過 Cloudflare 的阻擋；這類網站由組員用瀏覽器處理。
+  - AI 助理不繞過 Cloudflare 的阻擋。robots.txt 擋了 AI 代理的網站（例如 PTT 擋 `Claude-User`、`ChatGPT-User`）：Claude 不代抓；收集心得的 Codex 可以讀（2026-11-08 於「[心得來源走哪條路](issues/16-review-source-decision.md)」決定）。
 - 教材表格（git 外）：`團隊專題/99_其他/RAG/games_advisor-rag-materials.md`（`團隊專題/` 是 repo 根目錄下指向團隊專題資料夾的 symlink，已列在 `.git/info/exclude`，不進 git）
 
 ## Decisions so far
@@ -36,11 +36,11 @@
 - [Agent 怎麼追問、什麼時候推薦](issues/07-conversation-flow.md)：Agent 依對話規則自己判斷追問或推薦（function calling），程式守三道護欄：人數必填、只推薦工具回傳的桌遊、每則訊息最多呼叫 2 次工具；人數是唯一必要條件，最多推薦 3 款，一律用繁中；查無結果時放寬時長或年齡其中一項，人數不放寬；離題規則也在這張；偏離「程式判斷流程」的取捨寫成 ADR 0002（proposed）
 - [標籤詞彙表怎麼定](issues/08-tag-vocabulary.md)：詞彙先從心得歸納，再由立倫審核固定（最多約 30 個），每個標籤有英文代碼、繁中名稱、繁中定義；只描述玩起來的感受，不和條件或 BGG 欄位重複，每個面向只留一個方向；每款的每個標籤有 LLM 給的 0–1 信心分數，給分標準移到心得管線；人工驗證只能刪標籤
 - [條件與偏好怎麼比對桌遊](issues/10-matching-strategy.md)：SQL 篩條件；負面偏好優先排後面，再用 RRF 合併結構化分數（標籤信心、類別、機制、難度）與偏好描述對心得摘要的向量相似度，回傳前 3 款；同一個工具再取每款 2 段心得片段當理由出處；embedding 主要為展示 RAG；心得摘要向量放桌遊資料表、心得片段另開一張表，不建索引
+- [心得來源走哪條路](issues/16-review-source-decision.md)：心得不用 BGG，由立倫用 Codex 的 goal 模式與 live 網路搜尋，從 PTT、中英文部落格、評測網站收集，提示詞在 `prompts/collect-reviews.md`；每款目標 5 篇、至少 2 篇，逐字擷取感受段落，存進 repo 外的 `reviews.json`；資料庫只存衍生資料，心得片段帶 `source_url`、`site_name`、`language`
+- [心得怎麼變成標籤](issues/09-review-to-tags-pipeline.md)：全部寫成後端指令（歸納詞彙表也是，依 §4.2、§7）；每款 1 次 LLM 擷取候選詞、1 次合併成最多 30 個的草稿，立倫編輯 repo 裡的 `tag_vocabulary.json` 走 MR；上標籤每款 1 次、四級給分、門檻 0.5、三項自動檢查，人工驗證用 repo 外的草稿、匯入只允許刪除；心得摘要 120–200 字繁中、和上標籤分開；心得片段依段落切、存原文；每款一個交易、重跑即覆蓋
 
 ## Not yet specified
 
-- 資料表結構：桌遊欄位與向量位置已定，其餘等心得管線決定後才畫得出來（對話不建資料表）。
-- 標籤、心得摘要、心得片段要不要定期重跑（包括詞彙表改版、換 embedding 模型後要不要全部重產），怎麼只更新有變動的部分。
 - 批次指令部署到 Azure 後在哪裡執行。
 - 把所有決定整理成 `spec.md` 與 §7 情境表格。
 
