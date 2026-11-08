@@ -39,6 +39,7 @@
 - [心得來源走哪條路](issues/16-review-source-decision.md)：心得不用 BGG，由立倫用 Codex 的 goal 模式與 live 網路搜尋，從 PTT、中英文部落格、評測網站收集，提示詞在 `prompts/collect-reviews.md`；每款目標 5 篇、至少 2 篇，逐字擷取感受段落，存進 repo 外的 `reviews.json`；資料庫只存衍生資料，心得片段帶 `source_url`、`site_name`、`language`
 - [心得怎麼變成標籤](issues/09-review-to-tags-pipeline.md)：全部寫成後端指令（歸納詞彙表也是，依 §4.2、§7）；每款 1 次 LLM 擷取候選詞、1 次合併成最多 30 個的草稿，立倫編輯 repo 裡的 `tag_vocabulary.json` 走 MR；上標籤每款 1 次、四級給分、門檻 0.5、三項自動檢查，人工驗證用 repo 外的草稿、匯入只允許刪除；心得摘要 120–200 字繁中、和上標籤分開；心得片段依段落切、存原文；每款一個交易、重跑即覆蓋
 - [推薦理由要寫什麼、要不要附出處](issues/11-recommendation-reasons.md)：推薦卡片的基本資料與放寬的條件由程式產生，LLM 只寫最多 2 句推薦理由（命中的偏好、心得印證的感受，命中負面偏好要說）並引用心得片段 ID；最終回覆用 structured outputs（`reply` + `recommendations`），service 只認這則訊息的工具結果，無效的丟掉、全部丟掉就換固定文字；出處顯示片段原文、標題、網站並連回原文，英文不翻譯；心得片段資料表加 `title`，不加 `author`
+- [需要整合層提供哪些介面](issues/12-integrations-interface.md)：提案在 `integrations-proposal.md`；整合層一次只呼叫 1 次模型，工具迴圈與護欄留在 service；`generate` 不動，新增無狀態的 `generate_json`（批次）和有狀態的 `respond`（對話，只有雲端），embedding 只有 `embed(texts)`；schema 用 strict JSON Schema dict；fake 照腳本回傳並記錄呼叫；雲端用 `openai` SDK、pytest 用 `MockTransport`；`tools` 加 `text.format` 等 Foundry 建好再實測，不行就改用「交卷」工具
 
 ## Not yet specified
 

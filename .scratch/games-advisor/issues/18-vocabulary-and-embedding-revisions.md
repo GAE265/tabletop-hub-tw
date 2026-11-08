@@ -16,3 +16,5 @@ Map: [桌遊推薦 Agent + 桌遊 RAG](../map.md)
 同步詞彙表指令的測試案例需要第 1 題的答案。
 
 ## Comments
+
+- 2026-11-08（來自「[需要整合層提供哪些介面](12-integrations-interface.md)」）：換 embedding 模型就是改 `EMBEDDING_MODEL`，維度變了就一起改 `EMBEDDING_DIM`。整合層只檢查向量長度等於 `EMBEDDING_DIM`，不知道資料庫裡的向量是哪個模型產生的；要不要記錄模型、怎麼偵測不一致，在這張決定。
