@@ -49,6 +49,7 @@
 - [LLM 設定也改成 games_advisor 自己的一組嗎](issues/19-games-advisor-llm-settings.md)：不改，LLM 用全域 `LLM_*`，只有 embedding 開例外（換 LLM 不會讓已存資料失效）；factory 照提案讀 settings，批次指令複製 settings 換掉部署、推理強度、逾時；fake 沒給腳本時拋 `LLMUnavailable`，對話 API 回 503；4 個需要 LLM 的指令遇到 `LLM_PROVIDER=fake` 拒絕執行；換 Foundry 後舊對話走 404 清空；實作時要更新 OpenSpec 的 `llm-provider` 規格
 - [spec：桌遊資料與心得管線](issues/20-spec-data-and-review-pipeline.md)：`spec.md` 前半寫好：共用部分（目的、術語、4 張資料表、設定總覽、檔案總覽）與 7 個批次指令的規則和 §7 表格；新定 `games.json`、`tag_vocabulary.json`、標籤草稿的格式；補了 8 個缺漏：「設定值」寫成程式常數、類別與機制用 `text[]`、輸入檔錯就整份拒絕、0 篇心得重跑時清空、標籤草稿另寫原始檔比對、不改整合層提案、詞彙表放 `games_advisor` 資料夾、指令叫 `commands`、結束碼 0/1/2
 - [spec：推薦對話與 API](issues/21-spec-conversation-and-api.md)：`spec.md` 後半寫好：「查桌遊」工具 `search_games`、對話 service、API、前端 `data/` 與 `state/`、參考畫面與交接說明、評估題組，各有 §7 表格；補了 6 個缺漏：兩次查詢都能出卡片、沒查詢只清卡片不換固定文字、模型不照約定當作拒答、其他參數錯比照人數回給 LLM、標籤名稱與定義寫在工具參數說明、11 條小細節照預設
+- [把 spec 拆成 TDD 實作 ticket](issues/22-split-spec-into-tdd-tickets.md)：10 張實作 ticket 放在 `.scratch/games-advisor-impl/issues/`：01 AGENTS.md 補 503、02 建 Foundry 並在 Azure 驗證、03 收資料、04 整合層介面與 fake、05 資料表、06 心得管線、07 推薦對話與 API、08 雲端實作、09 前端與交接說明、10 評估題組與詞彙表；一張 ticket 一個 MR，照 spec 段落切；「開 Draft MR」是勾選項目；`eval` 放 10；狀態在自己的 MR 裡改成 `resolved`；這支分支先開成文件 MR。Destination 達成
 
 ## Not yet specified
 
