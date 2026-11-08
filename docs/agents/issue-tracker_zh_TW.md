@@ -30,3 +30,13 @@
 - **Frontier**（目前可以接手的 ticket）：掃描 `.scratch/<effort>/issues/`，找出還沒結案、沒被擋住、也沒人認領的檔案；編號最小的優先
 - **Claim**（認領）：動工前先設定 `Status: claimed` 並存檔
 - **Resolve**（結案）：在檔案最後加上 `## Answer` 標題並寫入答案，設定 `Status: resolved`，再到 `map.md` 的 Decisions-so-far 補上一筆 context pointer（摘要加連結）
+
+## Wayfinder 結束後的實作 ticket
+
+把 wayfinder 產出的 spec 拆成實作 ticket 時，放在旁邊另一個資料夾，不放進 map 的 `issues/`，wayfinder 找 frontier 時才不會撈到它們。
+
+- **位置**：`.scratch/<effort>-impl/issues/<NN>-<slug>.md`，從 `01` 開始依相依順序編號（被依賴的在前）。例如 `.scratch/games-advisor/` 的實作 ticket 放在 `.scratch/games-advisor-impl/`
+- **開頭的欄位**：`Status:`、`Blocked by:`、`Spec:`（連到 `../../<effort>/spec.md`，並寫出要實作的段落）、`MR:`
+- **狀態**：一開始是 `ready-for-agent` 或 `ready-for-human`，做完改成 `resolved`。不另外記錄「進行中」
+- **在哪裡改狀態**：`dev` 不能直接推（AGENTS.md §8.1）。有 MR 的 ticket，在自己的 MR 裡、合併前最後一個 commit 改成 `resolved`。沒有 MR 的 ticket，把結果寫進第一個用到它的 MR，在那裡結案；`MR:` 欄位寫那個 MR
+- **Skills**：讀寫 ticket 的 skill，參數給資料夾路徑（例如 `.scratch/games-advisor-impl/`）

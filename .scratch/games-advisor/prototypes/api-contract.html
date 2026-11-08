@@ -1,0 +1,634 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>推薦 Agent API 草圖</title>
+<!--
+  PROTOTYPE，可丟棄。ticket「API 契約與 prototype 頁面」用來讓立倫反應的草圖。
+  桌遊數字、心得片段、網址全是假資料。
+  第一個 <script> 是可以搬進 frontend/lib/domains/games_advisor/state/ 的邏輯（純函式，不碰畫面）；
+  第二個 <script> 是假後端；第三個是畫面外殼，用完就丟。
+-->
+<style>
+  :root {
+    --accent: #3b5bdb; --accent-soft: #edf2ff;
+    --ink: #1f2328; --muted: #656d76; --line: #d0d7de; --bg: #f6f8fa; --card: #fff;
+    --warn: #fff4e5; --warn-ink: #8a4b00; --err: #fdecea; --err-ink: #9b1c1c; --changed: #fff3bf;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif;
+         color: var(--ink); background: var(--bg); line-height: 1.6; font-size: 15px; }
+  code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
+  code { background: #eef1f4; padding: 1px 5px; border-radius: 4px; }
+  .wrap { max-width: 1280px; margin: 0 auto; padding: 24px 16px 64px; }
+  header h1 { margin: 0 0 4px; font-size: 22px; }
+  header p { margin: 0; color: var(--muted); }
+  .tag { display: inline-block; font-size: 12px; padding: 1px 8px; border-radius: 99px; background: var(--warn); color: var(--warn-ink); margin-left: 8px; vertical-align: middle; }
+  section { margin-top: 24px; }
+  h2 { font-size: 17px; margin: 0 0 12px; }
+  h3 { font-size: 15px; margin: 16px 0 6px; }
+  details.box { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 12px 18px; }
+  details.box > summary { cursor: pointer; font-weight: 600; }
+  .dec { margin: 6px 0; }
+  .dec b { color: var(--accent); margin-right: 6px; }
+  table { border-collapse: collapse; width: 100%; margin: 6px 0 4px; font-size: 14px; }
+  th, td { border: 1px solid var(--line); padding: 6px 8px; text-align: left; vertical-align: top; }
+  th { background: #f0f3f6; font-weight: 600; }
+
+  .grid { display: grid; grid-template-columns: 400px 1fr; gap: 20px; align-items: start; }
+  @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+
+  /* 聊天畫面草圖：刻意接近 Flutter 預設元件的樸素樣子 */
+  .phone { background: #fff; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; display: flex; flex-direction: column; height: 760px; }
+  .appbar { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; background: #f3f0f7; border-bottom: 1px solid var(--line); }
+  .appbar .title { font-size: 17px; }
+  .btn { font: inherit; font-size: 14px; border: 1px solid var(--line); background: #fff; border-radius: 8px; padding: 5px 12px; cursor: pointer; }
+  .btn:hover:not(:disabled) { border-color: var(--accent); }
+  .btn:disabled { opacity: .4; cursor: not-allowed; }
+  .btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .btn.small { font-size: 13px; padding: 2px 9px; }
+  .modes { display: flex; gap: 4px; padding: 6px 14px; border-bottom: 1px solid var(--line); font-size: 12px; color: var(--muted); align-items: center; background: #fafbfc; }
+  .modes .btn { font-size: 12px; padding: 1px 8px; }
+  .modes .btn.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+  .chat { flex: 1; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+  .bubble { max-width: 86%; padding: 8px 12px; border-radius: 12px; white-space: pre-wrap; }
+  .bubble.player { align-self: flex-end; background: #e7ecff; }
+  .bubble.advisor { align-self: flex-start; background: #f1f3f5; }
+  .bubble.loading { color: var(--muted); font-style: italic; }
+  .advisor-block { align-self: stretch; display: flex; flex-direction: column; gap: 8px; }
+  .relaxed { font-size: 13px; background: var(--warn); color: var(--warn-ink); border-radius: 8px; padding: 4px 10px; }
+  .gcard { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; background: #fff; }
+  .gcard .name { font-weight: 600; font-size: 16px; }
+  .gcard .meta { color: var(--muted); font-size: 13px; }
+  .gcard .reason { margin: 6px 0 4px; }
+  .ex { border-left: 3px solid var(--line); padding: 2px 0 2px 10px; margin-top: 6px; font-size: 13px; }
+  .ex .text.clamp { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .ex a { color: var(--accent); text-decoration: none; font-size: 12px; }
+  .ex .lang { font-size: 11px; border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; margin-left: 4px; color: var(--muted); }
+  .linkish { background: none; border: none; color: var(--accent); cursor: pointer; padding: 0; font: inherit; font-size: 13px; }
+  .empty { margin: auto 0; text-align: center; color: var(--muted); }
+  .empty .chips { display: flex; flex-direction: column; gap: 8px; align-items: center; margin-top: 12px; }
+  .notice { margin: 0 14px; padding: 8px 12px; border-radius: 8px; font-size: 14px; }
+  .notice.err { background: var(--err); color: var(--err-ink); }
+  .notice.warn { background: var(--warn); color: var(--warn-ink); }
+  .composer { border-top: 1px solid var(--line); padding: 10px 14px 8px; }
+  .composer .row { display: flex; gap: 8px; align-items: flex-end; }
+  .composer textarea { flex: 1; font: inherit; resize: none; height: 56px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; }
+  .composer textarea:disabled { background: #f3f3f3; }
+  .composer .under { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); margin-top: 4px; }
+  .composer .under .over { color: var(--err-ink); }
+
+  /* 右側面板 */
+  .side { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+  .panel { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+  .panel h2 { margin-bottom: 8px; }
+  .backend-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  select { font: inherit; padding: 5px 8px; border-radius: 8px; border: 1px solid var(--line); max-width: 100%; }
+  .hint { color: var(--muted); font-size: 13px; margin: 6px 0 0; }
+  .state-grid { display: grid; grid-template-columns: 150px 1fr; gap: 4px 12px; font-size: 14px; }
+  .state-grid .k { color: var(--muted); }
+  .state-grid .v.changed { background: var(--changed); border-radius: 4px; padding: 0 4px; }
+  pre.json { background: #f6f8fa; border: 1px solid var(--line); border-radius: 8px; padding: 10px; overflow-x: auto; margin: 4px 0 10px; max-height: 360px; }
+  .status { font-weight: 600; }
+  .status.ok { color: #1a7f37; } .status.bad { color: var(--err-ink); }
+  .internals { background: var(--accent-soft); border-radius: 8px; padding: 8px 10px; font-size: 14px; }
+
+  /* 導覽 */
+  .tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+  .tabs .btn.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .walk-desc { margin: 0 0 10px; }
+  .steps { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+  .steps .btn.done { background: #e6f4ea; border-color: #a6d8b4; color: #1a7f37; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>推薦 Agent API 草圖 <span class="tag">PROTOTYPE，可丟棄；資料全是假的</span></h1>
+  <p>這頁要回答：玩家送出一則訊息時，前端送什麼、後端回什麼、出錯時畫面怎麼變？左邊是聊天畫面草圖，右邊是每一步的請求、回應和前端記住的東西。</p>
+</header>
+
+<section>
+  <details class="box" open>
+    <summary>決定（2026-11-08 和立倫定案）</summary>
+
+    <h3>API 格式</h3>
+    <div class="dec"><b>D1</b>路徑 <code>POST /api/v1/advisor/messages</code>，成功回 201。推薦 Agent 只有一個，所以 <code>advisor</code> 用單數；送出一則訊息＝新增一筆訊息（§4.3「不是增刪改查的動作，當成新增子資源」）。後端不存對話，所以沒有 GET。</div>
+    <div class="dec"><b>D2</b>請求只有兩欄：<code>content</code>（去掉前後空白後 1–500 字）、<code>previous_response_id</code>（新對話給 <code>null</code>）。</div>
+    <div class="dec"><b>D3</b>回應四欄：<code>response_id</code>、<code>reply</code>、<code>relaxed_constraint</code>（<code>playtime</code>／<code>age</code>／<code>null</code>，整則訊息一個值，因為同一則的卡片都來自同一次查詢）、<code>recommendations</code>。每張卡片分三塊：<code>game</code>（程式從資料庫填）、<code>reason</code>（LLM 寫）、<code>excerpts</code>（被引用的心得片段）。追問、離題時 <code>recommendations</code> 是空陣列。</div>
+    <div class="dec"><b>D4</b>錯誤碼：</div>
+    <table>
+      <tr><th>情況</th><th>狀態碼</th><th><code>error.code</code></th><th>畫面</th></tr>
+      <tr><td>欄位錯誤（空白、超過 500 字）</td><td>422</td><td><code>VALIDATION_ERROR</code>（框架預設）</td><td>前端先擋；萬一發生，同「暫時無法回應」</td></tr>
+      <tr><td>未登入（只在 JWT 模式）</td><td>401</td><td><code>UNAUTHENTICATED</code></td><td>請先登入</td></tr>
+      <tr><td>對話過期或 id 錯（<code>LLMConversationNotFound</code>）</td><td>404</td><td><code>GAMES_ADVISOR_CONVERSATION_NOT_FOUND</code></td><td>清空畫面、顯示「對話已失效」、剛剛那句放回輸入框</td></tr>
+      <tr><td>Azure 暫時連不上，LLM 或 embedding 都算（<code>LLMUnavailable</code>、<code>EmbeddingError</code>）</td><td>503</td><td><code>GAMES_ADVISOR_UNAVAILABLE</code></td><td>剛剛那句從畫面拿掉、放回輸入框，提示再送一次</td></tr>
+      <tr><td>其他程式錯誤（<code>LLMError</code> 等）</td><td>500</td><td><code>INTERNAL_ERROR</code>（現有）</td><td>同上</td></tr>
+      <tr><td>網路斷線、後端沒開</td><td>—</td><td><code>NETWORK_ERROR</code>（前端產生，現有）</td><td>同上</td></tr>
+    </table>
+    <p class="hint">503 不在 §4.3 的清單裡，要由你向組員提議補進去（AI 不改 AGENTS.md）。</p>
+    <div class="dec"><b>D5</b>固定文字有兩種：模型拒答或內容被過濾、推薦全部被程式丟掉。都回 201，<code>response_id</code> 回請求帶來的舊 id（第一則就回 <code>null</code>），這則訊息不算進對話。</div>
+
+    <h3>行為</h3>
+    <div class="dec"><b>D6</b>不串流，整則一次回來，等待時顯示「正在找桌遊…」。理由：dio 在 Flutter Web 讀不到串流，要另加套件；呼叫工具的那段時間本來就沒有字可以顯示；最終輸出是 JSON；重點是卡片，<code>reply</code> 很短。前端的等待上限要比後端長（後端最多呼叫 LLM 3 次，每次上限 60 秒）。</div>
+    <div class="dec"><b>D7</b>玩家、店家人員、管理員都能用，所以沒有 403；未登入回 401。「沒有權限」的測試案例就是未登入。</div>
+
+    <h3>畫面（Flutter 參考畫面照這個做）</h3>
+    <div class="dec"><b>D8</b>只顯示心得片段原文，不顯示來源（標題、網站名稱、連結）；立倫決定，接受著作權法第 64 條「引用要明示出處」的風險。片段預設摺疊成「心得片段（2）」，點開才看；英文片段旁標「英文」。左邊畫面上方可以切三種顯示方式比較看看。</div>
+    <div class="dec"><b>D9</b>放寬條件顯示成卡片上方一行提示，不是每張卡片各標一次。</div>
+    <div class="dec"><b>D10</b>空畫面放 3 個範例按鈕，點了直接送出（Demo 時少打字）；輸入框下方固定一行「想問規則或玩法？到規則問答」；「開始新對話」不跳確認視窗。</div>
+  </details>
+</section>
+
+<section class="grid">
+  <div class="phone" id="phone"></div>
+
+  <div class="side">
+    <div class="panel">
+      <h2>後端（假的）</h2>
+      <div class="backend-row">
+        <label for="scenario">下一則訊息後端會回：</label>
+        <select id="scenario"></select>
+        <button class="btn primary" id="respondBtn">讓後端回應</button>
+      </div>
+      <p class="hint">玩家送出後，畫面停在「載入中」，按「讓後端回應」才會收到回應。</p>
+    </div>
+
+    <div class="panel">
+      <h2>前端記住的東西</h2>
+      <div class="state-grid" id="stateGrid"></div>
+      <p class="hint">黃底＝這一步剛改變的欄位。重新整理頁面就全部清空（後端不存對話，前端也不存進瀏覽器）。</p>
+    </div>
+
+    <div class="panel">
+      <h2>最近一次 API 往返</h2>
+      <div id="exchange"><p class="hint">還沒送出任何訊息。</p></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="panel">
+    <h2>導覽：照順序按，每個分頁從頭開始</h2>
+    <div class="tabs" id="tabs"></div>
+    <p class="walk-desc" id="walkDesc"></p>
+    <div class="steps" id="steps"></div>
+  </div>
+</section>
+
+</div>
+
+<!-- ===== 1. 前端狀態邏輯：可搬進 frontend/lib/domains/games_advisor/state/（純函式，不碰畫面） ===== -->
+<script>
+const AdvisorLogic = (() => {
+  const MAX_CONTENT = 500;
+  const CONVERSATION_NOT_FOUND = 'GAMES_ADVISOR_CONVERSATION_NOT_FOUND';
+
+  const initialState = () => ({
+    messages: [],        // { role: 'player' | 'advisor', text, recommendations, relaxedConstraint }
+    responseId: null,    // 前端保管的最新 response_id，下一則訊息帶回去
+    status: 'idle',      // 'idle' | 'sending'
+    draft: '',           // 輸入框內容
+    notice: null,        // null | 'expired' | 'unavailable' | 'unauthenticated'
+  });
+
+  const canSend = (s) => {
+    const t = s.draft.trim();
+    return s.status === 'idle' && t.length > 0 && t.length <= MAX_CONTENT;
+  };
+
+  const buildRequest = (s) => ({
+    method: 'POST',
+    path: '/api/v1/advisor/messages',
+    body: { content: s.draft.trim(), previous_response_id: s.responseId },
+  });
+
+  function reduce(s, a) {
+    switch (a.type) {
+      case 'editDraft':
+        return { ...s, draft: a.text };
+      case 'send':
+        if (!canSend(s)) return s;
+        return { ...s, status: 'sending', notice: null, draft: '',
+                 messages: [...s.messages, { role: 'player', text: s.draft.trim() }] };
+      case 'received': // 201：一般回覆、推薦、固定文字都走這裡
+        return { ...s, status: 'idle', responseId: a.body.response_id,
+                 messages: [...s.messages, { role: 'advisor', text: a.body.reply,
+                   recommendations: a.body.recommendations, relaxedConstraint: a.body.relaxed_constraint }] };
+      case 'failed': { // 4xx、5xx、斷線
+        const last = s.messages[s.messages.length - 1];
+        const failedText = last && last.role === 'player' ? last.text : '';
+        if (a.code === CONVERSATION_NOT_FOUND) {
+          return { ...initialState(), draft: failedText, notice: 'expired' };
+        }
+        return { ...s, status: 'idle', messages: s.messages.slice(0, -1), draft: failedText,
+                 notice: a.code === 'UNAUTHENTICATED' ? 'unauthenticated' : 'unavailable' };
+      }
+      case 'startNew':
+        return initialState();
+      default:
+        return s;
+    }
+  }
+
+  return { MAX_CONTENT, initialState, canSend, buildRequest, reduce };
+})();
+</script>
+
+<!-- ===== 2. 假後端：示範 service 回什麼（不是要搬走的程式） ===== -->
+<script>
+const FakeBackend = (() => {
+  let counter = 0;
+  const reset = () => { counter = 0; };
+  const newId = () => 'resp_' + String(++counter).padStart(2, '0');
+
+  // 假桌遊：數字是隨手填的，不是 BGG 資料
+  const G = {
+    splendor:  { id: 'uuid-璀璨寶石', name: '璀璨寶石', min_players: 2, max_players: 4, min_playtime: 30, max_playtime: 30, min_age: 10, weight: 1.8 },
+    ttr:       { id: 'uuid-鐵道任務', name: '鐵道任務', min_players: 2, max_players: 5, min_playtime: 30, max_playtime: 60, min_age: 8,  weight: 1.8 },
+    carc:      { id: 'uuid-卡卡頌',   name: '卡卡頌',   min_players: 2, max_players: 5, min_playtime: 30, max_playtime: 45, min_age: 7,  weight: 1.9 },
+    codenames: { id: 'uuid-機密代號', name: '機密代號', min_players: 2, max_players: 8, min_playtime: 15, max_playtime: 15, min_age: 14, weight: 1.3 },
+    dixit:     { id: 'uuid-妙語說書人', name: '妙語說書人', min_players: 3, max_players: 6, min_playtime: 30, max_playtime: 30, min_age: 8, weight: 1.2 },
+  };
+  // D8：API 只回片段的 id、text、language，不回來源欄位
+  const ex = (id, text, language) => ({ id, text, language });
+
+  const EX = {
+    splendor1: ex('uuid-片段-1', '（假心得）我們家每次聚會都會拿出來，十分鐘就能教會，一局下來大家還能一直聊天，節奏很快不拖泥帶水，玩完一局馬上有人喊再來一局。', 'zh-TW'),
+    splendor2: ex('uuid-片段-2', '（假心得）回合很短，等別人的時間幾乎感覺不到，適合不想動太多腦的晚上。', 'zh-TW'),
+    ttr1:      ex('uuid-片段-3', '(Fake review) The rules take five minutes to explain, and new players were happily planning routes on their very first turn. It stays relaxed even when someone blocks your line.', 'en'),
+    carc1:     ex('uuid-片段-4', '（假心得）一邊拼地圖一邊聊天，氣氛很輕鬆；不過抽到什麼板塊真的要看手氣，有時候整局都等不到想要的那塊。', 'zh-TW'),
+    code1:     ex('uuid-片段-5', '（假心得）分兩隊猜詞，一局很快就結束，大家吵吵鬧鬧笑成一團。', 'zh-TW'),
+    dixit1:    ex('uuid-片段-6', '（假心得）卡片圖很美，說故事的過程很療癒，沒玩過桌遊的朋友也能馬上加入。', 'zh-TW'),
+  };
+
+  const ok = (response_id, reply, recommendations = [], relaxed_constraint = null) =>
+    ({ status: 201, body: { response_id, reply, relaxed_constraint, recommendations } });
+  const err = (status, code, message) => ({ status, body: { error: { code, message, details: {} } } });
+
+  const SCENARIOS = {
+    ask: {
+      label: '追問偏好',
+      internals: 'LLM 判斷偏好還不夠 → 沒呼叫「查桌遊」 → 直接追問。',
+      respond: () => ok(newId(), '4 個人沒問題！想玩哪種感覺的？輕鬆聊天、動腦策略，還是大家合作？'),
+    },
+    askPlayers: {
+      label: '追問人數',
+      internals: '工具參數的人數必填。LLM 不知道人數 → 只問人數。',
+      respond: () => ok(newId(), '想幫你找桌遊！請問有幾個人要玩？'),
+    },
+    recommend: {
+      label: '推薦 3 款',
+      internals: 'LLM 呼叫「查桌遊」1 次 → 工具回 3 款，每款附 2 段心得片段 → LLM 回最終 JSON（reply＋每款 game_id、reason、excerpt_ids）→ 程式檢查 ID、照工具順序排、從資料庫補基本資料與片段原文。',
+      respond: () => ok(newId(), '幫你找到 3 款適合 4 個人、輕鬆聊天的桌遊。', [
+        { game: G.splendor, reason: '規則簡單、不燒腦，符合你想要的輕鬆路線；心得提到一局節奏很快，邊玩邊聊也不會卡住。', excerpts: [EX.splendor1, EX.splendor2] },
+        { game: G.ttr, reason: '規則幾分鐘就講完，屬於輕鬆路線；英文心得提到新手第一回合就能上手。', excerpts: [EX.ttr1] },
+        { game: G.carc, reason: '拼板塊很直覺，心得說很適合邊玩邊聊。抽板塊有運氣成分，和你「不要太看運氣」的偏好不同。', excerpts: [EX.carc1] },
+      ]),
+    },
+    relaxed: {
+      label: '放寬時長後推薦 2 款',
+      internals: '第 1 次查詢（最長 10 分鐘）0 款 → LLM 拿掉時長上限再查 → 2 款。程式比對這則訊息的 2 次工具呼叫，標出 relaxed_constraint = playtime。',
+      respond: () => ok(newId(), '沒有 10 分鐘內能玩完的桌遊，以下 2 款時長稍長。', [
+        { game: G.codenames, reason: '分隊猜詞，熱鬧好笑；心得提到一局很快就結束。', excerpts: [EX.code1] },
+        { game: G.dixit, reason: '說故事猜圖，沒玩過桌遊的人也能馬上加入，心得說過程很療癒。', excerpts: [EX.dixit1] },
+      ], 'playtime'),
+    },
+    noMatch: {
+      label: '沒有符合的桌遊（12 人）',
+      internals: '查詢 12 人 → 0 款。人數不放寬 → LLM 建議分桌。',
+      respond: () => ok(newId(), '目前收錄的桌遊沒有支援 12 個人一起玩的。可以分成兩桌，請問每桌大約幾個人？'),
+    },
+    offTopic: {
+      label: '離題：問規則',
+      internals: 'LLM 依離題規則回覆，沒呼叫工具。',
+      respond: () => ok(newId(), '規則和玩法的問題，請改用「規則問答」功能，那裡能查到完整說明。想再找其他桌遊的話，隨時告訴我。'),
+    },
+    allDropped: {
+      label: '推薦全部被程式丟掉 → 固定文字',
+      internals: 'LLM 推薦了 2 款，但 game_id 都不在這則訊息的工具結果裡 → 全部丟掉 → reply 換成固定文字、記 log。response_id 回請求帶來的舊 id，所以這則訊息不算進對話。',
+      respond: (req) => ok(req.body.previous_response_id, '這次推薦出了問題，請再說一次你的需求。'),
+    },
+    rejected: {
+      label: '模型拒答或內容被過濾 → 固定文字',
+      internals: '整合層拋 LLMOutputRejected（內容過濾、拒答、輸出被截斷）→ 回固定文字。response_id 回請求帶來的舊 id。',
+      respond: (req) => ok(req.body.previous_response_id, '這則訊息我沒辦法回答，請換個說法再試一次。'),
+    },
+    expired: {
+      label: '對話過期（404）',
+      internals: '整合層拋 LLMConversationNotFound（id 超過 30 天被 Azure 刪掉，或 id 打錯）→ 404。',
+      respond: () => err(404, 'GAMES_ADVISOR_CONVERSATION_NOT_FOUND', '對話已失效，請開始新對話'),
+    },
+    unavailable: {
+      label: 'Azure 暫時連不上（503）',
+      internals: '整合層拋 LLMUnavailable 或 EmbeddingError（逾時、額度用完、Azure 5xx）→ 503。',
+      respond: () => err(503, 'GAMES_ADVISOR_UNAVAILABLE', '推薦 Agent 暫時無法回應，請稍後再試'),
+    },
+    internal: {
+      label: '其他程式錯誤（500）',
+      internals: '整合層拋 LLMError（例如金鑰設錯）或其他沒預期的錯 → 統一錯誤處理器回 500。',
+      respond: () => err(500, 'INTERNAL_ERROR', '伺服器發生未預期的錯誤'),
+    },
+    unauth: {
+      label: '未登入（401）',
+      internals: 'JWT 模式下沒帶 token → 401。開發模式沒帶標頭會用預設測試玩家，不會出現這個錯誤。',
+      respond: () => err(401, 'UNAUTHENTICATED', '尚未登入'),
+    },
+    network: {
+      label: '網路斷線（沒有回應）',
+      internals: '請求沒送到後端（斷線、後端沒開）→ 前端 dio 拋錯，ApiException 的 code 是 NETWORK_ERROR。',
+      respond: () => ({ status: 0, body: null }),
+    },
+  };
+
+  const handle = (req, key) => SCENARIOS[key].respond(req);
+  return { SCENARIOS, handle, reset };
+})();
+</script>
+
+<!-- ===== 3. 畫面外殼（用完就丟） ===== -->
+<script>
+const L = AdvisorLogic;
+let state = L.initialState();
+let prev = state;
+let pendingRequest = null;
+let lastExchange = null;
+let excerptMode = 'collapsed';      // 'collapsed' | 'clamp' | 'full'
+const openCards = new Set();        // 摺疊模式下展開的卡片
+const openExcerpts = new Set();     // 兩行模式下展開的片段
+
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const range = (a, b) => (a === b ? String(a) : `${a}–${b}`);
+const RELAXED_LABEL = { playtime: '時長', age: '年齡' };
+const EXAMPLES = ['我們 4 個人，想輕鬆聊天', '2 個人約會玩', '6 個人，30 分鐘內玩完'];
+
+function commit(next) { prev = state; state = next; }
+
+function doSend(text) {
+  if (text != null) commit(L.reduce(state, { type: 'editDraft', text }));
+  if (!L.canSend(state)) { render(); return; }
+  const req = L.buildRequest(state);
+  commit(L.reduce(state, { type: 'send' }));
+  pendingRequest = req;
+  lastExchange = { request: req, response: null, internals: null, method: 'sendMessage(content)' };
+  render();
+}
+
+function doRespond(key) {
+  if (state.status !== 'sending') return;
+  document.getElementById('scenario').value = key;
+  const res = FakeBackend.handle(pendingRequest, key);
+  lastExchange.response = res;
+  lastExchange.internals = FakeBackend.SCENARIOS[key].internals;
+  if (res.status === 201) commit(L.reduce(state, { type: 'received', body: res.body }));
+  else commit(L.reduce(state, { type: 'failed', code: res.body ? res.body.error.code : 'NETWORK_ERROR' }));
+  pendingRequest = null;
+  render();
+}
+
+function doStartNew() {
+  commit(L.reduce(state, { type: 'startNew' }));
+  lastExchange = { request: null, response: null, internals: '只清前端；不呼叫 API（後端沒有對話可刪）。', method: 'startNewConversation()' };
+  openCards.clear(); openExcerpts.clear();
+  render();
+}
+
+function resetAll() {
+  state = L.initialState(); prev = state; pendingRequest = null; lastExchange = null;
+  FakeBackend.reset(); openCards.clear(); openExcerpts.clear();
+}
+
+/* ---------- 聊天畫面 ---------- */
+function renderExcerpt(e, key) {
+  const lang = e.language === 'en' ? '<span class="lang">英文</span>' : '';
+  if (excerptMode === 'clamp') {
+    const open = openExcerpts.has(key);
+    return `<div class="ex"><div class="text ${open ? '' : 'clamp'}">${esc(e.text)}</div>
+      <button class="linkish" data-ex="${key}">${open ? '收起' : '展開'}</button>${lang}</div>`;
+  }
+  return `<div class="ex"><div class="text">${esc(e.text)}${lang}</div></div>`;
+}
+
+function renderCard(rec, key) {
+  const g = rec.game;
+  const meta = `${range(g.min_players, g.max_players)} 人 · ${range(g.min_playtime, g.max_playtime)} 分鐘 · ${g.min_age} 歲以上 · 難度 ${g.weight.toFixed(1)} / 5`;
+  let exHtml = '';
+  if (rec.excerpts.length) {
+    if (excerptMode === 'collapsed') {
+      const open = openCards.has(key);
+      exHtml = `<button class="linkish" data-card="${key}">${open ? '▾' : '▸'} 心得片段（${rec.excerpts.length}）</button>`
+        + (open ? rec.excerpts.map((e, i) => renderExcerpt(e, `${key}-${i}`)).join('') : '');
+    } else {
+      exHtml = rec.excerpts.map((e, i) => renderExcerpt(e, `${key}-${i}`)).join('');
+    }
+  }
+  return `<div class="gcard"><div class="name">${esc(g.name)}</div><div class="meta">${meta}</div>
+    <div class="reason">${esc(rec.reason)}</div>${exHtml}</div>`;
+}
+
+function renderPhone() {
+  const s = state;
+  const sending = s.status === 'sending';
+  const startDisabled = sending || (s.messages.length === 0 && !s.notice && !s.draft);
+  let body = '';
+  if (s.messages.length === 0) {
+    const expired = s.notice === 'expired'
+      ? '<div class="notice err" style="margin:0 0 16px">對話已失效，請開始新對話。剛剛那句已放回輸入框。</div>' : '';
+    body = `<div class="empty">${expired}告訴我有幾個人、想玩什麼感覺的桌遊，我幫你挑。
+      <div class="chips">${EXAMPLES.map((t) => `<button class="btn" data-example="${esc(t)}" ${sending ? 'disabled' : ''}>${esc(t)}</button>`).join('')}</div></div>`;
+  } else {
+    body = s.messages.map((m, mi) => {
+      if (m.role === 'player') return `<div class="bubble player">${esc(m.text)}</div>`;
+      const relaxed = m.relaxedConstraint ? `<div class="relaxed">以下放寬了「${RELAXED_LABEL[m.relaxedConstraint]}」條件</div>` : '';
+      const cards = (m.recommendations || []).map((r, ri) => renderCard(r, `${mi}-${ri}`)).join('');
+      return `<div class="advisor-block"><div class="bubble advisor">${esc(m.text)}</div>${relaxed}${cards}</div>`;
+    }).join('');
+    if (sending) body += '<div class="bubble advisor loading">⏳ 正在找桌遊…</div>';
+  }
+  const banner = s.notice === 'unavailable'
+    ? '<div class="notice warn">推薦 Agent 暫時無法回應，剛剛那句已放回輸入框，請再送一次。</div>'
+    : s.notice === 'unauthenticated' ? '<div class="notice err">請先登入再使用推薦 Agent。</div>' : '';
+  const len = s.draft.trim().length;
+  const modeBtn = (m, t) => `<button class="btn ${excerptMode === m ? 'on' : ''}" data-mode="${m}">${t}</button>`;
+
+  document.getElementById('phone').innerHTML = `
+    <div class="appbar"><span class="title">推薦 Agent（參考畫面）</span>
+      <button class="btn small" id="startNew" ${startDisabled ? 'disabled' : ''}>開始新對話</button></div>
+    <div class="modes">片段顯示（比較用，不是正式按鈕）：${modeBtn('collapsed', '摺疊')}${modeBtn('clamp', '兩行')}${modeBtn('full', '完整')}</div>
+    <div class="chat" id="chat">${body}</div>
+    ${banner}
+    <div class="composer">
+      <div class="row"><textarea id="draft" placeholder="輸入訊息…" ${sending ? 'disabled' : ''}>${esc(s.draft)}</textarea>
+        <button class="btn primary" id="sendBtn" ${L.canSend(s) ? '' : 'disabled'}>送出</button></div>
+      <div class="under"><button class="linkish">想問規則或玩法？到規則問答 →</button>
+        <span class="${len > L.MAX_CONTENT ? 'over' : ''}">${len} / ${L.MAX_CONTENT}</span></div>
+    </div>`;
+  const chat = document.getElementById('chat');
+  chat.scrollTop = chat.scrollHeight;
+}
+
+/* ---------- 右側面板 ---------- */
+const NOTICE_LABEL = { expired: '對話已失效', unavailable: '暫時無法回應', unauthenticated: '請先登入' };
+function snapshot(s) {
+  const p = s.messages.filter((m) => m.role === 'player').length;
+  return {
+    '保管的 response_id': s.responseId ? `<code>${s.responseId}</code>` : '（沒有，下一則是新對話）',
+    '狀態': s.status === 'sending' ? '送出中，等待回應' : '可以輸入',
+    '輸入框': s.draft ? esc(s.draft) : '（空）',
+    '提示': s.notice ? NOTICE_LABEL[s.notice] : '（無）',
+    '畫面上的訊息': `${s.messages.length} 則（玩家 ${p}、推薦 Agent ${s.messages.length - p}）`,
+  };
+}
+
+function renderState() {
+  const now = snapshot(state), before = snapshot(prev);
+  document.getElementById('stateGrid').innerHTML = Object.keys(now).map((k) =>
+    `<div class="k">${k}</div><div class="v ${now[k] !== before[k] ? 'changed' : ''}">${now[k]}</div>`).join('');
+}
+
+function renderExchange() {
+  const el = document.getElementById('exchange');
+  if (!lastExchange) { el.innerHTML = '<p class="hint">還沒送出任何訊息。</p>'; return; }
+  const x = lastExchange;
+  let html = `<p class="hint" style="margin-top:0">前端 <code>state/</code> 呼叫：<code>${x.method}</code></p>`;
+  if (x.request) {
+    html += `<div><b>請求</b> <code>${x.request.method} ${x.request.path}</code></div>
+      <pre class="json">${esc(JSON.stringify(x.request.body, null, 2))}</pre>`;
+    if (!x.response) {
+      html += '<div><b>回應</b>（等待中，按右上「讓後端回應」）</div>';
+    } else if (x.response.status === 0) {
+      html += '<div><b>回應</b> <span class="status bad">沒有收到回應</span></div>';
+    } else {
+      const good = x.response.status < 300;
+      html += `<div><b>回應</b> <span class="status ${good ? 'ok' : 'bad'}">${x.response.status}</span></div>
+        <pre class="json">${esc(JSON.stringify(x.response.body, null, 2))}</pre>`;
+    }
+  }
+  if (x.internals) html += `<div class="internals"><b>後端內部：</b>${esc(x.internals)}</div>`;
+  el.innerHTML = html;
+}
+
+function renderBackend() {
+  document.getElementById('respondBtn').disabled = state.status !== 'sending';
+}
+
+/* ---------- 導覽 ---------- */
+const WALKS = [
+  { title: '追問後推薦',
+    desc: '最常見的路線。看右邊：第 1 則請求的 previous_response_id 是 null，之後每則都帶上一則回來的 response_id。卡片在 reply 下方，reply 本身不列桌遊名單。',
+    steps: [
+      { label: '玩家送出「我們 4 個人」', send: '我們 4 個人' },
+      { label: '後端回：追問偏好', respond: 'ask' },
+      { label: '玩家送出「輕鬆一點，不要太看運氣」', send: '輕鬆一點，不要太看運氣' },
+      { label: '後端回：推薦 3 款', respond: 'recommend' },
+    ] },
+  { title: '放寬時長',
+    desc: '沒有 10 分鐘內的桌遊時，Agent 自己放寬時長再查一次。看回應的 relaxed_constraint，和卡片上方那行提示。',
+    steps: [
+      { label: '玩家送出「我們 4 個人，想玩 10 分鐘內結束的，熱鬧一點」', send: '我們 4 個人，想玩 10 分鐘內結束的，熱鬧一點' },
+      { label: '後端回：放寬時長後推薦 2 款', respond: 'relaxed' },
+    ] },
+  { title: '推薦被程式丟掉',
+    desc: 'LLM 推薦了不在工具結果裡的桌遊，程式全部丟掉、換成固定文字。看 response_id：固定文字那則回的是舊的 resp_01，所以 Agent 不會記得這段失敗的往返，玩家再說一次就好。',
+    steps: [
+      { label: '玩家送出「我們 4 個人」', send: '我們 4 個人' },
+      { label: '後端回：追問偏好', respond: 'ask' },
+      { label: '玩家送出「輕鬆一點」', send: '輕鬆一點' },
+      { label: '後端回：推薦全部被丟掉 → 固定文字', respond: 'allDropped' },
+      { label: '玩家送出「輕鬆一點，不要太看運氣」', send: '輕鬆一點，不要太看運氣' },
+      { label: '後端回：推薦 3 款（請求帶的還是 resp_01）', respond: 'recommend' },
+    ] },
+  { title: '對話過期',
+    desc: 'Azure 只保留對話 30 天。過期時畫面清空，剛剛那句放回輸入框。看最後一步：Agent 已經忘了「4 個人」，所以重新追問人數。',
+    steps: [
+      { label: '玩家送出「我們 4 個人」', send: '我們 4 個人' },
+      { label: '後端回：追問偏好', respond: 'ask' },
+      { label: '玩家送出「想玩動腦的」', send: '想玩動腦的' },
+      { label: '後端回：對話過期（404）', respond: 'expired' },
+      { label: '玩家直接按送出（輸入框裡是剛剛那句）', send: null },
+      { label: '後端回：追問人數', respond: 'askPlayers' },
+    ] },
+  { title: '暫時無法回應',
+    desc: 'Azure 逾時時，剛送出的那句從畫面拿掉、放回輸入框，response_id 不變。再送一次就接上原本的對話。',
+    steps: [
+      { label: '玩家送出「我們 4 個人」', send: '我們 4 個人' },
+      { label: '後端回：追問偏好', respond: 'ask' },
+      { label: '玩家送出「輕鬆一點，不要太看運氣」', send: '輕鬆一點，不要太看運氣' },
+      { label: '後端回：Azure 暫時連不上（503）', respond: 'unavailable' },
+      { label: '玩家直接按送出（請求帶的還是 resp_01）', send: null },
+      { label: '後端回：推薦 3 款', respond: 'recommend' },
+    ] },
+  { title: '離題與查無結果',
+    desc: '問規則時請玩家改用規則問答；12 個人沒有適合的桌遊時建議分桌。兩種都沒有卡片。',
+    steps: [
+      { label: '玩家送出「卡卡頌怎麼計分？」', send: '卡卡頌怎麼計分？' },
+      { label: '後端回：離題（問規則）', respond: 'offTopic' },
+      { label: '玩家送出「我們 12 個人」', send: '我們 12 個人' },
+      { label: '後端回：沒有符合的桌遊', respond: 'noMatch' },
+    ] },
+];
+let walkIndex = 0;
+let walkStep = 0;
+
+function selectWalk(i) { walkIndex = i; walkStep = 0; resetAll(); render(); }
+
+function runStep(i) {
+  if (i !== walkStep) return;
+  const step = WALKS[walkIndex].steps[i];
+  if ('send' in step) doSend(step.send); else doRespond(step.respond);
+  walkStep++;
+  renderWalk();
+}
+
+function renderWalk() {
+  document.getElementById('tabs').innerHTML = WALKS.map((w, i) =>
+    `<button class="btn ${i === walkIndex ? 'on' : ''}" data-walk="${i}">${i + 1}. ${w.title}</button>`).join('')
+    + '<button class="btn" data-walk-reset>重來</button>';
+  const w = WALKS[walkIndex];
+  document.getElementById('walkDesc').textContent = w.desc;
+  document.getElementById('steps').innerHTML = w.steps.map((st, i) =>
+    `<button class="btn ${i < walkStep ? 'done' : ''}" data-step="${i}" ${i === walkStep ? '' : 'disabled'}>${i < walkStep ? '✓ ' : ''}${i + 1}. ${esc(st.label)}</button>`).join('');
+}
+
+function render() { renderPhone(); renderState(); renderExchange(); renderBackend(); renderWalk(); }
+
+/* ---------- 事件 ---------- */
+document.getElementById('scenario').innerHTML = Object.entries(FakeBackend.SCENARIOS)
+  .map(([k, v]) => `<option value="${k}">${v.label}</option>`).join('');
+document.getElementById('respondBtn').addEventListener('click', () => doRespond(document.getElementById('scenario').value));
+
+document.addEventListener('click', (e) => {
+  const t = e.target.closest('button');
+  if (!t) return;
+  if (t.id === 'sendBtn') doSend(null);
+  else if (t.id === 'startNew') doStartNew();
+  else if (t.dataset.example) doSend(t.dataset.example);
+  else if (t.dataset.mode) { excerptMode = t.dataset.mode; renderPhone(); }
+  else if (t.dataset.card) { openCards.has(t.dataset.card) ? openCards.delete(t.dataset.card) : openCards.add(t.dataset.card); renderPhone(); }
+  else if (t.dataset.ex) { openExcerpts.has(t.dataset.ex) ? openExcerpts.delete(t.dataset.ex) : openExcerpts.add(t.dataset.ex); renderPhone(); }
+  else if (t.dataset.walk !== undefined) selectWalk(Number(t.dataset.walk));
+  else if (t.dataset.walkReset !== undefined) selectWalk(walkIndex);
+  else if (t.dataset.step !== undefined) runStep(Number(t.dataset.step));
+});
+
+document.addEventListener('input', (e) => {
+  if (e.target.id !== 'draft') return;
+  state = L.reduce(state, { type: 'editDraft', text: e.target.value });
+  // 只更新送出按鈕與字數，不重畫整個畫面（避免游標跳掉）
+  document.getElementById('sendBtn').disabled = !L.canSend(state);
+  const len = state.draft.trim().length;
+  const counter = document.querySelector('.composer .under span');
+  counter.textContent = `${len} / ${L.MAX_CONTENT}`;
+  counter.className = len > L.MAX_CONTENT ? 'over' : '';
+});
+
+document.addEventListener('keydown', (e) => {
+  if (e.target.id === 'draft' && e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); doSend(null); }
+});
+
+render();
+</script>
+</body>
+</html>

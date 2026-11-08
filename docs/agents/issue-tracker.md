@@ -28,3 +28,13 @@ Used by `/wayfinder`. The **map** is a file with one **child** file per ticket.
 - **Frontier**: scan `.scratch/<effort>/issues/` for files that are open, unblocked, and unclaimed; first by number wins.
 - **Claim**: set `Status: claimed` and save before any work.
 - **Resolve**: append the answer under an `## Answer` heading, set `Status: resolved`, then append a context pointer (gist + link) to the map's Decisions-so-far in `map.md`.
+
+## Implementation tickets after a wayfinder effort
+
+When a wayfinder effort's spec is split into implementation tickets, they go in a sibling directory, not in the map's `issues/`, so the wayfinder frontier never picks them up.
+
+- **Location**: `.scratch/<effort>-impl/issues/<NN>-<slug>.md`, numbered from `01` in dependency order (blockers first). Example: `.scratch/games-advisor-impl/` for `.scratch/games-advisor/`.
+- **Header lines**: `Status:`, `Blocked by:`, `Spec:` (links to `../../<effort>/spec.md`, with the sections it implements), `MR:`.
+- **Status**: starts as `ready-for-agent` or `ready-for-human`, becomes `resolved` when done. There is no in-progress state.
+- **Where the status changes**: `dev` takes no direct pushes (AGENTS.md §8.1). A ticket with an MR is set to `resolved` in its own MR, in the last commit before merge. A ticket without an MR records its result in the first MR that uses it and is resolved there; its `MR:` line names that MR.
+- **Skills**: pass the directory path (for example `.scratch/games-advisor-impl/`) to skills that read or write tickets.
