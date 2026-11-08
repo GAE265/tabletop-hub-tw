@@ -2,7 +2,7 @@ from app.core.config import Settings
 from app.integrations.llm.base import LLMProvider
 from app.integrations.llm.fake import FakeLLMProvider
 
-# 🚧 cloud 由 games_advisor-impl ticket 08 實作
+# 🚧 cloud 尚未實作，之後另開 MR 補上雲端實作
 UNIMPLEMENTED = ("cloud", "local")
 
 

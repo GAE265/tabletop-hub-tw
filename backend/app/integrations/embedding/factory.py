@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from app.integrations.embedding.base import EmbeddingProvider
 from app.integrations.embedding.fake import FakeEmbeddingProvider
 
-# 🚧 cloud 由 games_advisor-impl ticket 08 實作
+# 🚧 cloud 尚未實作，之後另開 MR 補上雲端實作
 UNIMPLEMENTED = ("cloud",)
 
 

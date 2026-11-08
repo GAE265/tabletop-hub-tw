@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     llm_model: str | None = None
     # 批次指令用的部署名稱；沒填就用 llm_model
     llm_batch_model: str | None = None
+    # ⚠️ 合法值要和 Azure 的 reasoning.effort 一致。
     # 沒填就不帶 reasoning，用模型預設；非推理模型要留空
     llm_reasoning_effort: Literal["none", "low", "medium", "high", "xhigh", "max"] | None = None
     llm_timeout_seconds: float = 30

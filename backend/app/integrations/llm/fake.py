@@ -56,10 +56,7 @@ class FakeLLMProvider(LLMProvider):
     def generate_json(self, *, instructions: str, input: str, schema: JsonSchema) -> dict:
         kwargs = {"instructions": instructions, "input": input, "schema": schema}
         self.calls.append(FakeCall("generate_json", kwargs))
-        item = _next_item(self._json_outputs, "json_outputs")
-        if isinstance(item, Exception):
-            raise item
-        return item
+        return _next_item(self._json_outputs, "json_outputs")
 
     def respond(
         self,
@@ -94,8 +91,6 @@ class FakeLLMProvider(LLMProvider):
             raise LLMConversationNotFound(f"找不到 previous_response_id：{previous_response_id}")
 
         item = _next_item(self._responses, "responses")
-        if isinstance(item, Exception):
-            raise item
         response_id = f"fake_resp_{len(self._issued_response_ids) + 1}"
         self._issued_response_ids.add(response_id)
         return LLMResponse(
@@ -107,9 +102,13 @@ class FakeLLMProvider(LLMProvider):
         )
 
 
-def _next_item[T](script: deque[T] | None, name: str) -> T:
+def _next_item[T](script: deque[T | Exception] | None, name: str) -> T:
+    """取出腳本的下一個項目；項目是例外就拋出它。"""
     if script is None:
         raise LLMUnavailable(f"沒有設定模型：FakeLLMProvider 沒有 {name} 腳本")
     if not script:
         raise AssertionError(f"FakeLLMProvider 的 {name} 腳本已經用完，測試多呼叫了一次")
-    return script.popleft()
+    item = script.popleft()
+    if isinstance(item, Exception):
+        raise item
+    return item

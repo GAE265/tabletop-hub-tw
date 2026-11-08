@@ -12,7 +12,7 @@ class JsonSchema:
     additionalProperties 為 false、選填欄位寫成可為 null。整合層不轉換、不驗證。
     """
 
-    name: str  # Azure 規定只能用英數字、底線、連字號
+    name: str  # ⚠️ Azure 規定只能用英數字、底線、連字號
     schema: dict[str, Any]
 
 
