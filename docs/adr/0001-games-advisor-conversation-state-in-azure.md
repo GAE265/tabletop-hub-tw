@@ -17,4 +17,5 @@ games_advisor 的推薦 Agent 是一個聊天室：玩家和 Agent 對話選出�
 - `integrations/llm` 的介面要能接續上一輪（傳入 `previous_response_id`），fake 實作也要模擬這件事。介面由瑋鋐擁有，要另外提案。
 - 接續時，前面每一輪的輸入 token 仍會重新計費，費用不會比送完整紀錄少；`instructions` 不會延續，每輪都要重送。
 - 對話紀錄存在 Azure（`store=true`），預設保留 30 天，我們不主動刪除。超過期限的 `response_id` 不能再接續，API 回錯誤，前端請玩家開始新對話。
+- 換 Foundry 資源時（例如開發期間各自的 Foundry 整合成一個），進行中的對話全部失效：舊的 `response_id` 在新資源找不到，處理方式和過期相同。
 - 後端不檢查 `response_id` 屬於哪位使用者：id 是很長的隨機字串，對話內容只有桌遊偏好，API 也沒有讀取歷史訊息的端點。

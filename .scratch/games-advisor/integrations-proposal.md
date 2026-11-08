@@ -136,7 +136,7 @@ class EmbeddingProvider(ABC):
 - 只有批次版。線上只轉 1 段時，傳長度 1 的 list。
 - 回傳的順序、筆數和 `texts` 相同；傳入空的 list 就回傳空的 list，不發請求。
 - 一個請求最多送幾段，由實作決定，呼叫端不用管。
-- 每個向量的長度都等於 `EMBEDDING_DIM`。text-embedding-3 系列的雲端實作帶 `dimensions=EMBEDDING_DIM`。
+- 每個向量的長度都等於建立 provider 時傳入的 `dim`（`games_advisor` 傳 `GAMES_ADVISOR_EMBEDDING_DIM`，見第 7 節）。text-embedding-3 系列的雲端實作帶 `dimensions=dim`。
 - 傳入的文字有空字串或只有空白時，拋 `ValueError`。
 - 回傳零向量或維度不符時，拋 `EmbeddingError`。這個檢查寫成所有實作共用的函式，fake 也會檢查。
 
@@ -148,7 +148,7 @@ class EmbeddingProvider(ABC):
 |---|---|---|
 | `LLMError` | 基底類別。也用在設定或程式錯誤，例如金鑰錯誤（401）、schema 不符合 strict 規定（400） | 不攔截，變成 500 |
 | `LLMUnavailable(LLMError)` | 逾時、連線失敗、429、5xx，SDK 重試 2 次後仍然失敗 | 對話：回 HTTP 錯誤；批次：該款列進報告 |
-| `LLMConversationNotFound(LLMError)` | `previous_response_id` 過期或無效 | 回「對話已失效」錯誤，前端請玩家開始新對話 |
+| `LLMConversationNotFound(LLMError)` | Azure 找不到 `previous_response_id`：過期、亂填，或別的 Foundry 資源產生的，一律用這個 | 回「對話已失效」錯誤，前端請玩家開始新對話 |
 | `LLMOutputRejected(LLMError)` | 被 Azure 內容過濾擋下、模型拒答（refusal）、輸出因 token 上限被截斷、輸出不是合法 JSON | 對話：換成固定文字；批次：重試 1 次，仍然失敗就跳過 |
 
 `integrations/embedding/errors.py`：
@@ -186,13 +186,14 @@ class FakeResponse:
 - 每次呼叫的方法名稱與參數都記在 `fake.calls`。測試靠它檢查：每次都有重送 instructions、`previous_response_id` 有接上、第 3 次呼叫是 `allow_tool_calls=False`。
 - fake 不檢查 schema，也不檢查 `allow_tool_calls`：腳本寫什麼就回什麼。這樣才能測 service 的防呆，例如收到不在工具結果裡的 `game_id`。
 - 腳本用完了還被呼叫，就拋 `AssertionError`，代表測試本身寫錯。
+- 根本沒給腳本時（`responses=None`），`respond` 拋 `LLMUnavailable("沒有設定模型")`；`json_outputs=None` 時，`generate_json` 同理。後端用 `LLM_PROVIDER=fake` 啟動時（組員、CI）就是這種 fake，對話 API 因此回 503，不會變成 500（「[LLM 設定也改成 games_advisor 自己的一組嗎](issues/19-games-advisor-llm-settings.md)」）。
 - 既有的 `FakeLLMProvider()`、`FakeLLMProvider("你好")` 用法不變。
 
 ### 6.2 `FakeEmbeddingProvider`
 
 ```python
 FakeEmbeddingProvider(
-    dim: int,                                     # factory 傳入 EMBEDDING_DIM
+    dim: int,                                     # factory 傳入 EmbeddingConfig.dim
     vectors: dict[str, list[float]] | None = None,
     error: Exception | None = None,
 )
@@ -204,7 +205,7 @@ FakeEmbeddingProvider(
 - 指定零向量時，`embed` 拋 `EmbeddingError`（共用的檢查函式）。
 - 有設定 `error` 時，每次 `embed` 都拋出它，例如 `EmbeddingUnavailable()`。
 - 每次呼叫都記在 `fake.calls`。
-- `dim` 一律從設定讀，不寫死（AGENTS.md §4.4）。只有不連資料庫的 service 單元測試，才可以傳比較小的 `dim`。
+- `dim` 一律由呼叫方從設定讀出來再傳入（`games_advisor` 用 `GAMES_ADVISOR_EMBEDDING_DIM`），不寫死（AGENTS.md §4.4）。只有不連資料庫的 service 單元測試，才可以傳比較小的 `dim`。
 
 ## 7. 設定欄位
 
@@ -218,19 +219,33 @@ LLM_MODEL=             # 對話模型的部署名稱
 LLM_BATCH_MODEL=       # 批次指令用的部署名稱；留空就用 LLM_MODEL
 LLM_REASONING_EFFORT=  # none | low | medium | high | xhigh | max；留空就用模型預設，非推理模型要留空
 LLM_TIMEOUT_SECONDS=   # 單次請求逾時秒數，預設 30
-EMBEDDING_PROVIDER=    # fake | cloud
-EMBEDDING_ENDPOINT=
-EMBEDDING_API_KEY=
-EMBEDDING_MODEL=       # embedding 的部署名稱
-EMBEDDING_DIM=         # 既有欄位
+GAMES_ADVISOR_EMBEDDING_PROVIDER=  # fake | cloud；沒填就是 fake
+GAMES_ADVISOR_EMBEDDING_ENDPOINT=
+GAMES_ADVISOR_EMBEDDING_API_KEY=
+GAMES_ADVISOR_EMBEDDING_MODEL=     # embedding 的部署名稱；也記在每個向量上，用來偵測換了模型
+GAMES_ADVISOR_EMBEDDING_DIM=       # 沒填就是 1536
 ```
 
-- 每個 provider 只綁一個部署，方法不帶 `model` 參數。「[專題專用 Foundry 要部署哪些模型](issues/17-foundry-model-deployments.md)」決定批次用比較大的模型，所以加 `LLM_BATCH_MODEL`：批次指令另外建立一個 provider，部署換成 `LLM_BATCH_MODEL`、不帶推理強度（用模型預設）、逾時 300 秒（寫在批次指令裡，不開設定），介面不用改。
-- embedding 不共用 LLM 的 endpoint 與金鑰，之後才能「LLM 用地端、embedding 用雲端」。目前兩組填一樣的值即可。
+- **embedding 設定只給 `games_advisor` 用**（「[詞彙表改版或換 embedding 模型時怎麼處理](issues/18-vocabulary-and-embedding-revisions.md)」）：開發期間每位組員各用自己的 LLM、embedding 模型與 PostgreSQL，可能各自有一個 Foundry project；最後可能整合成一個 Foundry，也可能維持多個。`games_advisor` 的 Foundry 只有立倫使用，金鑰不和組員共用。所以本提案不新增全域的 `EMBEDDING_PROVIDER`、`EMBEDDING_ENDPOINT`、`EMBEDDING_API_KEY`、`EMBEDDING_MODEL`，規則書 RAG 需要時由他們自己提。
+- 沒填 `GAMES_ADVISOR_EMBEDDING_*` 時不退回任何全域設定。組員與 CI 不用填，預設就是 fake。
+- 既有的全域 `EMBEDDING_DIM` 不動（資料庫骨架的 spec 要求它存在），`games_advisor` 不讀它。
+- **LLM 設定是全域的**（「[LLM 設定也改成 games_advisor 自己的一組嗎](issues/19-games-advisor-llm-settings.md)」）：換 embedding 模型會讓存進資料庫的向量無法比較，換 LLM 模型則不會，已存的心得摘要與標籤仍然有效。所以 `games_advisor` 直接讀全域 `LLM_*`，照 AGENTS.md §4.2 用 `LLM_PROVIDER` 切換。開發期間每人用自己的 `.env`，不會互相影響；最後部署如果維持多個 Foundry，或其他 domain 要不同的模型、推理強度，再改成 `games_advisor` 自己的欄位。
+
+- 每個 provider 只綁一個部署，方法不帶 `model` 參數。「[專題專用 Foundry 要部署哪些模型](issues/17-foundry-model-deployments.md)」決定批次用比較大的模型，所以加 `LLM_BATCH_MODEL`：批次指令另外建立一個 provider，部署換成 `LLM_BATCH_MODEL`、不帶推理強度（用模型預設）、逾時 300 秒（寫在批次指令裡，不開設定），介面不用改。做法是複製一份 settings 再交給 factory：
+
+```python
+batch_settings = settings.model_copy(update={
+    "llm_model": settings.llm_batch_model or settings.llm_model,
+    "llm_reasoning_effort": None,
+    "llm_timeout_seconds": 300,
+})
+llm = get_llm_provider(settings.llm_provider, batch_settings)
+```
+- embedding 不共用 LLM 的 endpoint 與金鑰，之後才能「LLM 用地端、embedding 用雲端」。目前 `GAMES_ADVISOR_EMBEDDING_ENDPOINT`、`GAMES_ADVISOR_EMBEDDING_API_KEY` 和 LLM 填一樣的值即可。
 - SDK 預設的逾時是 600 秒，玩家等不了那麼久，所以要設定。預設 30 秒：gpt-5.6-luna 用 `low` 時，一次呼叫通常 10 秒內完成；前端的等待上限是 100 秒，比 3 × 30 秒長。重試次數沿用 SDK 預設的 2 次，不另外開設定。
 - `LLM_REASONING_EFFORT` 不是合法值時，啟動失敗。
 - 用 v1 端點，不需要 `api-version`（第一張實作 ticket 會驗證）。
-- **待瑋鋐確認**：AGENTS.md §4.2 寫「用 `LLM_PROVIDER` 切換……embedding 同理」。另外開 `EMBEDDING_PROVIDER` 是我們的解讀；條文也可以讀成 embedding 共用 `LLM_PROVIDER`。
+- **待瑋鋐確認**：AGENTS.md §4.2 寫「用 `LLM_PROVIDER` 切換……embedding 同理」。`games_advisor` 另外用自己的 `GAMES_ADVISOR_EMBEDDING_PROVIDER` 切換，見第 9 節第 5 點。
 
 Factory：
 
@@ -238,10 +253,21 @@ Factory：
 get_llm_provider(name: str, settings: Settings | None = None) -> LLMProvider
     # fake：不需要 settings。cloud：settings 必填，缺 endpoint、金鑰或 model 時拋 ValueError。
     # local：NotImplementedError。其他值：ValueError。
-get_embedding_provider(name: str, settings: Settings) -> EmbeddingProvider
+@dataclass(frozen=True)
+class EmbeddingConfig:          # integrations/embedding/factory.py
+    provider: str               # fake | cloud
+    dim: int
+    endpoint: str | None = None
+    api_key: str | None = None
+    model: str | None = None
+
+get_embedding_provider(config: EmbeddingConfig) -> EmbeddingProvider
+    # fake：只用 dim。cloud：缺 endpoint、金鑰或 model 時拋 ValueError。其他值：ValueError。
 ```
 
-`main.py` 啟動時把兩個 provider 都建好（`app.state.llm`、`app.state.embedding`）。設定不完整就讓啟動失敗，和現在「`cloud` 尚未實作就啟動失敗」的做法一致。
+- `get_embedding_provider` 只收設定值，不讀 `Settings`，整合層因此不知道 `games_advisor` 存在（AGENTS.md §4.2）。由呼叫方用 `GAMES_ADVISOR_EMBEDDING_*` 組出 `EmbeddingConfig`。
+- `get_llm_provider` 讀 `Settings`：LLM 讀的是全域欄位，整合層讀它不會因此知道任何 domain。兩個 factory 寫法不同，是因為設定的歸屬不同。
+- `main.py` 啟動時建好 `app.state.llm` 與 `app.state.games_advisor_embedding`，批次指令各自再建一個。設定不完整就讓啟動失敗，和現在「`cloud` 尚未實作就啟動失敗」的做法一致。
 
 ## 8. 第三方套件
 
@@ -263,6 +289,8 @@ get_embedding_provider(name: str, settings: Settings) -> EmbeddingProvider
 
 3. **§4.3 錯誤狀態碼**：`LLMUnavailable`、`EmbeddingError` 在對話 API 會變成 5xx，不在 §4.3 列出的狀態碼裡。用哪個狀態碼由「[API 契約與 prototype 頁面](issues/13-api-contract-and-prototype.md)」決定。
 4. **§2.1 repo 是公開的**：本提案和 `.env.example` 都不寫真實的資源名稱、endpoint 或金鑰。
+5. **§4.2「embedding 同理」**：條文的意思是 embedding 也用一個全專案的設定切換雲端與地端。`games_advisor` 改用自己的一組 `GAMES_ADVISOR_EMBEDDING_*`，理由見第 7 節：組員各用自己的資源開發，最後也不一定整合成一個 Foundry 或一個 PostgreSQL。切換雲端、地端的能力不變，只是設定只屬於 `games_advisor`。LLM 沒有這個出入，照 §4.2 用全域 `LLM_PROVIDER`。
+6. **OpenSpec 規格 `openspec/specs/llm-provider/spec.md`**：骨架階段寫的規格只有 `generate(prompt)`，並規定「骨架階段只支援 `fake`」、`LLM_PROVIDER=cloud` 要報「尚未實作」。實作本提案後這兩條都不成立，由實作的人開一個 OpenSpec change 更新：加上 `generate_json`、`respond`；改成「`fake`、`cloud` 已實作，`local` 尚未實作」。
 
 ## 10. 要在 Azure 實際驗證的事（第一張實作 ticket）
 
@@ -271,7 +299,7 @@ get_embedding_provider(name: str, settings: Settings) -> EmbeddingProvider
 1. 同一個請求同時帶 `tools`（strict）與 `text.format`（strict json_schema）時：模型會呼叫工具；送回工具結果並接上 `previous_response_id` 後，最終輸出符合 schema。
 2. 已經有工具呼叫紀錄的對話，帶 `tool_choice: "none"` 時，模型不會再呼叫工具。
 3. v1 端點不帶 `api-version` 也能呼叫。
-4. `previous_response_id` 無效時，Azure 實際回的狀態碼和錯誤格式，用來寫 `LLMConversationNotFound` 的轉換。
+4. `previous_response_id` 無效時，Azure 實際回的狀態碼和錯誤格式，用來寫 `LLMConversationNotFound` 的轉換。轉換規則：只要 Azure 表示找不到這個 id 就轉換，不分過期、亂填、別的 Foundry 資源產生的（換 Foundry 時會遇到）。
 5. 內容過濾擋下輸入、擋下輸出時，Azure 分別回什麼。
 
 **備案**：如果第 1 點不成立，最終輸出改成由一個「交卷」工具 `submit_recommendations` 帶出，工具參數就是原本的 `output_schema`。service 收到這個工具呼叫，就當成最終輸出，不送回結果。介面只改一處：`respond` 的 `output_schema` 改成可以不帶。
@@ -290,8 +318,10 @@ get_embedding_provider(name: str, settings: Settings) -> EmbeddingProvider
 | `LLM_PROVIDER=local` | `get_llm_provider("local")`、`create_app` | `NotImplementedError`（既有測試，參數改成只有 `local`） |
 | 未知的 `LLM_PROVIDER` | `get_llm_provider("nope")` | `ValueError`（既有） |
 | `LLM_REASONING_EFFORT` 不是合法值 | `create_app(settings)` | 啟動失敗，錯誤訊息指出這個欄位 |
-| `EMBEDDING_PROVIDER=fake` | `get_embedding_provider("fake", settings)` | 回傳 `FakeEmbeddingProvider`，`dim` 等於 `EMBEDDING_DIM` |
-| `EMBEDDING_PROVIDER=cloud`，缺 `EMBEDDING_MODEL` | `create_app(settings)` | 啟動失敗，錯誤訊息指出缺哪個欄位 |
+| `EmbeddingConfig(provider="fake", dim=1536)` | `get_embedding_provider(config)` | 回傳 `FakeEmbeddingProvider`，`dim` 等於 1536 |
+| `GAMES_ADVISOR_EMBEDDING_*` 都沒填 | `create_app(settings)` | 啟動成功，`app.state.games_advisor_embedding` 是 fake，`dim` 是 1536；不讀全域的 `EMBEDDING_DIM` |
+| `GAMES_ADVISOR_EMBEDDING_PROVIDER=cloud`，缺 `GAMES_ADVISOR_EMBEDDING_MODEL` | `create_app(settings)` | 啟動失敗，錯誤訊息指出缺哪個欄位 |
+| 未知的 provider | `get_embedding_provider(EmbeddingConfig(provider="nope", dim=1536))` | `ValueError` |
 
 ### 11.2 `FakeLLMProvider`
 
@@ -301,6 +331,7 @@ get_embedding_provider(name: str, settings: Settings) -> EmbeddingProvider
 | `previous_response_id` 不是 fake 產生的 | `respond(previous_response_id="resp_expired")` | `LLMConversationNotFound`，腳本沒有被用掉 |
 | 腳本項目是例外 | `respond`、`generate_json` | 拋出那個例外 |
 | 腳本用完 | 再多呼叫一次 | `AssertionError` |
+| 沒給腳本（`FakeLLMProvider()`） | `respond`、`generate_json` | `LLMUnavailable`，訊息說明沒有設定模型 |
 | 任何呼叫 | `respond(...)` | `fake.calls` 記下方法名稱與所有參數 |
 | `json_outputs` 有兩筆 | `generate_json` 兩次 | 依序回傳兩筆 |
 | 既有用法 | `FakeLLMProvider("你好").generate("hi")` | `"你好"`（既有） |
