@@ -33,9 +33,9 @@
 - [英文與繁中心得從哪裡取得](issues/03-review-sources.md)：BGG 評分留言量最大，部落格要作者同意，PTT 屬灰色地帶，Reddit、巴哈、Dcard 不行；BGG 的 AI 限制已由 ticket 15 更正
 - [核對 BGG 使用條款原文](issues/15-verify-bgg-terms.md)：現行 6.B.iv 允許把 BGG 內容交給 LLM 做摘要、搜尋、回答等一般用途，只禁止大型 AI 公司訓練；本專案視為非商業，收錄約 3–15 款；能不能存進資料庫還沒核對
 - [確認可用的 Azure OpenAI 資源](issues/04-azure-openai-resources.md)：另建專題專用的 Foundry，只有立倫使用，課程額度 NTD 2800；已確認 gpt-4.1-mini、gpt-4.1、gpt-4o-mini 支援 structured outputs，gpt-5.6 系列不確定；要部署哪些模型由新 ticket 決定。已由「專題專用 Foundry 要部署哪些模型」更正：額度是 NTD 3000；Microsoft 文件已列出 gpt-5.6 系列支援 structured outputs 與工具呼叫
-- [對話狀態存在哪裡](issues/05-conversation-state.md)：交給 Azure Responses API 保存，前端帶 `response_id` 接續；後端不存、不綁使用者、不能回看，Azure 保留 30 天；偏離 §4.2 的地端切換，寫成 ADR 0001（proposed）等組員決定
+- [對話狀態存在哪裡](issues/05-conversation-state.md)：交給 Azure Responses API 保存，前端帶 `response_id` 接續；後端不存、不綁使用者、不能回看，Azure 保留 30 天；偏離 §4.2 的地端切換，寫成 ADR 0001，組員已同意（2026-11-09）
 - [收錄哪些桌遊、存哪些欄位](issues/06-game-coverage-and-fields.md)：15 款（含 Demo 三款）；條件欄位是人數、時長、年齡，偏好欄位是 BGG 的類別、機制、難度；Codex 透過 BGG XML API 產生 repo 外的 JSON，後端匯入指令讀檔寫入
-- [Agent 怎麼追問、什麼時候推薦](issues/07-conversation-flow.md)：Agent 依對話規則自己判斷追問或推薦（function calling），程式守三道護欄：人數必填、只推薦工具回傳的桌遊、每則訊息最多呼叫 2 次工具；人數是唯一必要條件，最多推薦 3 款，一律用繁中；查無結果時放寬時長或年齡其中一項，人數不放寬；離題規則也在這張；偏離「程式判斷流程」的取捨寫成 ADR 0002（proposed）
+- [Agent 怎麼追問、什麼時候推薦](issues/07-conversation-flow.md)：Agent 依對話規則自己判斷追問或推薦（function calling），程式守三道護欄：人數必填、只推薦工具回傳的桌遊、每則訊息最多呼叫 2 次工具；人數是唯一必要條件，最多推薦 3 款，一律用繁中；查無結果時放寬時長或年齡其中一項，人數不放寬；離題規則也在這張；偏離「程式判斷流程」的取捨寫成 ADR 0002，組員已同意（2026-11-09）
 - [標籤詞彙表怎麼定](issues/08-tag-vocabulary.md)：詞彙先從心得歸納，再由立倫審核固定（最多約 30 個），每個標籤有英文代碼、繁中名稱、繁中定義；只描述玩起來的感受，不和條件或 BGG 欄位重複，每個面向只留一個方向；每款的每個標籤有 LLM 給的 0–1 信心分數，給分標準移到心得管線；人工驗證只能刪標籤
 - [條件與偏好怎麼比對桌遊](issues/10-matching-strategy.md)：SQL 篩條件；負面偏好優先排後面，再用 RRF 合併結構化分數（標籤信心、類別、機制、難度）與偏好描述對心得摘要的向量相似度，回傳前 3 款；同一個工具再取每款 2 段心得片段當理由出處；embedding 主要為展示 RAG；心得摘要向量放桌遊資料表、心得片段另開一張表，不建索引
 - [心得來源走哪條路](issues/16-review-source-decision.md)：心得不用 BGG，由立倫用 Codex 的 goal 模式與 live 網路搜尋，從 PTT、中英文部落格、評測網站收集，提示詞在 `prompts/collect-reviews.md`；每款目標 5 篇、至少 2 篇，逐字擷取感受段落，存進 repo 外的 `reviews.json`；資料庫只存衍生資料，心得片段帶 `source_url`、`site_name`、`language`
@@ -47,6 +47,8 @@
 - [專題專用 Foundry 要部署哪些模型](issues/17-foundry-model-deployments.md)：對話 gpt-5.6-luna（推理強度 `low`）、心得管線 gpt-5.6-terra（`LLM_BATCH_MODEL`，預設推理強度）、embedding text-embedding-3-large 縮成 1536 維；Japan East、GlobalStandard，部署名稱同模型名稱，TPM 100K／50K／100K；新增 `LLM_REASONING_EFFORT`；逾時對話 30 秒、前端 100 秒、心得管線 300 秒；額度 NTD 3000，預估用約 16%；配額等級、額度是否共用、區域 policy 移到建立 Foundry 的實作 ticket，剩不到 NTD 1,000 時心得管線改用 luna。embedding 的設定名稱已由「詞彙表改版或換 embedding 模型時怎麼處理」更正為 `GAMES_ADVISOR_EMBEDDING_*`
 - [詞彙表改版或換 embedding 模型時怎麼處理](issues/18-vocabulary-and-embedding-revisions.md)：同步依代碼比對，刪掉的代碼連帶刪除桌遊上的標籤，新增或改代碼只提醒重標（15 款全部），只改名稱或定義就原地更新；匯入草稿遇到詞彙表沒有的代碼整份拒絕；工具 enum 每則訊息讀資料庫；只在新增桌遊時重新歸納；pytest 檢查評估題組的代碼都在詞彙表；embedding 用 games_advisor 自己的 `GAMES_ADVISOR_EMBEDDING_*`（沒填就是 fake）；每個向量記下產生它的模型，模型不同就當作沒有向量，評估題組指令會拒絕執行；換模型重跑心得摘要與心得片段兩個指令；改維度時再新增 migration
 - [LLM 設定也改成 games_advisor 自己的一組嗎](issues/19-games-advisor-llm-settings.md)：不改，LLM 用全域 `LLM_*`，只有 embedding 開例外（換 LLM 不會讓已存資料失效）；factory 照提案讀 settings，批次指令複製 settings 換掉部署、推理強度、逾時；fake 沒給腳本時拋 `LLMUnavailable`，對話 API 回 503；4 個需要 LLM 的指令遇到 `LLM_PROVIDER=fake` 拒絕執行；換 Foundry 後舊對話走 404 清空；實作時要更新 OpenSpec 的 `llm-provider` 規格
+- [spec：桌遊資料與心得管線](issues/20-spec-data-and-review-pipeline.md)：`spec.md` 前半寫好：共用部分（目的、術語、4 張資料表、設定總覽、檔案總覽）與 7 個批次指令的規則和 §7 表格；新定 `games.json`、`tag_vocabulary.json`、標籤草稿的格式；補了 8 個缺漏：「設定值」寫成程式常數、類別與機制用 `text[]`、輸入檔錯就整份拒絕、0 篇心得重跑時清空、標籤草稿另寫原始檔比對、不改整合層提案、詞彙表放 `games_advisor` 資料夾、指令叫 `commands`、結束碼 0/1/2
+- [spec：推薦對話與 API](issues/21-spec-conversation-and-api.md)：`spec.md` 後半寫好：「查桌遊」工具 `search_games`、對話 service、API、前端 `data/` 與 `state/`、參考畫面與交接說明、評估題組，各有 §7 表格；補了 6 個缺漏：兩次查詢都能出卡片、沒查詢只清卡片不換固定文字、模型不照約定當作拒答、其他參數錯比照人數回給 LLM、標籤名稱與定義寫在工具參數說明、11 條小細節照預設
 
 ## Not yet specified
 

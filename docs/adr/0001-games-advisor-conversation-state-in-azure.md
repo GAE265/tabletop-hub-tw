@@ -1,10 +1,10 @@
 ---
-status: proposed
+status: accepted
 ---
 
 # games_advisor 的對話狀態交給 Azure Responses API 保存
 
-games_advisor 的推薦 Agent 是一個聊天室：玩家和 Agent 對話選出桌遊，不需要回頭看以前的對話。因此對話紀錄不存在我們的後端，而是交給 Azure OpenAI Responses API 在伺服器端保存：前端保管最新一輪的 `response_id`，送出新訊息時一起帶上，後端用 `previous_response_id` 接續上一輪。這和 AGENTS.md §4.2「用 `LLM_PROVIDER` 切換雲端與地端」有出入；立倫判斷這個功能不會換成地端 LLM，所以接受這個限制。§4.2 要不要調整，由組員決定。
+games_advisor 的推薦 Agent 是一個聊天室：玩家和 Agent 對話選出桌遊，不需要回頭看以前的對話。因此對話紀錄不存在我們的後端，而是交給 Azure OpenAI Responses API 在伺服器端保存：前端保管最新一輪的 `response_id`，送出新訊息時一起帶上，後端用 `previous_response_id` 接續上一輪。這和 AGENTS.md §4.2「用 `LLM_PROVIDER` 切換雲端與地端」有出入；立倫判斷這個功能不會換成地端 LLM，所以接受這個限制。2026-11-09 組員討論後同意這個例外。
 
 ## Considered Options
 

@@ -23,8 +23,8 @@
 
 相關的設計決定：
 
-- [ADR 0001：對話狀態交給 Azure Responses API 保存](../../docs/adr/0001-games-advisor-conversation-state-in-azure.md)（proposed）
-- [ADR 0002：追問與推薦由 LLM 依對話規則決定](../../docs/adr/0002-games-advisor-llm-driven-conversation-flow.md)（proposed）
+- [ADR 0001：對話狀態交給 Azure Responses API 保存](../../docs/adr/0001-games-advisor-conversation-state-in-azure.md)（accepted）
+- [ADR 0002：追問與推薦由 LLM 依對話規則決定](../../docs/adr/0002-games-advisor-llm-driven-conversation-flow.md)（accepted）
 
 ## 2. 設計原則
 
@@ -279,7 +279,7 @@ get_embedding_provider(config: EmbeddingConfig) -> EmbeddingProvider
 
 ## 9. 和 AGENTS.md 的出入
 
-1. **§4.2 用 `LLM_PROVIDER` 切換雲端與地端**：`respond` 依賴 Azure 保存對話（ADR 0001）和 function calling（ADR 0002），只有雲端實作。地端實作的 `respond` 拋 `NotImplementedError`；`generate`、`generate_json`、`embed` 都可以有地端實作。兩份 ADR 目前都是 proposed，**如果組員否決 ADR 0001**，`respond` 就拿掉 `previous_response_id`，改成每次傳入完整的訊息紀錄，其他型別不變。
+1. **§4.2 用 `LLM_PROVIDER` 切換雲端與地端**：`respond` 依賴 Azure 保存對話（ADR 0001）和 function calling（ADR 0002），只有雲端實作。地端實作的 `respond` 拋 `NotImplementedError`；`generate`、`generate_json`、`embed` 都可以有地端實作。兩份 ADR 已在 2026-11-09 由組員同意（accepted）。
 2. **§7.5 不得為了讓測試通過而修改測試**：實作 `cloud` 之後，下面兩個既有測試一定會失敗，要在 MR 說明寫出理由，經審核者同意後修改：
 
 | 既有測試 | 改法 | 理由 |
