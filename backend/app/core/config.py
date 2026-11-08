@@ -20,8 +20,24 @@ class Settings(BaseSettings):
     auth_mode: Literal["dev", "jwt"] = "jwt"
     # AUTH_MODE=dev 且未帶 X-Dev-User 時使用的預設玩家；app/dev 的 player 帳號也用這個值
     dev_default_user_id: UUID = UUID("11111111-1111-4111-8111-111111111111")
+    # --- LLM（全域，所有 domain 共用） ---
     llm_provider: str = "fake"
+    llm_endpoint: str | None = None
+    llm_api_key: str | None = None
+    llm_model: str | None = None
+    # 批次指令用的部署名稱；沒填就用 llm_model
+    llm_batch_model: str | None = None
+    # 沒填就不帶 reasoning，用模型預設；非推理模型要留空
+    llm_reasoning_effort: Literal["none", "low", "medium", "high", "xhigh", "max"] | None = None
+    llm_timeout_seconds: float = 30
+    # 全域向量維度；games_advisor 不讀它，改讀 games_advisor_embedding_dim
     embedding_dim: int = 1536
+    # --- games_advisor 自己的 embedding；沒填不退回任何全域設定 ---
+    games_advisor_embedding_provider: str = "fake"
+    games_advisor_embedding_endpoint: str | None = None
+    games_advisor_embedding_api_key: str | None = None
+    games_advisor_embedding_model: str | None = None
+    games_advisor_embedding_dim: int = 1536
     # 允許跨來源呼叫 API 的前端網址，逗號分隔。預設是本機 Flutter Web 固定的 port；
     # 部署時必須改成實際的前端網址
     cors_allow_origins: str = "http://localhost:5000"
