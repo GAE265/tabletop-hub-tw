@@ -52,3 +52,7 @@ games_advisor 要用哪一個 Azure OpenAI 資源？確認並記錄：
 
 - Azure CLI 唯讀查詢：`az cognitiveservices account list`、`account deployment list`、`account list-models`。
 - Microsoft Learn「How to use structured outputs with Azure OpenAI」的 Supported models：https://learn.microsoft.com/en-us/azure/ai-foundry/openai/how-to/structured-outputs
+
+## Comments
+
+- 2026-11-08（來自「[專題專用 Foundry 要部署哪些模型](17-foundry-model-deployments.md)」）：更正兩件事。一、課程額度是 NTD 3000，不是 2800（立倫更正）。二、Microsoft 文件現在已列出 gpt-5.6-terra、gpt-5.6-luna 支援 structured outputs、Responses API 與工具呼叫；工具呼叫要走 Responses API。另外，gpt-4.1、gpt-4.1-mini、gpt-4o-mini 已進入 Deprecated：只有部署過該版本的訂用帳戶能再部署。

@@ -18,3 +18,5 @@ Map: [桌遊推薦 Agent + 桌遊 RAG](../map.md)
 ## Comments
 
 - 2026-11-08（來自「[需要整合層提供哪些介面](12-integrations-interface.md)」）：換 embedding 模型就是改 `EMBEDDING_MODEL`，維度變了就一起改 `EMBEDDING_DIM`。整合層只檢查向量長度等於 `EMBEDDING_DIM`，不知道資料庫裡的向量是哪個模型產生的；要不要記錄模型、怎麼偵測不一致，在這張決定。
+- 2026-11-08（來自「[怎麼驗收推薦結果](14-recommendation-acceptance.md)」）：評估題組（`backend/tests/games_advisor/eval_cases.json`）用詞彙表代碼指定標籤；詞彙表刪掉或改掉代碼時，題組檔也要跟著改。
+- 2026-11-08（來自「[專題專用 Foundry 要部署哪些模型](17-foundry-model-deployments.md)」）：embedding 選 `text-embedding-3-large`，帶 `dimensions=1536`，`EMBEDDING_DIM=1536`。之後如果換成 small，維度一樣是 1536，向量欄位不用改；但兩個模型的向量不能混用，全部都要重產。只看維度偵測不到換了模型。

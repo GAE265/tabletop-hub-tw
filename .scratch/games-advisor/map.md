@@ -14,6 +14,7 @@
 - Ticket 的 `Status:` 用 `open`、`claimed`、`resolved`。
 - 固定偏好：
   - 不問時程問題，推薦答案也不附日期或天數。
+  - 這個功能主要展示 Agent 與桌遊 RAG 的應用，準確率不追求最高（2026-11-08 於「[怎麼驗收推薦結果](issues/14-recommendation-acceptance.md)」說明）。
   - 桌遊資料只供推薦使用；不提議共用桌遊目錄或拆出 catalog domain。
   - commit、PR、文件都不加 AI 署名。
   - 不 push、不建 GitHub issue、不開 research 分支。
@@ -30,7 +31,7 @@
 - [桌遊基本資料從哪裡取得](issues/02-game-data-sources.md)：BGG 欄位最完整（需註冊 token）；Wikidata 是 CC0 但欄位缺漏多；代理商頁只能人工對照。研究中「BGG 禁止用於 AI」的說法已由 ticket 15 更正
 - [英文與繁中心得從哪裡取得](issues/03-review-sources.md)：BGG 評分留言量最大，部落格要作者同意，PTT 屬灰色地帶，Reddit、巴哈、Dcard 不行；BGG 的 AI 限制已由 ticket 15 更正
 - [核對 BGG 使用條款原文](issues/15-verify-bgg-terms.md)：現行 6.B.iv 允許把 BGG 內容交給 LLM 做摘要、搜尋、回答等一般用途，只禁止大型 AI 公司訓練；本專案視為非商業，收錄約 3–15 款；能不能存進資料庫還沒核對
-- [確認可用的 Azure OpenAI 資源](issues/04-azure-openai-resources.md)：另建專題專用的 Foundry，只有立倫使用，課程額度 NTD 2800；已確認 gpt-4.1-mini、gpt-4.1、gpt-4o-mini 支援 structured outputs，gpt-5.6 系列不確定；要部署哪些模型由新 ticket 決定
+- [確認可用的 Azure OpenAI 資源](issues/04-azure-openai-resources.md)：另建專題專用的 Foundry，只有立倫使用，課程額度 NTD 2800；已確認 gpt-4.1-mini、gpt-4.1、gpt-4o-mini 支援 structured outputs，gpt-5.6 系列不確定；要部署哪些模型由新 ticket 決定。已由「專題專用 Foundry 要部署哪些模型」更正：額度是 NTD 3000；Microsoft 文件已列出 gpt-5.6 系列支援 structured outputs 與工具呼叫
 - [對話狀態存在哪裡](issues/05-conversation-state.md)：交給 Azure Responses API 保存，前端帶 `response_id` 接續；後端不存、不綁使用者、不能回看，Azure 保留 30 天；偏離 §4.2 的地端切換，寫成 ADR 0001（proposed）等組員決定
 - [收錄哪些桌遊、存哪些欄位](issues/06-game-coverage-and-fields.md)：15 款（含 Demo 三款）；條件欄位是人數、時長、年齡，偏好欄位是 BGG 的類別、機制、難度；Codex 透過 BGG XML API 產生 repo 外的 JSON，後端匯入指令讀檔寫入
 - [Agent 怎麼追問、什麼時候推薦](issues/07-conversation-flow.md)：Agent 依對話規則自己判斷追問或推薦（function calling），程式守三道護欄：人數必填、只推薦工具回傳的桌遊、每則訊息最多呼叫 2 次工具；人數是唯一必要條件，最多推薦 3 款，一律用繁中；查無結果時放寬時長或年齡其中一項，人數不放寬；離題規則也在這張；偏離「程式判斷流程」的取捨寫成 ADR 0002（proposed）
@@ -41,6 +42,8 @@
 - [推薦理由要寫什麼、要不要附出處](issues/11-recommendation-reasons.md)：推薦卡片的基本資料與放寬的條件由程式產生，LLM 只寫最多 2 句推薦理由（命中的偏好、心得印證的感受，命中負面偏好要說）並引用心得片段 ID；最終回覆用 structured outputs（`reply` + `recommendations`），service 只認這則訊息的工具結果，無效的丟掉、全部丟掉就換固定文字；出處顯示片段原文、標題、網站並連回原文，英文不翻譯；心得片段資料表加 `title`，不加 `author`。出處的顯示方式已由 ticket 13 更正：只顯示片段原文，不加 `title`
 - [需要整合層提供哪些介面](issues/12-integrations-interface.md)：提案在 `integrations-proposal.md`；整合層一次只呼叫 1 次模型，工具迴圈與護欄留在 service；`generate` 不動，新增無狀態的 `generate_json`（批次）和有狀態的 `respond`（對話，只有雲端），embedding 只有 `embed(texts)`；schema 用 strict JSON Schema dict；fake 照腳本回傳並記錄呼叫；雲端用 `openai` SDK、pytest 用 `MockTransport`；`tools` 加 `text.format` 等 Foundry 建好再實測，不行就改用「交卷」工具
 - [API 契約與 prototype 頁面](issues/13-api-contract-and-prototype.md)：`POST /api/v1/advisor/messages` 回 201，請求 `content`、`previous_response_id`，回應 `response_id`、`reply`、`relaxed_constraint`、`recommendations`（`game`、`reason`、`excerpts`）；不串流；三種角色都能用，未登入 401；404 對話過期（前端清空）、503 Azure 連不上（要向組員提議補進 §4.3）；固定文字回舊 id；卡片只顯示心得片段原文、不顯示來源（立倫接受著作權法第 64 條的風險）；參考畫面的按鈕與狀態都列在這張；草圖在 `prototypes/api-contract.html`；這個階段不用 DevUI
+- [怎麼驗收推薦結果](issues/14-recommendation-acceptance.md)：pytest（假的 LLM；repository 與匯入指令連 CI 的 PostgreSQL）是合併的唯一標準；真的模型改用「評估題組」檢查（原稱情境題組，避開 §7 的「情境」欄），寫成後端指令在本機真資料上跑，不進 CI、不擋合併，改到對話規則等項目時把分數貼進 MR；10 題對話腳本放 `backend/tests/games_advisor/eval_cases.json`，程式比對工具參數與卡片，人工看 repo 外的報告，分條件分、偏好分、人工項目；只有 3 題 Demo 題要求 3 次全過
+- [專題專用 Foundry 要部署哪些模型](issues/17-foundry-model-deployments.md)：對話 gpt-5.6-luna（推理強度 `low`）、心得管線 gpt-5.6-terra（`LLM_BATCH_MODEL`，預設推理強度）、embedding text-embedding-3-large 縮成 1536 維；Japan East、GlobalStandard，部署名稱同模型名稱，TPM 100K／50K／100K；新增 `LLM_REASONING_EFFORT`；逾時對話 30 秒、前端 100 秒、心得管線 300 秒；額度 NTD 3000，預估用約 16%；配額等級、額度是否共用、區域 policy 移到建立 Foundry 的實作 ticket，剩不到 NTD 1,000 時心得管線改用 luna
 
 ## Not yet specified
 

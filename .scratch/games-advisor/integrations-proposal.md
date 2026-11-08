@@ -108,6 +108,9 @@ class LLMProvider(ABC):
 | 輸出格式 | 純文字 | `text.format`：`json_schema`、`strict: true` | 同左，用 `output_schema` |
 | 工具 | 無 | 無 | 每個工具都 `strict: true`；`parallel_tool_calls: false` |
 | `allow_tool_calls=False` | 不適用 | 不適用 | 照樣送出 `tools`，但帶 `tool_choice: "none"`，保證拿到最終輸出 |
+| 推理強度 | 有設定才帶 `reasoning.effort` | 同左 | 同左 |
+
+- 推理強度：provider 建立時帶入（對話的 provider 讀 `LLM_REASONING_EFFORT`），三個方法都一樣。沒有值就不帶 `reasoning`，用模型預設；gpt-4.1 這類非推理模型不接受這個參數。對話用的 gpt-5.6-luna 填 `low`（「[專題專用 Foundry 要部署哪些模型](issues/17-foundry-model-deployments.md)」）。
 
 - `parallel_tool_calls` 固定 false：OpenAI 文件寫明 structured outputs 不相容平行工具呼叫；而且模型同時送出兩個查詢，會打亂呼叫端「先查，查到 0 款才放寬條件」的順序。
 - `input` 是字串時，代表玩家的訊息；是 `list[ToolResult]` 時，轉成 Responses API 的 `function_call_output` 項目。
@@ -212,7 +215,9 @@ LLM_PROVIDER=          # fake | cloud（cloud 指 Azure OpenAI）| local（尚�
 LLM_ENDPOINT=          # 格式：https://<資源名稱>.openai.azure.com/openai/v1/
 LLM_API_KEY=           # 既有欄位，Settings 還沒讀
 LLM_MODEL=             # 對話模型的部署名稱
-LLM_TIMEOUT_SECONDS=   # 單次請求逾時秒數，預設 60
+LLM_BATCH_MODEL=       # 批次指令用的部署名稱；留空就用 LLM_MODEL
+LLM_REASONING_EFFORT=  # none | low | medium | high | xhigh | max；留空就用模型預設，非推理模型要留空
+LLM_TIMEOUT_SECONDS=   # 單次請求逾時秒數，預設 30
 EMBEDDING_PROVIDER=    # fake | cloud
 EMBEDDING_ENDPOINT=
 EMBEDDING_API_KEY=
@@ -220,9 +225,10 @@ EMBEDDING_MODEL=       # embedding 的部署名稱
 EMBEDDING_DIM=         # 既有欄位
 ```
 
-- 每個 provider 只綁一個部署，方法不帶 `model` 參數。如果「[專題專用 Foundry 要部署哪些模型](issues/17-foundry-model-deployments.md)」決定批次要用比較大的模型，再加 `LLM_BATCH_MODEL`，由批次指令另外建立一個 provider，介面不用改。
+- 每個 provider 只綁一個部署，方法不帶 `model` 參數。「[專題專用 Foundry 要部署哪些模型](issues/17-foundry-model-deployments.md)」決定批次用比較大的模型，所以加 `LLM_BATCH_MODEL`：批次指令另外建立一個 provider，部署換成 `LLM_BATCH_MODEL`、不帶推理強度（用模型預設）、逾時 300 秒（寫在批次指令裡，不開設定），介面不用改。
 - embedding 不共用 LLM 的 endpoint 與金鑰，之後才能「LLM 用地端、embedding 用雲端」。目前兩組填一樣的值即可。
-- SDK 預設的逾時是 600 秒，玩家等不了那麼久，所以要設定。重試次數沿用 SDK 預設的 2 次，不另外開設定。
+- SDK 預設的逾時是 600 秒，玩家等不了那麼久，所以要設定。預設 30 秒：gpt-5.6-luna 用 `low` 時，一次呼叫通常 10 秒內完成；前端的等待上限是 100 秒，比 3 × 30 秒長。重試次數沿用 SDK 預設的 2 次，不另外開設定。
+- `LLM_REASONING_EFFORT` 不是合法值時，啟動失敗。
 - 用 v1 端點，不需要 `api-version`（第一張實作 ticket 會驗證）。
 - **待瑋鋐確認**：AGENTS.md §4.2 寫「用 `LLM_PROVIDER` 切換……embedding 同理」。另外開 `EMBEDDING_PROVIDER` 是我們的解讀；條文也可以讀成 embedding 共用 `LLM_PROVIDER`。
 
@@ -260,7 +266,7 @@ get_embedding_provider(name: str, settings: Settings) -> EmbeddingProvider
 
 ## 10. 要在 Azure 實際驗證的事（第一張實作 ticket）
 
-等專題專用的 Foundry 建好，部署好對話模型之後，手動執行一次，不放進 pytest：
+等專題專用的 Foundry 建好，部署好對話模型（`gpt-5.6-luna`，`reasoning.effort: low`）之後，手動執行一次，不放進 pytest：
 
 1. 同一個請求同時帶 `tools`（strict）與 `text.format`（strict json_schema）時：模型會呼叫工具；送回工具結果並接上 `previous_response_id` 後，最終輸出符合 schema。
 2. 已經有工具呼叫紀錄的對話，帶 `tool_choice: "none"` 時，模型不會再呼叫工具。
@@ -283,6 +289,7 @@ get_embedding_provider(name: str, settings: Settings) -> EmbeddingProvider
 | `LLM_PROVIDER=cloud`，缺 `LLM_ENDPOINT`、`LLM_API_KEY` 或 `LLM_MODEL` | `create_app(settings)` | 啟動失敗，錯誤訊息指出缺哪個欄位 |
 | `LLM_PROVIDER=local` | `get_llm_provider("local")`、`create_app` | `NotImplementedError`（既有測試，參數改成只有 `local`） |
 | 未知的 `LLM_PROVIDER` | `get_llm_provider("nope")` | `ValueError`（既有） |
+| `LLM_REASONING_EFFORT` 不是合法值 | `create_app(settings)` | 啟動失敗，錯誤訊息指出這個欄位 |
 | `EMBEDDING_PROVIDER=fake` | `get_embedding_provider("fake", settings)` | 回傳 `FakeEmbeddingProvider`，`dim` 等於 `EMBEDDING_DIM` |
 | `EMBEDDING_PROVIDER=cloud`，缺 `EMBEDDING_MODEL` | `create_app(settings)` | 啟動失敗，錯誤訊息指出缺哪個欄位 |
 
@@ -321,6 +328,8 @@ get_embedding_provider(name: str, settings: Settings) -> EmbeddingProvider
 | Azure 回 JSON 文字 | `respond` | `output` 是解析後的 dict，`tool_calls` 是空的 |
 | 無狀態的 JSON 輸出 | `generate_json(...)`，檢查送出的請求 | `store: false`、沒有 `tools`、`text.format` 是 strict json_schema；回傳 dict |
 | 純文字 | `generate(prompt)` | `store: false`，回傳文字 |
+| 有設定推理強度 | 建立 provider 時帶 `low`，再呼叫任一方法 | 請求帶 `reasoning.effort: "low"` |
+| 沒有設定推理強度 | 建立 provider 時不帶，再呼叫任一方法 | 請求沒有 `reasoning` 欄位 |
 | `previous_response_id` 無效 | Azure 回對應的錯誤（格式依第 10 節驗證結果） | `LLMConversationNotFound` |
 | 429、5xx、逾時 | 任一方法，SDK 重試後仍然失敗 | `LLMUnavailable` |
 | 內容過濾 | Azure 回 content filter 錯誤，或回應 `incomplete`、原因是 content filter | `LLMOutputRejected` |
