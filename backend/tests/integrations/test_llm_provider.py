@@ -1,4 +1,5 @@
 import pytest
+from pydantic import ValidationError
 
 from app.integrations.llm import FakeLLMProvider, LLMProvider, get_llm_provider
 from app.main import create_app
@@ -35,3 +36,13 @@ def test_unknown_provider_raises_value_error() -> None:
 def test_app_startup_fails_loudly_for_unimplemented_provider(make_settings) -> None:
     with pytest.raises(NotImplementedError):
         create_app(make_settings(llm_provider="cloud"))
+
+
+@pytest.mark.parametrize("effort", ["none", "low", "medium", "high", "xhigh", "max"])
+def test_valid_reasoning_effort_is_accepted(make_settings, effort: str) -> None:
+    assert make_settings(llm_reasoning_effort=effort).llm_reasoning_effort == effort
+
+
+def test_invalid_reasoning_effort_fails_startup_naming_the_field(make_settings) -> None:
+    with pytest.raises(ValidationError, match="llm_reasoning_effort"):
+        create_app(make_settings(llm_reasoning_effort="extreme"))
