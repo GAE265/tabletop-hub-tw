@@ -51,7 +51,6 @@
 ## Not yet specified
 
 - 批次指令部署到 Azure 後在哪裡執行；最後整合成一個或多個 Foundry、PostgreSQL 時，games_advisor 的資料怎麼放進部署環境（重跑管線或匯出匯入）；維持多個 Foundry，或其他 domain 要不同的 LLM 模型、推理強度時，games_advisor 的 LLM 改用自己的欄位。
-- 把所有決定整理成 `spec.md` 與 §7 情境表格。
 
 ## Out of scope
 
