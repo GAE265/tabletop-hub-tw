@@ -31,7 +31,7 @@ LLM 目前先使用雲端 API，地端 LLM 列為加分項目，之後再做（�
 4. **不擅自新增頂層資料夾或套件。** 新增第三方套件要在 MR 說明寫理由。
 5. **新功能與契約變更，先寫測試案例再寫程式。** 細節見第 7 節。
 6. **一個 MR 只做一件事。** 一個 MR 裡可以有多個 commit，不限制變更行數；但不要把不相關的修改混在同一個 MR。
-7. **發 MR 前自我檢查：** 後端在 `backend/` 跑 `uv run ruff check .`、`uv run ruff format --check .`、`uv run pytest`；前端在 `frontend/` 跑 `flutter analyze`、`flutter test`。全部通過才能發 MR。功能分支開發途中的 commit 允許測試失敗（見 7.2）。
+7. **發 MR 前自我檢查：** 後端在 `backend/` 跑 `uv run ruff check .`、`uv run ruff format --check .`、`uv run pytest`；前端在 `frontend/` 跑 `flutter analyze`、`flutter test`。全部通過才能發 MR。功能分支開發途中的 commit 允許測試失敗（見 7.2）。MR 新增、修改需要金鑰的測試，或改到它們測試的程式時，加跑 `uv run pytest -m real`（7.6）。
 8. **用語統一。** 程式命名與文件用詞依第 10 節術語表，不要自己發明同義詞。
 
 ## 3. Domain 與分工
@@ -326,6 +326,13 @@ frontend/lib/
 - service 層用假的 repository 做單元測試，不連真資料庫。
 - 每個 API 端點至少有成功與失敗各一個案例。
 
+### 7.6 需要金鑰的測試
+
+- 需要 API 金鑰或其他秘密才能執行的後端測試，加上 `@pytest.mark.real`。這些測試不在 CI 執行。MR 新增、修改這類測試，或改到它們測試的程式時，發 MR 前要在本機執行 `uv run pytest -m real` 並全部通過。
+- 能用 fake 或假造回應（例如 httpx `MockTransport`）寫的測試，一律寫成不需要金鑰的測試，照常在 CI 執行。
+- MR 說明的情境表格中，需要金鑰的測試標上「（本機）」，並在表格外附上執行指令、通過數量與執行日期。
+- 用 `real` 標記排除在 CI 外，不算 7.2 禁止的 skip；但不得用 `skip`、`xfail` 掩蓋需要金鑰的測試失敗。
+
 ## 8. Git 規則
 
 ### 8.1 分支
@@ -367,7 +374,7 @@ scope 的寫法：
 - 工具設定集中在各自的設定檔，不另外建立：後端的 ruff 與 pytest 設定寫在 `backend/pyproject.toml`；前端的分析規則寫在 `frontend/analysis_options.yaml`。
 - ruff 規則：行長 100，啟用 `E`、`F`、`I`（import 排序）、`B`、`UP`。要調整規則請改本檔。
 - GitHub Actions 在**發 MR 到 `dev` 或 `main` 時**自動執行：
-  - 後端：`ruff check`、`ruff format --check`、`pytest`（連線 CI 內建的 PostgreSQL + pgvector）
+  - 後端：`ruff check`、`ruff format --check`、`pytest`（不含 `real` 標記的測試；連線 CI 內建的 PostgreSQL + pgvector）
   - 前端：`flutter analyze`、`flutter test`
   - 發牌機：在 `device/` 跑 `ruff check`、`pytest`（使用 mock 硬體，不需要樹莓派）
 - CI 沒有全部通過的 MR 不得合併。
