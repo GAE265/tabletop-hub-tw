@@ -21,7 +21,7 @@ MR: （還沒開）分支 `docs/secret-tests-rule`，從 `dev` 開
 ```markdown
 ### 7.6 需要金鑰的測試
 
-- 需要 API 金鑰或其他秘密才能執行的後端測試，加上 `@pytest.mark.real`。這些測試不在 CI 執行，發 MR 前要在本機執行 `uv run pytest -m real` 並全部通過。
+- 需要 API 金鑰或其他秘密才能執行的後端測試，加上 `@pytest.mark.real`。這些測試不在 CI 執行。MR 新增、修改這類測試，或改到它們測試的程式時，發 MR 前要在本機執行 `uv run pytest -m real` 並全部通過。
 - 能用 fake 或假造回應（例如 httpx `MockTransport`）寫的測試，一律寫成不需要金鑰的測試，照常在 CI 執行。
 - MR 說明的情境表格中，需要金鑰的測試標上「（本機）」，並在表格外附上執行指令、通過數量與執行日期。
 - 用 `real` 標記排除在 CI 外，不算 7.2 禁止的 skip；但不得用 `skip`、`xfail` 掩蓋需要金鑰的測試失敗。
@@ -29,7 +29,7 @@ MR: （還沒開）分支 `docs/secret-tests-rule`，從 `dev` 開
 
 配合修改：
 
-- §2 第 7 點：補上「有需要金鑰的測試時，加跑 `uv run pytest -m real`」。
+- §2 第 7 點：補上「MR 新增、修改需要金鑰的測試，或改到它們測試的程式時，加跑 `uv run pytest -m real`（7.6）」。沒有金鑰的組員（例如只做訂位）不受影響。
 - §8.3 後端的 `pytest`：補上「不含 `real` 標記的測試」。
 
 ## 驗收條件
