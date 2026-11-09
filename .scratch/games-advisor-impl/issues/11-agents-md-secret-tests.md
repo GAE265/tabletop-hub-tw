@@ -3,7 +3,7 @@
 Status: ready-for-human
 Blocked by: 無
 Spec: [spec](../../games-advisor/spec.md) §2、§18
-MR: （還沒開）分支 `docs/secret-tests-rule`，從 `dev` 開
+MR: [#17](https://github.com/GAE265/tabletop-hub-tw/pull/17)（分支 `docs/secret-tests-rule`）
 
 ## 要做什麼
 
