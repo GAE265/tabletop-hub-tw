@@ -28,6 +28,7 @@
 ## 自我檢查
 
 - [ ] 後端（`backend/`）：`uv run ruff check .`、`uv run ruff format --check .`、`uv run pytest`
+- [ ] 需要金鑰的測試（`uv run pytest -m real`）已在本機通過，指令、通過數量與日期附在上方說明（沒有相關改動就寫不適用）
 - [ ] 前端（`frontend/`）：`flutter analyze`、`flutter test`
 - [ ] 沒有提交秘密、規則書全文或合作店家資料
 - [ ] 只改了被指派的 domain；動到共用區已在上方說明並 @ 主責

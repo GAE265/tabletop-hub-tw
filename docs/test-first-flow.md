@@ -66,7 +66,8 @@ flowchart TD
 |---|---|
 | `uv run ruff check .` | 程式碼有沒有常見錯誤、import 排序 |
 | `uv run ruff format --check .` | 程式碼格式是否統一（要自動修正就拿掉 `--check`） |
-| `uv run pytest` | 所有測試是否通過 |
+| `uv run pytest` | 所有測試是否通過（不含需要金鑰的測試，CI 跑的也是這些） |
+| `uv run pytest -m real` | 需要金鑰的測試是否通過。CI 不跑；MR 新增、修改這類測試，或改到它們測試的程式時才要跑（`AGENTS.md` 7.6） |
 
 **前端**（在 `frontend/` 資料夾執行）：
 
@@ -90,3 +91,6 @@ flowchart TD
 
 **Q：可以用 `xfail` 或 `skip` 先讓紅燈消失嗎？**
 不行。這等於把警報關掉，問題還在。
+
+**Q：需要 API 金鑰的測試，CI 跑不了怎麼辦？**
+CI 沒有金鑰，所以這類測試加上 `real` 標記，不在 CI 跑。但發 MR 前要在本機用 `uv run pytest -m real` 跑過，並把指令、通過數量、日期附在 MR 說明。這不是把警報關掉，只是換到你的電腦上檢查。能用 fake 寫的測試就不要用真的金鑰，照常讓 CI 跑（`AGENTS.md` 7.6）。
