@@ -304,9 +304,11 @@ get_embedding_provider(config: EmbeddingConfig) -> EmbeddingProvider
 
 **備案**：如果第 1 點不成立，最終輸出改成由一個「交卷」工具 `submit_recommendations` 帶出，工具參數就是原本的 `output_schema`。service 收到這個工具呼叫，就當成最終輸出，不送回結果。介面只改一處：`respond` 的 `output_schema` 改成可以不帶。
 
+驗證結果記在「[建立 Foundry 並在 Azure 驗證](../games-advisor-impl/issues/02-foundry-and-azure-checks.md)」。之後要重新確認（例如換 Foundry），改跑 §11.6 的需要金鑰的測試。
+
 ## 11. 測試案例（AGENTS.md §7）
 
-實作者可以直接拿這張表開 Draft MR（§7.2）。雲端實作的測試用 httpx `MockTransport` 注入 `openai` client，假造 Azure 的回應，不連網路；CI 拿不到金鑰（§2.1），也不能用 skip 蓋掉失敗（§7.2）。真實 Azure 的驗證見第 10 節。測試資料一律自行編寫（§2.2）。
+實作者可以直接拿這張表開 Draft MR（§7.2）。能不用金鑰寫的測試一律進 CI（[ticket 11](../games-advisor-impl/issues/11-agents-md-secret-tests.md)），所以雲端實作的行為都用 httpx `MockTransport` 注入 `openai` client，假造 Azure 的回應，不連網路（§11.4、§11.5）；真的 Azure 只用 §11.6 的 4 個需要金鑰的測試確認連得上。測試資料一律自行編寫（§2.2）。
 
 ### 11.1 Factory 與啟動
 
@@ -377,3 +379,19 @@ get_embedding_provider(config: EmbeddingConfig) -> EmbeddingProvider
 | Azure 回零向量 | `embed` | `EmbeddingError` |
 | Azure 回的維度不符 | `embed` | `EmbeddingError` |
 | 429、5xx、逾時 | `embed`，重試後仍然失敗 | `EmbeddingUnavailable` |
+
+### 11.6 需要金鑰的測試（`real`，本機）
+
+加上 `real` 標記，不在 CI 跑；發 MR 前在本機執行 `uv run pytest -m real`（[ticket 11](../games-advisor-impl/issues/11-agents-md-secret-tests.md)）。目的只是確認真的連得上 Azure、回應格式和 §11.4、§11.5 假造的一致；行為的細節照樣由 `MockTransport` 的測試負責。
+
+- 設定從 `.env` 讀（`LLM_*`、`GAMES_ADVISOR_EMBEDDING_*`），不從 shell 讀。缺欄位時直接失敗，錯誤訊息指出缺哪個欄位，不用 `skip`。
+- 工具、schema、文字都自行編寫，不用桌遊或心得資料。
+- 內容過濾不放進來：要臨時改 Azure 的過濾設定才觸發得到（見第 10 節的驗證結果）。
+- 跑一次的費用不到 NTD 1（第 10 節驗證時的實測）。
+
+| 情境 | 操作 | 預期結果 |
+|---|---|---|
+| 工具呼叫與最終輸出 | `respond` 帶一個自編的工具與 `output_schema`，訊息要求先查詢；再送回 `ToolResult`，帶第 1 次的 `response_id` | 第 1 次 `tool_calls` 不是空的；第 2 次 `output` 符合 schema |
+| 無狀態的 JSON 輸出 | `generate_json`，自編的 strict schema | 回傳 dict，欄位符合 schema |
+| 向量 | `embed` 兩段文字 | 2 個向量，長度都等於 `GAMES_ADVISOR_EMBEDDING_DIM` |
+| 對話不存在 | `respond` 帶不存在的 `previous_response_id`：`resp_` 開頭的、亂填的各一次 | 兩次都是 `LLMConversationNotFound` |
