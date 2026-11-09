@@ -40,6 +40,22 @@ def test_app_startup_defaults_games_advisor_embedding_to_fake(
     assert embedding.dim == 1536
 
 
+def test_app_startup_ignores_settings_in_shell_environment(
+    make_settings: Callable[..., Settings],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # 本機為了跑需要金鑰的測試把真的設定載入 shell 時，一般測試仍然是「都沒填」
+    monkeypatch.setenv("GAMES_ADVISOR_EMBEDDING_PROVIDER", "cloud")
+    monkeypatch.setenv("GAMES_ADVISOR_EMBEDDING_DIM", "3072")
+    monkeypatch.setenv("LLM_REASONING_EFFORT", "not-a-valid-value")
+
+    app = create_app(make_settings())
+
+    embedding = app.state.games_advisor_embedding
+    assert isinstance(embedding, FakeEmbeddingProvider)
+    assert embedding.dim == 1536
+
+
 def test_factory_rejects_unknown_provider() -> None:
     with pytest.raises(ValueError):
         get_embedding_provider(EmbeddingConfig(provider="nope", dim=1536))

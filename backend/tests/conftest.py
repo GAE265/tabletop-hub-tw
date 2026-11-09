@@ -28,8 +28,13 @@ TEST_ADMIN = CurrentUser(id=uuid.UUID("dddddddd-dddd-4ddd-8ddd-dddddddddddd"), r
 
 
 @pytest.fixture
-def make_settings() -> Callable[..., Settings]:
+def make_settings(monkeypatch: pytest.MonkeyPatch) -> Callable[..., Settings]:
     def _make(**overrides: object) -> Settings:
+        # Settings 也讀 shell 的環境變數（不分大小寫）。先清掉，測試結果才不受本機設定影響
+        fields = set(Settings.model_fields)
+        for key in list(os.environ):
+            if key.lower() in fields:
+                monkeypatch.delenv(key)
         values: dict[str, object] = {
             "database_url": UNREACHABLE_DB,
             "auth_mode": "dev",
