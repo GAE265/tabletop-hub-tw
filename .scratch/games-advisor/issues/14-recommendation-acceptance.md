@@ -48,7 +48,7 @@ Map: [桌遊推薦 Agent + 桌遊 RAG](../map.md)
 - 在本機開發資料庫上執行。先跑完匯入桌遊與心得管線，用真的 15 款桌遊、標籤與向量，連真的 Azure。
 - 指令在後端內部直接呼叫 service，不經過 HTTP API，因為 API 回應裡沒有工具參數。真的 LLM provider 外面包一層記錄器，記下每次呼叫模型的內容和回應。
 - 沒有採用 pytest 標記：結果會時紅時綠，§7.2 又不准用 skip 掩蓋失敗，還要改共用的 pytest 設定。
-  - 2026-11-10 補充：「[AGENTS.md 加上需要金鑰的測試規則](../../games-advisor-impl/issues/11-agents-md-secret-tests.md)」生效後，「§7.2 不准 skip」和「要改共用的 pytest 設定」兩個理由不再成立（08 會加上 `real` 標記）。評估題組仍然寫成指令，不寫成 pytest：結果時紅時綠，而且它產出的是分數和人工勾選的報告，不是單純的通過或不通過。
+  - 2026-11-10 補充：「[AGENTS.md 加上需要金鑰的測試規則](../../games-advisor-impl/issues/11-agents-md-secret-tests.md)」生效後，「§7.2 不准 skip」和「要改共用的 pytest 設定」兩個理由不再成立（08 會加上 `real` 標記；後來定名為 `external`，已由 #18 註冊，見 AGENTS.md 7.6）。評估題組仍然寫成指令，不寫成 pytest：結果時紅時綠，而且它產出的是分數和人工勾選的報告，不是單純的通過或不通過。
 
 **5. 評估題的格式**
 
