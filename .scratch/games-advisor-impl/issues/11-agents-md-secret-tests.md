@@ -1,9 +1,19 @@
 # 11：AGENTS.md 加上需要金鑰的測試規則
 
-Status: ready-for-human
+Status: resolved
 Blocked by: 無
 Spec: [spec](../../games-advisor/spec.md) §2、§18
-MR: [#17](https://github.com/GAE265/tabletop-hub-tw/pull/17)（分支 `docs/secret-tests-rule`）
+MR: [#18](https://github.com/GAE265/tabletop-hub-tw/pull/18)（分支 `chore/test-classification`，組員提出；原本的 #17 已關閉）
+
+## 結果
+
+2026-11-10 #18 合併進 dev，寫成 AGENTS.md 7.6「測試分類」。下面的「建議條文」是當初的草稿，留著當紀錄；和定案不同的地方：
+
+- 標記叫 `external`，不是 `real`；名稱是「外部服務測試」。
+- 只有 `integrations/` 的測試可以需要金鑰；domain 的測試一律用 `integrations/` 的假實作。
+- 觸發條件是「有修改 `integrations/` 的 MR」，要在 MR 說明貼上 `uv run pytest -m external` 的結果（通過幾個、失敗幾個）。
+- `backend/pyproject.toml` 的 `markers` 與 `addopts = "-m 'not external'"` 已在 #18 加好，ticket 08 不用再做。
+- `.github/pull_request_template.md` 沒有改。
 
 ## 要做什麼
 
@@ -34,9 +44,9 @@ MR: [#17](https://github.com/GAE265/tabletop-hub-tw/pull/17)（分支 `docs/secr
 
 ## 驗收條件
 
-- [ ] 立倫親手在 AGENTS.md §7 加上 7.6，並配合修改 §2 第 7 點、§8.3
-- [ ] `docs/test-first-flow.md`：自我檢查表加上 `uv run pytest -m real`；「可以用 skip 嗎」補上需要金鑰的測試的說明
-- [ ] `.github/pull_request_template.md`：自我檢查加一行需要金鑰的測試
-- [ ] `docs/review-guide.md`：測試案例的檢查加一條「（本機）的測試有附上本機執行結果」
-- [ ] MR 說明的情境表格寫「不適用」，理由是只改文件（AGENTS.md §7.4）
-- [ ] 合併前把本檔的 `Status` 改成 `resolved`、`MR` 填上連結（本檔在 #15 的分支，#15 合併前就在那個分支改）
+- [x] AGENTS.md §7 加上 7.6，並配合修改 §2 第 7 點、§8.3（#18）
+- [x] `docs/test-first-flow.md`：自我檢查表加上 `uv run pytest -m external`；「可以用 skip 嗎」補上外部服務測試的說明（#18）
+- [ ] `.github/pull_request_template.md`：自我檢查加一行需要金鑰的測試（#18 沒有改，不擋結案）
+- [x] `docs/review-guide.md`：加上「動到 `integrations/` 的 MR 要附 external 測試結果」（#18）
+- [x] MR 說明的情境表格寫「不適用」，理由是只改文件（AGENTS.md §7.4）（#18）
+- [x] 合併前把本檔的 `Status` 改成 `resolved`、`MR` 填上連結（本檔在 #15 的分支，#15 合併前就在那個分支改）
