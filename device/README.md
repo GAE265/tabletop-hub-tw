@@ -2,7 +2,7 @@
 
 發牌決策在樹莓派本機完成，網路斷線也要能出牌（見 [AGENTS.md](../AGENTS.md) 第 6 節）。
 
-目前是骨架：只有攝影機與馬達的介面（`hardware/camera.py`、`hardware/motor.py`）和 mock 實作（`hardware/mock_*.py`），**沒有真實硬體驅動，也沒有 MQTT 連線**。上層邏輯只能依賴介面，不得 import 硬體專用套件。
+目前是骨架：只有攝影機與馬達的介面（`hardware/camera.py`、`hardware/motor.py`）和 fake 實作（`hardware/fake_*.py`），**沒有真實硬體驅動，也沒有 MQTT 連線**。上層邏輯只能依賴介面，不得 import 硬體專用套件。
 
 ## 開發機（Windows／Mac／Linux）
 

@@ -2,8 +2,8 @@ import ast
 from pathlib import Path
 
 from hardware.camera import Camera
-from hardware.mock_camera import MockCamera
-from hardware.mock_motor import MockMotor
+from hardware.fake_camera import FakeCamera
+from hardware.fake_motor import FakeMotor
 from hardware.motor import Motor
 
 HARDWARE_DIR = Path(__file__).resolve().parents[1] / "hardware"
@@ -19,7 +19,7 @@ def deal_one_card(camera: Camera, motor: Motor) -> bytes:
 
 
 def test_upper_layer_works_with_interfaces_only():
-    camera, motor = MockCamera(frames=[b"x"]), MockMotor()
+    camera, motor = FakeCamera(frames=[b"x"]), FakeMotor()
 
     assert deal_one_card(camera, motor) == b"x"
     assert [action.name for action in motor.actions] == ["rotate", "stop"]
