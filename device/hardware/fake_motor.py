@@ -8,7 +8,7 @@ class MotorAction:
 
 
 @dataclass
-class MockMotor:
+class FakeMotor:
     """不需硬體的馬達。只記錄動作供測試檢查，不拋出硬體錯誤。"""
 
     actions: list[MotorAction] = field(default_factory=list)
