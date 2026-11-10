@@ -6,6 +6,8 @@
 > 本檔只能由組員親手修改，修改需經組內同意，以 MR 提出。
 > 例外：OpenSpec 會在本檔中自動維護它自己的區塊（由組員執行 `openspec init`／`openspec update` 產生），該區塊內容不受此限，但區塊以外的內容一樣不得由 AI 修改。
 > 本檔所說的 MR（Merge Request）在 GitHub 介面上叫做 Pull request，兩者是同一件事。
+>
+> **版本：1.7（2026-11-10）**。每次修改本檔都要更新版本號，並在文末「修訂紀錄」加一行。
 
 ## 1. 專案概要
 
@@ -272,7 +274,7 @@ frontend/lib/
 ## 6. 發牌機（`device/`）
 
 - 發牌決策在樹莓派本機完成，網路斷線也要能出牌。後端只接收事件紀錄。
-- 硬體（攝影機、馬達）一律包在介面後面，並提供 `mock` 實作，讓沒有樹莓派的人也能在電腦上跑測試。
+- 硬體（攝影機、馬達）一律包在介面後面，並提供 fake 實作（例如 `FakeCamera`、`FakeMotor`），讓沒有樹莓派的人也能在電腦上跑測試。
 - MQTT 主題：`tabletop/{shop_id}/dealer/{device_id}/{events|commands}`。訊息格式為 JSON，必含 `type`、`ts`（ISO 8601、UTC）。
 - 樹莓派開機後主動連到 MQTT broker，不依賴固定 IP。
 
@@ -324,7 +326,9 @@ frontend/lib/
 ### 7.5 測試的底線
 
 - **不得為了讓測試通過而修改或刪除測試。** 如果認為測試本身寫錯了，在 MR 說明寫出理由，由審核者同意後才能改。
-- service 層用假的 repository 做單元測試，不連真資料庫。
+- **測試替身一律手寫 fake**（照介面寫的簡化實作，例如 `FakeLLMProvider`、`FakeHealthRepository`），類別名稱以 `Fake` 開頭，不使用 mock 套件（例如 `unittest.mock`、mocktail、mockito）。
+- service 層用 fake repository 做單元測試，不連真資料庫。
+- 前端 state 的測試用 Riverpod 的 override 換成 fake repository，fake 集中放在 `frontend/test/support/fakes.dart`。開發畫面時接本機後端，不在 `lib/` 裡另做假資料。
 - 每個 API 端點至少有成功與失敗各一個案例。
 - 用到 LLM、embedding、OCR 等外部服務的功能，domain 的測試一律使用 `integrations/` 提供的假實作（例如 `FakeLLMProvider`），不得連到真正的外部服務。
 
@@ -375,7 +379,7 @@ scope 的寫法：
 | 單一 domain | domain 名稱 | `feat(booking): 新增查詢可用桌位 API` |
 | 後端共用區 | `core`、`integrations` | `fix(core): 修正錯誤格式缺少 code 欄位` |
 | 前端共用區或主題 | `frontend` | `refactor(frontend): 抽出共用載入元件` |
-| 發牌機 | `device` | `feat(device): 新增馬達 mock 實作` |
+| 發牌機 | `device` | `feat(device): 新增馬達 fake 實作` |
 | 跨多個 domain 或整個 repo | 省略 scope | `docs: 更新 README 啟動步驟`、`ci: 新增 MR 檢查流程` |
 
 ### 8.3 自動檢查（CI）與工具設定
@@ -385,7 +389,7 @@ scope 的寫法：
 - GitHub Actions 在**發 MR 到 `dev` 或 `main` 時**自動執行：
   - 後端：`ruff check`、`ruff format --check`、`pytest`（連線 CI 內建的 PostgreSQL + pgvector；依 7.6 不執行 `external` 標記的測試）
   - 前端：`flutter analyze`、`flutter test`
-  - 發牌機：在 `device/` 跑 `ruff check`、`pytest`（使用 mock 硬體，不需要樹莓派）
+  - 發牌機：在 `device/` 跑 `ruff check`、`pytest`（使用 fake 硬體，不需要樹莓派）
 - CI 沒有全部通過的 MR 不得合併。
 
 ## 9. 給 AI 助理的額外規則
@@ -440,6 +444,13 @@ scope 的寫法：
 | 成員 | `member` | 已加入某個揪團的玩家。開團主建立揪團時自動成為第一位成員，也計入人數 |
 | 報名 | — | 玩家加入揪團的**動作**，不是資料。API 為 `POST /api/v1/groups/{id}/members`，結果是新增一位成員，或在額滿時加入候補 |
 | 候補 | `waitlist` | 揪團人數額滿後，排隊等待遞補的玩家名單。有人退出時，依報名先後通知遞補。額滿時報名 API 的確切回應，由 `groups` 負責人在測試案例中定義 |
+
+## 修訂紀錄
+
+| 版本 | 日期 | 修改內容 |
+|---|---|---|
+| 1.7 | 2026-11-10 | 新增 7.6 測試分類（`external` 標記，需要金鑰的測試不在預設執行與 CI 中跑）；7.2 加上 `external` 例外；7.5 規定測試替身一律手寫 fake、不使用 mock 套件，並寫明前端測試的做法；發牌機的 mock 改稱 fake；本檔開始標示版本 |
+| 1.0–1.6 | 2026-11-10 以前 | 未記錄 |
 
 ## Agent skills
 以下設定給 mattpocock skills 使用（目前只有立倫使用）。組員照 OpenSpec 流程即可。
