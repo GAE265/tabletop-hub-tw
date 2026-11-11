@@ -1,7 +1,7 @@
 # spec：桌遊推薦 Agent + 桌遊 RAG（games_advisor）
 
 - Map：[桌遊推薦 Agent + 桌遊 RAG](map.md)
-- 狀態：前半（共用部分、桌遊資料與心得管線）2026-11-08、後半（推薦對話與 API）2026-11-09 立倫看過。2026-11-10 補上需要金鑰的測試（§2、§17、§18，[ticket 11](../games-advisor-impl/issues/11-agents-md-secret-tests.md)）。
+- 狀態：前半（共用部分、桌遊資料與心得管線）2026-11-08、後半（推薦對話與 API）2026-11-09 立倫看過。2026-11-10 補上外部服務測試（§2、§17、§18）；同日依 AGENTS.md 7.6（#18）改用 `external` 標記。
 - 這份 spec 只整理已定案的決定，不重新決定。標〔Qn〕的地方是寫 spec 時發現的缺漏：Q1–Q8 記在「[spec：桌遊資料與心得管線](issues/20-spec-data-and-review-pipeline.md)」的 Comments，Q9 起記在「[spec：推薦對話與 API](issues/21-spec-conversation-and-api.md)」的 Comments。
 
 ## 怎麼讀
@@ -67,7 +67,7 @@
 | 批次指令 | `games_advisor` 在本機手動執行的後端指令：匯入桌遊、心得管線、評估題組 | 〔管線〕§8 |
 | 評估題組、評估題 | 用真的模型檢查推薦品質的題目，不進 CI、不擋合併 | 〔驗收〕§2 |
 | 詞彙表草稿、歸納報告、標籤草稿 | 批次指令產生、給立倫審核的檔案（§5） | 〔管線〕§1、§4 |
-| 需要金鑰的測試 | 要讀 `.env` 的金鑰、連到真的外部服務（例如 Azure）的 pytest。加上 `real` 標記，不在 CI 跑；發 MR 前在本機執行 `uv run pytest -m real`。評估題組是指令，不算這類測試 | [ticket 11](../games-advisor-impl/issues/11-agents-md-secret-tests.md) |
+| 外部服務測試 | `integrations/` 裡要讀 `.env` 的金鑰、連到真的外部服務（例如 Azure）的 pytest。加上 `external` 標記，不在 CI 跑；改到 `integrations/` 的 MR，發 MR 前在本機執行 `uv run pytest -m external`，結果貼在 MR 說明。評估題組是指令，不算這類測試 | AGENTS.md 7.6 |
 
 ## 3. 資料表總覽
 
@@ -1361,11 +1361,11 @@ uv run python -m app.domains.games_advisor.commands eval <eval_cases.json> --out
 - games_advisor 依賴的部分：`respond`（對話）、`generate_json`（歸納詞彙表、上標籤）、`generate`（心得摘要）、`embed`；`FakeLLMProvider` 的 `responses`、`json_outputs` 腳本與 `calls`；`FakeEmbeddingProvider` 的 `vectors`、`error`；沒給腳本時拋 `LLMUnavailable`。〔提案 §3、§6〕
 - `integrations/llm/`、`integrations/embedding/` 由瑋鋐擁有；誰實作、OpenSpec `llm-provider` 規格的更新放在哪一張，由「[把 spec 拆成 TDD 實作 ticket](issues/22-split-spec-into-tdd-tickets.md)」決定。〔提案 §9〕
 - 第一張實作 ticket 要在 Azure 驗證提案第 10 節的 5 件事，排在「建立 Foundry 與三個部署」之後。〔提案 §10〕、〔部署〕§8
-- 雲端實作另外有 4 個需要金鑰的測試（§2），在本機確認真的連得上 Azure，範圍見提案 §11.6；`real` 標記的設定也在同一張 ticket 加上。〔提案 §11.6〕
+- 雲端實作另外有 4 個外部服務測試（§2），在本機確認真的連得上 Azure，範圍見提案 §11.6。`external` 標記已由 #18 註冊在 `backend/pyproject.toml`，不用再加。〔提案 §11.6〕、AGENTS.md 7.6
 
 ## 18. 組員已同意的事
 
-下面 5 件事和 AGENTS.md 的規則有出入，或會改到全組的流程。前 4 件 2026-11-09 組員討論後同意；第 5 件組員同意方向，條文照立倫的寫法，在 ticket 11 的 MR 給組員確認。AI 不改 AGENTS.md（AGENTS.md §2.0）：503 要補進 §4.3 的清單、第 5 件要寫進 §7，都由組員親手修改 AGENTS.md，以 MR 提出。
+下面 5 件事和 AGENTS.md 的規則有出入，或會改到全組的流程。前 4 件 2026-11-09 組員討論後同意；第 5 件 2026-11-10 已由組員寫進 AGENTS.md 7.6（#18）。AI 不改 AGENTS.md（AGENTS.md §2.0）：503 要補進 §4.3 的清單，由組員親手修改 AGENTS.md，以 MR 提出。
 
 | 事項 | 內容 | 出處 |
 |---|---|---|
@@ -1373,4 +1373,4 @@ uv run python -m app.domains.games_advisor.commands eval <eval_cases.json> --out
 | ADR 0001 | 對話狀態交給 Azure 保存，偏離 §4.2「用 `LLM_PROVIDER` 切換雲端與地端」 | 〔ADR 0001〕 |
 | ADR 0002 | 追問與推薦由 LLM 依對話規則決定 | 〔ADR 0002〕 |
 | 評估題組的位置 | pytest 仍是合併的唯一標準；評估題組不進 CI、不擋合併，改到對話規則等項目時把分數貼進 MR | 〔驗收〕§3 |
-| 需要金鑰的測試不進 CI | 需要金鑰的測試（§2）加上 `real` 標記，不在 CI 跑；發 MR 前要在本機通過，MR 說明的情境表格標「（本機）」，表格外附上執行指令、通過數量與日期。能用 fake 或 `MockTransport` 寫的測試，照樣進 CI | [ticket 11](../games-advisor-impl/issues/11-agents-md-secret-tests.md) |
+| 外部服務測試不進 CI（已寫進 AGENTS.md） | 外部服務測試（§2）只能放在 `integrations/`，加上 `external` 標記，不在 CI 跑；缺金鑰時直接失敗並說明缺哪個設定；改到 `integrations/` 的 MR 要在說明貼上本機執行 `uv run pytest -m external` 的結果。能用 fake 或 `MockTransport` 寫的測試，照樣進 CI | AGENTS.md 7.6（#18）、[ticket 11](../games-advisor-impl/issues/11-agents-md-secret-tests.md) |

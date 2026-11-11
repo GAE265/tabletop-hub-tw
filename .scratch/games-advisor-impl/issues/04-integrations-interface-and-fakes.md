@@ -1,9 +1,9 @@
 # 04：整合層介面與 fake
 
-Status: ready-for-agent
+Status: resolved
 Blocked by: 無
 Spec: [spec](../../games-advisor/spec.md) §4.1、§17
-MR: （還沒開）
+MR: [#16](https://github.com/GAE265/tabletop-hub-tw/pull/16)
 
 ## 要做什麼
 
@@ -11,9 +11,9 @@ MR: （還沒開）
 
 ## 驗收條件
 
-- [ ] 開 Draft MR，MR 說明列出情境表格（AGENTS.md §7.2、§7.4）
-- [ ] 提案 §11.1–§11.3 的每一列都有測試而且通過。§11.1 中需要雲端實作的 4 列除外（見 08）
-- [ ] `.env.example` 只寫欄位名與說明（AGENTS.md §2.1）
-- [ ] AGENTS.md §2 第 7 點的三項檢查通過
-- [ ] MR @ 瑋鋐（整合層擁有者）
-- [ ] 合併前把本檔的 `Status` 改成 `resolved`、`MR` 填上連結
+- [x] 開 Draft MR，MR 說明列出情境表格（AGENTS.md §7.2、§7.4）
+- [x] 提案 §11.1–§11.3 的每一列都有測試而且通過。§11.1 中需要雲端實作的 4 列除外（見 08）
+- [x] `.env.example` 只寫欄位名與說明（AGENTS.md §2.1）
+- [x] AGENTS.md §2 第 7 點的三項檢查通過
+- [x] MR @ 瑋鋐（整合層擁有者）
+- [x] 合併前把本檔的 `Status` 改成 `resolved`、`MR` 填上連結

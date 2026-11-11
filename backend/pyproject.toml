@@ -32,3 +32,5 @@ known-first-party = ["app", "tests"]
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
+markers = ["external: 需要外部服務金鑰的測試，預設不執行"]
+addopts = "-m 'not external'"
