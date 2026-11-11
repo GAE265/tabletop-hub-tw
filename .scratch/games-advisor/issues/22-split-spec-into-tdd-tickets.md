@@ -69,3 +69,12 @@ Map: [桌遊推薦 Agent + 桌遊 RAG](../map.md)
 - 2026-11-08（來自「[spec：桌遊資料與心得管線](20-spec-data-and-review-pipeline.md)」）：前半有 4 張新資料表（spec §3），一個 MR 最多一個 migration，拆法在這張決定。整合層提案不用為心得摘要的測試改動（立倫決定 Q6）。批次指令都在 `app.domains.games_advisor.commands`，7 個子指令各有 §7 表格（spec §8）。
 - 2026-11-09（來自「[spec：推薦對話與 API](21-spec-conversation-and-api.md)」）：後半寫在 spec §10–§18，§7 表格分在 §11.8（repository、service）、§12.7（對話 service）、§13.4（router）、§14.2–§14.3（前端 `state/`、`data/`）、§15.5（評估題組）。拆票時要注意：參考畫面的路由改 `frontend/lib/app/router.dart`（永傑擁有，要 @）；`main.py` 要多建一個 embedding provider，`core/config.py` 與 `.env.example` 要加 §4.1 的欄位；整合層誰實作、OpenSpec `llm-provider` 規格更新放哪一張（spec §17）；第一張實作 ticket 在 Azure 驗證提案第 10 節，排在「建立 Foundry 與三個部署」之後；spec §18 的 4 件事由立倫向組員提出，不是實作 ticket。
 - 2026-11-09 更正上一則：spec §18 的 4 件事（503 補進 §4.3、ADR 0001、ADR 0002、評估題組的位置）組員已討論同意，兩份 ADR 改成 accepted。剩下一個動作：AGENTS.md §4.3 補上 503，由組員親手修改、以 MR 提出（AI 不改 AGENTS.md）；要不要列成一張 ticket、排在 API 的 MR 之前，在這張決定。
+- 2026-11-11 資料表改版與 ticket 順序調整（立倫 grilling 定案，spec 標〔改表〕）：
+  - **順序**：欄位先定案 → 03 收桌遊資料 → 05 建表。03 拆成兩張：03 只做 `games.json`、在 05 的 MR 結案；新開 12 做 `reviews.json`、在 10 的 MR 結案。05 的 Blocked by 改成 03、04；10 改成 03、06、07、08、12。不拆的話 05 等 03、03 等 10、10 又等 05，會卡成死結。
+  - **共用表**：`games`、`game_types`（8 個類型）、`game_game_types` 給所有 domain 直接查詢，表名不用 domain 開頭，`games.id` 是立倫指定的 "1"、"2"…… 字串編號（AGENTS.md §4.2、§4.4 的例外，見 ADR 0003）。不開 ticket 改 AGENTS.md，理由寫在 05 的 MR。負責人立倫，程式在 `backend/app/core/games/`。
+  - **編號**：給出去就不改、不重複使用；`games.json` 不帶編號，匯入時問立倫，產生臨時的編號對應檔。
+  - **欄位**：`english_name` 取代 `original_name`；`categories`、`mechanics` 不加前綴；`bgg_id` 保留；一款可以有多個類型，類型由 Codex 從 BGG 抓，抓不到的立倫手填。
+  - **用詞**：8 大類叫「類型」（`type`），BGG 細分類叫「類別」（`categories`），「種類」不用。
+  - **心得摘要**搬到 `games_advisor_review_summaries`；標籤、心得片段的 `game_id` 改參照 `games.id`。
+  - **標籤**：立倫給的 35 個關鍵字寫進歸納詞彙表的提示詞，當作優先的候選詞；和既有規則衝突的詞在審核時照規則處理。
+  - **不在這次**：推薦用不用類型篩選，之後再談。
