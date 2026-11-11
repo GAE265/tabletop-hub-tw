@@ -10,6 +10,7 @@ from app.core.config import Settings, get_settings
 from app.core.db import create_db_engine
 from app.core.errors import register_error_handlers
 from app.domains.health.router import router as health_router
+from app.integrations.embedding import EmbeddingConfig, get_embedding_provider
 from app.integrations.llm import get_llm_provider
 
 API_PREFIX = "/api/v1"
@@ -27,8 +28,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app = FastAPI(title="遊任有娛 tabletop-hub-tw", lifespan=lifespan)
     app.state.settings = settings
     app.state.session_factory = sessionmaker(engine)
-    # LLM_PROVIDER 設錯時在啟動就明確報錯
-    app.state.llm = get_llm_provider(settings.llm_provider)
+    # LLM_PROVIDER、GAMES_ADVISOR_EMBEDDING_* 設錯時在啟動就明確報錯
+    app.state.llm = get_llm_provider(settings.llm_provider, settings)
+    app.state.games_advisor_embedding = get_embedding_provider(
+        EmbeddingConfig(
+            provider=settings.games_advisor_embedding_provider,
+            dim=settings.games_advisor_embedding_dim,
+            endpoint=settings.games_advisor_embedding_endpoint,
+            api_key=settings.games_advisor_embedding_api_key,
+            model=settings.games_advisor_embedding_model,
+        )
+    )
 
     if settings.cors_origins:
         app.add_middleware(
