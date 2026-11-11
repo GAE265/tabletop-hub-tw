@@ -17,7 +17,7 @@ MR: 不開 MR，在 05 的 MR 裡結案
 
 - [x] Claude 寫 `games.json` 的 Codex 提示詞，放在 `.scratch/games-advisor/prompts/`，格式照 spec §8.1（含 `english_name`、`types`）
 - [x] 提示詞請 Codex 先確認 BGG XML API 有沒有回大類排名（`ranks` 裡 `type="family"`）；抓不到類型的桌遊，`types` 由立倫手填
-- [ ] 立倫用 Codex 產生 `games.json`，手填繁中名稱
+- [x] 立倫用 Codex 產生 `games.json`，手填繁中名稱
 - [x] 16 款都符合 spec §8.1 的檢查；兩款 Demo 遊戲（血與刃的白薔薇、阿不思學院）的 `bgg_id` 已查到，spec §3.1 已改
 - [x] `games.json` 在 repo 外，沒有進 git
 - [ ] 在 05 的分支把本檔的 `Status` 改成 `resolved`；新的提示詞也在那裡 commit
@@ -31,5 +31,6 @@ MR: 不開 MR，在 05 的 MR 裡結案
 3. **血與刃的白薔薇的 `types`**：BGG 沒有任何大類排名，立倫手填 `["party"]`，理由是機制和阿瓦隆幾乎一樣，阿瓦隆是 `party`。「陣營」不另設類型，用機制（Hidden Roles、Traitor Game、Team-Based Game）表示。
 4. **《記憶 44》**查不到台灣繁中版，立倫決定保留，06 補上例外。
 5. 格式：`check_games.py` 通過，16 款各 12 個欄位，數值都在 spec §8.1 的範圍內；spec 裡「15 款」的地方（§8.7 的提醒門檻改成 13 款、§15）一起改成 16 款。
+6. **繁中名稱**：16 款立倫照盒子全部確認。
 
 和提示詞不同的地方：Codex 沒有用 BGG XML API，而是用瀏覽器讀 BGG 頁面與 `api.geekdo.com`。抽查 3 款的 12 個欄位和 BGG 一致，資料本身照用；之後要重抓時仍照提示詞走 XML API。
