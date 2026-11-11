@@ -1,9 +1,9 @@
 # 02：建立 Foundry 並在 Azure 驗證
 
-Status: ready-for-human
+Status: resolved
 Blocked by: 無
 Spec: [spec](../../games-advisor/spec.md) §16、§17
-MR: 不開 MR，結果跟著 08 的 MR 一起 commit
+MR: [#21](https://github.com/GAE265/tabletop-hub-tw/pull/21)（不開自己的 MR，結果跟著 08 的 MR 一起 commit）
 
 ## 要做什麼
 
@@ -16,7 +16,7 @@ MR: 不開 MR，結果跟著 08 的 MR 一起 commit
 - [x] 驗證提案第 10 節的 5 件事。AI 可以寫一次性的驗證腳本，腳本不進 repo
 - [x] 結果寫在本檔的 `## Answer`：第 4、5 點要記下 Azure 實際回的狀態碼與錯誤格式，08 用它們寫例外轉換
 - [x] 第 1 點不成立時改走提案的備案（「交卷」工具）：先改 spec 與提案，再做 07、08；04 已經合併的話，介面的修改放進 08（第 1 點成立，不適用）
-- [ ] 在 08 的分支把本檔的 `Status` 改成 `resolved`
+- [x] 在 08 的分支把本檔的 `Status` 改成 `resolved`
 
 ## Answer
 
