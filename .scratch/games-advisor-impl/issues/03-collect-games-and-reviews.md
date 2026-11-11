@@ -1,9 +1,9 @@
 # 03：收集桌遊資料
 
-Status: ready-for-human
+Status: resolved
 Blocked by: 無
 Spec: [spec](../../games-advisor/spec.md) §3.1–§3.3、§5、§8.1
-MR: 不開 MR，在 05 的 MR 裡結案
+MR: 不開 MR，在 05 的 MR [#22](https://github.com/GAE265/tabletop-hub-tw/pull/22) 裡結案
 
 ## 要做什麼
 
@@ -20,7 +20,7 @@ MR: 不開 MR，在 05 的 MR 裡結案
 - [x] 立倫用 Codex 產生 `games.json`，手填繁中名稱
 - [x] 16 款都符合 spec §8.1 的檢查；兩款 Demo 遊戲（血與刃的白薔薇、阿不思學院）的 `bgg_id` 已查到，spec §3.1 已改
 - [x] `games.json` 在 repo 外，沒有進 git
-- [ ] 在 05 的分支把本檔的 `Status` 改成 `resolved`；新的提示詞也在那裡 commit
+- [x] 在 05 的分支把本檔的 `Status` 改成 `resolved`；新的提示詞也在那裡 commit
 
 ## Answer
 

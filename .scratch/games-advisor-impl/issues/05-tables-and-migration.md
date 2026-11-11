@@ -1,9 +1,9 @@
 # 05：資料表
 
-Status: ready-for-agent
+Status: resolved
 Blocked by: 03、04
 Spec: [spec](../../games-advisor/spec.md) §3
-MR: （還沒開）
+MR: [#22](https://github.com/GAE265/tabletop-hub-tw/pull/22)
 
 ## 要做什麼
 
@@ -13,10 +13,10 @@ MR: （還沒開）
 
 ## 驗收條件
 
-- [ ] 開 Draft MR，MR 說明列出情境表格（AGENTS.md §7.2、§7.4）
-- [ ] spec §3.8 的每一列都有測試而且通過
+- [x] 開 Draft MR，MR 說明列出情境表格（AGENTS.md §7.2、§7.4）
+- [x] spec §3.8 的每一列都有測試而且通過
 - [ ] MR 說明寫出共用表的例外與理由，連到 ADR 0003；組員同意後 ADR 0003 改成 accepted
-- [ ] AGENTS.md §2 第 7 點的三項檢查通過
-- [ ] MR @ 瑋鋐（審核 migration，AGENTS.md §4.4）
-- [ ] 03 的 `games.json` 提示詞在這個分支 commit
-- [ ] 合併前把本檔與 03 的 `Status` 改成 `resolved`、`MR` 填上連結
+- [x] AGENTS.md §2 第 7 點的三項檢查通過
+- [x] MR @ 瑋鋐（審核 migration，AGENTS.md §4.4）
+- [x] 03 的 `games.json` 提示詞在這個分支 commit
+- [x] 合併前把本檔與 03 的 `Status` 改成 `resolved`、`MR` 填上連結
