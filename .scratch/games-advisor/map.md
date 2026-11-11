@@ -34,7 +34,7 @@
 - [核對 BGG 使用條款原文](issues/15-verify-bgg-terms.md)：現行 6.B.iv 允許把 BGG 內容交給 LLM 做摘要、搜尋、回答等一般用途，只禁止大型 AI 公司訓練；本專案視為非商業，收錄約 3–15 款；能不能存進資料庫還沒核對
 - [確認可用的 Azure OpenAI 資源](issues/04-azure-openai-resources.md)：另建專題專用的 Foundry，只有立倫使用，課程額度 NTD 2800；已確認 gpt-4.1-mini、gpt-4.1、gpt-4o-mini 支援 structured outputs，gpt-5.6 系列不確定；要部署哪些模型由新 ticket 決定。已由「專題專用 Foundry 要部署哪些模型」更正：額度是 NTD 3000；Microsoft 文件已列出 gpt-5.6 系列支援 structured outputs 與工具呼叫
 - [對話狀態存在哪裡](issues/05-conversation-state.md)：交給 Azure Responses API 保存，前端帶 `response_id` 接續；後端不存、不綁使用者、不能回看，Azure 保留 30 天；偏離 §4.2 的地端切換，寫成 ADR 0001，組員已同意（2026-11-09）
-- [收錄哪些桌遊、存哪些欄位](issues/06-game-coverage-and-fields.md)：15 款（含 Demo 三款）；條件欄位是人數、時長、年齡，偏好欄位是 BGG 的類別、機制、難度；Codex 透過 BGG XML API 產生 repo 外的 JSON，後端匯入指令讀檔寫入
+- [收錄哪些桌遊、存哪些欄位](issues/06-game-coverage-and-fields.md)：15 款（含 Demo 三款；2026-11-11 更正為 16 款，8 個類型各 2 款，見該 ticket 的 Comments）；條件欄位是人數、時長、年齡，偏好欄位是 BGG 的類別、機制、難度；Codex 透過 BGG XML API 產生 repo 外的 JSON，後端匯入指令讀檔寫入
 - [Agent 怎麼追問、什麼時候推薦](issues/07-conversation-flow.md)：Agent 依對話規則自己判斷追問或推薦（function calling），程式守三道護欄：人數必填、只推薦工具回傳的桌遊、每則訊息最多呼叫 2 次工具；人數是唯一必要條件，最多推薦 3 款，一律用繁中；查無結果時放寬時長或年齡其中一項，人數不放寬；離題規則也在這張；偏離「程式判斷流程」的取捨寫成 ADR 0002，組員已同意（2026-11-09）
 - [標籤詞彙表怎麼定](issues/08-tag-vocabulary.md)：詞彙先從心得歸納，再由立倫審核固定（最多約 30 個），每個標籤有英文代碼、繁中名稱、繁中定義；只描述玩起來的感受，不和條件或 BGG 欄位重複，每個面向只留一個方向；每款的每個標籤有 LLM 給的 0–1 信心分數，給分標準移到心得管線；人工驗證只能刪標籤
 - [條件與偏好怎麼比對桌遊](issues/10-matching-strategy.md)：SQL 篩條件；負面偏好優先排後面，再用 RRF 合併結構化分數（標籤信心、類別、機制、難度）與偏好描述對心得摘要的向量相似度，回傳前 3 款；同一個工具再取每款 2 段心得片段當理由出處；embedding 主要為展示 RAG；心得摘要向量放桌遊資料表、心得片段另開一張表，不建索引
