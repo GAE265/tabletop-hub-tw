@@ -3,7 +3,7 @@
 Status: ready-for-agent
 Blocked by: 02、04（原本的 11 已由 #18 寫進 AGENTS.md 7.6）
 Spec: [spec](../../games-advisor/spec.md) §16、§17
-MR: （還沒開）
+MR: [#21](https://github.com/GAE265/tabletop-hub-tw/pull/21)
 
 ## 要做什麼
 
