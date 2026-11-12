@@ -22,7 +22,8 @@ def test_factory_returns_fake_for_fake() -> None:
     assert isinstance(get_llm_provider("fake"), FakeLLMProvider)
 
 
-@pytest.mark.parametrize("name", ["cloud", "local"])
+# cloud 已實作，「尚未實作的值要明確報錯」改由 local 驗證（整合層提案第 9 節第 2 點）
+@pytest.mark.parametrize("name", ["local"])
 def test_unimplemented_provider_raises_clear_error(name: str) -> None:
     with pytest.raises(NotImplementedError, match="尚未實作"):
         get_llm_provider(name)
@@ -35,7 +36,7 @@ def test_unknown_provider_raises_value_error() -> None:
 
 def test_app_startup_fails_loudly_for_unimplemented_provider(make_settings) -> None:
     with pytest.raises(NotImplementedError):
-        create_app(make_settings(llm_provider="cloud"))
+        create_app(make_settings(llm_provider="local"))
 
 
 @pytest.mark.parametrize("effort", ["none", "low", "medium", "high", "xhigh", "max"])
