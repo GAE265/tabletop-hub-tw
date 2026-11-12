@@ -1,6 +1,6 @@
 """games tables: 共用桌遊表 games、game_types、game_game_types 與 games_advisor 的 4 張表
 
-共用表是 AGENTS.md §4.2、§4.4 的例外（表名沒有 domain 開頭、games.id 是字串），
+共用表是 AGENTS.md §4.2、§4.4 的例外（表名沒有 domain 開頭、games.id 是自動給號的整數），
 理由見 docs/adr/0003-shared-games-table.md。
 
 Revision ID: 0002
@@ -41,7 +41,7 @@ def uuid_pk() -> sa.Column:
 
 def game_fk() -> sa.Column:
     return sa.Column(
-        "game_id", sa.Text(), sa.ForeignKey("games.id", ondelete="CASCADE"), nullable=False
+        "game_id", sa.BigInteger(), sa.ForeignKey("games.id", ondelete="CASCADE"), nullable=False
     )
 
 
@@ -50,7 +50,8 @@ def upgrade() -> None:
 
     op.create_table(
         "games",
-        sa.Column("id", sa.Text(), primary_key=True),
+        # 沒給 id 就自動給號；給了就照給的寫入（同步共用桌遊資料時要用，spec §8.11）
+        sa.Column("id", sa.BigInteger(), sa.Identity(always=False), primary_key=True),
         sa.Column("bgg_id", sa.Integer(), nullable=False),
         sa.Column("name", sa.Text(), nullable=False),
         sa.Column("english_name", sa.Text(), nullable=False),
@@ -63,7 +64,7 @@ def upgrade() -> None:
         sa.Column("categories", postgresql.ARRAY(sa.Text()), nullable=False),
         sa.Column("mechanics", postgresql.ARRAY(sa.Text()), nullable=False),
         sa.UniqueConstraint("bgg_id", name="uq_games_bgg_id"),
-        sa.CheckConstraint("id ~ '^[1-9][0-9]*$'", name="ck_games_id_format"),
+        sa.CheckConstraint("id > 0", name="ck_games_id_positive"),
         sa.CheckConstraint("min_players BETWEEN 1 AND max_players", name="ck_games_players"),
         sa.CheckConstraint("min_playtime BETWEEN 1 AND max_playtime", name="ck_games_playtime"),
         sa.CheckConstraint("min_age >= 0", name="ck_games_min_age"),

@@ -6,7 +6,16 @@ game_id 參照共用表 games.id（app/core/games/models.py）。
 import uuid
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import CheckConstraint, Double, ForeignKey, Text, UniqueConstraint, Uuid, text
+from sqlalchemy import (
+    BigInteger,
+    CheckConstraint,
+    Double,
+    ForeignKey,
+    Text,
+    UniqueConstraint,
+    Uuid,
+    text,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.db import Base
@@ -18,8 +27,8 @@ def _uuid_pk() -> Mapped[uuid.UUID]:
     )
 
 
-def _game_fk() -> Mapped[str]:
-    return mapped_column(Text, ForeignKey("games.id", ondelete="CASCADE"))
+def _game_fk() -> Mapped[int]:
+    return mapped_column(BigInteger, ForeignKey("games.id", ondelete="CASCADE"))
 
 
 # 向量欄位不寫維度：實際維度由 migration 讀 GAMES_ADVISOR_EMBEDDING_DIM 建立，這裡不重複寫死
@@ -32,7 +41,7 @@ class ReviewSummary(Base):
     )
 
     id: Mapped[uuid.UUID] = _uuid_pk()
-    game_id: Mapped[str] = _game_fk()
+    game_id: Mapped[int] = _game_fk()
     summary: Mapped[str] = mapped_column(Text)
     embedding: Mapped[list[float]] = mapped_column(Vector())
     embedding_model: Mapped[str] = mapped_column(Text)
@@ -60,7 +69,7 @@ class GameTag(Base):
     )
 
     id: Mapped[uuid.UUID] = _uuid_pk()
-    game_id: Mapped[str] = _game_fk()
+    game_id: Mapped[int] = _game_fk()
     tag_id: Mapped[uuid.UUID] = mapped_column(
         Uuid, ForeignKey("games_advisor_tags.id", ondelete="CASCADE")
     )
@@ -77,7 +86,7 @@ class ReviewExcerpt(Base):
     )
 
     id: Mapped[uuid.UUID] = _uuid_pk()
-    game_id: Mapped[str] = _game_fk()
+    game_id: Mapped[int] = _game_fk()
     text: Mapped[str] = mapped_column(Text)
     embedding: Mapped[list[float]] = mapped_column(Vector())
     embedding_model: Mapped[str] = mapped_column(Text)

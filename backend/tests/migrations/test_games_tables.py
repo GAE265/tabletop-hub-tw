@@ -4,7 +4,7 @@ from collections.abc import Iterator
 
 import pytest
 from sqlalchemy import Connection, Engine, create_engine, text
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import DBAPIError, IntegrityError
 
 from app.core import config
 from app.core.config import Settings
@@ -22,6 +22,12 @@ NEW_TABLES = {
 VECTOR_COLUMNS = [
     ("games_advisor_review_summaries", "embedding"),
     ("games_advisor_review_excerpts", "embedding"),
+]
+GAME_ID_TABLES = [
+    "game_game_types",
+    "games_advisor_review_summaries",
+    "games_advisor_game_tags",
+    "games_advisor_review_excerpts",
 ]
 GAME_TYPES = {
     "party": "派對",
@@ -66,10 +72,19 @@ def migrated() -> Iterator[Engine]:
 
 @pytest.fixture
 def clean(migrated: Engine) -> Engine:
-    # game_types 是 migration 寫入的固定資料，不清
+    # game_types 是 migration 寫入的固定資料，不清；games.id 的計數器從 1 重新開始
     with migrated.begin() as conn:
-        conn.execute(text("TRUNCATE games, games_advisor_tags CASCADE"))
+        conn.execute(text("TRUNCATE games, games_advisor_tags RESTART IDENTITY CASCADE"))
     return migrated
+
+
+def column_type(engine: Engine, table: str, column: str) -> str:
+    sql = text(
+        "SELECT data_type FROM information_schema.columns "
+        "WHERE table_schema = 'public' AND table_name = :t AND column_name = :c"
+    )
+    with engine.connect() as conn:
+        return conn.scalar(sql, {"t": table, "c": column})
 
 
 def table_names(engine: Engine) -> set[str]:
@@ -87,15 +102,21 @@ def vector_type(engine: Engine, table: str, column: str) -> str:
         return conn.scalar(sql, {"t": table, "c": column})
 
 
-def insert_game(conn: Connection, game_id: str = "1", bgg_id: int = 900001) -> None:
-    conn.execute(
-        text(
-            "INSERT INTO games (id, bgg_id, name, english_name, min_players, max_players, "
-            "min_playtime, max_playtime, min_age, weight, categories, mechanics) "
-            "VALUES (:id, :bgg_id, '範例桌遊甲', 'Example Game A', 2, 4, 30, 45, 10, 1.85, "
-            "ARRAY['Card Game'], ARRAY['Hand Management'])"
-        ),
-        {"id": game_id, "bgg_id": bgg_id},
+def insert_game(conn: Connection, game_id: object = 1, bgg_id: int = 900001) -> int:
+    """寫入一款假桌遊並回傳 id；game_id 給 None 時不帶 id，由資料庫自動給號。"""
+    columns = "bgg_id, name, english_name, min_players, max_players, " + (
+        "min_playtime, max_playtime, min_age, weight, categories, mechanics"
+    )
+    values = (
+        ":bgg_id, '範例桌遊甲', 'Example Game A', 2, 4, 30, 45, 10, 1.85, "
+        "ARRAY['Card Game'], ARRAY['Hand Management']"
+    )
+    params: dict[str, object] = {"bgg_id": bgg_id}
+    if game_id is not None:
+        columns, values = f"id, {columns}", f":id, {values}"
+        params["id"] = game_id
+    return conn.scalar(
+        text(f"INSERT INTO games ({columns}) VALUES ({values}) RETURNING id"), params
     )
 
 
@@ -114,7 +135,7 @@ def zero_vector(engine: Engine) -> str:
     return "[" + ",".join(["0"] * dim) + "]"
 
 
-def insert_summary(conn: Connection, vector: str, game_id: str = "1") -> None:
+def insert_summary(conn: Connection, vector: str, game_id: int = 1) -> None:
     conn.execute(
         text(
             "INSERT INTO games_advisor_review_summaries "
@@ -125,7 +146,7 @@ def insert_summary(conn: Connection, vector: str, game_id: str = "1") -> None:
     )
 
 
-def insert_excerpt(conn: Connection, vector: str, game_id: str = "1") -> None:
+def insert_excerpt(conn: Connection, vector: str, game_id: int = 1) -> None:
     conn.execute(
         text(
             "INSERT INTO games_advisor_review_excerpts "
@@ -137,7 +158,7 @@ def insert_excerpt(conn: Connection, vector: str, game_id: str = "1") -> None:
     )
 
 
-def add_game_type(conn: Connection, game_id: str = "1", code: str = "party") -> None:
+def add_game_type(conn: Connection, game_id: int = 1, code: str = "party") -> None:
     conn.execute(
         text(
             "INSERT INTO game_game_types (game_id, game_type_id) "
@@ -147,7 +168,7 @@ def add_game_type(conn: Connection, game_id: str = "1", code: str = "party") -> 
     )
 
 
-def add_game_tag(conn: Connection, tag_id: str, game_id: str = "1") -> None:
+def add_game_tag(conn: Connection, tag_id: str, game_id: int = 1) -> None:
     conn.execute(
         text(
             "INSERT INTO games_advisor_game_tags (game_id, tag_id, confidence) VALUES (:g, :t, 0.8)"
@@ -167,6 +188,9 @@ def test_upgrade_creates_tables_with_default_dim(migrated: Engine) -> None:
     assert NEW_TABLES <= table_names(migrated)
     for table, column in VECTOR_COLUMNS:
         assert vector_type(migrated, table, column) == "vector(1536)"
+    assert column_type(migrated, "games", "id") == "bigint"
+    for table in GAME_ID_TABLES:
+        assert column_type(migrated, table, "game_id") == "bigint"
 
 
 def test_vector_dim_follows_setting() -> None:
@@ -184,8 +208,25 @@ def test_game_types_are_seeded(migrated: Engine) -> None:
     assert dict(rows) == GAME_TYPES
 
 
-@pytest.mark.parametrize("game_id", ["01", "a", "0"])
-def test_game_id_must_be_positive_integer_string(clean: Engine, game_id: str) -> None:
+def test_game_id_is_generated_when_omitted(clean: Engine) -> None:
+    with clean.begin() as conn:
+        first = insert_game(conn, None, bgg_id=900001)
+        second = insert_game(conn, None, bgg_id=900002)
+    assert (first, second) == (1, 2)
+
+
+def test_explicit_game_id_is_kept(clean: Engine) -> None:
+    with clean.begin() as conn:
+        assert insert_game(conn, 5) == 5
+
+
+def test_game_id_rejects_non_integer(clean: Engine) -> None:
+    with pytest.raises(DBAPIError), clean.begin() as conn:
+        insert_game(conn, "a")
+
+
+@pytest.mark.parametrize("game_id", [0, -1])
+def test_game_id_must_be_positive(clean: Engine, game_id: int) -> None:
     with pytest.raises(IntegrityError), clean.begin() as conn:
         insert_game(conn, game_id)
 
@@ -207,18 +248,11 @@ def test_downgrade_removes_new_tables_only() -> None:
 # --- 補充：spec §3.1–§3.7 的限制 ---
 
 
-@pytest.mark.parametrize("game_id", ["1", "10"])
-def test_game_id_accepts_valid_numbers(clean: Engine, game_id: str) -> None:
-    with clean.begin() as conn:
-        insert_game(conn, game_id)
-        assert conn.scalar(text("SELECT id FROM games")) == game_id
-
-
 def test_bgg_id_is_unique(clean: Engine) -> None:
     with clean.begin() as conn:
-        insert_game(conn, "1", bgg_id=900001)
+        insert_game(conn, 1, bgg_id=900001)
     with pytest.raises(IntegrityError), clean.begin() as conn:
-        insert_game(conn, "2", bgg_id=900001)
+        insert_game(conn, 2, bgg_id=900001)
 
 
 def test_same_game_type_twice_is_rejected(clean: Engine) -> None:
@@ -250,15 +284,15 @@ def test_second_review_summary_is_rejected(clean: Engine) -> None:
 def test_deleting_game_removes_its_rows(clean: Engine) -> None:
     vector = zero_vector(clean)
     with clean.begin() as conn:
-        insert_game(conn, "1", bgg_id=900001)
-        insert_game(conn, "2", bgg_id=900002)
+        insert_game(conn, 1, bgg_id=900001)
+        insert_game(conn, 2, bgg_id=900002)
         tag_id = insert_tag(conn)
-        for game_id in ("1", "2"):
+        for game_id in (1, 2):
             add_game_type(conn, game_id)
             add_game_tag(conn, tag_id, game_id)
             insert_summary(conn, vector, game_id)
             insert_excerpt(conn, vector, game_id)
-        conn.execute(text("DELETE FROM games WHERE id = '1'"))
+        conn.execute(text("DELETE FROM games WHERE id = 1"))
     with clean.connect() as conn:
         for table in (
             "game_game_types",
@@ -268,18 +302,18 @@ def test_deleting_game_removes_its_rows(clean: Engine) -> None:
         ):
             # 只剩第 2 款的那一列
             assert count(conn, table) == 1
-            assert conn.scalar(text(f"SELECT game_id FROM {table}")) == "2"
+            assert conn.scalar(text(f"SELECT game_id FROM {table}")) == 2
         assert count(conn, "game_types") == len(GAME_TYPES)
         assert count(conn, "games_advisor_tags") == 1
 
 
 def test_deleting_tag_removes_it_from_games(clean: Engine) -> None:
     with clean.begin() as conn:
-        insert_game(conn, "1", bgg_id=900001)
-        insert_game(conn, "2", bgg_id=900002)
+        insert_game(conn, 1, bgg_id=900001)
+        insert_game(conn, 2, bgg_id=900002)
         kept = insert_tag(conn, "cooperative")
         removed = insert_tag(conn, "bluffing")
-        for game_id in ("1", "2"):
+        for game_id in (1, 2):
             add_game_tag(conn, kept, game_id)
             add_game_tag(conn, removed, game_id)
         conn.execute(text("DELETE FROM games_advisor_tags WHERE id = :t"), {"t": removed})
