@@ -52,15 +52,6 @@ def _bgg_ids(value: str) -> list[int]:
         ) from None
 
 
-def _read_json(path: Path) -> object:
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except OSError as exc:
-        raise Refused(f"讀不到檔案 {path}：{exc.strerror}") from exc
-    except ValueError as exc:
-        raise Refused(f"{path} 不是合法的 JSON：{exc}") from exc
-
-
 # --- 建立 provider ---
 
 
@@ -107,7 +98,7 @@ def _embedding(settings: Settings) -> tuple[EmbeddingProvider, EmbeddingConfig]:
 
 def _import_games(args: argparse.Namespace, session: Session, settings: Settings) -> int:
     result = service.import_games(
-        GameRepository(session), _read_json(args.games_json), args.first_four
+        GameRepository(session), service.read_json(args.games_json), args.first_four
     )
     print(f"已匯入 {result.count} 款桌遊。")
     for game_id, name in result.first_four:
@@ -126,7 +117,7 @@ def _export_games(args: argparse.Namespace, session: Session, settings: Settings
 
 
 def _sync_games(args: argparse.Namespace, session: Session, settings: Settings) -> int:
-    result = service.sync_games(GameRepository(session), _read_json(args.export_json))
+    result = service.sync_games(GameRepository(session), service.read_json(args.export_json))
     print(
         f"同步完成：新增 {result.added} 款、更新 {result.updated} 款、"
         f"刪除 {result.deleted} 款，next_id 是 {result.next_id}。"
@@ -156,7 +147,7 @@ def _summarize_reviews(args: argparse.Namespace, session: Session, settings: Set
     result = service.summarize_reviews(
         GameRepository(session),
         ReviewRepository(session),
-        _read_json(args.reviews_json),
+        service.read_json(args.reviews_json),
         llm=llm,
         embedding=embedding,
         embedding_config=embedding_config,
@@ -170,7 +161,7 @@ def _build_excerpts(args: argparse.Namespace, session: Session, settings: Settin
     result = service.build_excerpts(
         GameRepository(session),
         ReviewRepository(session),
-        _read_json(args.reviews_json),
+        service.read_json(args.reviews_json),
         embedding=embedding,
         embedding_config=embedding_config,
         only_bgg_ids=args.bgg_id,
@@ -183,7 +174,7 @@ def _draft_vocabulary(args: argparse.Namespace, session: Session, settings: Sett
     llm = _batch_llm(settings)
     result = service.draft_vocabulary(
         GameRepository(session),
-        _read_json(args.reviews_json),
+        service.read_json(args.reviews_json),
         llm=llm,
         out_path=args.out,
         report_path=args.report,
@@ -197,9 +188,37 @@ def _draft_vocabulary(args: argparse.Namespace, session: Session, settings: Sett
 
 
 def _sync_vocabulary(args: argparse.Namespace, session: Session, settings: Settings) -> int:
-    result = service.sync_vocabulary(TagRepository(session), _read_json(args.vocabulary_json))
+    result = service.sync_vocabulary(
+        TagRepository(session), service.read_json(args.vocabulary_json)
+    )
     for line in result.lines:
         print(line)
+    return EXIT_OK
+
+
+def _draft_tags(args: argparse.Namespace, session: Session, settings: Settings) -> int:
+    # 先確認有真的模型，再讀檔案
+    llm = _batch_llm(settings)
+    result = service.draft_tags(
+        GameRepository(session),
+        TagRepository(session),
+        service.read_json(args.reviews_json),
+        llm=llm,
+        out_path=args.out,
+        only_bgg_ids=args.bgg_id,
+    )
+    print(f"標籤草稿：{args.out}（{result.games} 款桌遊）")
+    print(f"原始檔：{service.original_path(args.out)}（不要編輯，匯入時用來比對）")
+    for line in result.lines:
+        print(line)
+    print("請刪掉不對的標籤（只能刪除，不能新增或改分數），再執行 import-tags。")
+    _print_skipped(result.skipped, "它們不在草稿裡，匯入時不會動它們的標籤")
+    return result.exit_code
+
+
+def _import_tags(args: argparse.Namespace, session: Session, settings: Settings) -> int:
+    result = service.import_tags(GameRepository(session), TagRepository(session), args.draft_json)
+    print(f"已匯入 {result.games} 款桌遊的標籤，共 {result.tags} 個。")
     return EXIT_OK
 
 
@@ -264,6 +283,17 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     sync_vocabulary.add_argument("vocabulary_json", type=Path, metavar="<tag_vocabulary.json>")
     sync_vocabulary.set_defaults(handler=_sync_vocabulary)
+
+    draft_tags = commands.add_parser(
+        "draft-tags", help="上標籤：產生標籤草稿與原始檔，需要真的 LLM，不寫資料庫"
+    )
+    _add_reviews_arguments(draft_tags)
+    draft_tags.add_argument("--out", type=Path, required=True, metavar="<標籤草稿>")
+    draft_tags.set_defaults(handler=_draft_tags)
+
+    import_tags = commands.add_parser("import-tags", help="匯入標籤草稿：把審核過的標籤寫進資料庫")
+    import_tags.add_argument("draft_json", type=Path, metavar="<標籤草稿>")
+    import_tags.set_defaults(handler=_import_tags)
 
     return parser
 

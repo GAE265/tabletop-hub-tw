@@ -5,6 +5,8 @@
 - 讀 reviews.json 的指令：心得摘要（§8.3）、心得片段（§8.4）。先檢查整份檔案，不通過就拋
   Refused；通過後一款桌遊一個交易，某款失敗就跳過它、保留它的舊資料，其他款照寫（§7.2）。
 - 標籤詞彙表：歸納草稿（§8.5，只寫檔案、不寫資料庫）、同步（§8.6，整份一個交易）。
+- 每款桌遊的標籤：上標籤（§8.7，只寫標籤草稿與原始檔）、匯入標籤草稿（§8.8，先檢查整份
+  草稿，再一款一個交易）。
 """
 
 import json
@@ -17,7 +19,12 @@ from typing import Any, Protocol
 from pydantic import BaseModel, ValidationError
 
 from app.domains.games_advisor import prompts
-from app.domains.games_advisor.constants import TAG_VOCABULARY_MAX_TAGS
+from app.domains.games_advisor.constants import (
+    TAG_HIGH_CONFIDENCE,
+    TAG_HIGH_CONFIDENCE_MIN_REVIEWS,
+    TAG_USAGE_WARNING_RATIO,
+    TAG_VOCABULARY_MAX_TAGS,
+)
 from app.domains.games_advisor.excerpts import DEFAULT_LIMITS, ExcerptLimits, split_reviews
 from app.domains.games_advisor.repository import GameInUseError, GameRepository
 from app.domains.games_advisor.schemas import (
@@ -27,6 +34,8 @@ from app.domains.games_advisor.schemas import (
     MergeOutput,
     Review,
     ReviewsFile,
+    TagDraftFile,
+    TagsOutput,
     TagVocabularyFile,
     describe_problems,
 )
@@ -43,6 +52,16 @@ class Refused(Exception):
     def __init__(self, *reasons: str) -> None:
         super().__init__("\n".join(reasons))
         self.reasons = list(reasons)
+
+
+def read_json(path: Path) -> object:
+    """讀一個 JSON 檔；讀不到或不是合法 JSON 就拒絕執行。"""
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except OSError as exc:
+        raise Refused(f"讀不到檔案 {path}：{exc.strerror}") from exc
+    except ValueError as exc:
+        raise Refused(f"{path} 不是合法的 JSON：{exc}") from exc
 
 
 @dataclass(frozen=True)
@@ -597,3 +616,228 @@ def sync_vocabulary(store: TagStore, data: object) -> VocabularySyncResult:
         if added:
             lines.append("有新增的標籤：請重跑上標籤（draft-tags，全部桌遊），並重做人工驗證")
     return VocabularySyncResult(lines=lines or ["標籤詞彙表和檔案相同，沒有變動"])
+
+
+# --- 每款桌遊的標籤 ---
+
+
+class TagVocabulary(Protocol):
+    """service 讀標籤詞彙表用到的方法。"""
+
+    def list_tags(self) -> list[dict[str, str]]: ...
+
+
+class GameTagStore(TagVocabulary, Protocol):
+    """service 寫每款桌遊的標籤用到的方法。"""
+
+    def transaction(self) -> AbstractContextManager[None]: ...
+
+    def replace_game_tags(self, game_id: int, tags: Sequence[Mapping[str, Any]]) -> None: ...
+
+
+@dataclass(frozen=True)
+class TagDraftResult:
+    games: int
+    skipped: list[SkippedGame]
+    # 提醒，不算失敗：每個標籤被幾款使用、詞彙表可能有問題的標籤、沒有任何標籤的桌遊
+    lines: list[str]
+
+    @property
+    def exit_code(self) -> int:
+        """0 全部完成；2 部分完成（有款被跳過）。"""
+        return 2 if self.skipped else 0
+
+
+@dataclass(frozen=True)
+class TagImportResult:
+    games: int
+    tags: int
+
+
+def original_path(draft_path: Path) -> Path:
+    """標籤草稿的原始檔：檔名加上 .original，例如 tags-draft.original.json。"""
+    return draft_path.with_name(f"{draft_path.stem}.original{draft_path.suffix}")
+
+
+def _tag_problems(output: TagsOutput, codes: set[str], review_urls: set[str]) -> list[str]:
+    """上標籤的自動檢查（spec §8.7 第 3 點）；回傳不通過的地方，空的就是通過。"""
+    problems = []
+    seen: set[str] = set()
+    for tag in output.tags:
+        if tag.code not in codes:
+            problems.append(f"{tag.code} 不在詞彙表裡")
+        if tag.code in seen:
+            problems.append(f"{tag.code} 重複")
+        seen.add(tag.code)
+        if not 0 <= tag.confidence <= 1:
+            problems.append(f"{tag.code} 的信心分數 {tag.confidence} 不在 0 到 1 之間")
+        cited = set(tag.source_urls)
+        if not cited:
+            problems.append(f"{tag.code} 沒有引用心得")
+        elif cited - review_urls:
+            problems.append(f"{tag.code} 引用了不是這一款的心得網址")
+        if tag.confidence >= TAG_HIGH_CONFIDENCE and len(cited) < TAG_HIGH_CONFIDENCE_MIN_REVIEWS:
+            problems.append(
+                f"{tag.code} 的信心分數 {tag.confidence} 至少要引用 "
+                f"{TAG_HIGH_CONFIDENCE_MIN_REVIEWS} 篇心得"
+            )
+    return problems
+
+
+def _judge_tags(
+    llm: LLMProvider,
+    game: dict[str, Any],
+    reviews: list[Review],
+    tags: list[dict[str, str]],
+) -> TagsOutput:
+    codes = [tag["code"] for tag in tags]
+    review_urls = {review.source_url for review in reviews}
+
+    def ask() -> TagsOutput:
+        output = _parsed(
+            TagsOutput,
+            llm.generate_json(
+                instructions=prompts.tagging_instructions(tags),
+                input=prompts.reviews_input(game, reviews),
+                schema=prompts.tagging_schema(codes),
+            ),
+        )
+        # 自動檢查不通過，和模型輸出被拒絕一樣處理：重試 1 次，仍不通過就跳過這一款
+        if problems := _tag_problems(output, set(codes), review_urls):
+            raise LLMOutputRejected("自動檢查不通過：" + "；".join(problems))
+        return output
+
+    return _ask_llm(ask)
+
+
+def _tag_reminders(
+    tags: list[dict[str, str]], entries: list[dict[str, Any]], total_games: int
+) -> list[str]:
+    """每個標籤被幾款使用；沒有桌遊使用、或太多桌遊都有的標籤，提醒「詞彙表可能有問題」。"""
+    lines = []
+    for tag in tags:
+        count = sum(
+            any(judged["code"] == tag["code"] for judged in entry["tags"]) for entry in entries
+        )
+        line = f"標籤 {tag['code']}（{tag['name']}）：{count} 款使用"
+        if count == 0:
+            line += "，詞彙表可能有問題（沒有任何桌遊使用）"
+        elif total_games and count / total_games >= TAG_USAGE_WARNING_RATIO:
+            percent = round(TAG_USAGE_WARNING_RATIO * 100)
+            line += f"，詞彙表可能有問題（{percent}% 以上的桌遊都有）"
+        lines.append(line)
+    lines += [
+        f"{entry['name']}（bgg_id {entry['bgg_id']}）沒有任何標籤"
+        for entry in entries
+        if not entry["tags"]
+    ]
+    return lines
+
+
+def draft_tags(
+    games: GameLookup,
+    vocabulary: TagVocabulary,
+    data: object,
+    *,
+    llm: LLMProvider,
+    out_path: Path,
+    only_bgg_ids: Collection[int] | None = None,
+) -> TagDraftResult:
+    """每款桌遊呼叫 1 次模型，照詞彙表選標籤、給信心分數。只寫標籤草稿與原始檔，不寫資料庫。
+
+    被跳過的桌遊不放進草稿，匯入時就不會動它的標籤；0 篇心得的桌遊放進草稿、沒有標籤，
+    匯入後它的標籤會清空。
+    """
+    original = original_path(out_path)
+    # 先確認兩個檔案都還不存在，再呼叫模型：不蓋掉立倫刪過標籤的草稿
+    if existing := [str(path) for path in (out_path, original) if path.exists()]:
+        raise Refused(*(f"{path} 已經存在；請換一個路徑，或先把它移走" for path in existing))
+    tags = vocabulary.list_tags()
+    if not tags:
+        raise Refused("標籤詞彙表是空的；請先執行 sync-vocabulary 同步詞彙表")
+
+    entries = []
+    skipped = []
+    for game, reviews in _reviews_by_game(games, data, only_bgg_ids):
+        judged: list[dict[str, Any]] = []
+        if reviews:
+            try:
+                judged = [tag.model_dump() for tag in _judge_tags(llm, game, reviews, tags).tags]
+            except _LLMFailed as exc:
+                skipped.append(SkippedGame(game["bgg_id"], game["name"], exc.reason))
+                continue
+        entries.append({"bgg_id": game["bgg_id"], "name": game["name"], "tags": judged})
+
+    content = json.dumps({"games": entries}, ensure_ascii=False, indent=2) + "\n"
+    out_path.write_text(content, encoding="utf-8")
+    original.write_text(content, encoding="utf-8")
+    # 🚧 帶 --bgg-id 只跑幾款時，要不要印「詞彙表可能有問題」的提醒，等立倫決定
+    lines = _tag_reminders(tags, entries, total_games=len(games.list_games()))
+    return TagDraftResult(games=len(entries), skipped=skipped, lines=lines)
+
+
+def _read_tag_draft(path: Path) -> TagDraftFile:
+    data = read_json(path)
+    try:
+        return TagDraftFile.model_validate(data)
+    except ValidationError as exc:
+        problems = describe_problems(exc, data, id_field="bgg_id")
+        raise Refused(f"{path} 的格式不對", *problems) from exc
+
+
+def import_tags(games: GameLookup, store: GameTagStore, draft_path: Path) -> TagImportResult:
+    """把立倫審核過的標籤草稿寫進資料庫。先檢查整份草稿，有一項不符合就整份拒絕。
+
+    只替換草稿裡有的桌遊，其他款不動；低於門檻的標籤也存；依據的心得網址不存。
+    """
+    draft = _read_tag_draft(draft_path)
+    original = original_path(draft_path)
+    if not original.exists():
+        raise Refused(
+            f"找不到原始檔 {original}；沒有它就不能確認草稿只有刪除標籤，請重跑 draft-tags"
+        )
+    allowed = {
+        game.bgg_id: {tag.code: tag.confidence for tag in game.tags}
+        for game in _read_tag_draft(original).games
+    }
+
+    problems = []
+    codes = {tag["code"] for tag in store.list_tags()}
+    if unknown := sorted({tag.code for game in draft.games for tag in game.tags} - codes):
+        problems.append(
+            f"草稿有詞彙表沒有的代碼：{'、'.join(unknown)}；"
+            "產生草稿之後詞彙表改過了，請重跑 draft-tags"
+        )
+    # 和原始檔比：只能刪除，不能多出桌遊或標籤，也不能改分數
+    seen_games: set[int] = set()
+    for game in draft.games:
+        if game.bgg_id in seen_games:
+            problems.append(f"bgg_id {game.bgg_id} 在草稿裡出現兩次")
+        seen_games.add(game.bgg_id)
+        if game.bgg_id not in allowed:
+            problems.append(f"bgg_id {game.bgg_id} 不在原始檔裡：草稿只能刪除，不能新增桌遊")
+            continue
+        seen_codes: set[str] = set()
+        for tag in game.tags:
+            original_confidence = allowed[game.bgg_id].get(tag.code)
+            if original_confidence is None or tag.code in seen_codes:
+                problems.append(f"bgg_id {game.bgg_id} 多了標籤 {tag.code}：草稿只能刪除標籤")
+            elif tag.confidence != original_confidence:
+                problems.append(
+                    f"bgg_id {game.bgg_id} 的 {tag.code} 分數從 {original_confidence} "
+                    f"改成 {tag.confidence}：草稿不能改分數"
+                )
+            seen_codes.add(tag.code)
+    found = {game["bgg_id"]: game["id"] for game in games.find_games_by_bgg_ids(sorted(seen_games))}
+    if missing := sorted(seen_games - found.keys()):
+        problems.append(f"草稿有資料庫沒有的 bgg_id：{'、'.join(map(str, missing))}")
+    if problems:
+        raise Refused(*problems)
+
+    for game in draft.games:
+        with store.transaction():
+            store.replace_game_tags(
+                found[game.bgg_id],
+                [{"code": tag.code, "confidence": tag.confidence} for tag in game.tags],
+            )
+    return TagImportResult(games=len(draft.games), tags=sum(len(game.tags) for game in draft.games))

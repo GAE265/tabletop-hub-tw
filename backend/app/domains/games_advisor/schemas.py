@@ -229,6 +229,35 @@ class MergeOutput(BaseModel):
     discarded: list[DiscardedCandidate]
 
 
+# --- 上標籤時 LLM 的輸出，以及標籤草稿的格式（spec §8.7、§8.8） ---
+
+
+class JudgedTag(BaseModel):
+    """一款桌遊的一個標籤：代碼、信心分數、依據的心得網址。"""
+
+    code: str
+    confidence: float
+    source_urls: list[str]
+
+
+class TagsOutput(BaseModel):
+    tags: list[JudgedTag]
+
+
+class TagDraftGame(BaseModel):
+    """標籤草稿裡的一款桌遊。name 只是給人看的，匯入時用 bgg_id 認桌遊。"""
+
+    bgg_id: int
+    name: str = ""
+    tags: list[JudgedTag]
+
+
+class TagDraftFile(BaseModel):
+    """標籤草稿與它的原始檔。"""
+
+    games: list[TagDraftGame]
+
+
 def _reason(error: Any) -> str:
     """把 pydantic 的錯誤換成中文說明；沒列到的類型就用 pydantic 原本的訊息。"""
     context = error.get("ctx") or {}

@@ -169,3 +169,58 @@ def merge_input(candidates: Sequence[NumberedCandidate]) -> str:
         f"{candidate.id}｜{candidate.term}｜{candidate.description}｜桌遊：{candidate.game_name}"
         for candidate in candidates
     )
+
+
+# --- 上標籤（spec §8.7） ---
+
+
+def tagging_instructions(tags: Sequence[dict[str, str]]) -> str:
+    """tags 是標籤詞彙表：每個標籤有 code、name、definition。"""
+    vocabulary = "\n".join(f"- {tag['code']}：{tag['name']}。{tag['definition']}" for tag in tags)
+    return f"""\
+你負責替桌遊貼標籤。請讀完下面同一款桌遊的全部心得，從標籤詞彙表裡選出心得有提到的標籤，\
+每個標籤給一個信心分數，並附上依據的心得網址。
+
+標籤詞彙表（只能選這些代碼）：
+{vocabulary}
+
+信心分數的標準：
+- 0.8 到 1.0：2 篇以上的心得明確提到。
+- 0.5 到 0.7：1 篇心得明確提到，或 2 篇以上的心得間接提到。
+- 0.2 到 0.4：只有 1 篇心得間接提到。
+- 沒有心得提到的標籤不要輸出。
+
+「明確提到」是直接描述這種感受，例如「大家笑到不行」。「間接提到」是要推論才看得出來，\
+例如用「很適合聚會」推論出歡樂爆笑。有心得明確說出相反的感受時，分數降一級。
+
+其他規定：
+1. 同一個標籤只輸出一次。
+2. source_urls 只能用下面每篇心得的 source_url，而且要是真的提到這個標籤的那幾篇。
+3. 分數在 0.8 以上的標籤，source_urls 至少要有 2 篇。"""
+
+
+def tagging_schema(codes: Sequence[str]) -> JsonSchema:
+    """上標籤的輸出格式。code 用 enum 限制成詞彙表裡的代碼。"""
+    return JsonSchema(
+        name="game_tags",
+        schema={
+            "type": "object",
+            "properties": {
+                "tags": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "code": {"type": "string", "enum": list(codes)},
+                            "confidence": {"type": "number"},
+                            "source_urls": {"type": "array", "items": {"type": "string"}},
+                        },
+                        "required": ["code", "confidence", "source_urls"],
+                        "additionalProperties": False,
+                    },
+                }
+            },
+            "required": ["tags"],
+            "additionalProperties": False,
+        },
+    )

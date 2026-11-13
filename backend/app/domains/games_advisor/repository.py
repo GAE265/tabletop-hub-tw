@@ -3,7 +3,7 @@
 - GameRepository：共用桌遊表 games、game_game_types 與 games.id 的計數器。共用表的定義在
   app/core/games/；只有匯入桌遊與同步共用桌遊資料兩個指令會寫入（ADR 0003）。
 - ReviewRepository：games_advisor 自己的心得摘要與心得片段。
-- TagRepository：標籤詞彙表（tag_vocabulary.json 同步出來的副本）。
+- TagRepository：標籤詞彙表（tag_vocabulary.json 同步出來的副本）與每款桌遊的標籤。
 """
 
 from collections.abc import Collection, Iterator, Mapping, Sequence
@@ -184,7 +184,7 @@ class ReviewRepository(_SessionRepository):
 
 
 class TagRepository(_SessionRepository):
-    """標籤詞彙表的讀寫。以代碼認出同一個標籤。"""
+    """標籤詞彙表與每款桌遊的標籤的讀寫。以代碼認出同一個標籤。"""
 
     def list_tags(self) -> list[dict[str, str]]:
         """全部標籤，照代碼排；每個是 code、name、definition。"""
@@ -220,3 +220,26 @@ class TagRepository(_SessionRepository):
         affected = [dict(game) for game in games]
         self.session.execute(delete(Tag).where(Tag.code == code))
         return affected
+
+    def replace_game_tags(self, game_id: int, tags: Sequence[Mapping[str, Any]]) -> None:
+        """把一款桌遊的標籤整組換成 tags；每個是 code 與 confidence。低於門檻的也存。"""
+        self.session.execute(delete(GameTag).where(GameTag.game_id == game_id))
+        if not tags:
+            return
+        codes = {tag["code"] for tag in tags}
+        tag_ids = dict(
+            self.session.execute(select(Tag.code, Tag.id).where(Tag.code.in_(codes))).all()
+        )
+        if unknown := sorted(codes - set(tag_ids)):
+            raise ValueError(f"詞彙表沒有這些代碼：{'、'.join(unknown)}")
+        self.session.execute(
+            insert(GameTag),
+            [
+                {
+                    "game_id": game_id,
+                    "tag_id": tag_ids[tag["code"]],
+                    "confidence": tag["confidence"],
+                }
+                for tag in tags
+            ],
+        )
