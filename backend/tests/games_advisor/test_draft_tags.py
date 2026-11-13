@@ -257,6 +257,20 @@ def test_warns_about_a_tag_that_80_percent_of_the_games_use(tmp_path: Path) -> N
     assert MAYBE_WRONG not in usage_line(result, "scheming")
 
 
+def test_bgg_id_option_prints_no_vocabulary_reminders(tmp_path: Path) -> None:
+    # 只補跑 1 款時，每個標籤不是 0 款就是全部，統計沒有意義：不印標籤的使用情況與
+    # 「詞彙表可能有問題」，只印哪一款沒有任何標籤（立倫 2026-11-13 決定）
+    llm = FakeLLMProvider(json_outputs=[{"tags": []}])
+
+    result = draft(tmp_path, llm, only_bgg_ids=[900002])
+
+    assert MAYBE_WRONG not in printed(result)
+    for code in CODES:
+        assert code not in printed(result)
+    assert result.lines == [line for line in result.lines if "沒有任何標籤" in line]
+    assert make_game(2)["name"] in printed(result)
+
+
 # --- 拒絕執行：不呼叫模型，什麼都不寫 ---
 
 
