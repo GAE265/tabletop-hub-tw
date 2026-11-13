@@ -68,6 +68,57 @@ class FakeReviewRepository:
         self.excerpts[game_id] = [dict(excerpt) for excerpt in excerpts]
 
 
+class FakeTagRepository:
+    """假的標籤詞彙表與每款桌遊的標籤。
+
+    - tags：代碼 → {"name", "definition"}。
+    - game_tags：代碼 → 有這個標籤的桌遊清單，每筆是 {"game": 桌遊, "confidence": 信心分數}。
+    - transaction() 和寫入的規定同 FakeReviewRepository。
+    """
+
+    def __init__(self) -> None:
+        self.tags: dict[str, dict[str, str]] = {}
+        self.game_tags: dict[str, list[dict[str, Any]]] = {}
+        self._in_transaction = False
+
+    @contextmanager
+    def transaction(self) -> Iterator[None]:
+        before = copy.deepcopy((self.tags, self.game_tags))
+        self._in_transaction = True
+        try:
+            yield
+        except BaseException:
+            self.tags, self.game_tags = before
+            raise
+        finally:
+            self._in_transaction = False
+
+    def _require_transaction(self) -> None:
+        assert self._in_transaction, "寫入要放在 transaction() 裡，否則不會提交"
+
+    def list_tags(self) -> list[dict[str, str]]:
+        return [{"code": code, **self.tags[code]} for code in sorted(self.tags)]
+
+    def list_tag_codes(self) -> list[str]:
+        return sorted(self.tags)
+
+    def add_tag(self, code: str, name: str, definition: str) -> None:
+        self._require_transaction()
+        assert code not in self.tags, f"標籤 {code} 已經存在"
+        self.tags[code] = {"name": name, "definition": definition}
+
+    def update_tag(self, code: str, name: str, definition: str) -> None:
+        self._require_transaction()
+        assert code in self.tags, f"沒有標籤 {code}"
+        self.tags[code] = {"name": name, "definition": definition}
+
+    def delete_tag(self, code: str) -> list[dict[str, Any]]:
+        """刪掉標籤，連帶刪掉各款桌遊上的這個標籤；回傳受影響的桌遊。"""
+        self._require_transaction()
+        del self.tags[code]
+        return [entry["game"] for entry in self.game_tags.pop(code, [])]
+
+
 class FakeEmbeddingProviderFailingOnCall(FakeEmbeddingProvider):
     """integrations 的 FakeEmbeddingProvider，但只有第 fail_on 次呼叫 embed 會拋出 error。
 

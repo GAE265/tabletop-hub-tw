@@ -19,7 +19,11 @@ from tests.games_advisor import support
 from tests.games_advisor.support import CommandResult
 
 if TYPE_CHECKING:
-    from app.domains.games_advisor.repository import GameRepository, ReviewRepository
+    from app.domains.games_advisor.repository import (
+        GameRepository,
+        ReviewRepository,
+        TagRepository,
+    )
 
 RunCommand = Callable[..., CommandResult]
 
@@ -116,6 +120,13 @@ def review_repo(session: Session) -> "ReviewRepository":
     from app.domains.games_advisor.repository import ReviewRepository
 
     return ReviewRepository(session)
+
+
+@pytest.fixture
+def tag_repo(session: Session) -> "TagRepository":
+    from app.domains.games_advisor.repository import TagRepository
+
+    return TagRepository(session)
 
 
 @pytest.fixture

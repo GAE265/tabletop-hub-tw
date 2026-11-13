@@ -280,3 +280,75 @@ def reviews_data(reviews: list[dict[str, Any]]) -> dict[str, Any]:
 
 def write_reviews_file(tmp_path: Path, reviews: list[dict[str, Any]]) -> Path:
     return write_json(tmp_path / "reviews.json", reviews_data(reviews))
+
+
+# --- 假的標籤詞彙表（tag_vocabulary.json，spec §8.6） ---
+
+_TAGS = {
+    "laughter": ("歡樂爆笑", "玩的過程常有大笑、吵鬧的場面"),
+    "scheming": ("勾心鬥角", "玩家之間互相猜忌、設局"),
+    "luck": ("運氣影響大", "勝負常常取決於抽牌或擲骰的運氣"),
+    "tense": ("緊張刺激", "玩的過程讓人屏住呼吸"),
+}
+
+
+def make_tag(code: str, /, **overrides: Any) -> dict[str, Any]:
+    """詞彙表的一個標籤：代碼、繁中名稱、一句定義。沒列在 _TAGS 的代碼就用代碼產生。
+
+    overrides 可以換掉任何欄位，包括 code：make_tag("laughter", code="laughing")。
+    """
+    name, definition = _TAGS.get(code, (f"標籤 {code}", f"{code} 的定義"))
+    tag = {"code": code, "name": name, "definition": definition}
+    tag.update(overrides)
+    return tag
+
+
+def vocabulary_data(*tags: dict[str, Any]) -> dict[str, Any]:
+    return {"tags": list(tags)}
+
+
+def write_vocabulary_file(tmp_path: Path, *tags: dict[str, Any]) -> Path:
+    return write_json(tmp_path / "tag_vocabulary.json", vocabulary_data(*tags))
+
+
+def seed_tag(db: Engine | Connection, tag: dict[str, Any]) -> None:
+    """直接用 SQL 寫入一個標籤。"""
+    with _connect(db) as conn:
+        conn.execute(
+            text(
+                "INSERT INTO games_advisor_tags (code, name, definition) "
+                "VALUES (:code, :name, :definition)"
+            ),
+            tag,
+        )
+
+
+def seed_game_tag(
+    db: Engine | Connection, game_id: int, code: str, confidence: float = 0.8
+) -> None:
+    """直接用 SQL 替一款桌遊加上一個標籤。"""
+    with _connect(db) as conn:
+        conn.execute(
+            text(
+                "INSERT INTO games_advisor_game_tags (game_id, tag_id, confidence) "
+                "SELECT :g, id, :c FROM games_advisor_tags WHERE code = :code"
+            ),
+            {"g": game_id, "c": confidence, "code": code},
+        )
+
+
+def read_tags(db: Engine | Connection) -> list[dict[str, Any]]:
+    """資料庫的標籤詞彙表，照代碼排。"""
+    sql = text("SELECT code, name, definition FROM games_advisor_tags ORDER BY code")
+    with _connect(db) as conn:
+        return [dict(row) for row in conn.execute(sql).mappings()]
+
+
+def read_game_tags(db: Engine | Connection) -> list[tuple[int, str, float]]:
+    """每款桌遊的標籤：（桌遊 id，代碼，信心分數），照桌遊 id、代碼排。"""
+    sql = text(
+        "SELECT gt.game_id, t.code, gt.confidence FROM games_advisor_game_tags gt "
+        "JOIN games_advisor_tags t ON t.id = gt.tag_id ORDER BY gt.game_id, t.code"
+    )
+    with _connect(db) as conn:
+        return [tuple(row) for row in conn.execute(sql)]
