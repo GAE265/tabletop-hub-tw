@@ -81,7 +81,7 @@
 
 | 審核者 | 特別要看 |
 |---|---|
-| 瑋鋐 | 有 migration 的 MR：資料表名稱是否以 domain 開頭、主鍵是否為 UUID、**已合併的 migration 有沒有被修改**。有動到 `integrations/` 的 MR：是否附上 external 測試結果 |
+| 瑋鋐 | 有 migration 的 MR：表名是否已在群組告知、主鍵是否為 UUID（固定的小型分類表才可用流水號）、共用表的結構變更是否已和擁有者確認、**已合併的 migration 有沒有被修改**。有動到 `integrations/` 的 MR：是否附上 external 測試結果 |
 | 立倫 | 動到 API 契約的 MR：路徑、請求與回應格式、錯誤代碼是否一致 |
 | 永傑 | 有 `needs-ui` 標籤的 MR：交接說明是否清楚，`state/` 是否足夠讓你做正式頁面 |
 
