@@ -7,7 +7,7 @@
 > 例外：OpenSpec 會在本檔中自動維護它自己的區塊（由組員執行 `openspec init`／`openspec update` 產生），該區塊內容不受此限，但區塊以外的內容一樣不得由 AI 修改。
 > 本檔所說的 MR（Merge Request）在 GitHub 介面上叫做 Pull request，兩者是同一件事。
 >
-> **版本：1.7（2026-11-10）**。每次修改本檔都要更新版本號，並在文末「修訂紀錄」加一行。
+> **版本：1.8（2026-11-13）**。每次修改本檔都要更新版本號，並在文末「修訂紀錄」加一行。
 
 ## 1. 專案概要
 
@@ -46,9 +46,9 @@ Domain 是依業務切出來的範圍（概念接近 DDD 的 bounded context）�
 | `games_advisor` | #1 桌遊推薦 Agent | 必做 | 立倫 | 永傑、瑋鋐 |
 | `rules_qa` | #2 規則教學與問答 | 必做 | 永傑 | 新善、瑋鋐 |
 | `matches` | #13 回合、戰績紀錄與天梯 | 必做 | 新善 | 永傑、立倫 |
-| `booking` | #6 訂位與客服（座位圖） | 必做 | 秀暖 | — |
+| `booking` | #6 訂位與客服（座位圖） | 必做 | 瑋鋐 | — |
 | `dealer` | #12 睜眼偵測發牌機（之後串接 AI 主持） | 必做 | 新善 | 立倫、永傑 |
-| `groups` | #7 揪團與候補 Agent | 必做 | 秀暖 | 立倫 |
+| `groups` | #7 揪團與候補 Agent | 必做 | 永傑 | 立倫 |
 | `host` | #3 AI 遊戲主持（語音） | 應做 | 立倫 | — |
 | `parts` | #4 配件辨識與缺件回報 | 應做 | 新善 | — |
 | `tips` | #14 推薦遊玩技巧建議 | 加分 | 瑋鋐 | 新善 |
@@ -75,6 +75,18 @@ Domain 是依業務切出來的範圍（概念接近 DDD 的 bounded context）�
 | `backend/app/integrations/llm/`、`integrations/embedding/`、`integrations/ocr/` | 瑋鋐 |
 | `backend/app/integrations/mqtt/`、`device/` | 新善 |
 | `frontend/lib/app/`（含主題）、`frontend/lib/core/` 的共用元件 | 永傑 |
+
+共用資料表（規則見 4.2、4.4）：
+
+| 資料表 | 內容 | 擁有者 |
+|---|---|---|
+| `games` | 遊戲本身的資訊（中英文名稱等） | 立倫 |
+| `genres` | 遊戲類型，例如派對遊戲、策略遊戲（固定的小型分類表） | 立倫 |
+| `game_genres` | 遊戲與類型的對應 | 立倫 |
+| `auth_users` | 使用者帳號（玩家、店員、管理員共用，不另建玩家表） | 立倫 |
+| `booking_shops` | 合作店家（訂位、店員所屬店家、揪團地點等共用） | 瑋鋐 |
+
+新增共用資料表時，更新這張清單。
 
 - 第 2 節規則 3「改共用區要 @ 主責」只適用於非擁有者。擁有者修改自己的共用區，照一般 MR 流程，由另一位組員審核即可。
 
@@ -115,6 +127,8 @@ router → service → repository → models
 | `integrations` | 包裝外部服務，對內只暴露介面 | 知道任何 domain 的存在 |
 
 - Domain 之間只能呼叫對方的 `service`，不能直接用對方的 `repository` 或 `models`。
+- **例外：共用資料表**（清單見第 3 節「共用資料表」）。共用表由擁有者建立 model 與 repository，各 domain 的 service 可以直接使用該 repository 讀寫。要改共用表的結構（加欄位、改欄位）時，先和擁有者確認。
+- 每張資料表只對應一個 model 與一個 repository，不要在不同 domain 重複建立同一張表的 model 或 repository。
 - **`app/dev/` 是唯一的例外區：** 它可以使用任何 domain 的程式，但**任何地方都不得 import `app/dev/`**。它只在 `AUTH_MODE=dev` 時啟用：
   - seed 指令：建立固定 UUID 的測試帳號，可重複執行，`AUTH_MODE=jwt` 時拒絕執行。
   - `GET /api/v1/dev/users`：列出測試帳號，供前端身分切換器讀取。測試帳號的 UUID 只定義在後端這一處，前端不另外存一份。
@@ -147,8 +161,12 @@ router → service → repository → models
 
 - 所有結構變更都用 Alembic migration，一個 MR 最多一個 migration，**並由瑋鋐審核**。
 - **已合併的 migration 不得修改**，要改就新增一個。
-- 資料表名稱用複數 `snake_case`，以 domain 名開頭避免撞名，例如 `booking_tables`、`matches_results`。
-- **所有資料表的主鍵一律使用 UUID**，欄位名稱為 `id`；參照其他資料表的欄位命名為 `<對象>_id`，例如 `user_id`、`shop_id`。這樣發牌機、未來的 App 在離線時也能自行產生 ID，不會與其他資料重複。
+- 資料表名稱用複數 `snake_case`。只屬於某個 domain 的表，可以用 domain 名稱開頭避免撞名，例如 `matches_results`；多個 domain 共用的表不用加。依情境判斷，不強制。
+- **建立新的資料表前，先在群組說一聲表名**，避免兩人各自建立同名的表（git 合併時不會出現衝突，要到執行 migration 時才會報錯）。
+- 共用表只記錄該對象本身的資料，例如 `games` 只記遊戲本身的資訊；遊玩紀錄、統計等屬於某個 domain 的資料，另外建表並用外鍵指回共用表。
+- **主鍵預設使用 UUID**，欄位名稱為 `id`；參照其他資料表的欄位命名為 `<對象>_id`，例如 `user_id`、`shop_id`。這樣發牌機、未來的 App 在離線時也能自行產生 ID，不會與其他資料重複。
+  - 例外：固定的小型分類表（例如 `genres`）可以用自動流水號（`bigint` identity）。
+  - 被其他表引用、需要在種子資料或測試中找到的資料，要有一個加上唯一限制（unique）的名稱欄位可以查詢，例如 `games` 的英文名稱。種子資料與測試用這個欄位找資料，不寫死 `id`；這個欄位建立後不隨意修改。
 - 資料庫存取一律使用同步寫法（SQLAlchemy 同步 session + psycopg），不使用 async。
 - 開發用的測試帳號（固定 UUID 的 player、shop_staff、admin 各一）由開發用 seed 指令建立，**不寫進 migration**。
 - 向量欄位使用 pgvector，維度寫在設定裡，不要寫死在程式中。
@@ -178,7 +196,7 @@ router → service → repository → models
 
 - `auth_users`（屬於 `auth` domain）在專案骨架階段就先建立，只含 `id`、`display_name`、`role`、`shop_id`（可為空）、`created_at`。其他 domain 用 `user_id` 參照它。
 - 登入需要的欄位（例如 `email`、`password_hash`）由立倫在階段 3 以新的 migration 加上。
-- 店家資料表 `booking_shops` 屬於 `booking` domain，同樣在骨架階段先建立最少欄位（`id`、`name`）。
+- 店家資料表 `booking_shops` 屬於 `booking` domain，也是共用資料表（見第 3 節），同樣在骨架階段先建立最少欄位（`id`、`name`）。
 
 #### 程式怎麼取得目前使用者
 
@@ -399,7 +417,8 @@ scope 的寫法：
 - 不確定的事情（套件選擇、資料格式、命名）先問，不要自己決定。
 - 新功能先產出測試案例表格給使用者確認，再寫測試，最後才寫功能（第 7 節）。
 - 寫測試前先判斷屬於 7.6 的哪一類。需要金鑰的測試只能放在 `integrations/`，並加上 `external` 標記；domain 的測試一律使用假實作。
-- 準備發 MR 時，產出 MR 說明的情境表格（7.4），列出本次涵蓋的所有情境，並標示每個情境對應的測試。
+- **不得自行開 MR、改 MR 狀態或合併。** MR 一律由組員自己開。
+- 準備發 MR 時，依 `.github/pull_request_template.md` 的格式產出 MR 說明，貼給使用者自行貼上。說明是給審核者看的摘要，簡短扼要，不寫實作過程；情境表格（7.4）列出本次涵蓋的所有情境，並標示每個情境對應的測試。
 - 做前端功能時，只做 `data/`、`state/`、`prototypes/` 與交接說明，不要碰 `pages/` 與 `app/theme/`，除非使用者是永傑或明確要求。
 - 產生的程式碼、註解、commit 訊息用繁體中文或英文，不用簡體中文。
 - 完成後列出：改了哪些檔案、跑了哪些檢查、還有哪些沒做完。
@@ -449,6 +468,7 @@ scope 的寫法：
 
 | 版本 | 日期 | 修改內容 |
 |---|---|---|
+| 1.8 | 2026-11-13 | 4.4 表名的 domain 前綴改為依情境判斷，建表前先在群組告知；主鍵預設 UUID，固定的小型分類表可用流水號，被引用的資料要有唯一的名稱欄位；4.2 新增共用資料表例外，各 domain 的 service 可直接使用共用表的 repository；第 3 節新增「共用資料表」清單（`games`、`genres`、`game_genres`、`auth_users`、`booking_shops`）；第 9 節規定 AI 不得自行開 MR，只產出簡短的 MR 說明；`booking`（#6）改由瑋鋐負責、`groups`（#7）改由永傑負責 |
 | 1.7 | 2026-11-10 | 新增 7.6 測試分類（`external` 標記，需要金鑰的測試不在預設執行與 CI 中跑）；7.2 加上 `external` 例外；7.5 規定測試替身一律手寫 fake、不使用 mock 套件，並寫明前端測試的做法；發牌機的 mock 改稱 fake；本檔開始標示版本 |
 | 1.0–1.6 | 2026-11-10 以前 | 未記錄 |
 
