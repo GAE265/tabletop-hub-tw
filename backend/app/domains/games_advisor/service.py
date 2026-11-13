@@ -639,7 +639,8 @@ class GameTagStore(TagVocabulary, Protocol):
 class TagDraftResult:
     games: int
     skipped: list[SkippedGame]
-    # 提醒，不算失敗：每個標籤被幾款使用、詞彙表可能有問題的標籤、沒有任何標籤的桌遊
+    # 提醒，不算失敗：每個標籤被幾款使用、詞彙表可能有問題的標籤（帶 --bgg-id 時沒有這兩種）、
+    # 沒有任何標籤的桌遊
     lines: list[str]
 
     @property
@@ -710,7 +711,7 @@ def _judge_tags(
     return _ask_llm(ask)
 
 
-def _tag_reminders(
+def _tag_usage_lines(
     tags: list[dict[str, str]], entries: list[dict[str, Any]], total_games: int
 ) -> list[str]:
     """每個標籤被幾款使用；沒有桌遊使用、或太多桌遊都有的標籤，提醒「詞彙表可能有問題」。"""
@@ -726,12 +727,15 @@ def _tag_reminders(
             percent = round(TAG_USAGE_WARNING_RATIO * 100)
             line += f"，詞彙表可能有問題（{percent}% 以上的桌遊都有）"
         lines.append(line)
-    lines += [
+    return lines
+
+
+def _untagged_lines(entries: list[dict[str, Any]]) -> list[str]:
+    return [
         f"{entry['name']}（bgg_id {entry['bgg_id']}）沒有任何標籤"
         for entry in entries
         if not entry["tags"]
     ]
-    return lines
 
 
 def draft_tags(
@@ -771,9 +775,12 @@ def draft_tags(
     content = json.dumps({"games": entries}, ensure_ascii=False, indent=2) + "\n"
     out_path.write_text(content, encoding="utf-8")
     original.write_text(content, encoding="utf-8")
-    # 🚧 帶 --bgg-id 只跑幾款時，要不要印「詞彙表可能有問題」的提醒，等立倫決定
-    lines = _tag_reminders(tags, entries, total_games=len(games.list_games()))
-    return TagDraftResult(games=len(entries), skipped=skipped, lines=lines)
+    # 只補跑幾款（--bgg-id）時不統計標籤的使用情況：每個標籤不是 0 款就是全部，
+    # 「詞彙表可能有問題」的提醒沒有意義。要檢查詞彙表就跑全部桌遊
+    usage = [] if only_bgg_ids else _tag_usage_lines(tags, entries, len(games.list_games()))
+    return TagDraftResult(
+        games=len(entries), skipped=skipped, lines=usage + _untagged_lines(entries)
+    )
 
 
 def _read_tag_draft(path: Path) -> TagDraftFile:
