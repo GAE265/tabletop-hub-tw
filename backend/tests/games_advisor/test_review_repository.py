@@ -14,7 +14,8 @@ from tests.games_advisor.support import (
 )
 
 if TYPE_CHECKING:
-    from app.domains.games_advisor.repository import GameRepository, ReviewRepository
+    from app.core.games.repository import GameRepository
+    from app.domains.games_advisor.repository import ReviewRepository
 
 
 def add_games(game_repo: "GameRepository", *numbers: int) -> None:

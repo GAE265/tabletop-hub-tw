@@ -18,6 +18,7 @@ from typing import Any, Protocol
 
 from pydantic import BaseModel, ValidationError
 
+from app.core.games.repository import GameInUseError, GameRepository
 from app.domains.games_advisor import prompts
 from app.domains.games_advisor.constants import (
     TAG_HIGH_CONFIDENCE,
@@ -26,7 +27,6 @@ from app.domains.games_advisor.constants import (
     TAG_VOCABULARY_MAX_TAGS,
 )
 from app.domains.games_advisor.excerpts import DEFAULT_LIMITS, ExcerptLimits, split_reviews
-from app.domains.games_advisor.repository import GameInUseError, GameRepository
 from app.domains.games_advisor.schemas import (
     CandidatesOutput,
     GamesExport,
@@ -107,7 +107,7 @@ def import_games(repository: GameRepository, data: object, first_four: list[int]
     """把 games.json 匯入空的資料庫：first_four 的 4 款依序是 1–4 號，其他照檔案順序。"""
     with repository.transaction():
         games = _validated(
-            GamesFile, data, id_field="bgg_id", type_codes=repository.list_game_type_codes()
+            GamesFile, data, id_field="bgg_id", type_codes=repository.list_genre_codes()
         ).games
         if problems := _first_four_problems(first_four, {game.bgg_id for game in games}):
             raise Refused(*problems)
@@ -122,7 +122,7 @@ def import_games(repository: GameRepository, data: object, first_four: list[int]
         imported = []
         for game in ordered:
             game_id = repository.add_game(game.columns())
-            repository.replace_game_types(game_id, game.types)
+            repository.replace_game_genres(game_id, game.types)
             imported.append((game_id, game.name))
     return ImportResult(count=len(imported), first_four=imported[:4])
 
@@ -140,7 +140,7 @@ def sync_games(repository: GameRepository, data: object) -> SyncResult:
     """讓資料庫的共用桌遊資料和匯出檔完全一樣，計數器也設成匯出檔的 next_id。"""
     with repository.transaction():
         export = _validated(
-            GamesExport, data, id_field="id", type_codes=repository.list_game_type_codes()
+            GamesExport, data, id_field="id", type_codes=repository.list_genre_codes()
         )
         bgg_id_in_database = {game["id"]: game["bgg_id"] for game in repository.list_games()}
         # id 和 bgg_id 都相同才是同一款；其他的（匯出檔沒有的、同 id 但不同款的）先全部刪掉，
@@ -158,7 +158,7 @@ def sync_games(repository: GameRepository, data: object) -> SyncResult:
         for game in export.games:
             # 同一款只更新欄位、不先刪再寫，參照它的心得摘要、標籤、心得片段才會留著
             repository.save_game(game.id, game.columns())
-            repository.replace_game_types(game.id, game.types)
+            repository.replace_game_genres(game.id, game.types)
         repository.set_next_game_id(export.next_id)
     return SyncResult(
         added=len(export.games) - len(same_game_ids),

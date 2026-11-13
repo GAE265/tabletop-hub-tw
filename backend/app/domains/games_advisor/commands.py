@@ -17,8 +17,9 @@ from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
 from app.core.db import create_db_engine
+from app.core.games.repository import GameRepository
 from app.domains.games_advisor import service
-from app.domains.games_advisor.repository import GameRepository, ReviewRepository, TagRepository
+from app.domains.games_advisor.repository import ReviewRepository, TagRepository
 from app.domains.games_advisor.service import BatchResult, Refused, SkippedGame
 from app.integrations.embedding.base import EmbeddingProvider
 from app.integrations.embedding.factory import EmbeddingConfig, get_embedding_provider

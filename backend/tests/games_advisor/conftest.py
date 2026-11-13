@@ -19,15 +19,12 @@ from tests.games_advisor import support
 from tests.games_advisor.support import CommandResult
 
 if TYPE_CHECKING:
-    from app.domains.games_advisor.repository import (
-        GameRepository,
-        ReviewRepository,
-        TagRepository,
-    )
+    from app.core.games.repository import GameRepository
+    from app.domains.games_advisor.repository import ReviewRepository, TagRepository
 
 RunCommand = Callable[..., CommandResult]
 
-# game_types 是 migration 寫入的固定資料，不清；games.id 的計數器從 1 重新開始
+# genres 是 migration 寫入的固定資料，不清；games.id 的計數器從 1 重新開始
 _CLEAN = "TRUNCATE games, games_advisor_tags RESTART IDENTITY CASCADE"
 
 
@@ -110,7 +107,7 @@ def session(games_db: Engine) -> Iterator[Session]:
 
 @pytest.fixture
 def game_repo(session: Session) -> "GameRepository":
-    from app.domains.games_advisor.repository import GameRepository
+    from app.core.games.repository import GameRepository
 
     return GameRepository(session)
 

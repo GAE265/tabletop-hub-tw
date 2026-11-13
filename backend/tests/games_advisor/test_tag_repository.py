@@ -17,7 +17,8 @@ from tests.games_advisor.support import (
 )
 
 if TYPE_CHECKING:
-    from app.domains.games_advisor.repository import GameRepository, TagRepository
+    from app.core.games.repository import GameRepository
+    from app.domains.games_advisor.repository import TagRepository
 
 
 def test_delete_tag_removes_it_from_every_game_and_returns_those_games(

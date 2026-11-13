@@ -17,7 +17,7 @@ from tests.games_advisor.support import (
 )
 
 if TYPE_CHECKING:
-    from app.domains.games_advisor.repository import GameRepository
+    from app.core.games.repository import GameRepository
 
 
 def add_games(game_repo: "GameRepository", *numbers: int) -> list[int]:
@@ -25,10 +25,10 @@ def add_games(game_repo: "GameRepository", *numbers: int) -> list[int]:
 
 
 def type_rows(session: Session) -> list[tuple[int, str]]:
-    """game_game_types 的每一列：（桌遊 id，類型代碼）。"""
+    """game_genres 的每一列：（桌遊 id，類型代碼）。"""
     sql = text(
-        "SELECT ggt.game_id, t.code FROM game_game_types ggt "
-        "JOIN game_types t ON t.id = ggt.game_type_id ORDER BY ggt.game_id, t.code"
+        "SELECT gg.game_id, t.code FROM game_genres gg "
+        "JOIN genres t ON t.id = gg.genre_id ORDER BY gg.game_id, t.code"
     )
     return [tuple(row) for row in session.execute(sql)]
 
@@ -65,7 +65,7 @@ def test_delete_games_except_removes_the_rest_with_their_data(
     game_repo: "GameRepository", session: Session
 ) -> None:
     add_games(game_repo, 1, 2, 3)
-    game_repo.replace_game_types(3, ["party"])
+    game_repo.replace_game_genres(3, ["party"])
     for game_id in (1, 3):
         seed_summary(session.connection(), game_id)
 
@@ -98,13 +98,13 @@ def test_next_game_id_does_not_shrink_after_delete(
     assert game_repo.next_game_id() == 4
 
 
-def test_replace_game_types_only_touches_that_game(
+def test_replace_game_genres_only_touches_that_game(
     game_repo: "GameRepository", session: Session
 ) -> None:
     add_games(game_repo, 1, 2)
-    game_repo.replace_game_types(1, ["party", "family"])
-    game_repo.replace_game_types(2, ["strategy"])
+    game_repo.replace_game_genres(1, ["party", "family"])
+    game_repo.replace_game_genres(2, ["strategy"])
 
-    game_repo.replace_game_types(1, ["party"])
+    game_repo.replace_game_genres(1, ["party"])
 
     assert type_rows(session) == [(1, "party"), (2, "strategy")]

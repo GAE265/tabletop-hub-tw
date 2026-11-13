@@ -110,8 +110,8 @@ def read_games(db: Engine | Connection) -> list[dict[str, Any]]:
         "COALESCE(array_agg(t.code ORDER BY t.code) FILTER (WHERE t.code IS NOT NULL), '{}') "
         "AS types "
         "FROM games g "
-        "LEFT JOIN game_game_types ggt ON ggt.game_id = g.id "
-        "LEFT JOIN game_types t ON t.id = ggt.game_type_id "
+        "LEFT JOIN game_genres gg ON gg.game_id = g.id "
+        "LEFT JOIN genres t ON t.id = gg.genre_id "
         "GROUP BY g.id ORDER BY g.id"
     )
     with _connect(db) as conn:
@@ -147,8 +147,8 @@ def seed_game(db: Engine | Connection, game: dict[str, Any], game_id: int | None
         for code in game["types"]:
             conn.execute(
                 text(
-                    "INSERT INTO game_game_types (game_id, game_type_id) "
-                    "SELECT :g, id FROM game_types WHERE code = :c"
+                    "INSERT INTO game_genres (game_id, genre_id) "
+                    "SELECT :g, id FROM genres WHERE code = :c"
                 ),
                 {"g": new_id, "c": code},
             )
