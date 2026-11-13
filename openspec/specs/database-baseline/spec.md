@@ -21,8 +21,8 @@
 - **WHEN** `auth_users.shop_id` 指向不存在的 `booking_shops.id`
 - **THEN** 資料庫拒絕該筆寫入
 
-### Requirement: 主鍵一律為 UUID
-所有資料表的主鍵 `id` SHALL 為 UUID 型別，資料庫端 MUST 有預設值，使不指定 `id` 的寫入也能成功；參照欄位（如 `shop_id`）同為 UUID。
+### Requirement: 主鍵預設為 UUID
+資料表的主鍵 `id` 預設 SHALL 為 UUID 型別，資料庫端 MUST 有預設值，使不指定 `id` 的寫入也能成功；參照 UUID 主鍵的欄位（如 `shop_id`）同為 UUID。固定的小型分類表（如 `game_types`）MAY 使用 `bigint` identity 作為主鍵。
 
 #### Scenario: 欄位型別
 - **WHEN** 檢視 `auth_users.id`、`booking_shops.id`、`auth_users.shop_id` 的型別
@@ -35,6 +35,10 @@
 #### Scenario: 呼叫端自行指定 id
 - **WHEN** 寫入時提供事先產生的 UUID 作為 `id`
 - **THEN** 以該值儲存，不被覆蓋
+
+#### Scenario: 固定小型分類表使用流水號
+- **WHEN** 固定的小型分類表（如 `game_types`）以 `bigint` identity 作為主鍵
+- **THEN** 不違反本需求，其餘資料表的主鍵仍預設為 UUID
 
 ### Requirement: migration 不含帳號與種子資料
 migration MUST NOT 寫入任何測試帳號或示範資料；這類資料只能由開發用 seed 指令建立。
