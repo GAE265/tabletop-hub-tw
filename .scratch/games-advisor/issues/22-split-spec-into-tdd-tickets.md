@@ -78,3 +78,4 @@ Map: [桌遊推薦 Agent + 桌遊 RAG](../map.md)
   - **心得摘要**搬到 `games_advisor_review_summaries`；標籤、心得片段的 `game_id` 改參照 `games.id`。
   - **標籤**：立倫給的 35 個關鍵字寫進歸納詞彙表的提示詞，當作優先的候選詞；和既有規則衝突的詞在審核時照規則處理。
   - **不在這次**：推薦用不用類型篩選，之後再談。
+- 2026-11-13 對齊 AGENTS.md 1.8（MR #23，spec 標〔1.8〕）：上一則的 `game_types`、`game_game_types` 改名為 `genres`、`game_genres`，`genres.id` 改成流水號（bigint）。共用表在 1.8 已經是正式規則，只剩 `games.id` 用整數是例外（2026-11-12 已從字串改成整數）；ADR 0003 改成 accepted。

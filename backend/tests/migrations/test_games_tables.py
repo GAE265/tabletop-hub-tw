@@ -12,8 +12,8 @@ from tests.db_utils import recreate_database, run_migrations
 
 NEW_TABLES = {
     "games",
-    "game_types",
-    "game_game_types",
+    "genres",
+    "game_genres",
     "games_advisor_review_summaries",
     "games_advisor_tags",
     "games_advisor_game_tags",
@@ -24,12 +24,12 @@ VECTOR_COLUMNS = [
     ("games_advisor_review_excerpts", "embedding"),
 ]
 GAME_ID_TABLES = [
-    "game_game_types",
+    "game_genres",
     "games_advisor_review_summaries",
     "games_advisor_game_tags",
     "games_advisor_review_excerpts",
 ]
-GAME_TYPES = {
+GENRES = {
     "party": "派對",
     "strategy": "策略",
     "thematic": "主題",
@@ -72,7 +72,7 @@ def migrated() -> Iterator[Engine]:
 
 @pytest.fixture
 def clean(migrated: Engine) -> Engine:
-    # game_types 是 migration 寫入的固定資料，不清；games.id 的計數器從 1 重新開始
+    # genres 是 migration 寫入的固定資料，不清；games.id 的計數器從 1 重新開始
     with migrated.begin() as conn:
         conn.execute(text("TRUNCATE games, games_advisor_tags RESTART IDENTITY CASCADE"))
     return migrated
@@ -158,11 +158,11 @@ def insert_excerpt(conn: Connection, vector: str, game_id: int = 1) -> None:
     )
 
 
-def add_game_type(conn: Connection, game_id: int = 1, code: str = "party") -> None:
+def add_game_genre(conn: Connection, game_id: int = 1, code: str = "party") -> None:
+    # 用代碼找類型，不寫死 id（AGENTS.md §4.4）
     conn.execute(
         text(
-            "INSERT INTO game_game_types (game_id, game_type_id) "
-            "SELECT :g, id FROM game_types WHERE code = :c"
+            "INSERT INTO game_genres (game_id, genre_id) SELECT :g, id FROM genres WHERE code = :c"
         ),
         {"g": game_id, "c": code},
     )
@@ -191,6 +191,8 @@ def test_upgrade_creates_tables_with_default_dim(migrated: Engine) -> None:
     assert column_type(migrated, "games", "id") == "bigint"
     for table in GAME_ID_TABLES:
         assert column_type(migrated, table, "game_id") == "bigint"
+    assert column_type(migrated, "genres", "id") == "bigint"
+    assert column_type(migrated, "game_genres", "genre_id") == "bigint"
 
 
 def test_vector_dim_follows_setting() -> None:
@@ -202,10 +204,21 @@ def test_vector_dim_follows_setting() -> None:
         engine.dispose()
 
 
-def test_game_types_are_seeded(migrated: Engine) -> None:
+def test_genres_are_seeded(migrated: Engine) -> None:
     with migrated.connect() as conn:
-        rows = conn.execute(text("SELECT code, name FROM game_types")).all()
-    assert dict(rows) == GAME_TYPES
+        rows = conn.execute(text("SELECT code, name FROM genres")).all()
+    assert dict(rows) == GENRES
+
+
+def test_genre_id_is_generated_when_omitted(migrated: Engine) -> None:
+    # 不 commit：連線關閉時退回，genres 維持 migration 寫入的 8 列
+    with migrated.connect() as conn:
+        seeded = set(conn.scalars(text("SELECT id FROM genres")).all())
+        new_id = conn.scalar(
+            text("INSERT INTO genres (code, name) VALUES ('example', '範例') RETURNING id")
+        )
+    assert isinstance(new_id, int)
+    assert new_id not in seeded
 
 
 def test_game_id_is_generated_when_omitted(clean: Engine) -> None:
@@ -255,12 +268,12 @@ def test_bgg_id_is_unique(clean: Engine) -> None:
         insert_game(conn, 2, bgg_id=900001)
 
 
-def test_same_game_type_twice_is_rejected(clean: Engine) -> None:
+def test_same_game_genre_twice_is_rejected(clean: Engine) -> None:
     with clean.begin() as conn:
         insert_game(conn)
-        add_game_type(conn)
+        add_game_genre(conn)
     with pytest.raises(IntegrityError), clean.begin() as conn:
-        add_game_type(conn)
+        add_game_genre(conn)
 
 
 def test_same_game_tag_twice_is_rejected(clean: Engine) -> None:
@@ -288,14 +301,14 @@ def test_deleting_game_removes_its_rows(clean: Engine) -> None:
         insert_game(conn, 2, bgg_id=900002)
         tag_id = insert_tag(conn)
         for game_id in (1, 2):
-            add_game_type(conn, game_id)
+            add_game_genre(conn, game_id)
             add_game_tag(conn, tag_id, game_id)
             insert_summary(conn, vector, game_id)
             insert_excerpt(conn, vector, game_id)
         conn.execute(text("DELETE FROM games WHERE id = 1"))
     with clean.connect() as conn:
         for table in (
-            "game_game_types",
+            "game_genres",
             "games_advisor_game_tags",
             "games_advisor_review_summaries",
             "games_advisor_review_excerpts",
@@ -303,7 +316,7 @@ def test_deleting_game_removes_its_rows(clean: Engine) -> None:
             # 只剩第 2 款的那一列
             assert count(conn, table) == 1
             assert conn.scalar(text(f"SELECT game_id FROM {table}")) == 2
-        assert count(conn, "game_types") == len(GAME_TYPES)
+        assert count(conn, "genres") == len(GENRES)
         assert count(conn, "games_advisor_tags") == 1
 
 
