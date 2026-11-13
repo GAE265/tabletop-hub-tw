@@ -118,6 +118,30 @@ class FakeTagRepository:
         del self.tags[code]
         return [entry["game"] for entry in self.game_tags.pop(code, [])]
 
+    def replace_game_tags(self, game_id: int, tags: Sequence[Mapping[str, Any]]) -> None:
+        """把一款桌遊的標籤整組換成 tags；每個是 code 與 confidence。"""
+        self._require_transaction()
+        for code in list(self.game_tags):
+            kept = [entry for entry in self.game_tags[code] if entry["game"]["id"] != game_id]
+            if kept:
+                self.game_tags[code] = kept
+            else:
+                del self.game_tags[code]
+        for tag in tags:
+            assert tag["code"] in self.tags, f"沒有標籤 {tag['code']}"
+            self.game_tags.setdefault(tag["code"], []).append(
+                {"game": {"id": game_id}, "confidence": tag["confidence"]}
+            )
+
+    def tags_of(self, game_id: int) -> dict[str, float]:
+        """測試用：一款桌遊目前的標籤，代碼 → 信心分數。"""
+        return {
+            code: entry["confidence"]
+            for code, entries in self.game_tags.items()
+            for entry in entries
+            if entry["game"]["id"] == game_id
+        }
+
 
 class FakeEmbeddingProviderFailingOnCall(FakeEmbeddingProvider):
     """integrations 的 FakeEmbeddingProvider，但只有第 fail_on 次呼叫 embed 會拋出 error。

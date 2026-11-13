@@ -2,6 +2,8 @@
 
 from typing import TYPE_CHECKING
 
+import pytest
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from tests.games_advisor.support import (
@@ -63,3 +65,37 @@ def test_add_update_and_list_tags(
     assert read_tags(session.connection()) == [changed, scheming]
     # 原地更新：桌遊上的標籤與信心分數都還在
     assert read_game_tags(session.connection()) == [(1, "laughter", 0.3)]
+
+
+def test_replace_game_tags_only_touches_that_game(
+    game_repo: "GameRepository", tag_repo: "TagRepository", session: Session
+) -> None:
+    for number in (1, 2):
+        game_repo.add_game(game_columns(make_game(number)))
+    for code in ("laughter", "scheming", "luck"):
+        seed_tag(session.connection(), make_tag(code))
+    seed_game_tag(session.connection(), 1, "laughter", confidence=0.9)
+    seed_game_tag(session.connection(), 1, "scheming", confidence=0.6)
+    seed_game_tag(session.connection(), 2, "laughter", confidence=0.7)
+
+    tag_repo.replace_game_tags(
+        1, [{"code": "luck", "confidence": 0.3}, {"code": "scheming", "confidence": 0.8}]
+    )
+
+    assert read_game_tags(session.connection()) == [
+        (1, "luck", 0.3),
+        (1, "scheming", 0.8),
+        (2, "laughter", 0.7),
+    ]
+
+
+def test_same_tag_twice_on_one_game_violates_the_unique_constraint(
+    game_repo: "GameRepository", tag_repo: "TagRepository", session: Session
+) -> None:
+    game_repo.add_game(game_columns(make_game(1)))
+    seed_tag(session.connection(), make_tag("laughter"))
+
+    with pytest.raises(IntegrityError):
+        tag_repo.replace_game_tags(
+            1, [{"code": "laughter", "confidence": 0.8}, {"code": "laughter", "confidence": 0.5}]
+        )
