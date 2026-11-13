@@ -1,8 +1,9 @@
 """所有 domain 共用的桌遊表（ADR 0003）。
 
-這三張表是 AGENTS.md §4.2、§4.4 的例外：表名沒有 domain 開頭、所有 domain 都可以直接查詢、
-games.id 是自動給號的整數。只有 games_advisor 的匯入桌遊（立倫）與同步（其他組員）指令寫入；
-其他 domain 要改這三張表請 @ 立倫。
+games、genres、game_genres 列在 AGENTS.md 第 3 節「共用資料表」，擁有者是立倫；
+要改結構先和立倫確認。
+games.id 用自動給號的整數是 §4.4 的例外（主鍵預設 UUID）。只有 games_advisor 的匯入桌遊（立倫）
+與同步（其他組員）指令寫入。
 """
 
 import uuid
@@ -51,28 +52,25 @@ class Game(Base):
     mechanics: Mapped[list[str]] = mapped_column(ARRAY(Text))
 
 
-class GameType(Base):
-    __tablename__ = "game_types"
+class Genre(Base):
+    __tablename__ = "genres"
     __table_args__ = (
-        UniqueConstraint("code", name="uq_game_types_code"),
-        UniqueConstraint("name", name="uq_game_types_name"),
+        UniqueConstraint("code", name="uq_genres_code"),
+        UniqueConstraint("name", name="uq_genres_name"),
     )
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        Uuid, primary_key=True, default=uuid.uuid4, server_default=text("gen_random_uuid()")
-    )
+    # 固定的小型分類表，主鍵用流水號（AGENTS.md §4.4）；找類型一律用 code，不寫死 id
+    id: Mapped[int] = mapped_column(BigInteger, Identity(always=False), primary_key=True)
     code: Mapped[str] = mapped_column(Text)
     name: Mapped[str] = mapped_column(Text)
 
 
-class GameGameType(Base):
-    __tablename__ = "game_game_types"
-    __table_args__ = (
-        UniqueConstraint("game_id", "game_type_id", name="uq_game_game_types_game_type"),
-    )
+class GameGenre(Base):
+    __tablename__ = "game_genres"
+    __table_args__ = (UniqueConstraint("game_id", "genre_id", name="uq_game_genres_game_genre"),)
 
     id: Mapped[uuid.UUID] = mapped_column(
         Uuid, primary_key=True, default=uuid.uuid4, server_default=text("gen_random_uuid()")
     )
     game_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("games.id", ondelete="CASCADE"))
-    game_type_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("game_types.id"))
+    genre_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("genres.id"))

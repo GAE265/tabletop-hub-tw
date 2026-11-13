@@ -1,7 +1,7 @@
-"""games tables: 共用桌遊表 games、game_types、game_game_types 與 games_advisor 的 4 張表
+"""games tables: 共用桌遊表 games、genres、game_genres 與 games_advisor 的 4 張表
 
-共用表是 AGENTS.md §4.2、§4.4 的例外（表名沒有 domain 開頭、games.id 是自動給號的整數），
-理由見 docs/adr/0003-shared-games-table.md。
+共用表的規則見 AGENTS.md 第 3 節「共用資料表」。games.id 用自動給號的整數是 §4.4 的例外
+（主鍵預設 UUID，只有固定的小型分類表可以用流水號），理由見 docs/adr/0003-shared-games-table.md。
 
 Revision ID: 0002
 Revises: 0001
@@ -23,7 +23,7 @@ branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
 # ⚠️ 固定的 8 個類型，要和 spec §3.2、games.json 的 types 代碼一致
-GAME_TYPES = [
+GENRES = [
     ("party", "派對"),
     ("strategy", "策略"),
     ("thematic", "主題"),
@@ -70,21 +70,22 @@ def upgrade() -> None:
         sa.CheckConstraint("min_age >= 0", name="ck_games_min_age"),
         sa.CheckConstraint("weight BETWEEN 1 AND 5", name="ck_games_weight"),
     )
-    game_types = op.create_table(
-        "game_types",
-        uuid_pk(),
+    genres = op.create_table(
+        "genres",
+        # 固定的小型分類表，主鍵用流水號（AGENTS.md §4.4）；找類型一律用 code，不寫死 id
+        sa.Column("id", sa.BigInteger(), sa.Identity(always=False), primary_key=True),
         sa.Column("code", sa.Text(), nullable=False),
         sa.Column("name", sa.Text(), nullable=False),
-        sa.UniqueConstraint("code", name="uq_game_types_code"),
-        sa.UniqueConstraint("name", name="uq_game_types_name"),
+        sa.UniqueConstraint("code", name="uq_genres_code"),
+        sa.UniqueConstraint("name", name="uq_genres_name"),
     )
-    op.bulk_insert(game_types, [{"code": code, "name": name} for code, name in GAME_TYPES])
+    op.bulk_insert(genres, [{"code": code, "name": name} for code, name in GENRES])
     op.create_table(
-        "game_game_types",
+        "game_genres",
         uuid_pk(),
         game_fk(),
-        sa.Column("game_type_id", sa.Uuid(), sa.ForeignKey("game_types.id"), nullable=False),
-        sa.UniqueConstraint("game_id", "game_type_id", name="uq_game_game_types_game_type"),
+        sa.Column("genre_id", sa.BigInteger(), sa.ForeignKey("genres.id"), nullable=False),
+        sa.UniqueConstraint("game_id", "genre_id", name="uq_game_genres_game_genre"),
     )
 
     op.create_table(
@@ -143,6 +144,6 @@ def downgrade() -> None:
     op.drop_table("games_advisor_game_tags")
     op.drop_table("games_advisor_tags")
     op.drop_table("games_advisor_review_summaries")
-    op.drop_table("game_game_types")
-    op.drop_table("game_types")
+    op.drop_table("game_genres")
+    op.drop_table("genres")
     op.drop_table("games")
