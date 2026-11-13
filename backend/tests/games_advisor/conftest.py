@@ -5,6 +5,7 @@
 """
 
 from collections.abc import Callable, Iterator
+from types import ModuleType
 from typing import TYPE_CHECKING
 
 import pytest
@@ -14,10 +15,11 @@ from sqlalchemy.orm import Session
 from app.core import config
 from app.core.config import Settings
 from tests.db_utils import recreate_database, run_migrations
+from tests.games_advisor import support
 from tests.games_advisor.support import CommandResult
 
 if TYPE_CHECKING:
-    from app.domains.games_advisor.repository import GameRepository
+    from app.domains.games_advisor.repository import GameRepository, ReviewRepository
 
 RunCommand = Callable[..., CommandResult]
 
@@ -52,14 +54,27 @@ def other_db(other_db_url: str) -> Iterator[Engine]:
     engine.dispose()
 
 
+@pytest.fixture(scope="session")
+def embedding_dim(test_db_url: str) -> int:
+    """測試資料庫向量欄位的維度。"""
+    engine = create_engine(test_db_url)
+    try:
+        return support.embedding_dim(engine)
+    finally:
+        engine.dispose()
+
+
 @pytest.fixture
 def run_command(
-    test_db_url: str, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    test_db_url: str,
+    embedding_dim: int,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> RunCommand:
     """在同一個行程裡執行批次指令的 main()，回傳結束碼與印出的文字。
 
     一律設 LLM_PROVIDER=fake，所以不用 LLM 的指令在 fake 之下照常執行（spec §7.2）。
-    database_url 沒給就連 games_db 的資料庫。
+    embedding 也用 fake，維度照測試資料庫的欄位。database_url 沒給就連 games_db 的資料庫。
     """
 
     def _run(*args: str, database_url: str | None = None) -> CommandResult:
@@ -69,6 +84,8 @@ def run_command(
         monkeypatch.setitem(Settings.model_config, "env_file", None)
         monkeypatch.setenv("DATABASE_URL", database_url or test_db_url)
         monkeypatch.setenv("LLM_PROVIDER", "fake")
+        monkeypatch.setenv("GAMES_ADVISOR_EMBEDDING_PROVIDER", "fake")
+        monkeypatch.setenv("GAMES_ADVISOR_EMBEDDING_DIM", str(embedding_dim))
         config.get_settings.cache_clear()
         try:
             code = main(list(args))
@@ -92,3 +109,18 @@ def game_repo(session: Session) -> "GameRepository":
     from app.domains.games_advisor.repository import GameRepository
 
     return GameRepository(session)
+
+
+@pytest.fixture
+def review_repo(session: Session) -> "ReviewRepository":
+    from app.domains.games_advisor.repository import ReviewRepository
+
+    return ReviewRepository(session)
+
+
+@pytest.fixture
+def excerpts() -> ModuleType:
+    """切段函式所在的模組 app.domains.games_advisor.excerpts。"""
+    from app.domains.games_advisor import excerpts as module
+
+    return module

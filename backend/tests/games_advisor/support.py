@@ -160,8 +160,8 @@ def delete_game(db: Engine | Connection, game_id: int) -> None:
         conn.execute(text("DELETE FROM games WHERE id = :id"), {"id": game_id})
 
 
-def seed_summary(db: Engine | Connection, game_id: int) -> None:
-    """直接用 SQL 替一款桌遊寫入心得摘要；向量長度照資料表欄位的維度。"""
+def embedding_dim(db: Engine | Connection) -> int:
+    """資料表向量欄位的維度（建表時讀 GAMES_ADVISOR_EMBEDDING_DIM 決定）。"""
     with _connect(db) as conn:
         column_type = conn.scalar(
             text(
@@ -170,14 +170,23 @@ def seed_summary(db: Engine | Connection, game_id: int) -> None:
                 "AND attname = 'embedding'"
             )
         )
-        dim = int(column_type[len("vector(") : -1])
+    return int(column_type[len("vector(") : -1])
+
+
+def _vector_text(dim: int) -> str:
+    return "[" + ",".join(["0.5"] * dim) + "]"
+
+
+def seed_summary(db: Engine | Connection, game_id: int, summary: str = "心得摘要") -> None:
+    """直接用 SQL 替一款桌遊寫入心得摘要；向量長度照資料表欄位的維度。"""
+    with _connect(db) as conn:
         conn.execute(
             text(
                 "INSERT INTO games_advisor_review_summaries "
                 "(game_id, summary, embedding, embedding_model) "
-                "VALUES (:g, '心得摘要', CAST(:v AS vector), 'fake')"
+                "VALUES (:g, :s, CAST(:v AS vector), 'fake')"
             ),
-            {"g": game_id, "v": "[" + ",".join(["0.5"] * dim) + "]"},
+            {"g": game_id, "s": summary, "v": _vector_text(embedding_dim(conn))},
         )
 
 
@@ -189,3 +198,85 @@ def summary_game_ids(db: Engine | Connection) -> list[int]:
                 text("SELECT game_id FROM games_advisor_review_summaries ORDER BY game_id")
             )
         )
+
+
+def read_summaries(db: Engine | Connection) -> list[dict[str, Any]]:
+    """全部心得摘要，照桌遊 id 排；dims 是向量的長度。"""
+    sql = text(
+        "SELECT game_id, summary, embedding_model, vector_dims(embedding) AS dims "
+        "FROM games_advisor_review_summaries ORDER BY game_id"
+    )
+    with _connect(db) as conn:
+        return [dict(row) for row in conn.execute(sql).mappings()]
+
+
+def seed_excerpt(db: Engine | Connection, game_id: int, excerpt_text: str = "舊的心得片段") -> None:
+    """直接用 SQL 替一款桌遊寫入一段心得片段。"""
+    with _connect(db) as conn:
+        conn.execute(
+            text(
+                "INSERT INTO games_advisor_review_excerpts "
+                "(game_id, text, embedding, embedding_model, source_url, site_name, language) "
+                "VALUES (:g, :t, CAST(:v AS vector), 'fake', "
+                "'https://example.com/old', '舊網站', 'zh-TW')"
+            ),
+            {"g": game_id, "t": excerpt_text, "v": _vector_text(embedding_dim(conn))},
+        )
+
+
+def read_excerpts(db: Engine | Connection) -> list[dict[str, Any]]:
+    """全部心得片段，照桌遊 id、文字排；dims 是向量的長度。"""
+    sql = text(
+        "SELECT game_id, text, embedding_model, source_url, site_name, language, "
+        "vector_dims(embedding) AS dims "
+        "FROM games_advisor_review_excerpts ORDER BY game_id, text"
+    )
+    with _connect(db) as conn:
+        return [dict(row) for row in conn.execute(sql).mappings()]
+
+
+# --- 假心得（reviews.json，spec §8.2） ---
+
+
+def review_paragraphs(number: int, index: int = 1) -> list[str]:
+    """第 number 款第 index 篇假心得的兩個段落。每段約 60 字，不會被合併也不會被切開。"""
+    tag = f"【第 {number} 款第 {index} 篇】"
+    return [
+        tag + "大家圍著桌子一邊出牌一邊笑，氣氛很熱鬧。" * 3,
+        tag + "規則不難，新手玩過一輪就能跟上，很適合聚會。" * 3,
+    ]
+
+
+def english_paragraphs(number: int, index: int = 1) -> list[str]:
+    """英文假心得的兩個段落，各 30 個單字：用單字數算也不會被合併或切開。"""
+    tag = f"game{number}review{index}"
+    return [
+        f"{tag} " + " ".join(["laughing"] * 29),
+        f"{tag} " + " ".join(["bluffing"] * 29),
+    ]
+
+
+def make_review(number: int, index: int = 1, **overrides: Any) -> dict[str, Any]:
+    """第 number 款桌遊的第 index 篇假心得，格式是 reviews.json 的一篇。"""
+    review: dict[str, Any] = {
+        "bgg_id": 900000 + number,
+        "source_url": f"https://example.com/game-{number}/review-{index}",
+        "site_name": f"範例網站{index}",
+        "title": f"第 {number} 款的心得",
+        "author": None,
+        "language": "zh-TW",
+        "published_on": "2025-03-01",
+        "retrieved_on": "2026-11-08",
+        "text": "\n\n".join(review_paragraphs(number, index)),
+    }
+    review.update(overrides)
+    return review
+
+
+def reviews_data(reviews: list[dict[str, Any]]) -> dict[str, Any]:
+    """reviews.json 的內容；shortfalls 後端不讀，照 Codex 的格式放一個空的。"""
+    return {"reviews": reviews, "shortfalls": []}
+
+
+def write_reviews_file(tmp_path: Path, reviews: list[dict[str, Any]]) -> Path:
+    return write_json(tmp_path / "reviews.json", reviews_data(reviews))
