@@ -1571,4 +1571,4 @@ uv run python -m app.domains.games_advisor.commands eval <eval_cases.json> --out
 | ADR 0001 | 對話狀態交給 Azure 保存，偏離 §4.2「用 `LLM_PROVIDER` 切換雲端與地端」 | 〔ADR 0001〕 |
 | ADR 0002 | 追問與推薦由 LLM 依對話規則決定 | 〔ADR 0002〕 |
 | 評估題組的位置 | pytest 仍是合併的唯一標準；評估題組不進 CI、不擋合併，改到對話規則等項目時把分數貼進 MR | 〔驗收〕§3 |
-| 外部服務測試不進 CI（已寫進 AGENTS.md） | 外部服務測試（§2）只能放在 `integrations/`，加上 `external` 標記，不在 CI 跑；缺金鑰時直接失敗並說明缺哪個設定；改到 `integrations/` 的 MR 要在說明貼上本機執行 `uv run pytest -m external` 的結果。能用 fake 或 `MockTransport` 寫的測試，照樣進 CI | AGENTS.md 7.6（#18）、[ticket 11](../games-advisor-impl/issues/11-agents-md-secret-tests.md) |
+| 外部服務測試不進 CI（已寫進 AGENTS.md） | 外部服務測試（§2）只能放在 `integrations/`，加上 `external` 標記，不在 CI 跑；缺金鑰時直接失敗並說明缺哪個設定；改到 `integrations/` 的 MR 要在說明貼上本機執行 `uv run pytest -m external` 的結果。能用 fake（例如 `FakeAzureTransport`）寫的測試，照樣進 CI | AGENTS.md 7.6（#18）、[ticket 11](../games-advisor-impl/issues/11-agents-md-secret-tests.md) |

@@ -290,7 +290,7 @@ get_embedding_provider(config: EmbeddingConfig) -> EmbeddingProvider
 3. **§4.3 錯誤狀態碼**：`LLMUnavailable`、`EmbeddingError` 在對話 API 會變成 5xx，不在 §4.3 列出的狀態碼裡。用哪個狀態碼由「[API 契約與 prototype 頁面](issues/13-api-contract-and-prototype.md)」決定。
 4. **§2.1 repo 是公開的**：本提案和 `.env.example` 都不寫真實的資源名稱、endpoint 或金鑰。
 5. **§4.2「embedding 同理」**：條文的意思是 embedding 也用一個全專案的設定切換雲端與地端。`games_advisor` 改用自己的一組 `GAMES_ADVISOR_EMBEDDING_*`，理由見第 7 節：組員各用自己的資源開發，最後也不一定整合成一個 Foundry 或一個 PostgreSQL。切換雲端、地端的能力不變，只是設定只屬於 `games_advisor`。LLM 沒有這個出入，照 §4.2 用全域 `LLM_PROVIDER`。
-6. **OpenSpec 規格 `openspec/specs/llm-provider/spec.md`**：骨架階段寫的規格只有 `generate(prompt)`，並規定「骨架階段只支援 `fake`」、`LLM_PROVIDER=cloud` 要報「尚未實作」。實作本提案後這兩條都不成立，由實作的人開一個 OpenSpec change 更新：加上 `generate_json`、`respond`；改成「`fake`、`cloud` 已實作，`local` 尚未實作」。
+6. **OpenSpec 規格 `openspec/specs/llm-provider/spec.md`**：骨架階段寫的規格只有 `generate(prompt)`，並規定「骨架階段只支援 `fake`」、`LLM_PROVIDER=cloud` 要報「尚未實作」。實作本提案後這兩條都不成立，要更新的內容：加上 `generate_json`、`respond`；改成「`fake`、`cloud` 已實作，`local` 尚未實作」。AI 不修改 `openspec/` 資料夾，由實作的人在 MR 說明建議組員更新（2026-11-11）。
 
 ## 10. 要在 Azure 實際驗證的事（第一張實作 ticket）
 
@@ -308,7 +308,7 @@ get_embedding_provider(config: EmbeddingConfig) -> EmbeddingProvider
 
 ## 11. 測試案例（AGENTS.md §7）
 
-實作者可以直接拿這張表開 Draft MR（§7.2）。能不用金鑰寫的測試一律進 CI（AGENTS.md 7.6），所以雲端實作的行為都用 httpx `MockTransport` 注入 `openai` client，假造 Azure 的回應，不連網路（§11.4、§11.5）；真的 Azure 只用 §11.6 的 4 個外部服務測試確認連得上。測試資料一律自行編寫（§2.2）。
+實作者可以直接拿這張表開 Draft MR（§7.2）。能不用金鑰寫的測試一律進 CI（AGENTS.md 7.6），所以雲端實作的行為都用手寫的 `FakeAzureTransport`（`httpx.BaseTransport` 的子類別）注入 `openai` client（AGENTS.md 7.5 規定手寫 fake，2026-11-11 從 `MockTransport` 改過來），假造 Azure 的回應，不連網路（§11.4、§11.5）；真的 Azure 只用 §11.6 的 4 個外部服務測試確認連得上。測試資料一律自行編寫（§2.2）。
 
 ### 11.1 Factory 與啟動
 
@@ -350,7 +350,7 @@ get_embedding_provider(config: EmbeddingConfig) -> EmbeddingProvider
 | 傳入空字串 | `embed([""])` | `ValueError` |
 | 傳入空的 list | `embed([])` | 回傳 `[]` |
 
-### 11.4 LLM 雲端實作（`MockTransport`）
+### 11.4 LLM 雲端實作（`FakeAzureTransport`）
 
 | 情境 | 操作 | 預期結果 |
 |---|---|---|
@@ -370,7 +370,7 @@ get_embedding_provider(config: EmbeddingConfig) -> EmbeddingProvider
 | 輸出被截斷 | 回應 `incomplete`、原因是 token 上限 | `LLMOutputRejected` |
 | 金鑰錯誤 | Azure 回 401 | `LLMError`，不是上面三種子類別 |
 
-### 11.5 Embedding 雲端實作（`MockTransport`）
+### 11.5 Embedding 雲端實作（`FakeAzureTransport`）
 
 | 情境 | 操作 | 預期結果 |
 |---|---|---|
@@ -382,7 +382,7 @@ get_embedding_provider(config: EmbeddingConfig) -> EmbeddingProvider
 
 ### 11.6 外部服務測試（`external`，本機）
 
-加上 `@pytest.mark.external`，不在 CI 跑；發 MR 前在本機執行 `uv run pytest -m external`，結果貼在 MR 說明（AGENTS.md 7.6）。目的只是確認真的連得上 Azure、回應格式和 §11.4、§11.5 假造的一致；行為的細節照樣由 `MockTransport` 的測試負責。
+加上 `@pytest.mark.external`，不在 CI 跑；發 MR 前在本機執行 `uv run pytest -m external`，結果貼在 MR 說明（AGENTS.md 7.6）。目的只是確認真的連得上 Azure、回應格式和 §11.4、§11.5 假造的一致；行為的細節照樣由 `FakeAzureTransport` 的測試負責。
 
 - 設定從 `.env` 讀（`LLM_*`、`GAMES_ADVISOR_EMBEDDING_*`），不從 shell 讀。缺欄位時直接失敗，錯誤訊息指出缺哪個欄位，不用 `skip`。這個 fixture 放在 `backend/tests/integrations/conftest.py`，不放進 `integrations/llm`（#18）。
 - 工具、schema、文字都自行編寫，不用桌遊或心得資料。
