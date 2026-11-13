@@ -1,10 +1,11 @@
-"""games.json 與匯出檔的格式與檢查（spec §8.1、§8.10、§8.11）。
+"""批次指令讀寫的檔案格式與檢查：games.json、匯出檔（spec §8.1、§8.10、§8.11）、
+reviews.json（spec §8.2）。
 
 型別一律嚴格比對：整數欄位不接受 "2"、2.0、true。
 types 的代碼是否存在，要給 context={"type_codes": 代碼集合} 才檢查；沒給就不檢查。
 """
 
-from typing import Annotated, Any, Self
+from typing import Annotated, Any, Literal, Self
 
 from pydantic import (
     AfterValidator,
@@ -132,10 +133,31 @@ class GamesExport(BaseModel):
         return {"next_id": self.next_id, "games": games}
 
 
+class Review(BaseModel):
+    """reviews.json 的一篇心得。後端只讀這 5 個欄位，其他欄位（標題、作者、日期）不管。"""
+
+    model_config = ConfigDict(extra="ignore", strict=True)
+
+    bgg_id: int = Field(gt=0)
+    source_url: str
+    site_name: str
+    language: Literal["zh-TW", "en"]
+    text: NonBlank
+
+
+class ReviewsFile(BaseModel):
+    """reviews.json：Codex 收集的心得。shortfalls 等其他欄位後端不讀。"""
+
+    model_config = ConfigDict(extra="ignore", strict=True)
+
+    reviews: list[Review]
+
+
 def _reason(error: Any) -> str:
     """把 pydantic 的錯誤換成中文說明；沒列到的類型就用 pydantic 原本的訊息。"""
     context = error.get("ctx") or {}
     reasons = {
+        "literal_error": f"只能是 {str(context.get('expected')).replace(' or ', ' 或 ')}",
         "missing": "缺少這個欄位",
         "extra_forbidden": "不認得的欄位",
         "int_type": "要是整數",
@@ -151,16 +173,21 @@ def _reason(error: Any) -> str:
     return reasons.get(error["type"], error["msg"])
 
 
-def describe_problems(exc: ValidationError, data: object, id_field: str) -> list[str]:
-    """把檢查不通過的地方寫成一行一個問題：哪一款（id_field 的值）的哪個欄位、為什麼。"""
-    games = data.get("games") if isinstance(data, dict) else None
+def describe_problems(
+    exc: ValidationError, data: object, *, id_field: str, items: str = "games", unit: str = "款"
+) -> list[str]:
+    """把檢查不通過的地方寫成一行一個問題：第幾款（id_field 的值）的哪個欄位、為什麼。
+
+    items 是檔案裡放清單的欄位名稱，unit 是量詞：桌遊用「款」，心得用「篇」。
+    """
+    entries = data.get(items) if isinstance(data, dict) else None
     lines = []
     for error in exc.errors():
         location = error["loc"]
-        if len(location) >= 2 and location[0] == "games" and isinstance(location[1], int):
-            game = games[location[1]] if isinstance(games, list) else None
-            value = game.get(id_field, "？") if isinstance(game, dict) else "？"
-            where = f"第 {location[1] + 1} 款（{id_field} {value}）"
+        if len(location) >= 2 and location[0] == items and isinstance(location[1], int):
+            entry = entries[location[1]] if isinstance(entries, list) else None
+            value = entry.get(id_field, "？") if isinstance(entry, dict) else "？"
+            where = f"第 {location[1] + 1} {unit}（{id_field} {value}）"
             if len(location) >= 3:
                 where += f"的 {location[2]}"
         else:

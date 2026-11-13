@@ -1,16 +1,31 @@
 """games_advisor 批次指令的商業邏輯。
 
-目前有共用桌遊資料的三個動作：匯入（spec §8.1）、匯出（§8.10）、同步（§8.11）。
-每個動作都是整份檔案一個交易：任何一步不通過就拋 Refused，什麼都不寫。
+- 共用桌遊資料：匯入（spec §8.1）、匯出（§8.10）、同步（§8.11）。整份檔案一個交易：
+  任何一步不通過就拋 Refused，什麼都不寫。
+- 讀 reviews.json 的指令：心得摘要（§8.3）、心得片段（§8.4）。先檢查整份檔案，不通過就拋
+  Refused；通過後一款桌遊一個交易，某款失敗就跳過它、保留它的舊資料，其他款照寫（§7.2）。
 """
 
+from collections.abc import Callable, Collection, Mapping, Sequence
+from contextlib import AbstractContextManager
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Protocol
 
 from pydantic import ValidationError
 
+from app.domains.games_advisor.excerpts import DEFAULT_LIMITS, ExcerptLimits, split_reviews
 from app.domains.games_advisor.repository import GameInUseError, GameRepository
-from app.domains.games_advisor.schemas import GamesExport, GamesFile, describe_problems
+from app.domains.games_advisor.schemas import (
+    GamesExport,
+    GamesFile,
+    Review,
+    ReviewsFile,
+    describe_problems,
+)
+from app.integrations.embedding.base import EmbeddingProvider
+from app.integrations.embedding.errors import EmbeddingError
+from app.integrations.embedding.factory import EmbeddingConfig
+from app.integrations.llm.base import LLMProvider
 
 
 class Refused(Exception):
@@ -43,7 +58,7 @@ def _validated[FileModel: (GamesFile, GamesExport)](
     try:
         return model.model_validate(data, context={"type_codes": type_codes})
     except ValidationError as exc:
-        raise Refused(*describe_problems(exc, data, id_field)) from exc
+        raise Refused(*describe_problems(exc, data, id_field=id_field)) from exc
 
 
 def _first_four_problems(first_four: list[int], bgg_ids_in_file: set[int]) -> list[str]:
@@ -123,3 +138,190 @@ def sync_games(repository: GameRepository, data: object) -> SyncResult:
         deleted=deleted,
         next_id=export.next_id,
     )
+
+
+# --- 讀 reviews.json 的指令 ---
+
+
+class GameLookup(Protocol):
+    """service 查桌遊用到的方法。每款桌遊是一個 dict，至少有 id、bgg_id、name、english_name。"""
+
+    def list_games(self) -> list[dict[str, Any]]: ...
+
+    def find_games_by_bgg_ids(self, bgg_ids: Collection[int]) -> list[dict[str, Any]]: ...
+
+
+class ReviewStore(Protocol):
+    """service 寫心得摘要、心得片段用到的方法。"""
+
+    def transaction(self) -> AbstractContextManager[None]: ...
+
+    def save_review_summary(
+        self, game_id: int, summary: str, embedding: Sequence[float], embedding_model: str
+    ) -> None: ...
+
+    def delete_review_summary(self, game_id: int) -> None: ...
+
+    def replace_review_excerpts(
+        self, game_id: int, excerpts: Sequence[Mapping[str, Any]]
+    ) -> None: ...
+
+
+@dataclass(frozen=True)
+class SkippedGame:
+    bgg_id: int
+    name: str
+    reason: str
+
+
+@dataclass(frozen=True)
+class BatchResult:
+    """一款一個交易的指令跑完的結果：完成幾款、跳過哪幾款與原因。"""
+
+    done: int
+    skipped: list[SkippedGame]
+
+    @property
+    def exit_code(self) -> int:
+        """0 全部完成；2 部分完成（有款被跳過）。"""
+        return 2 if self.skipped else 0
+
+
+GameReviews = list[tuple[dict[str, Any], list[Review]]]
+
+
+def _reviews_by_game(
+    games: GameLookup, data: object, only_bgg_ids: Collection[int] | None
+) -> GameReviews:
+    """檢查 reviews.json，回傳這次要處理的桌遊（照 id 排）與各自的心得。
+
+    沒給 only_bgg_ids 就處理資料庫裡全部桌遊，包括 0 篇心得的：它們上一次產生的資料要清掉。
+    """
+    try:
+        reviews = ReviewsFile.model_validate(data).reviews
+    except ValidationError as exc:
+        problems = describe_problems(exc, data, id_field="bgg_id", items="reviews", unit="篇")
+        raise Refused(*problems) from exc
+
+    def missing(bgg_ids: Collection[int]) -> list[int]:
+        found = {game["bgg_id"] for game in games.find_games_by_bgg_ids(bgg_ids)}
+        return sorted(set(bgg_ids) - found)
+
+    if unknown := missing({review.bgg_id for review in reviews}):
+        raise Refused(
+            f"reviews.json 有資料庫沒有的 bgg_id：{'、'.join(map(str, unknown))}；"
+            "請先匯入或同步桌遊"
+        )
+    if only_bgg_ids and (unknown := missing(only_bgg_ids)):
+        raise Refused(f"--bgg-id 有資料庫沒有的 bgg_id：{'、'.join(map(str, unknown))}")
+
+    targets = games.find_games_by_bgg_ids(only_bgg_ids) if only_bgg_ids else games.list_games()
+    return [
+        (game, [review for review in reviews if review.bgg_id == game["bgg_id"]])
+        for game in targets
+    ]
+
+
+def _for_each_game(
+    work: GameReviews, process: Callable[[dict[str, Any], list[Review]], None]
+) -> BatchResult:
+    """一款一款處理；轉成向量失敗的那一款跳過，其他款照做。"""
+    done = 0
+    skipped = []
+    for game, reviews in work:
+        try:
+            process(game, reviews)
+        except EmbeddingError as exc:
+            skipped.append(SkippedGame(game["bgg_id"], game["name"], f"轉成向量失敗：{exc}"))
+        else:
+            done += 1
+    return BatchResult(done=done, skipped=skipped)
+
+
+def _embedding_model_name(config: EmbeddingConfig) -> str:
+    """記在每個向量上的模型名稱；用 fake 時記 fake（spec §8.9）。"""
+    return "fake" if config.provider == "fake" or config.model is None else config.model
+
+
+_SUMMARY_INSTRUCTIONS = """\
+你負責整理桌遊心得。請讀完下面同一款桌遊的全部心得，寫一段 120 到 200 字的繁體中文摘要。
+
+要寫：玩起來的氣氛、玩家之間的互動方式、對運氣與策略的感受、適合的場合。英文心得也用繁體中文寫。
+不要寫：整體好壞的評價（例如好玩、無聊）；價格、版本、翻譯品質、購買管道；規則說明；心得沒有提到的特性。
+
+只輸出摘要本身，不要標題、不要條列、不要前言。"""
+
+
+def _summary_prompt(game: dict[str, Any], reviews: list[Review]) -> str:
+    parts = [_SUMMARY_INSTRUCTIONS, f"桌遊：{game['name']}（{game['english_name']}）"]
+    parts += [
+        f"心得 {number}（{review.language}）：\n{review.text}"
+        for number, review in enumerate(reviews, start=1)
+    ]
+    return "\n\n".join(parts)
+
+
+def summarize_reviews(
+    games: GameLookup,
+    store: ReviewStore,
+    data: object,
+    *,
+    llm: LLMProvider,
+    embedding: EmbeddingProvider,
+    embedding_config: EmbeddingConfig,
+    only_bgg_ids: Collection[int] | None = None,
+) -> BatchResult:
+    """每款桌遊呼叫 1 次 LLM 讀完全部心得，寫成心得摘要，和向量一起存。"""
+    # 讀取也放進交易：讀完就結束交易，不會開著交易等模型回應
+    with store.transaction():
+        work = _reviews_by_game(games, data, only_bgg_ids)
+    embedding_model = _embedding_model_name(embedding_config)
+
+    def process(game: dict[str, Any], reviews: list[Review]) -> None:
+        if not reviews:
+            # 0 篇心得：不呼叫模型，清掉上一次產生的心得摘要
+            with store.transaction():
+                store.delete_review_summary(game["id"])
+            return
+        summary = llm.generate(_summary_prompt(game, reviews))
+        [vector] = embedding.embed([summary])
+        with store.transaction():
+            store.save_review_summary(game["id"], summary, vector, embedding_model)
+
+    return _for_each_game(work, process)
+
+
+def build_excerpts(
+    games: GameLookup,
+    store: ReviewStore,
+    data: object,
+    *,
+    embedding: EmbeddingProvider,
+    embedding_config: EmbeddingConfig,
+    only_bgg_ids: Collection[int] | None = None,
+    limits: ExcerptLimits = DEFAULT_LIMITS,
+) -> BatchResult:
+    """把每款桌遊的心得切成心得片段，一款的片段一起轉成向量後存。不用 LLM。"""
+    with store.transaction():
+        work = _reviews_by_game(games, data, only_bgg_ids)
+    embedding_model = _embedding_model_name(embedding_config)
+
+    def process(game: dict[str, Any], reviews: list[Review]) -> None:
+        excerpts = split_reviews(reviews, limits)
+        # 0 篇心得：不呼叫 embed，只清掉上一次產生的心得片段
+        vectors = embedding.embed([excerpt.text for excerpt in excerpts]) if excerpts else []
+        rows = [
+            {
+                "text": excerpt.text,
+                "embedding": vector,
+                "embedding_model": embedding_model,
+                "source_url": excerpt.source_url,
+                "site_name": excerpt.site_name,
+                "language": excerpt.language,
+            }
+            for excerpt, vector in zip(excerpts, vectors, strict=True)
+        ]
+        with store.transaction():
+            store.replace_review_excerpts(game["id"], rows)
+
+    return _for_each_game(work, process)

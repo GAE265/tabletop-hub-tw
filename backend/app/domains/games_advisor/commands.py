@@ -2,9 +2,9 @@
 
 執行方式：uv run python -m app.domains.games_advisor.commands <子指令> <參數>
 
-角色和 router 相同：只解析參數、讀寫檔案、呼叫 service、印出結果。
+角色和 router 相同：只解析參數、讀寫檔案、建立 provider、呼叫 service、印出結果。
 
-結束碼：0 全部完成；1 沒有完成（拒絕執行或參數不對，什麼都沒寫）。
+結束碼：0 全部完成；1 沒有完成（拒絕執行或參數不對，什麼都沒寫）；2 部分完成（有款被跳過）。
 """
 
 import argparse
@@ -15,14 +15,21 @@ from typing import NoReturn
 
 from sqlalchemy.orm import Session
 
-from app.core.config import get_settings
+from app.core.config import Settings, get_settings
 from app.core.db import create_db_engine
 from app.domains.games_advisor import service
-from app.domains.games_advisor.repository import GameRepository
-from app.domains.games_advisor.service import Refused
+from app.domains.games_advisor.repository import GameRepository, ReviewRepository
+from app.domains.games_advisor.service import BatchResult, Refused
+from app.integrations.embedding.base import EmbeddingProvider
+from app.integrations.embedding.factory import EmbeddingConfig, get_embedding_provider
+from app.integrations.llm.base import LLMProvider
+from app.integrations.llm.factory import get_llm_provider
 
 EXIT_OK = 0
 EXIT_FAILED = 1
+
+# 批次指令一次讀完一款的全部心得，固定等 300 秒，不讀 LLM_TIMEOUT_SECONDS（spec §4.1）
+BATCH_LLM_TIMEOUT_SECONDS = 300
 
 
 class _UsageError(Exception):
@@ -54,27 +61,125 @@ def _read_json(path: Path) -> object:
         raise Refused(f"{path} 不是合法的 JSON：{exc}") from exc
 
 
-def _import_games(args: argparse.Namespace, repository: GameRepository) -> None:
-    result = service.import_games(repository, _read_json(args.games_json), args.first_four)
+# --- 建立 provider ---
+
+
+def batch_llm_settings(settings: Settings) -> Settings:
+    """批次指令用的 LLM 設定：複製一份 settings、換掉三個值（spec §7.2 規則 4）。
+
+    模型用 LLM_BATCH_MODEL（沒填就用 LLM_MODEL）、推理強度用模型預設、逾時固定 300 秒。
+    """
+    return settings.model_copy(
+        update={
+            "llm_model": settings.llm_batch_model or settings.llm_model,
+            "llm_reasoning_effort": None,
+            "llm_timeout_seconds": BATCH_LLM_TIMEOUT_SECONDS,
+        }
+    )
+
+
+def _batch_llm(settings: Settings) -> LLMProvider:
+    if settings.llm_provider == "fake":
+        raise Refused("需要真的模型，請設定 LLM_*")
+    try:
+        return get_llm_provider(settings.llm_provider, batch_llm_settings(settings))
+    except (ValueError, NotImplementedError) as exc:
+        raise Refused(str(exc)) from exc
+
+
+def _embedding(settings: Settings) -> tuple[EmbeddingProvider, EmbeddingConfig]:
+    """games_advisor 自己的 embedding：只讀 GAMES_ADVISOR_EMBEDDING_*（spec §7.2 規則 5）。"""
+    config = EmbeddingConfig(
+        provider=settings.games_advisor_embedding_provider,
+        dim=settings.games_advisor_embedding_dim,
+        endpoint=settings.games_advisor_embedding_endpoint,
+        api_key=settings.games_advisor_embedding_api_key,
+        model=settings.games_advisor_embedding_model,
+    )
+    try:
+        return get_embedding_provider(config), config
+    except ValueError as exc:
+        raise Refused(str(exc)) from exc
+
+
+# --- 各個子指令 ---
+
+
+def _import_games(args: argparse.Namespace, session: Session, settings: Settings) -> int:
+    result = service.import_games(
+        GameRepository(session), _read_json(args.games_json), args.first_four
+    )
     print(f"已匯入 {result.count} 款桌遊。")
     for game_id, name in result.first_four:
         print(f"  {game_id} 號：{name}")
     print("記得執行 export-games，把匯出檔放進 GAE265G5。")
+    return EXIT_OK
 
 
-def _export_games(args: argparse.Namespace, repository: GameRepository) -> None:
-    export = service.export_games(repository)
+def _export_games(args: argparse.Namespace, session: Session, settings: Settings) -> int:
+    export = service.export_games(GameRepository(session))
     content = json.dumps(export.to_json(), ensure_ascii=False, indent=2)
     args.out.write_text(content + "\n", encoding="utf-8")
     print(f"已匯出 {len(export.games)} 款桌遊到 {args.out}，next_id 是 {export.next_id}。")
     print("把匯出檔放進 GAE265G5，覆蓋舊的那份。")
+    return EXIT_OK
 
 
-def _sync_games(args: argparse.Namespace, repository: GameRepository) -> None:
-    result = service.sync_games(repository, _read_json(args.export_json))
+def _sync_games(args: argparse.Namespace, session: Session, settings: Settings) -> int:
+    result = service.sync_games(GameRepository(session), _read_json(args.export_json))
     print(
         f"同步完成：新增 {result.added} 款、更新 {result.updated} 款、"
         f"刪除 {result.deleted} 款，next_id 是 {result.next_id}。"
+    )
+    return EXIT_OK
+
+
+def _report(result: BatchResult, what: str) -> int:
+    """印出一款一個交易的指令跑完的結果；跳過的款附上原因。"""
+    print(f"{what}：完成 {result.done} 款。")
+    if result.skipped:
+        print(f"跳過 {len(result.skipped)} 款，它們的舊資料沒有變：", file=sys.stderr)
+        for skipped in result.skipped:
+            print(f"  bgg_id {skipped.bgg_id}「{skipped.name}」：{skipped.reason}", file=sys.stderr)
+    return result.exit_code
+
+
+def _summarize_reviews(args: argparse.Namespace, session: Session, settings: Settings) -> int:
+    # 先確認有真的模型，再讀檔案
+    llm = _batch_llm(settings)
+    embedding, embedding_config = _embedding(settings)
+    result = service.summarize_reviews(
+        GameRepository(session),
+        ReviewRepository(session),
+        _read_json(args.reviews_json),
+        llm=llm,
+        embedding=embedding,
+        embedding_config=embedding_config,
+        only_bgg_ids=args.bgg_id,
+    )
+    return _report(result, "心得摘要")
+
+
+def _build_excerpts(args: argparse.Namespace, session: Session, settings: Settings) -> int:
+    embedding, embedding_config = _embedding(settings)
+    result = service.build_excerpts(
+        GameRepository(session),
+        ReviewRepository(session),
+        _read_json(args.reviews_json),
+        embedding=embedding,
+        embedding_config=embedding_config,
+        only_bgg_ids=args.bgg_id,
+    )
+    return _report(result, "心得片段")
+
+
+def _add_reviews_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("reviews_json", type=Path, metavar="<reviews.json>")
+    parser.add_argument(
+        "--bgg-id",
+        type=_bgg_ids,
+        metavar="<bgg_id>",
+        help="只跑指定的桌遊，用來補跑失敗的那幾款；多款用逗號分開。沒給就跑全部桌遊",
     )
 
 
@@ -108,6 +213,14 @@ def _build_parser() -> argparse.ArgumentParser:
     sync_games.add_argument("export_json", type=Path, metavar="<匯出檔>")
     sync_games.set_defaults(handler=_sync_games)
 
+    summarize_reviews = commands.add_parser("summarize-reviews", help="產生心得摘要：需要真的 LLM")
+    _add_reviews_arguments(summarize_reviews)
+    summarize_reviews.set_defaults(handler=_summarize_reviews)
+
+    build_excerpts = commands.add_parser("build-excerpts", help="產生心得片段：不用 LLM")
+    _add_reviews_arguments(build_excerpts)
+    build_excerpts.set_defaults(handler=_build_excerpts)
+
     return parser
 
 
@@ -118,17 +231,17 @@ def main(argv: list[str] | None = None) -> int:
         print(exc, file=sys.stderr)
         return EXIT_FAILED
 
-    engine = create_db_engine(get_settings().database_url)
+    settings = get_settings()
+    engine = create_db_engine(settings.database_url)
     try:
         with Session(engine) as session:
-            args.handler(args, GameRepository(session))
+            return args.handler(args, session, settings)
     except Refused as exc:
         for reason in exc.reasons:
             print(reason, file=sys.stderr)
         return EXIT_FAILED
     finally:
         engine.dispose()
-    return EXIT_OK
 
 
 if __name__ == "__main__":

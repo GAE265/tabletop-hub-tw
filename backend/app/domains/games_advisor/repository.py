@@ -1,10 +1,11 @@
 """games_advisor 的資料存取。
 
-GameRepository 讀寫共用桌遊表 games、game_game_types 與 games.id 的計數器。共用表的定義在
-app/core/games/；只有匯入桌遊與同步共用桌遊資料兩個指令會寫入（ADR 0003）。
+- GameRepository：共用桌遊表 games、game_game_types 與 games.id 的計數器。共用表的定義在
+  app/core/games/；只有匯入桌遊與同步共用桌遊資料兩個指令會寫入（ADR 0003）。
+- ReviewRepository：games_advisor 自己的心得摘要與心得片段。
 """
 
-from collections.abc import Collection, Iterator, Mapping
+from collections.abc import Collection, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from typing import Any
 
@@ -15,6 +16,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.games.models import Game, GameGameType, GameType
+from app.domains.games_advisor.models import ReviewExcerpt, ReviewSummary
 
 
 class GameInUseError(Exception):
@@ -27,7 +29,9 @@ class GameInUseError(Exception):
         self.table = table
 
 
-class GameRepository:
+class _SessionRepository:
+    """共用同一個 session 的 repository。交易的範圍由 service 用 transaction() 決定。"""
+
     def __init__(self, session: Session) -> None:
         self.session = session
 
@@ -40,6 +44,10 @@ class GameRepository:
             self.session.rollback()
             raise
         self.session.commit()
+
+
+class GameRepository(_SessionRepository):
+    """共用桌遊表 games、game_game_types 與 games.id 計數器的讀寫。"""
 
     def count_games(self) -> int:
         return self.session.scalar(select(func.count()).select_from(Game)) or 0
@@ -58,6 +66,18 @@ class GameRepository:
         # 讀成一般的列，不讀成 ORM 物件：同一個 session 之後用 SQL 改過資料，也不會讀到舊值
         games = self.session.execute(select(Game.__table__).order_by(Game.id)).mappings()
         return [{**game, "types": types.get(game["id"], [])} for game in games]
+
+    def find_games_by_bgg_ids(self, bgg_ids: Collection[int]) -> list[dict[str, Any]]:
+        """用 bgg_id 查桌遊，照 id 排。資料庫沒有的 bgg_id 不會出現在結果裡。
+
+        每款是 id 與 11 個欄位，不含 types。
+        """
+        if not bgg_ids:
+            return []
+        games = self.session.execute(
+            select(Game.__table__).where(Game.bgg_id.in_(list(bgg_ids))).order_by(Game.id)
+        ).mappings()
+        return [dict(game) for game in games]
 
     def list_game_type_codes(self) -> set[str]:
         return set(self.session.scalars(select(GameType.code)))
@@ -127,3 +147,36 @@ class GameRepository:
         用 ALTER TABLE 而不是 setval()：setval() 不會跟著交易退回。
         """
         self.session.execute(text(f"ALTER TABLE games ALTER COLUMN id RESTART WITH {int(next_id)}"))
+
+
+class ReviewRepository(_SessionRepository):
+    """心得摘要（一款最多一列）與心得片段（一款多列）的寫入。重跑就是覆蓋：先刪再寫。"""
+
+    def save_review_summary(
+        self, game_id: int, summary: str, embedding: Sequence[float], embedding_model: str
+    ) -> None:
+        """寫入一款桌遊的心得摘要、向量與模型名稱；已經有的話取代舊的。"""
+        self.delete_review_summary(game_id)
+        self.session.execute(
+            insert(ReviewSummary).values(
+                game_id=game_id,
+                summary=summary,
+                embedding=list(embedding),
+                embedding_model=embedding_model,
+            )
+        )
+
+    def delete_review_summary(self, game_id: int) -> None:
+        self.session.execute(delete(ReviewSummary).where(ReviewSummary.game_id == game_id))
+
+    def replace_review_excerpts(self, game_id: int, excerpts: Sequence[Mapping[str, Any]]) -> None:
+        """把一款桌遊的心得片段整組換成 excerpts；給空的清單就是全部刪掉。
+
+        每段要有 text、embedding、embedding_model、source_url、site_name、language。
+        """
+        self.session.execute(delete(ReviewExcerpt).where(ReviewExcerpt.game_id == game_id))
+        if excerpts:
+            self.session.execute(
+                insert(ReviewExcerpt),
+                [{"game_id": game_id, **excerpt} for excerpt in excerpts],
+            )
