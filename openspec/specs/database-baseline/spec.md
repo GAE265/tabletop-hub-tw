@@ -2,7 +2,7 @@
 
 ## Purpose
 
-建立資料庫起點：向量擴充與兩張共用表，讓各 domain 之後的 migration 有穩定的外鍵目標。
+建立資料庫起點：向量擴充，以及 `auth_users` 與 `booking_shops` 兩張共用資料表（皆列於 AGENTS.md 第 3 節「共用資料表」），讓各 domain 之後的 migration 有穩定的外鍵目標。
 
 ## Requirements
 
