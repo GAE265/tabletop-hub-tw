@@ -4,28 +4,37 @@
   任何一步不通過就拋 Refused，什麼都不寫。
 - 讀 reviews.json 的指令：心得摘要（§8.3）、心得片段（§8.4）。先檢查整份檔案，不通過就拋
   Refused；通過後一款桌遊一個交易，某款失敗就跳過它、保留它的舊資料，其他款照寫（§7.2）。
+- 標籤詞彙表：歸納草稿（§8.5，只寫檔案、不寫資料庫）、同步（§8.6，整份一個交易）。
 """
 
+import json
 from collections.abc import Callable, Collection, Mapping, Sequence
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Protocol
 
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 
+from app.domains.games_advisor import prompts
+from app.domains.games_advisor.constants import TAG_VOCABULARY_MAX_TAGS
 from app.domains.games_advisor.excerpts import DEFAULT_LIMITS, ExcerptLimits, split_reviews
 from app.domains.games_advisor.repository import GameInUseError, GameRepository
 from app.domains.games_advisor.schemas import (
+    CandidatesOutput,
     GamesExport,
     GamesFile,
+    MergeOutput,
     Review,
     ReviewsFile,
+    TagVocabularyFile,
     describe_problems,
 )
 from app.integrations.embedding.base import EmbeddingProvider
 from app.integrations.embedding.errors import EmbeddingError
 from app.integrations.embedding.factory import EmbeddingConfig
 from app.integrations.llm.base import LLMProvider
+from app.integrations.llm.errors import LLMOutputRejected, LLMUnavailable
 
 
 class Refused(Exception):
@@ -222,15 +231,50 @@ def _reviews_by_game(
     ]
 
 
+class _LLMFailed(Exception):
+    """模型這一次沒有給出能用的結果：輸出重試後仍被拒絕，或模型連不上。"""
+
+    def __init__(self, reason: str) -> None:
+        super().__init__(reason)
+        self.reason = reason
+
+
+def _ask_llm[Answer](ask: Callable[[], Answer]) -> Answer:
+    """呼叫模型；輸出被拒絕就重試 1 次（spec §7.2 規則 6）。
+
+    重試後仍被拒絕、或模型連不上（SDK 已經重試過）時拋 _LLMFailed，由呼叫端跳過這一款。
+    其他 LLMError（金鑰錯誤、schema 不符合規定）不攔截，讓整個指令失敗。
+    """
+    try:
+        try:
+            return ask()
+        except LLMOutputRejected:
+            return ask()
+    except LLMOutputRejected as exc:
+        raise _LLMFailed(f"模型的輸出重試 1 次後仍然不能用：{exc}") from exc
+    except LLMUnavailable as exc:
+        raise _LLMFailed(f"模型連不上：{exc}") from exc
+
+
+def _parsed[Output: BaseModel](model: type[Output], output: dict[str, Any]) -> Output:
+    """確認模型的輸出符合預期的格式；不符合就當作輸出被拒絕，可以重試。"""
+    try:
+        return model.model_validate(output)
+    except ValidationError as exc:
+        raise LLMOutputRejected(f"模型的輸出不符合格式：{exc.error_count()} 個問題") from exc
+
+
 def _for_each_game(
     work: GameReviews, process: Callable[[dict[str, Any], list[Review]], None]
 ) -> BatchResult:
-    """一款一款處理；轉成向量失敗的那一款跳過，其他款照做。"""
+    """一款一款處理；模型或向量轉換失敗的那一款跳過，其他款照做。"""
     done = 0
     skipped = []
     for game, reviews in work:
         try:
             process(game, reviews)
+        except _LLMFailed as exc:
+            skipped.append(SkippedGame(game["bgg_id"], game["name"], exc.reason))
         except EmbeddingError as exc:
             skipped.append(SkippedGame(game["bgg_id"], game["name"], f"轉成向量失敗：{exc}"))
         else:
@@ -241,24 +285,6 @@ def _for_each_game(
 def _embedding_model_name(config: EmbeddingConfig) -> str:
     """記在每個向量上的模型名稱；用 fake 時記 fake（spec §8.9）。"""
     return "fake" if config.provider == "fake" or config.model is None else config.model
-
-
-_SUMMARY_INSTRUCTIONS = """\
-你負責整理桌遊心得。請讀完下面同一款桌遊的全部心得，寫一段 120 到 200 字的繁體中文摘要。
-
-要寫：玩起來的氣氛、玩家之間的互動方式、對運氣與策略的感受、適合的場合。英文心得也用繁體中文寫。
-不要寫：整體好壞的評價（例如好玩、無聊）；價格、版本、翻譯品質、購買管道；規則說明；心得沒有提到的特性。
-
-只輸出摘要本身，不要標題、不要條列、不要前言。"""
-
-
-def _summary_prompt(game: dict[str, Any], reviews: list[Review]) -> str:
-    parts = [_SUMMARY_INSTRUCTIONS, f"桌遊：{game['name']}（{game['english_name']}）"]
-    parts += [
-        f"心得 {number}（{review.language}）：\n{review.text}"
-        for number, review in enumerate(reviews, start=1)
-    ]
-    return "\n\n".join(parts)
 
 
 def summarize_reviews(
@@ -283,7 +309,7 @@ def summarize_reviews(
             with store.transaction():
                 store.delete_review_summary(game["id"])
             return
-        summary = llm.generate(_summary_prompt(game, reviews))
+        summary = _ask_llm(lambda: llm.generate(prompts.summary_prompt(game, reviews)))
         [vector] = embedding.embed([summary])
         with store.transaction():
             store.save_review_summary(game["id"], summary, vector, embedding_model)
@@ -325,3 +351,249 @@ def build_excerpts(
             store.replace_review_excerpts(game["id"], rows)
 
     return _for_each_game(work, process)
+
+
+# --- 標籤詞彙表 ---
+
+
+@dataclass(frozen=True)
+class _NumberedCandidate:
+    """編了號的候選詞，記得它來自哪一款桌遊。"""
+
+    id: str
+    term: str
+    description: str
+    source_urls: list[str]
+    game_name: str
+
+
+@dataclass(frozen=True)
+class VocabularyDraftResult:
+    tags: int
+    candidates: int
+    skipped: list[SkippedGame]
+
+    @property
+    def exit_code(self) -> int:
+        """0 全部完成；2 部分完成（有款被跳過）。"""
+        return 2 if self.skipped else 0
+
+
+def _extract_candidates(
+    llm: LLMProvider, game: dict[str, Any], reviews: list[Review]
+) -> CandidatesOutput:
+    def ask() -> CandidatesOutput:
+        output = llm.generate_json(
+            instructions=prompts.CANDIDATES_INSTRUCTIONS,
+            input=prompts.reviews_input(game, reviews),
+            schema=prompts.CANDIDATES_SCHEMA,
+        )
+        return _parsed(CandidatesOutput, output)
+
+    return _ask_llm(ask)
+
+
+def _merge_candidates(llm: LLMProvider, candidates: list[_NumberedCandidate]) -> MergeOutput:
+    def ask() -> MergeOutput:
+        output = llm.generate_json(
+            instructions=prompts.merge_instructions(TAG_VOCABULARY_MAX_TAGS),
+            input=prompts.merge_input(candidates),
+            schema=prompts.MERGE_SCHEMA,
+        )
+        return _parsed(MergeOutput, output)
+
+    return _ask_llm(ask)
+
+
+def _table(header: list[str], rows: list[list[str]]) -> list[str]:
+    """Markdown 表格。儲存格裡的 | 與換行會弄壞表格，先換掉。"""
+
+    def line(cells: list[str]) -> str:
+        return (
+            "| " + " | ".join(cell.replace("|", "｜").replace("\n", " ") for cell in cells) + " |"
+        )
+
+    return [line(header), line(["---"] * len(header)), *(line(row) for row in rows)]
+
+
+def _vocabulary_report(
+    merged: list[tuple[Any, list[_NumberedCandidate]]],
+    discarded: list[tuple[_NumberedCandidate, str]],
+    unassigned: list[_NumberedCandidate],
+    skipped: list[SkippedGame],
+    candidate_count: int,
+) -> str:
+    """歸納報告（Markdown）：每個標籤的依據、捨棄的候選詞與原因、被跳過的桌遊。"""
+    lines = [
+        "# 歸納報告",
+        "",
+        f"{candidate_count} 個候選詞合併成 {len(merged)} 個標籤，依出現的款數由多到少排。",
+        "審核時可以刪除、合併、改名稱、改寫定義、改代碼；不能新增這份報告裡找不到依據的標籤。",
+        "",
+        "## 標籤",
+    ]
+    for position, (tag, members) in enumerate(merged, start=1):
+        game_names = list(dict.fromkeys(member.game_name for member in members))
+        lines += [
+            "",
+            f"### {position}. {tag.name}（`{tag.code}`）",
+            "",
+            f"- 定義：{tag.definition}",
+            f"- 出現在 {len(game_names)} 款：{'、'.join(game_names) or '（沒有對應的候選詞）'}",
+            "",
+            *_table(
+                ["編號", "候選詞", "桌遊", "描述", "依據"],
+                [
+                    [m.id, m.term, m.game_name, m.description, " ".join(m.source_urls)]
+                    for m in members
+                ],
+            ),
+        ]
+    lines += ["", "## 捨棄的候選詞", ""]
+    lines += (
+        _table(
+            ["編號", "候選詞", "桌遊", "原因"],
+            [[c.id, c.term, c.game_name, reason] for c, reason in discarded],
+        )
+        if discarded
+        else ["沒有。"]
+    )
+    if unassigned:
+        lines += ["", "## 模型沒有歸類的候選詞", ""]
+        lines += _table(
+            ["編號", "候選詞", "桌遊", "描述"],
+            [[c.id, c.term, c.game_name, c.description] for c in unassigned],
+        )
+    lines += ["", "## 跳過的桌遊", ""]
+    lines += (
+        [f"- bgg_id {game.bgg_id}「{game.name}」：{game.reason}" for game in skipped]
+        if skipped
+        else ["沒有。"]
+    )
+    return "\n".join(lines) + "\n"
+
+
+def draft_vocabulary(
+    games: GameLookup, data: object, *, llm: LLMProvider, out_path: Path, report_path: Path
+) -> VocabularyDraftResult:
+    """從全部心得歸納出詞彙表草稿與歸納報告。只寫這兩個檔案，不寫資料庫。
+
+    每款有心得的桌遊呼叫 1 次模型擷取候選詞，全部候選詞再呼叫 1 次合併成標籤。
+    """
+    # 先確認兩個檔案都還不存在，再呼叫模型：不蓋掉立倫編輯過的草稿與當作依據的報告，
+    # 也不會跑完模型才發現不能寫
+    if existing := [str(path) for path in (out_path, report_path) if path.exists()]:
+        raise Refused(*(f"{path} 已經存在；請換一個路徑，或先把它移走" for path in existing))
+
+    candidates: list[_NumberedCandidate] = []
+    skipped: list[SkippedGame] = []
+    for game, reviews in _reviews_by_game(games, data, None):
+        if not reviews:
+            continue
+        try:
+            output = _extract_candidates(llm, game, reviews)
+        except _LLMFailed as exc:
+            skipped.append(SkippedGame(game["bgg_id"], game["name"], exc.reason))
+            continue
+        for candidate in output.candidates:
+            candidates.append(
+                _NumberedCandidate(
+                    id=f"c{len(candidates) + 1}",
+                    term=candidate.term,
+                    description=candidate.description,
+                    source_urls=candidate.source_urls,
+                    game_name=game["name"],
+                )
+            )
+    if not candidates:
+        raise Refused(
+            "沒有擷取到任何候選詞，兩個檔案都沒有寫",
+            *(f"跳過 bgg_id {game.bgg_id}「{game.name}」：{game.reason}" for game in skipped),
+        )
+
+    try:
+        output = _merge_candidates(llm, candidates)
+    except _LLMFailed as exc:
+        raise Refused(f"合併同義詞失敗，兩個檔案都沒有寫：{exc.reason}") from exc
+
+    by_id = {candidate.id: candidate for candidate in candidates}
+    merged = [
+        (tag, [by_id[candidate_id] for candidate_id in tag.candidate_ids if candidate_id in by_id])
+        for tag in output.tags
+    ]
+    # 依出現在幾款桌遊由多到少排；一樣多的維持模型給的順序
+    merged.sort(key=lambda item: -len({member.game_name for member in item[1]}))
+    discarded = [
+        (by_id[entry.candidate_id], entry.reason)
+        for entry in output.discarded
+        if entry.candidate_id in by_id
+    ]
+    assigned = {member.id for _, members in merged for member in members}
+    assigned |= {candidate.id for candidate, _ in discarded}
+    unassigned = [candidate for candidate in candidates if candidate.id not in assigned]
+
+    draft = {
+        "tags": [
+            {"code": tag.code, "name": tag.name, "definition": tag.definition} for tag, _ in merged
+        ]
+    }
+    out_path.write_text(json.dumps(draft, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    report_path.write_text(
+        _vocabulary_report(merged, discarded, unassigned, skipped, len(candidates)),
+        encoding="utf-8",
+    )
+    return VocabularyDraftResult(tags=len(merged), candidates=len(candidates), skipped=skipped)
+
+
+class TagStore(Protocol):
+    """service 同步標籤詞彙表用到的方法。"""
+
+    def transaction(self) -> AbstractContextManager[None]: ...
+
+    def list_tags(self) -> list[dict[str, str]]: ...
+
+    def add_tag(self, code: str, name: str, definition: str) -> None: ...
+
+    def update_tag(self, code: str, name: str, definition: str) -> None: ...
+
+    def delete_tag(self, code: str) -> list[dict[str, Any]]: ...
+
+
+@dataclass(frozen=True)
+class VocabularySyncResult:
+    # 要印給執行的人看的結果，一行一件事
+    lines: list[str]
+
+
+def sync_vocabulary(store: TagStore, data: object) -> VocabularySyncResult:
+    """讓資料表的標籤詞彙表和 tag_vocabulary.json 相同。以代碼認出同一個標籤，整份一個交易。"""
+    try:
+        wanted = TagVocabularyFile.model_validate(data).tags
+    except ValidationError as exc:
+        problems = describe_problems(exc, data, id_field="code", items="tags", unit="個")
+        raise Refused(*problems) from exc
+
+    lines = []
+    with store.transaction():
+        current = {tag["code"]: tag for tag in store.list_tags()}
+        wanted_codes = {tag.code for tag in wanted}
+        # 先刪、再改、最後新增：名稱不能重複，要讓被刪掉或改名的標籤先把名稱讓出來
+        for code in sorted(current.keys() - wanted_codes):
+            games = store.delete_tag(code)
+            names = "、".join(game["name"] for game in games)
+            lines.append(
+                f"刪掉標籤 {code}（{current[code]['name']}）："
+                + (f"{len(games)} 款桌遊少了這個標籤：{names}" if games else "沒有桌遊有這個標籤")
+            )
+        for tag in wanted:
+            old = current.get(tag.code)
+            if old and (old["name"], old["definition"]) != (tag.name, tag.definition):
+                store.update_tag(tag.code, tag.name, tag.definition)
+                lines.append(f"標籤 {tag.code}（{tag.name}）的名稱或定義改了，可以考慮重標")
+        added = [tag for tag in wanted if tag.code not in current]
+        for tag in added:
+            store.add_tag(tag.code, tag.name, tag.definition)
+            lines.append(f"新增標籤 {tag.code}（{tag.name}）")
+        if added:
+            lines.append("有新增的標籤：請重跑上標籤（draft-tags，全部桌遊），並重做人工驗證")
+    return VocabularySyncResult(lines=lines or ["標籤詞彙表和檔案相同，沒有變動"])

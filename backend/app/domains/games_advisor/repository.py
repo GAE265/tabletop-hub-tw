@@ -3,6 +3,7 @@
 - GameRepository：共用桌遊表 games、game_game_types 與 games.id 的計數器。共用表的定義在
   app/core/games/；只有匯入桌遊與同步共用桌遊資料兩個指令會寫入（ADR 0003）。
 - ReviewRepository：games_advisor 自己的心得摘要與心得片段。
+- TagRepository：標籤詞彙表（tag_vocabulary.json 同步出來的副本）。
 """
 
 from collections.abc import Collection, Iterator, Mapping, Sequence
@@ -10,13 +11,13 @@ from contextlib import contextmanager
 from typing import Any
 
 from psycopg.errors import ForeignKeyViolation
-from sqlalchemy import delete, func, insert, select, text
+from sqlalchemy import delete, func, insert, select, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.games.models import Game, GameGameType, GameType
-from app.domains.games_advisor.models import ReviewExcerpt, ReviewSummary
+from app.domains.games_advisor.models import GameTag, ReviewExcerpt, ReviewSummary, Tag
 
 
 class GameInUseError(Exception):
@@ -180,3 +181,42 @@ class ReviewRepository(_SessionRepository):
                 insert(ReviewExcerpt),
                 [{"game_id": game_id, **excerpt} for excerpt in excerpts],
             )
+
+
+class TagRepository(_SessionRepository):
+    """標籤詞彙表的讀寫。以代碼認出同一個標籤。"""
+
+    def list_tags(self) -> list[dict[str, str]]:
+        """全部標籤，照代碼排；每個是 code、name、definition。"""
+        tags = self.session.execute(
+            select(Tag.code, Tag.name, Tag.definition).order_by(Tag.code)
+        ).mappings()
+        return [dict(tag) for tag in tags]
+
+    def list_tag_codes(self) -> list[str]:
+        return list(self.session.scalars(select(Tag.code).order_by(Tag.code)))
+
+    def add_tag(self, code: str, name: str, definition: str) -> None:
+        self.session.execute(insert(Tag).values(code=code, name=name, definition=definition))
+
+    def update_tag(self, code: str, name: str, definition: str) -> None:
+        """原地更新名稱與定義；各款桌遊上的這個標籤與信心分數不受影響。"""
+        self.session.execute(
+            update(Tag).where(Tag.code == code).values(name=name, definition=definition)
+        )
+
+    def delete_tag(self, code: str) -> list[dict[str, Any]]:
+        """刪掉一個標籤，各款桌遊上的這個標籤跟著刪。
+
+        回傳原本有這個標籤的桌遊，照 id 排；每款是 id、bgg_id、name。
+        """
+        games = self.session.execute(
+            select(Game.id, Game.bgg_id, Game.name)
+            .join(GameTag, GameTag.game_id == Game.id)
+            .join(Tag, Tag.id == GameTag.tag_id)
+            .where(Tag.code == code)
+            .order_by(Game.id)
+        ).mappings()
+        affected = [dict(game) for game in games]
+        self.session.execute(delete(Tag).where(Tag.code == code))
+        return affected

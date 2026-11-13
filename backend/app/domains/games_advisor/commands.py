@@ -18,8 +18,8 @@ from sqlalchemy.orm import Session
 from app.core.config import Settings, get_settings
 from app.core.db import create_db_engine
 from app.domains.games_advisor import service
-from app.domains.games_advisor.repository import GameRepository, ReviewRepository
-from app.domains.games_advisor.service import BatchResult, Refused
+from app.domains.games_advisor.repository import GameRepository, ReviewRepository, TagRepository
+from app.domains.games_advisor.service import BatchResult, Refused, SkippedGame
 from app.integrations.embedding.base import EmbeddingProvider
 from app.integrations.embedding.factory import EmbeddingConfig, get_embedding_provider
 from app.integrations.llm.base import LLMProvider
@@ -134,13 +134,18 @@ def _sync_games(args: argparse.Namespace, session: Session, settings: Settings) 
     return EXIT_OK
 
 
+def _print_skipped(skipped: list[SkippedGame], note: str) -> None:
+    """跳過的款在指令結束時列出來，附上原因（spec §7.2 規則 6）。"""
+    if skipped:
+        print(f"跳過 {len(skipped)} 款，{note}：", file=sys.stderr)
+        for game in skipped:
+            print(f"  bgg_id {game.bgg_id}「{game.name}」：{game.reason}", file=sys.stderr)
+
+
 def _report(result: BatchResult, what: str) -> int:
-    """印出一款一個交易的指令跑完的結果；跳過的款附上原因。"""
+    """印出一款一個交易的指令跑完的結果。"""
     print(f"{what}：完成 {result.done} 款。")
-    if result.skipped:
-        print(f"跳過 {len(result.skipped)} 款，它們的舊資料沒有變：", file=sys.stderr)
-        for skipped in result.skipped:
-            print(f"  bgg_id {skipped.bgg_id}「{skipped.name}」：{skipped.reason}", file=sys.stderr)
+    _print_skipped(result.skipped, "它們的舊資料沒有變")
     return result.exit_code
 
 
@@ -171,6 +176,31 @@ def _build_excerpts(args: argparse.Namespace, session: Session, settings: Settin
         only_bgg_ids=args.bgg_id,
     )
     return _report(result, "心得片段")
+
+
+def _draft_vocabulary(args: argparse.Namespace, session: Session, settings: Settings) -> int:
+    # 先確認有真的模型，再讀檔案
+    llm = _batch_llm(settings)
+    result = service.draft_vocabulary(
+        GameRepository(session),
+        _read_json(args.reviews_json),
+        llm=llm,
+        out_path=args.out,
+        report_path=args.report,
+    )
+    print(f"{result.candidates} 個候選詞合併成 {result.tags} 個標籤。")
+    print(f"詞彙表草稿：{args.out}")
+    print(f"歸納報告：{args.report}")
+    print("請參考歸納報告編輯草稿，存成 tag_vocabulary.json 後走 MR，再執行 sync-vocabulary。")
+    _print_skipped(result.skipped, "它們的心得沒有算進這份草稿")
+    return result.exit_code
+
+
+def _sync_vocabulary(args: argparse.Namespace, session: Session, settings: Settings) -> int:
+    result = service.sync_vocabulary(TagRepository(session), _read_json(args.vocabulary_json))
+    for line in result.lines:
+        print(line)
+    return EXIT_OK
 
 
 def _add_reviews_arguments(parser: argparse.ArgumentParser) -> None:
@@ -220,6 +250,20 @@ def _build_parser() -> argparse.ArgumentParser:
     build_excerpts = commands.add_parser("build-excerpts", help="產生心得片段：不用 LLM")
     _add_reviews_arguments(build_excerpts)
     build_excerpts.set_defaults(handler=_build_excerpts)
+
+    draft_vocabulary = commands.add_parser(
+        "draft-vocabulary", help="歸納詞彙表草稿與歸納報告：需要真的 LLM，不寫資料庫"
+    )
+    draft_vocabulary.add_argument("reviews_json", type=Path, metavar="<reviews.json>")
+    draft_vocabulary.add_argument("--out", type=Path, required=True, metavar="<詞彙表草稿>")
+    draft_vocabulary.add_argument("--report", type=Path, required=True, metavar="<歸納報告>")
+    draft_vocabulary.set_defaults(handler=_draft_vocabulary)
+
+    sync_vocabulary = commands.add_parser(
+        "sync-vocabulary", help="同步詞彙表：照 tag_vocabulary.json 改寫資料庫的標籤"
+    )
+    sync_vocabulary.add_argument("vocabulary_json", type=Path, metavar="<tag_vocabulary.json>")
+    sync_vocabulary.set_defaults(handler=_sync_vocabulary)
 
     return parser
 

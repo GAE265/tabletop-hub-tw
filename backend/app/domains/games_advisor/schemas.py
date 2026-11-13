@@ -1,10 +1,12 @@
 """批次指令讀寫的檔案格式與檢查：games.json、匯出檔（spec §8.1、§8.10、§8.11）、
-reviews.json（spec §8.2）。
+reviews.json（spec §8.2）、tag_vocabulary.json（spec §8.6），以及歸納詞彙表時 LLM 的輸出
+（spec §8.5）。
 
 型別一律嚴格比對：整數欄位不接受 "2"、2.0、true。
 types 的代碼是否存在，要給 context={"type_codes": 代碼集合} 才檢查；沒給就不檢查。
 """
 
+import re
 from typing import Annotated, Any, Literal, Self
 
 from pydantic import (
@@ -17,6 +19,8 @@ from pydantic import (
     field_validator,
     model_validator,
 )
+
+from app.domains.games_advisor.constants import TAG_VOCABULARY_MAX_TAGS
 
 
 def _not_blank(value: str) -> str:
@@ -82,14 +86,16 @@ class ExportedGame(GameData):
     id: int = Field(gt=0)
 
 
-def _repeated(games: list[Any], field: str) -> list[str]:
-    """同一個欄位值出現第二次時，說明是第幾款和第幾款重複。"""
-    first_seen: dict[int, int] = {}
+def _repeated(entries: list[Any], field: str, unit: str = "款") -> list[str]:
+    """同一個欄位值出現第二次時，說明是第幾款和第幾款重複。unit 是量詞。"""
+    first_seen: dict[Any, int] = {}
     problems = []
-    for position, game in enumerate(games, start=1):
-        value = getattr(game, field)
+    for position, entry in enumerate(entries, start=1):
+        value = getattr(entry, field)
         if value in first_seen:
-            problems.append(f"第 {position} 款的 {field} {value} 和第 {first_seen[value]} 款重複")
+            problems.append(
+                f"第 {position} {unit}的 {field} {value} 和第 {first_seen[value]} {unit}重複"
+            )
         else:
             first_seen[value] = position
     return problems
@@ -151,6 +157,76 @@ class ReviewsFile(BaseModel):
     model_config = ConfigDict(extra="ignore", strict=True)
 
     reviews: list[Review]
+
+
+_TAG_CODE = re.compile(r"[a-z][a-z0-9_]*")
+
+
+def _tag_code(value: str) -> str:
+    if not _TAG_CODE.fullmatch(value):
+        raise ValueError("要用小寫英文字母開頭，只能有小寫英文字母、數字、底線")
+    return value
+
+
+class TagDefinition(BaseModel):
+    """tag_vocabulary.json 的一個標籤：英文代碼、繁中名稱、一句繁中定義。"""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    code: Annotated[str, AfterValidator(_tag_code)]
+    name: NonBlank
+    definition: NonBlank
+
+
+class TagVocabularyFile(BaseModel):
+    """tag_vocabulary.json：標籤詞彙表的正本，資料表是照它同步出來的副本。"""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    tags: list[TagDefinition]
+
+    @model_validator(mode="after")
+    def _codes_and_names_are_unique_and_within_limit(self) -> Self:
+        problems = _repeated(self.tags, "code", "個") + _repeated(self.tags, "name", "個")
+        if len(self.tags) > TAG_VOCABULARY_MAX_TAGS:
+            problems.append(f"有 {len(self.tags)} 個標籤，最多只能有 {TAG_VOCABULARY_MAX_TAGS} 個")
+        if problems:
+            raise ValueError("；".join(problems))
+        return self
+
+
+# --- 歸納詞彙表時 LLM 的輸出（spec §8.5）。雲端模型照 strict schema 輸出，這裡再確認一次 ---
+
+
+class Candidate(BaseModel):
+    """LLM 從一款桌遊的心得擷取的候選詞。"""
+
+    term: str
+    description: str
+    source_urls: list[str]
+
+
+class CandidatesOutput(BaseModel):
+    candidates: list[Candidate]
+
+
+class MergedTag(BaseModel):
+    """LLM 把幾個候選詞合併成的一個標籤。"""
+
+    code: str
+    name: str
+    definition: str
+    candidate_ids: list[str]
+
+
+class DiscardedCandidate(BaseModel):
+    candidate_id: str
+    reason: str
+
+
+class MergeOutput(BaseModel):
+    tags: list[MergedTag]
+    discarded: list[DiscardedCandidate]
 
 
 def _reason(error: Any) -> str:
