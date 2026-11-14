@@ -127,7 +127,9 @@ def test_only_players_does_not_filter_playtime_or_age(
     session: Session, game_repo: "GameRepository"
 ) -> None:
     g1 = add_game(session, 1, min_players=1, max_players=8, max_playtime=240, min_age=18)
-    g2 = add_game(session, 2, min_players=1, max_players=8, max_playtime=15, min_age=3)
+    g2 = add_game(
+        session, 2, min_players=1, max_players=8, min_playtime=10, max_playtime=15, min_age=3
+    )
 
     games = game_repo.filter_games(players=4)
 
