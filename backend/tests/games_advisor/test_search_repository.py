@@ -305,6 +305,23 @@ def test_nearest_excerpts_empty_when_summary_vector_unusable(
         )
 
 
+def test_list_excerpt_models_per_game(
+    session: Session, review_repo: "ReviewRepository", embedding_dim: int
+) -> None:
+    mixed = add_game(session, 1)
+    current = add_game(session, 2)
+    no_excerpts = add_game(session, 3)
+    conn = session.connection()
+    seed_excerpt_vector(conn, mixed, "新", vec(embedding_dim, 1.0), "m1")
+    seed_excerpt_vector(conn, mixed, "舊", vec(embedding_dim, 1.0), "m0")
+    seed_excerpt_vector(conn, mixed, "舊 2", vec(embedding_dim, 1.0), "m0")
+    seed_excerpt_vector(conn, current, "新", vec(embedding_dim, 1.0), "m1")
+
+    result = review_repo.list_excerpt_models([mixed, current, no_excerpts])
+
+    assert result == {mixed: ["m0", "m1"], current: ["m1"]}
+
+
 # --- 工具定義用的清單（GameRepository） ---
 
 

@@ -169,6 +169,7 @@ class FakeSearchRepository:
     - summary_models：桌遊 id → 心得摘要向量的模型名稱；沒列的桌遊就是沒有心得摘要。
     - similarities：桌遊 id → 帶查詢向量、而且模型相同時回傳的相似度。
     - excerpts：桌遊 id → 心得片段清單，照「由近到遠」的順序寫。
+    - excerpt_models：桌遊 id → 這款心得片段用過的模型名稱；沒列的桌遊當作沒有心得片段。
     - filter_calls、excerpt_calls 記下 service 怎麼查的。
     """
 
@@ -181,8 +182,10 @@ class FakeSearchRepository:
         summary_models: dict[int, str] | None = None,
         similarities: dict[int, float] | None = None,
         excerpts: dict[int, list[dict[str, Any]]] | None = None,
+        excerpt_models: dict[int, list[str]] | None = None,
     ) -> None:
         self.games = sorted(games, key=lambda game: game["id"])
+        self.excerpt_models = dict(excerpt_models or {})
         self.tags = list(tags or [])
         self.game_tags = dict(game_tags or {})
         self.summary_models = dict(summary_models or {})
@@ -280,3 +283,10 @@ class FakeSearchRepository:
             }
         )
         return [dict(excerpt) for excerpt in self.excerpts.get(game_id, [])[:limit]]
+
+    def list_excerpt_models(self, game_ids: Collection[int]) -> dict[int, list[str]]:
+        return {
+            game_id: sorted(self.excerpt_models[game_id])
+            for game_id in game_ids
+            if game_id in self.excerpt_models
+        }

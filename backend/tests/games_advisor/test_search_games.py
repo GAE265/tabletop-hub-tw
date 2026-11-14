@@ -313,6 +313,21 @@ def test_summary_vector_from_other_model_counts_as_missing_and_warns(
     assert any("甲" in message and "心得摘要" in message for message in warnings)
 
 
+def test_excerpts_from_other_model_warn(caplog: pytest.LogCaptureFixture) -> None:
+    repo = FakeSearchRepository(
+        [game(1, "甲", weight=1.0), game(2, "乙", weight=3.0)],
+        tags=TAGS,
+        excerpt_models={1: ["old-model"], 2: [MODEL]},
+    )
+
+    with caplog.at_level(logging.WARNING):
+        run(repo)
+
+    warnings = [record.getMessage() for record in caplog.records if record.levelname == "WARNING"]
+    assert any("甲" in message and "心得片段" in message for message in warnings)
+    assert not any("乙" in message for message in warnings)
+
+
 # --- 參數檢查 ---
 
 
