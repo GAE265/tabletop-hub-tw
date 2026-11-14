@@ -1,7 +1,7 @@
 # spec：桌遊推薦 Agent + 桌遊 RAG（games_advisor）
 
 - Map：[桌遊推薦 Agent + 桌遊 RAG](map.md)
-- 狀態：前半（共用部分、桌遊資料與心得管線）2026-11-08、後半（推薦對話與 API）2026-11-09 立倫看過。2026-11-10 補上外部服務測試（§2、§17、§18）；同日依 AGENTS.md 7.6（#18）改用 `external` 標記。2026-11-11 資料表改版：桌遊改成共用表 `games`、新增類型、心得摘要搬到自己的表（§3，〔改表〕、ADR 0003）。
+- 狀態：前半（共用部分、桌遊資料與心得管線）2026-11-08、後半（推薦對話與 API）2026-11-09 立倫看過。2026-11-10 補上外部服務測試（§2、§17、§18）；同日依 AGENTS.md 7.6（#18）改用 `external` 標記。2026-11-11 資料表改版：桌遊改成共用表 `games`、新增類型、心得摘要搬到自己的表（§3，〔改表〕、ADR 0003）。2026-11-12 `games.id` 改成整數、自動給號，其他組員用匯出檔同步（§3、§8.1、§8.10、§8.11，〔整數編號〕）。2026-11-13 依 AGENTS.md 1.8：類型的兩張表改名為 `genres`、`game_genres`，`genres.id` 改成流水號，共用表不再是例外，只剩 `games.id` 是例外（§3，〔1.8〕）。
 - 這份 spec 只整理已定案的決定，不重新決定。標〔Qn〕的地方是寫 spec 時發現的缺漏：Q1–Q8 記在「[spec：桌遊資料與心得管線](issues/20-spec-data-and-review-pipeline.md)」的 Comments，Q9 起記在「[spec：推薦對話與 API](issues/21-spec-conversation-and-api.md)」的 Comments。
 
 ## 怎麼讀
@@ -25,8 +25,10 @@
 | 〔流程〕 | [Agent 怎麼追問、什麼時候推薦](issues/07-conversation-flow.md) |
 | 〔ADR 0001〕 | [games_advisor 的對話狀態交給 Azure Responses API 保存](../../docs/adr/0001-games-advisor-conversation-state-in-azure.md)（accepted） |
 | 〔ADR 0002〕 | [games_advisor 的追問與推薦由 LLM 依對話規則決定](../../docs/adr/0002-games-advisor-llm-driven-conversation-flow.md)（accepted） |
-| 〔ADR 0003〕 | [桌遊基本資料改成所有 domain 共用的 `games` 表](../../docs/adr/0003-shared-games-table.md)（proposed，在 05 的 MR 給組員確認） |
+| 〔ADR 0003〕 | [桌遊基本資料改成所有 domain 共用的 `games` 表](../../docs/adr/0003-shared-games-table.md)（accepted） |
 | 〔改表〕 | 2026-11-11 資料表改版的決定，記在「[把 spec 拆成 TDD 實作 ticket](issues/22-split-spec-into-tdd-tickets.md)」的 Comments |
+| 〔整數編號〕 | 2026-11-12 `games.id` 改成整數、自動給號，其他組員用匯出檔同步的決定：組員在 [MR #22](https://github.com/GAE265/tabletop-hub-tw/pull/22) 提出，立倫 grilling 後定案，記在〔ADR 0003〕 |
+| 〔1.8〕 | 2026-11-13 對齊 AGENTS.md 1.8（[MR #23](https://github.com/GAE265/tabletop-hub-tw/pull/23)）：第 3 節「共用資料表」清單、§4.2 共用表的 repository、§4.4 主鍵預設 UUID 與分類表可用流水號 |
 | 〔提案 §n〕 | [整合層提案](integrations-proposal.md)第 n 節 |
 | 〔map〕 | map 的 Notes（固定偏好）與 Out of scope |
 | 〔Qn〕 | 寫 spec 時發現的缺漏，由立倫決定。Q1–Q8 見「[spec：桌遊資料與心得管線](issues/20-spec-data-and-review-pipeline.md)」的 Comments；Q9 起見「[spec：推薦對話與 API](issues/21-spec-conversation-and-api.md)」的 Comments |
@@ -55,7 +57,7 @@
 | 部分 | 位置 |
 |---|---|
 | 後端 | `backend/app/domains/games_advisor/`：`router`、`schemas`、`service`、`repository`、`models`（AGENTS.md §4.1），加上一個批次指令模組（§7）〔管線〕§8 |
-| 共用桌遊表 | `backend/app/core/games/`：`games`、`game_types`、`game_game_types` 的資料表定義與唯讀查詢，負責人立倫（§3、〔ADR 0003〕） |
+| 共用桌遊表 | `backend/app/core/games/`：`games`、`genres`、`game_genres` 的資料表定義與唯讀查詢，負責人立倫（§3、〔ADR 0003〕） |
 | 整合層 | `backend/app/integrations/llm/`、`integrations/embedding/`（瑋鋐擁有），介面照[整合層提案](integrations-proposal.md) |
 | 測試 | `backend/tests/games_advisor/` |
 | 前端 | `frontend/lib/domains/games_advisor/` 的 `data/`、`state/`，`frontend/lib/prototypes/games_advisor/`，交接說明 `docs/handoff/games_advisor.md`（§14） |
@@ -79,11 +81,12 @@
 
 | 組 | 表 | 誰負責 | 程式位置 |
 |---|---|---|---|
-| 共用表 | `games`、`game_types`、`game_game_types` | 立倫 | `backend/app/core/games/` |
+| 共用表 | `games`、`genres`、`game_genres` | 立倫 | `backend/app/core/games/` |
 | games_advisor | `games_advisor_review_summaries`、`games_advisor_tags`、`games_advisor_game_tags`、`games_advisor_review_excerpts` | 立倫 | `backend/app/domains/games_advisor/` |
 
-- **共用表是 AGENTS.md 的例外**（〔ADR 0003〕）：表名不用 domain 名稱開頭；所有 domain 都可以直接查詢（不經過 games_advisor 的 service）；`games.id` 是字串，不是 UUID。只有 games_advisor 的匯入指令寫入共用表。例外的理由寫在 05 的 MR 說明，由組員在 MR 審核時確認。
-- 其他規則照 AGENTS.md §4.4：除了 `games.id`，主鍵一律是 UUID 的 `id`，預設 `gen_random_uuid()`（比照 `0001_baseline`）；games_advisor 的表名以 `games_advisor_` 開頭；參照欄位叫 `<對象>_id`。
+- **共用表照 AGENTS.md 第 3 節「共用資料表」的規則**（〔1.8〕、〔ADR 0003〕）：表名不用 domain 名稱開頭；一張表只有一個 model 與一個 repository，放在 `backend/app/core/games/`，各 domain 的 service 可以直接使用（AGENTS.md §4.2）。只有 games_advisor 的匯入桌遊（立倫執行）與同步（其他組員執行）兩個指令寫入共用表。〔整數編號〕
+- **唯一的例外是 `games.id`**：AGENTS.md §4.4 規定主鍵預設是 UUID，只有固定的小型分類表可以用流水號。`games.id` 是整數（bigint）、自動給號，2026-11-13 立倫確認瑋鋐同意以例外處理（〔ADR 0003〕）。
+- 其他主鍵：`genres.id` 是流水號（bigint；固定的小型分類表，§4.4 允許）；其餘都是 UUID 的 `id`，預設 `gen_random_uuid()`（比照 `0001_baseline`）。games_advisor 的表名以 `games_advisor_` 開頭；參照欄位叫 `<對象>_id`。〔1.8〕
 - 向量欄位的長度讀 `GAMES_ADVISOR_EMBEDDING_DIM`，不寫死。〔改版〕§6
 - 不建向量索引：資料量小，逐筆比對就夠快，結果也精確。〔比對〕§7
 
@@ -91,8 +94,8 @@
 
 | 欄位 | 型別 | 可為空 | 說明 | 出處 |
 |---|---|---|---|---|
-| `id` | text，主鍵 | 否 | 桌遊編號，"1"、"2"、"3"……由立倫指定（3 款 Demo 遊戲也由立倫指定）。只能是正整數的字串（`^[1-9][0-9]*$`）；給出去就不改、不重複使用，刪掉的編號空著 | 〔改表〕、〔ADR 0003〕 |
-| `bgg_id` | integer，不重複 | 否 | BGG 的編號。Demo 遊戲在 BGG 查不到時怎麼辦，等 03 查完再決定 | 〔收錄〕§4 |
+| `id` | bigint，主鍵，自動給號 | 否 | 桌遊編號 1、2、3……。立倫匯入時由資料庫自動給號，1–4 號固定（見下方）；其他組員同步時照匯出檔的編號寫入（§8.11），所以每個人的編號都一樣。只能是正整數；給出去就不改、不重複使用，刪掉的編號空著 | 〔改表〕、〔整數編號〕 |
+| `bgg_id` | integer，不重複 | 否 | BGG 的編號。Demo 遊戲都查到了：血與刃的白薔薇 400566、阿不思學院 144734、馬可波羅 171623（03） | 〔收錄〕§4 |
 | `name` | text | 否 | 繁中名稱，立倫手填 | 〔收錄〕§2 |
 | `english_name` | text | 否 | 英文名稱，BGG 的主要名稱 | 〔收錄〕§2、〔改表〕 |
 | `min_players`、`max_players` | integer | 否 | 人數 | 〔收錄〕§2、〔比對〕§1 |
@@ -103,15 +106,24 @@
 | `mechanics` | text[] | 否 | 機制，BGG 英文名稱；可以是空陣列 | 同上 |
 
 - 數值範圍照 §8.1 的檢查，也寫成資料庫的 check 限制。
-- `id` 是字串，照編號排序時要轉成數字，否則 "10" 會排在 "2" 前面。〔改表〕
+- 1–4 號固定是 4 款 Demo 遊戲，匯入時用 `--first-four` 指定（§8.1）：〔整數編號〕
+
+  | `id` | 桌遊 | `bgg_id` |
+  |---|---|---|
+  | 1 | 血與刃的白薔薇 | 400566 |
+  | 2 | 阿不思學院 | 144734 |
+  | 3 | 馬可波羅 | 171623 |
+  | 4 | 阿瓦隆 | 128882 |
+
+- `id` 用 `GENERATED BY DEFAULT AS IDENTITY`：寫入時沒給 `id` 就自動給下一個號碼；給了就照給的寫入（同步要用）。下一個號碼記在資料庫的計數器（sequence），照給的寫入不會推動計數器，所以同步要照匯出檔設定它（§8.11）。〔整數編號〕
 - 不存：簡介、圖片、價格、評分與排名、最佳人數。〔收錄〕§2
 - API 卡片的 `game` 物件沿用這些欄位名稱（`id`、`name`、`min_players`、`max_players`、`min_playtime`、`max_playtime`、`min_age`、`weight`）。〔API〕§1
 
-### 3.2 `game_types`：類型，8 列（共用）
+### 3.2 `genres`：類型，8 列（共用）
 
 | 欄位 | 型別 | 可為空 | 說明 |
 |---|---|---|---|
-| `id` | uuid，主鍵 | 否 | |
+| `id` | bigint，主鍵，自動給號 | 否 | 流水號。找類型一律用 `code`，程式、種子資料與測試都不寫死 `id`（AGENTS.md §4.4）〔1.8〕 |
 | `code` | text，不重複 | 否 | 英文代碼 |
 | `name` | text，不重複 | 否 | 繁中名稱 |
 
@@ -131,15 +143,15 @@
 - 類型和類別是兩回事：類型只有這 8 個，類別是 BGG 的細分類（術語見 `GLOSSARY.md`）。〔改表〕
 - 推薦（「查桌遊」工具、API、評估題組）先不用類型，之後再談（§1）。
 
-### 3.3 `game_game_types`：每款桌遊的類型（共用）
+### 3.3 `game_genres`：每款桌遊的類型（共用）
 
 | 欄位 | 型別 | 可為空 | 說明 |
 |---|---|---|---|
 | `id` | uuid，主鍵 | 否 | |
-| `game_id` | text，參照 `games.id` | 否 | 桌遊被刪除時，這一列跟著刪 |
-| `game_type_id` | uuid，參照 `game_types.id` | 否 | |
+| `game_id` | bigint，參照 `games.id` | 否 | 桌遊被刪除時，這一列跟著刪 |
+| `genre_id` | bigint，參照 `genres.id` | 否 | |
 
-- 一款桌遊可以有多個類型，也可以沒有：`(game_id, game_type_id)` 不重複。〔改表〕
+- 一款桌遊可以有多個類型，也可以沒有：`(game_id, genre_id)` 不重複。〔改表〕
 - 匯入桌遊時照 `games.json` 的 `types` 整組替換（§8.1）。
 
 ### 3.4 `games_advisor_review_summaries`：心得摘要，一款最多一列
@@ -147,7 +159,7 @@
 | 欄位 | 型別 | 可為空 | 說明 | 出處 |
 |---|---|---|---|---|
 | `id` | uuid，主鍵 | 否 | | AGENTS.md §4.4 |
-| `game_id` | text，參照 `games.id`，不重複 | 否 | 桌遊被刪除時，這一列跟著刪 | 〔改表〕 |
+| `game_id` | bigint，參照 `games.id`，不重複 | 否 | 桌遊被刪除時，這一列跟著刪 | 〔改表〕 |
 | `summary` | text | 否 | 心得摘要 | 〔比對〕§7、〔管線〕§5 |
 | `embedding` | vector(`GAMES_ADVISOR_EMBEDDING_DIM`) | 否 | 心得摘要向量 | 〔比對〕§7、〔改版〕§6 |
 | `embedding_model` | text | 否 | 產生向量時的 `GAMES_ADVISOR_EMBEDDING_MODEL`；fake 記 `fake` | 〔改版〕§5 |
@@ -164,7 +176,7 @@
 | `name` | text，不重複 | 否 | 繁中名稱 | 〔詞彙表〕§2、〔管線〕§1 |
 | `definition` | text | 否 | 繁中定義，一句 | 〔詞彙表〕§2 |
 
-- 一列是一個標籤，每個標籤只出現一次。哪款桌遊有哪個標籤存在 §3.6，兩張表的關係和 `game_types`、`game_game_types` 相同。
+- 一列是一個標籤，每個標籤只出現一次。哪款桌遊有哪個標籤存在 §3.6，兩張表的關係和 `genres`、`game_genres` 相同。
 - 正本是 repo 裡的 `tag_vocabulary.json`；資料表是同步出來的副本，因為「查桌遊」工具的 enum 從資料庫產生。〔管線〕§1
 - 不記錄詞彙表版本。〔改版〕總覽
 
@@ -173,7 +185,7 @@
 | 欄位 | 型別 | 可為空 | 說明 | 出處 |
 |---|---|---|---|---|
 | `id` | uuid，主鍵 | 否 | | AGENTS.md §4.4 |
-| `game_id` | text，參照 `games.id` | 否 | 桌遊被刪除時，這一列跟著刪 | 〔管線〕§9、〔改表〕 |
+| `game_id` | bigint，參照 `games.id` | 否 | 桌遊被刪除時，這一列跟著刪 | 〔管線〕§9、〔改表〕 |
 | `tag_id` | uuid，參照 `games_advisor_tags.id` | 否 | 標籤被刪除時，這一列跟著刪 | 〔管線〕§9、〔改版〕§1 |
 | `confidence` | double precision | 否 | 信心分數 0–1 | 〔詞彙表〕§4 |
 
@@ -186,7 +198,7 @@
 | 欄位 | 型別 | 可為空 | 說明 | 出處 |
 |---|---|---|---|---|
 | `id` | uuid，主鍵 | 否 | 推薦理由引用的片段 ID | AGENTS.md §4.4、〔理由〕 |
-| `game_id` | text，參照 `games.id` | 否 | 桌遊被刪除時，這一列跟著刪 | 〔管線〕§9、〔改表〕 |
+| `game_id` | bigint，參照 `games.id` | 否 | 桌遊被刪除時，這一列跟著刪 | 〔管線〕§9、〔改表〕 |
 | `text` | text | 否 | 片段原文，不翻譯 | 〔管線〕§6 |
 | `embedding` | vector(`GAMES_ADVISOR_EMBEDDING_DIM`) | 否 | 片段向量 | 〔比對〕§7、〔改版〕§6 |
 | `embedding_model` | text | 否 | 產生向量時的 `GAMES_ADVISOR_EMBEDDING_MODEL`；fake 記 `fake` | 〔改版〕§5 |
@@ -208,11 +220,17 @@ migration 的測試（比照 `tests/migrations/test_baseline.py`）：
 
 | 情境 | 操作 | 預期結果 |
 |---|---|---|
-| 空資料庫，`GAMES_ADVISOR_EMBEDDING_DIM` 沒填 | `alembic upgrade head` | 7 張表都在；兩個向量欄位都是 1536 維 |
+| 空資料庫，`GAMES_ADVISOR_EMBEDDING_DIM` 沒填 | `alembic upgrade head` | 7 張表都在；兩個向量欄位都是 1536 維；`games.id`、4 個 `game_id` 欄位、`genres.id`、`game_genres.genre_id` 都是 bigint |
 | `GAMES_ADVISOR_EMBEDDING_DIM=8` | 同上 | 兩個向量欄位都是 8 維 |
-| 空資料庫 | `alembic upgrade head` | `game_types` 有 8 列，代碼與名稱照 §3.2 |
-| `games.id` 寫入 "01"、"a"、"0" | 寫入 | 資料庫拒絕 |
+| 空資料庫 | `alembic upgrade head` | `genres` 有 8 列，代碼與名稱照 §3.2 |
+| 新增一個類型，不給 `id` | 寫入 | 自動給號，和原本 8 個不重複〔1.8〕 |
+| 寫入兩款桌遊，不給 `id` | 寫入 | 自動拿到 1、2 |
+| 寫入一款桌遊，`id` 給 5 | 寫入 | 成功，`id` 是 5 |
+| `games.id` 寫入 `"a"` | 寫入 | 資料庫拒絕（型別不對） |
+| `games.id` 寫入 0、-1 | 寫入 | 資料庫拒絕（只能是正整數） |
 | 已經 upgrade | `alembic downgrade` 回前一版 | 7 張表都移除 |
+
+05 另外補的測試（2026-11-12 立倫同意）：`bgg_id` 不重複；同一款桌遊的類型、標籤不重複，心得摘要最多一列；刪桌遊時類型、心得摘要、標籤、心得片段一起刪；刪標籤時每款桌遊上的這個標籤一起刪。〔整數編號〕
 
 ## 4. 設定欄位總覽
 
@@ -275,8 +293,8 @@ GAMES_ADVISOR_EMBEDDING_DIM=1536
 
 | 檔案 | 位置 | 進 repo | 誰寫 | 誰讀 |
 |---|---|---|---|---|
-| `games.json` | repo 外的團隊資料夾 | 否 | Codex（繁中名稱由立倫手填） | 匯入桌遊；Codex 收心得時也讀 |
-| 編號對應檔 | repo 外，臨時 | 否 | 執行匯入前問立倫每款的編號後產生，用完不保存 | 匯入桌遊（§8.1） |
+| `games.json` | repo 外的團隊資料夾，臨時 | 否 | Codex（繁中名稱由立倫手填） | 匯入桌遊（立倫執行一次，之後可以刪掉）；Codex 收心得時也讀 |
+| 匯出檔 | 團隊共用雲端資料夾 GAE265G5，只放最新的一份 | 否 | 立倫執行匯出（§8.10） | 其他組員執行同步（§8.11）；立倫重建資料庫時也讀 |
 | `reviews.json` | 和 `games.json` 同一個資料夾 | 否 | Codex | 心得管線的各個指令 |
 | `tag_vocabulary.json` | `backend/app/domains/games_advisor/tag_vocabulary.json`〔Q7〕 | 是 | 歸納指令產生草稿，立倫編輯後走 MR | 同步詞彙表；評估題組的 pytest |
 | 歸納報告 | repo 外，`--report` 指定 | 否（含心得網址） | 歸納詞彙表 | 立倫 |
@@ -295,13 +313,19 @@ GAMES_ADVISOR_EMBEDDING_DIM=1536
 
 ```
 1. Codex 產生 games.json，立倫補繁中名稱
-2. 問立倫每款的編號 → 匯入桌遊            import-games
+2. 匯入桌遊 → 匯出 → 放進 GAE265G5        import-games → export-games
+   （其他組員：下載匯出檔 → 同步          sync-games）
 3. Codex 收心得，產生 reviews.json
 4. 產生心得摘要、產生心得片段              summarize-reviews、build-excerpts
 5. 歸納詞彙表草稿 → 立倫編輯、走 MR → 同步  draft-vocabulary → sync-vocabulary
 6. 上標籤 → 立倫刪標籤 → 匯入標籤草稿      draft-tags → import-tags
 ```
 
+- 第 2 步只做一次：立倫在空的資料庫執行 `import-games`，之後 `games.json` 就不再使用，可以刪掉。其他組員只執行 `sync-games`，否則他們的資料庫會自己給號，編號就對不上。組員拿到新的匯出檔就重跑同步，跑幾次結果都一樣。〔整數編號〕
+- 立倫的資料庫要重建時，用 GAE265G5 最新的匯出檔執行 `sync-games`，不重新匯入；`games` 不是空的時候 `import-games` 拒絕執行（§8.1）。〔整數編號〕
+- 之後要新增桌遊，到時再另外設計，現在不做。〔整數編號〕
+- 部署到 Azure 的正式資料庫也用 `sync-games` 放資料：由立倫把 `DATABASE_URL` 指到正式資料庫後執行。正式資料庫不執行 `import-games`。〔整數編號〕
+- 第 3 步之後的指令只有立倫執行；其他組員只需要共用表，不同步推薦用的 4 張表。〔整數編號〕
 - 第 4 步不依賴詞彙表，第 2 步之後隨時能跑。〔管線〕總覽
 - 補心得之後重跑第 4、6 步。〔管線〕總覽
 - 詞彙表只在新增桌遊時考慮重新歸納；補心得、改提示詞都不重新歸納。〔改版〕§2
@@ -321,7 +345,9 @@ uv run python -m app.domains.games_advisor.commands <子指令> <參數>
 
 | 子指令 | 做什麼 | 讀 | 寫 | 用 LLM | 用 embedding |
 |---|---|---|---|---|---|
-| `import-games <games.json> --ids <編號對應檔>` | 匯入桌遊（§8.1） | `games.json`、編號對應檔 | `games`、`game_game_types` | — | — |
+| `import-games <games.json> --first-four <4 個 bgg_id>` | 匯入桌遊（§8.1），只有立倫在空資料庫執行一次 | `games.json` | `games`、`game_genres` | — | — |
+| `export-games --out <匯出檔>` | 匯出共用桌遊資料（§8.10），只有立倫執行 | `games`、`game_genres`、`games.id` 的計數器 | 匯出檔 | — | — |
+| `sync-games <匯出檔>` | 同步共用桌遊資料（§8.11），其他組員執行 | 匯出檔 | `games`、`game_genres`、`games.id` 的計數器 | — | — |
 | `summarize-reviews <reviews.json>` | 產生心得摘要（§8.3） | `reviews.json` | `games_advisor_review_summaries` | `generate` | 是 |
 | `build-excerpts <reviews.json>` | 產生心得片段（§8.4） | `reviews.json` | `games_advisor_review_excerpts` | — | 是 |
 | `draft-vocabulary <reviews.json> --out <草稿> --report <報告>` | 歸納詞彙表草稿（§8.5） | `reviews.json` | 詞彙表草稿、歸納報告 | `generate_json` | — |
@@ -336,7 +362,7 @@ uv run python -m app.domains.games_advisor.commands <子指令> <參數>
 
 1. **先匯入桌遊。** `reviews.json` 出現資料庫沒有的 `bgg_id` 時，整個指令拒絕執行：什麼都不寫，也不呼叫模型。〔管線〕§8
 2. **每款桌遊一個交易，某款失敗不影響其他款。** 重跑就是覆蓋：先刪該款的舊資料再寫入，不記錄進度。〔管線〕§8
-   - 匯入桌遊例外：以 `id` 更新、不先刪再寫（§8.1）。如果先刪再寫，參照這款的類型、心得摘要、標籤與心得片段會跟著被刪。〔收錄〕§4、〔改表〕
+   - 匯入桌遊與同步例外：整份檔案一個交易。匯入只在空資料庫執行（§8.1）；同步以 `id` 認出同一款，已存在就直接更新欄位、不先刪再寫（§8.11）。如果先刪再寫，參照這款的類型、心得摘要、標籤與心得片段會跟著被刪。〔收錄〕§4、〔改表〕、〔整數編號〕
 3. **需要 LLM 的指令遇到 `LLM_PROVIDER=fake` 就拒絕執行**，印出「需要真的模型，請設定 LLM_*」。範圍是 `draft-vocabulary`、`draft-tags`、`summarize-reviews`，以及 `eval`（§15）。`local` 不擋。pytest 直接把 fake 傳進 service，不經過這個檢查。〔LLM 設定〕§4
 4. **批次用的 LLM provider：複製一份 settings、換掉三個值，再交給 factory。** 寫成 `games_advisor` 裡的一個小函式，用單元測試確認三個值都換對。〔LLM 設定〕§2、〔提案 §7〕
 
@@ -369,7 +395,7 @@ uv run python -m app.domains.games_advisor.commands <子指令> <參數>
 | 情境 | 操作 | 預期結果 |
 |---|---|---|
 | `LLM_PROVIDER=fake` | 執行 `summarize-reviews`、`draft-vocabulary`、`draft-tags`（各一個案例） | 結束碼 1；印出「需要真的模型，請設定 LLM_*」；資料庫與輸出檔都沒有變 |
-| `LLM_PROVIDER=fake` | 執行 `build-excerpts`、`import-games`、`sync-vocabulary`、`import-tags` | 照常執行，不被這條擋 |
+| `LLM_PROVIDER=fake` | 執行 `build-excerpts`、`import-games`、`export-games`、`sync-games`、`sync-vocabulary`、`import-tags` | 照常執行，不被這條擋 |
 | `reviews.json` 有資料庫沒有的 `bgg_id` | 執行任一讀 `reviews.json` 的指令（service 層，假的 repository） | 結束碼 1；印出是哪個 `bgg_id`；沒有呼叫模型；沒有寫入 |
 | `LLM_BATCH_MODEL=b`、`LLM_MODEL=a`、`LLM_REASONING_EFFORT=low`、`LLM_TIMEOUT_SECONDS=30` | 呼叫批次 settings 函式 | `llm_model=b`、`llm_reasoning_effort=None`、`llm_timeout_seconds=300`；原本的 settings 不變 |
 | `LLM_BATCH_MODEL` 留空、`LLM_MODEL=a` | 同上 | `llm_model=a` |
@@ -413,49 +439,48 @@ uv run python -m app.domains.games_advisor.commands <子指令> <參數>
 | `weight` | `statistics` 的 `averageweight` | 1 ≤ 難度 ≤ 5 |
 | `categories` | `link type="boardgamecategory"` 的 `value` | 字串陣列，可以是空的；元素不是空白、不重複 |
 | `mechanics` | `link type="boardgamemechanic"` 的 `value` | 同上 |
-| `types` | `statistics` 的 `ranks` 裡 `type="family"` 的大類排名，換成 `game_types.code`；Codex 先確認 API 有回這一段，抓不到的由立倫手填〔改表〕 | 字串陣列，可以是空的；元素是 `game_types.code`、不重複 |
+| `types` | `statistics` 的 `ranks` 裡 `type="family"` 的大類排名，換成 `genres.code`；Codex 先確認 API 有回這一段，抓不到的由立倫手填〔改表〕 | 字串陣列，可以是空的；元素是 `genres.code`、不重複 |
 
-- 12 個欄位都必填，不接受其他欄位；數值範圍〔Q8〕。`games.json` 沒有桌遊編號，編號在執行前問立倫，寫進臨時的編號對應檔。〔改表〕
-
-編號對應檔的格式（repo 外，用完不保存）：
-
-```json
-{"ids": [{"bgg_id": 900001, "id": "1"}]}
-```
-
-- `games.json` 的每一款都要有一個編號，不能多也不能少；`id` 符合 `^[1-9][0-9]*$`、不重複。
-- 資料庫裡已有這個 `id`，但 `bgg_id` 不同：拒絕，因為編號不能改給別款。
+- 12 個欄位都必填，不接受其他欄位；數值範圍〔Q8〕。`games.json` 沒有桌遊編號，編號由資料庫自動給。〔改表〕、〔整數編號〕
 - 人數、時長、年齡一律用 BGG 的數字，不和盒子或代理商頁比對。〔收錄〕§3
 - Codex 收心得時也讀這個檔案的 `bgg_id`、`name`、`english_name`（`prompts/collect-reviews.md` 寫「欄位名稱以檔案為準」）。
+- 只有立倫在空的資料庫執行一次；之後 `games.json` 不再使用，可以刪掉。其他組員用同步（§8.11）。〔整數編號〕
 
 行為：
 
-1. 先檢查整份檔案與編號對應檔。有任何一款不符合，就整份拒絕、什麼都不寫，並印出是哪一款（`bgg_id`）的哪個欄位。〔Q3〕
-2. 以 `id` 判斷同一款：已存在就更新欄位；不存在就新增。類型照 `types` 整組替換。〔收錄〕§4、〔改表〕
-3. 不刪除檔案裡沒有的桌遊。〔收錄〕§4
-4. 不碰 `games_advisor_review_summaries`。〔比對〕§7
-5. 結束時印出新增幾款、更新幾款。
+1. 先檢查：
+   - 整份檔案照上表檢查。
+   - `--first-four` 剛好 4 個 `bgg_id`、不重複，而且都在檔案裡。
 
-測試（指令與 repository 連 CI 的 PostgreSQL〔驗收〕§1；用 3 款自編的假桌遊〔收錄〕§4）：
+   有任何一項不符合，就整份拒絕、什麼都不寫，並印出是哪一款（`bgg_id`）的哪個欄位，或 `--first-four` 哪裡不對。〔Q3〕、〔整數編號〕
+2. `games` 不是空的：拒絕執行，印出「資料庫已經有桌遊；要重建請用 GAE265G5 最新的匯出檔執行 sync-games」。〔整數編號〕
+3. 依序寫入：先寫 `--first-four` 的 4 款，照參數的順序拿到 1–4 號；其他款照檔案順序拿 5 號之後的號碼。`id` 都由資料庫自動給。類型照 `types` 寫進 `game_genres`。〔收錄〕§4、〔改表〕、〔整數編號〕
+4. 整份檔案一個交易：任何一步失敗，什麼都不寫。
+5. 結束時印出匯入幾款、1–4 號各是哪一款，並提醒「記得執行 export-games，把匯出檔放進 GAE265G5」。〔整數編號〕
+
+立倫實際執行的指令：
+
+```
+uv run python -m app.domains.games_advisor.commands import-games <games.json> \
+  --first-four 400566,144734,171623,128882
+```
+
+測試（指令與 repository 連 CI 的 PostgreSQL〔驗收〕§1；用 5 款自編的假桌遊〔收錄〕§4，`--first-four` 指定其中 4 款、順序和檔案不同）：
 
 | 情境 | 操作 | 預期結果 |
 |---|---|---|
-| 空資料庫，檔案有 3 款，編號 "1"–"3" | `import-games` | 結束碼 0；3 列，`id` 照編號對應檔，欄位和檔案相同；`types` 寫進 `game_game_types`；印出新增 3、更新 0 |
-| 同一個檔案再匯入一次 | 同上 | 仍然 3 列；印出新增 0、更新 3 |
-| 改了某款的 `max_playtime` | 同上 | 該款欄位更新 |
-| 某款的 `types` 從 `[party, family]` 改成 `[party]` | 同上 | 該款只剩 `party` |
-| 某款已經有心得摘要 | 重新匯入 | 心得摘要那一列不變 |
-| 檔案少了 1 款 | 同上 | 那一款仍在資料庫 |
+| 空資料庫，檔案有 5 款 | `import-games --first-four` 指定第 5、3、1、4 款 | 結束碼 0；第 5、3、1、4 款依序是 1–4 號，第 2 款是 5 號；欄位和檔案相同；`types` 寫進 `game_genres`；印出匯入 5 款 |
+| 資料庫已有桌遊 | 同上 | 結束碼 1；印出要用同步重建；資料庫沒有任何變動 |
+| `--first-four` 只給 3 個、給了 5 個，或有重複 | 同上 | 結束碼 1；印出 `--first-four` 哪裡不對；資料庫沒有任何變動 |
+| `--first-four` 有一個 `bgg_id` 不在檔案裡 | 同上 | 同上 |
+| 匯入後 | 不給 `id` 再寫入一款 | 拿到 6 號 |
 | 缺必填欄位（例如沒有 `name`） | 同上 | 結束碼 1；印出 `bgg_id` 與欄位；資料庫沒有任何變動 |
 | `name` 是空白 | 同上 | 同上 |
 | `min_players` 大於 `max_players` | 同上 | 同上 |
 | `weight` 是 5.5 | 同上 | 同上 |
 | 兩款的 `bgg_id` 相同 | 同上 | 同上 |
 | `types` 有不認得的代碼（例如 `partyy`） | 同上 | 同上 |
-| 編號對應檔少了 1 款，或兩款的 `id` 相同 | 同上 | 同上 |
-| `id` 是 "01" 或 "a" | 同上 | 同上 |
-| 資料庫已有 `id` "1"，對應檔把 "1" 給另一個 `bgg_id` | 同上 | 同上 |
-| 有不認得的欄位（例如拼錯成 `min_player`） | 同上 | 同上 |
+| 有不認得的欄位（例如拼錯成 `min_player`，或多帶了 `id`） | 同上 | 同上 |
 | `min_playtime` 是 0 | 同上 | 同上 |
 | 檔案不存在，或不是合法 JSON | 同上 | 結束碼 1；資料庫沒有任何變動 |
 | 沒有權限 | — | 不適用：本機指令 |
@@ -678,7 +703,7 @@ service 的測試（假的 repository、`FakeEmbeddingProvider`）：
 
    不通過就重試 1 次；仍不通過就跳過這一款，列在結束時的輸出。
 
-4. 提醒，不算失敗〔管線〕§3：每個標籤被幾款使用；沒有任何一款使用、或「15 款中有 12 款以上」使用的標籤，標為「詞彙表可能有問題」（門檻寫成已匯入桌遊數的 80% 以上，15 款時就是 12 款〔Q8〕）；沒有任何標籤的桌遊。
+4. 提醒，不算失敗〔管線〕§3：每個標籤被幾款使用；沒有任何一款使用、或「16 款中有 13 款以上」使用的標籤，標為「詞彙表可能有問題」（門檻寫成已匯入桌遊數的 80% 以上，16 款時就是 13 款〔Q8〕）；沒有任何標籤的桌遊。
 5. 寫標籤草稿（repo 外）：
 
    ```json
@@ -760,14 +785,102 @@ service 的測試（假的 repository、`FakeEmbeddingProvider`）：
 - 改維度：新增一個 migration，清空兩種向量（心得片段整列刪掉）、改欄位維度，再重跑上面兩個指令。現在不寫。〔改版〕§6
 - 重產期間不用特別處理：「查桌遊」把模型和目前設定不同的向量當作沒有向量。「查桌遊」的這條過濾與 warning log、評估題組開始前的檢查，寫在 §11.6、§15.1。〔改版〕§5、§6
 
+### 8.10 匯出共用桌遊資料 `export-games`
+
+立倫匯入之後執行，把共用表匯出成檔案，讓其他組員同步。〔整數編號〕
+
+匯出檔的格式（放在團隊共用雲端資料夾 GAE265G5，只放最新的一份、每次覆蓋；不進 repo）：
+
+```json
+{
+  "next_id": 4,
+  "games": [
+    {
+      "id": 1,
+      "bgg_id": 900001,
+      "name": "範例桌遊甲",
+      "english_name": "Example Game A",
+      "min_players": 2,
+      "max_players": 4,
+      "min_playtime": 30,
+      "max_playtime": 45,
+      "min_age": 10,
+      "weight": 1.85,
+      "categories": ["Card Game", "Fantasy"],
+      "mechanics": ["Hand Management", "Set Collection"],
+      "types": ["family"]
+    }
+  ]
+}
+```
+
+- `games` 的每一款是 `games.json` 的 12 個欄位加上 `id`，照 `id` 由小到大排。
+- `next_id`：資料庫計數器的下一個號碼。刪掉編號最大的桌遊之後，`next_id` 不會跟著變小。例如 3 款刪掉第 3 款，`next_id` 仍然是 4。
+
+行為：
+
+1. 讀 `games`、`game_genres` 與 `games.id` 的計數器，寫成匯出檔。只讀資料庫，不改任何資料。
+2. `games` 是空的：拒絕，結束碼 1，不產生檔案。
+3. `--out` 指定的檔案已經存在：直接覆蓋。
+4. 結束時印出匯出幾款、`next_id`，並提醒「把匯出檔放進 GAE265G5，覆蓋舊的那份」。
+
+測試（連 CI 的 PostgreSQL；假桌遊）：
+
+| 情境 | 操作 | 預期結果 |
+|---|---|---|
+| 資料庫有 3 款 | `export-games --out <檔案>` | 結束碼 0；檔案有 3 款，`id`、欄位、`types` 和資料庫相同；`next_id` 是 4 |
+| 3 款刪掉第 3 款 | 同上 | 檔案有 2 款；`next_id` 仍然是 4 |
+| 空資料庫 | 同上 | 結束碼 1；沒有產生檔案 |
+| 沒有權限 | — | 不適用：本機指令 |
+
+### 8.11 同步共用桌遊資料 `sync-games`
+
+其他組員拿到新的匯出檔後執行；立倫重建資料庫時也用（§6）。同步後，資料庫的共用表和匯出檔完全一樣。〔整數編號〕
+
+行為：
+
+1. 先檢查整份匯出檔：`next_id` 是正整數，而且大於所有 `id`；每款的 `id` 是正整數、不重複；其他 12 個欄位照 §8.1 的檢查。有任何一款不符合，就整份拒絕、什麼都不寫，並印出是哪一款（`id`）的哪個欄位。
+2. 以 `id` 判斷同一款：
+   - 資料庫有同一個 `id`、`bgg_id` 也相同：更新欄位。
+   - 資料庫有同一個 `id`，但 `bgg_id` 不同：當成不同的桌遊，先刪掉舊的再照匯出檔寫入。
+   - 資料庫沒有這個 `id`：照匯出檔的 `id` 寫入。
+
+   類型照 `types` 整組替換。
+3. 匯出檔裡沒有的桌遊從資料庫刪掉，連帶刪除的資料照 §3。組員自己在本機加的桌遊也會被刪；測試請用寫在測試程式裡的假資料（AGENTS.md §2.2）。其他 domain 的資料還參照要刪的桌遊時，資料庫會擋下刪除：整份拒絕、什麼都不寫，印出是哪一款、被哪張表參照，由立倫決定怎麼處理（〔ADR 0003〕）。
+4. 把 `games.id` 的計數器設成 `next_id`：之後在這個資料庫新增桌遊，從 `next_id` 開始給號，不會重用以前給過的號碼。
+5. 整份檔案一個交易：任何一步失敗，什麼都不寫。
+6. 結束時印出新增幾款、更新幾款、刪除幾款，以及 `next_id`。
+
+測試（連 CI 的 PostgreSQL；假桌遊）：
+
+| 情境 | 操作 | 預期結果 |
+|---|---|---|
+| 空資料庫，匯出檔有 3 款、`next_id` 4 | `sync-games <匯出檔>` | 結束碼 0；3 列，`id` 與欄位和匯出檔相同；`types` 寫進 `game_genres`；印出新增 3、更新 0、刪除 0 |
+| 同步完上一列 | 不給 `id` 寫入一款桌遊 | 拿到 4 號 |
+| 空資料庫，匯出檔有 2 款（`id` 1、2）、`next_id` 4 | 同步，再不給 `id` 寫入一款 | 拿到 4 號，不是 3 號 |
+| 同一個匯出檔再同步一次 | `sync-games <匯出檔>` | 仍然 3 列；印出新增 0、更新 3、刪除 0 |
+| 資料庫有匯出檔沒有的桌遊（例如組員自己加的） | 同上 | 那一款被刪掉；印出刪除 1 |
+| 資料庫的 `id` 2 是另一個 `bgg_id` | 同上 | `id` 2 換成匯出檔的那一款 |
+| 匯出檔把某款的 `types` 從 `[party, family]` 改成 `[party]` | 同上 | 該款只剩 `party` |
+| 立倫的資料庫匯出，再同步到另一個空資料庫 | `export-games` → `sync-games` | 兩個資料庫的 `games`、`game_genres` 完全相同；之後各自新增的下一款都是同一個號碼 |
+| 測試裡建一張參照 `games.id` 的假表（不連帶刪除），參照匯出檔沒有的那一款 | `sync-games <匯出檔>` | 結束碼 1；印出那一款與那張表的名稱；資料庫沒有任何變動 |
+| 缺 `next_id`，或 `next_id` 不大於最大的 `id` | 同上 | 結束碼 1；印出原因；資料庫沒有任何變動 |
+| 兩款的 `id` 相同，或 `id` 是 0、`"a"` | 同上 | 同上 |
+| 某款的欄位不符合 §8.1 的檢查（例如 `weight` 是 5.5） | 同上 | 同上 |
+| 檔案不存在，或不是合法 JSON | 同上 | 結束碼 1；資料庫沒有任何變動 |
+| 沒有權限 | — | 不適用：本機指令 |
+
 ## 9. repository 的測試（連 CI 的 PostgreSQL）
 
 〔驗收〕§1：repository 連 CI 內建的 PostgreSQL 測試，比照現有的 seed 測試，資料用自編的假桌遊。「查桌遊」用到的 SQL 篩選與 pgvector 查詢寫在 §11.8。
 
 | 情境 | 操作 | 預期結果 |
 |---|---|---|
-| 資料表是空的 | 寫入 3 款桌遊，編號 "1"–"3" | 3 列，`id` 照給的編號 |
+| 資料表是空的 | 不給 `id` 寫入 3 款桌遊 | 3 列，`id` 自動給 1–3 |
 | `id` 已存在 | 用同一個 `id` 寫入新的欄位值 | 欄位更新，心得摘要不變 |
+| 有 3 款 | 刪除不在清單裡的桌遊（清單有 `id` 1、2） | 第 3 款刪掉，它的心得摘要等資料一起刪；回傳刪除的款數 |
+| 資料表是空的 | 照給的 `id`（1、2）寫入，再把計數器設成 4 | 再不給 `id` 寫入一款，拿到 4 號 |
+| 有 3 款，刪掉第 3 款 | 讀計數器的下一個號碼 | 回傳 4 |
 | 某款有 2 個類型 | 替換成 1 個 | 該款只剩 1 列；其他款不變 |
 | 某款桌遊 | 寫入心得摘要、向量、模型名稱 | `games_advisor_review_summaries` 有 1 列；向量長度等於設定的維度 |
 | 某款已有心得摘要 | 再寫一次 | 取代舊的，仍然 1 列 |
@@ -825,10 +938,10 @@ service 的測試（假的 repository、`FakeEmbeddingProvider`）：
 | `prefer_mechanics`、`avoid_mechanics` | 否 | 字串陣列 | 所有桌遊 `mechanics` 的聯集 |
 | `weight_min`、`weight_max` | 否 | 數字 1–5，可只填一個 | — |
 | `preference_text` | 否 | 繁中字串 | — |
-| `exclude_game_ids` | 否 | 字串陣列 | 所有桌遊的 `id` |
+| `exclude_game_ids` | 否 | 整數陣列 | 所有桌遊的 `id`〔整數編號〕 |
 
 - 工具是 strict：所有參數都列為 required，選填的寫成可為 null，LLM 沒帶就給 null。〔提案 §3.1〕
-- enum 每則玩家訊息都從資料庫讀一次。同步詞彙表或重新匯入桌遊之後，下一則訊息就用新清單，不用重啟後端。〔改版〕§1
+- enum 每則玩家訊息都從資料庫讀一次。同步詞彙表或同步桌遊之後，下一則訊息就用新清單，不用重啟後端。〔改版〕§1
 - 標籤的繁中名稱與定義寫在 `prefer_tags`、`avoid_tags` 的參數說明裡（每個代碼一行「代碼：名稱——定義」），也是每則訊息從資料庫產生。LLM 靠它把「想要歡樂一點」對到 `laughter`。〔Q13〕
 - 某份清單是空的（例如還沒同步詞彙表），工具定義就拿掉對應的參數，不送出空的 enum。〔Q14〕
 
@@ -902,7 +1015,7 @@ Azure 的 strict 模式保證型別與 enum，但 `FakeLLMProvider` 不檢查 sc
 {
   "games": [
     {
-      "id": "1",
+      "id": 1,
       "name": "範例桌遊甲",
       "min_players": 2, "max_players": 4,
       "min_playtime": 30, "max_playtime": 45,
@@ -1023,7 +1136,7 @@ LLM 的最終輸出用 strict JSON schema（名稱 `advisor_reply`〔Q14〕）�
 {
   "reply": "幫你找到 3 款適合 4 個人、輕鬆聊天的桌遊。",
   "recommendations": [
-    {"game_id": "1", "reason": "……", "excerpt_ids": ["<uuid>"]}
+    {"game_id": 1, "reason": "……", "excerpt_ids": ["<uuid>"]}
   ]
 }
 ```
@@ -1132,7 +1245,7 @@ LLM 的最終輸出用 strict JSON schema（名稱 `advisor_reply`〔Q14〕）�
   "recommendations": [
     {
       "game": {
-        "id": "1", "name": "範例桌遊甲",
+        "id": 1, "name": "範例桌遊甲",
         "min_players": 2, "max_players": 4,
         "min_playtime": 30, "max_playtime": 45,
         "min_age": 10, "weight": 1.85
@@ -1149,7 +1262,7 @@ LLM 的最終輸出用 strict JSON schema（名稱 `advisor_reply`〔Q14〕）�
 | `response_id` | 見 §13.2 | 〔API〕§3 |
 | `relaxed_constraint` | `playtime`、`age` 或 `null`；整則訊息一個值 | 〔API〕§1、§12.5 |
 | `recommendations` | 最多 3 筆，照工具回傳的順序；追問、離題、查無結果、固定文字時是空陣列 | 〔API〕§1 |
-| `game` | 8 個欄位，名稱跟著 `games`（§3.1）；`id` 是字串，例如 `"1"`；`weight` 回原值 | 〔API〕§1；`weight` 原值〔Q14〕 |
+| `game` | 8 個欄位，名稱跟著 `games`（§3.1）；`id` 是整數，例如 `1`；`weight` 回原值 | 〔API〕§1；`weight` 原值〔Q14〕；`id` 型別〔整數編號〕 |
 | `excerpts` | 只有 `id`、`text`、`language`；不回 `title`、`site_name`、`source_url` | 〔API〕§7 |
 
 - 不串流：整則訊息一次回來。〔API〕§4
@@ -1325,7 +1438,7 @@ LLM 的最終輸出用 strict JSON schema（名稱 `advisor_reply`〔Q14〕）�
 uv run python -m app.domains.games_advisor.commands eval <eval_cases.json> --out <報告> [--repeat N]
 ```
 
-- 在本機開發資料庫上執行：先跑完匯入桌遊與心得管線，用真的 15 款、標籤與向量，連真的 Azure。不進 CI、不擋合併。〔驗收〕§3、§4
+- 在本機開發資料庫上執行：先跑完匯入桌遊與心得管線，用真的 16 款、標籤與向量，連真的 Azure。不進 CI、不擋合併。〔驗收〕§3、§4
 - 直接呼叫 service，不經過 HTTP API（API 回應裡沒有工具參數）。真的 LLM provider 外面包一層記錄器，記下每次呼叫模型的內容和回應，從裡面取工具參數。〔驗收〕§4
 - 對話用的 provider 和 API 相同（`LLM_MODEL`、`LLM_REASONING_EFFORT`、`LLM_TIMEOUT_SECONDS`），不是批次的設定。〔部署〕§1
 
