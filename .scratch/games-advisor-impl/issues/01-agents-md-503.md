@@ -1,6 +1,6 @@
 # 01：AGENTS.md §4.3 補上 503
 
-Status: ready-for-human
+Status: resolved
 Blocked by: 無
 Spec: [spec](../../games-advisor/spec.md) §18
 MR: （還沒開）
@@ -11,6 +11,6 @@ MR: （還沒開）
 
 ## 驗收條件
 
-- [ ] 立倫親手在 AGENTS.md §4.3 的錯誤狀態碼加上 503
-- [ ] MR 說明的情境表格寫「不適用」，理由是只改文件（AGENTS.md §7.4）
+- [x] 立倫親手在 AGENTS.md §4.3 的錯誤狀態碼加上 503
+- [x] MR 說明的情境表格寫「不適用」，理由是只改文件（AGENTS.md §7.4）
 - [ ] 合併前把本檔的 `Status` 改成 `resolved`、`MR` 填上連結
