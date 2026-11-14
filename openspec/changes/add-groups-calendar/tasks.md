@@ -25,12 +25,14 @@
 ## 3. MR 2：前端 data、state、參考畫面與交接說明（於 MR 1 合併後從 dev 開分支）
 
 - [ ] 3.1 永傑開 Draft MR 2，AI 從 `specs/groups-calendar-page` 整理情境表格，驗證：Draft MR 已存在
-- [ ] 3.2 撰寫 state 測試（`test/domains/groups/`，在 `test/support/fakes.dart` 新增 `FakeGroupsRepository`，用 Riverpod override 替換）：當月載入與每日團數、UTC+8 跨日、切換月份、今天、超過 100 團的分頁載入、開團主篩選與場數、當日列表排序與名額狀態文字、報名／候補／退出／取消揪團的成功與失敗、操作進行中不能重複送出、表單驗證、後端錯誤訊息，驗證：測試存在且失敗
-- [ ] 3.3 實作 `domains/groups/data/`（freezed DTO、`GroupsRepository`、`HttpGroupsRepository`），並執行 `dart run build_runner build --delete-conflicting-outputs`，驗證：`flutter analyze` 沒有錯誤
-- [ ] 3.4 實作 `domains/groups/state/`（`GroupsCalendarNotifier`、`GroupDetailNotifier`、`GroupFormNotifier`，以及目前使用者 id 的 provider），驗證：3.2 的測試全部通過
+- [x] 3.2 撰寫 state 測試（`test/domains/groups/`，在 `test/support/fakes.dart` 新增 `FakeGroupsRepository`，用 Riverpod override 替換）：當月載入與每日團數、UTC+8 跨日、切換月份、今天、超過 100 團的分頁載入、開團主篩選與場數、當日列表排序與名額狀態文字、報名／候補／退出／取消揪團的成功與失敗、操作進行中不能重複送出、表單驗證、後端錯誤訊息，驗證：測試存在且失敗
+- [x] 3.3 實作 `domains/groups/data/`（freezed DTO、`GroupsRepository`、`HttpGroupsRepository`），並執行 `dart run build_runner build --delete-conflicting-outputs`，驗證：`flutter analyze` 沒有錯誤
+- [x] 3.4 實作 `domains/groups/state/`（`GroupsCalendarNotifier`、`GroupDetailNotifier`、`GroupFormNotifier`，以及目前使用者 id 的 provider），驗證：3.2 的測試全部通過
 - [ ] 3.5 實作 `prototypes/groups/`（只用 Flutter 預設元件，做出所有按鈕、欄位與載入中、沒有資料、錯誤三種狀態），並在 `app/router.dart` 註冊 `/proto/groups`，驗證：後端以 dev 模式啟動並已 seed，手動走過開團、報名、額滿候補、退出遞補（用身分切換器換人）、取消揪團
-- [ ] 3.6 撰寫 `docs/handoff/groups.md`（依 `_template.md`，附參考畫面截圖），驗證：涵蓋範本所有欄位
+  - 註記：參考畫面與 `/proto/groups` 路由已完成，路由測試通過；以無頭 Chrome 截圖確認可連本機後端顯示月曆團數、額滿與候補文字。完整的手動操作流程（換身分報名、退出遞補、取消）待永傑實際操作確認，因此本項維持未完成。
+- [x] 3.6 撰寫 `docs/handoff/groups.md`（依 `_template.md`，附參考畫面截圖），驗證：涵蓋範本所有欄位
 - [ ] 3.7 自我檢查：在 `frontend/` 跑 `flutter analyze`、`flutter test`，驗證：全部通過、CI 全綠；加上 `needs-ui` 標籤後改成 Ready for review
+  - 註記：本機 `flutter analyze`（No issues）、`flutter test`（58 passed）已通過；本機 Flutter 為 3.47.6，與 CI 鎖定的 3.41.4 不同，以 CI 結果為準。
 
 ## 4. MR 3：正式月曆頁（於 MR 2 合併後從 dev 開分支）
 

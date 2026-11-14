@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:tabletop_hub/app/app.dart';
 import 'package:tabletop_hub/core/config/app_config.dart';
 import 'package:tabletop_hub/core/dev/data/dev_users_repository.dart';
+import 'package:tabletop_hub/domains/groups/data/groups_repository.dart';
 import 'package:tabletop_hub/domains/health/data/health_repository.dart';
 import 'package:tabletop_hub/domains/health/data/health_status.dart';
 
@@ -26,6 +27,7 @@ Future<void> pumpApp(
           ),
         ),
         devUsersRepositoryProvider.overrideWithValue(FakeDevUsersRepository()),
+        groupsRepositoryProvider.overrideWithValue(FakeGroupsRepository()),
         healthRepositoryProvider.overrideWithValue(
           FakeHealthRepository(
             result: const HealthStatus(status: 'ok', database: 'up'),
@@ -79,5 +81,21 @@ void main() {
   testWidgets('正式環境框架沒有身分切換器', (tester) async {
     await pumpApp(tester, showPrototypes: false, dev: false);
     expect(find.byType(DropdownButton<String>), findsNothing);
+  });
+
+  testWidgets('SHOW_PROTOTYPES 開啟：/proto/groups 顯示揪團參考畫面', (tester) async {
+    await pumpApp(tester, showPrototypes: true);
+    goTo(tester, '/proto/groups');
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('groups-proto-page')), findsOneWidget);
+    expect(find.text('我要開團'), findsWidgets);
+  });
+
+  testWidgets('SHOW_PROTOTYPES 關閉：/proto/groups 顯示找不到頁面', (tester) async {
+    await pumpApp(tester, showPrototypes: false);
+    goTo(tester, '/proto/groups');
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('groups-proto-page')), findsNothing);
+    expect(find.text('找不到頁面'), findsOneWidget);
   });
 }
