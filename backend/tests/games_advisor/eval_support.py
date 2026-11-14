@@ -4,6 +4,7 @@
 要測的程式都在函式裡才 import：程式還沒寫的時候，每個情境各自失敗（同 conftest.py 的說明）。
 """
 
+from collections.abc import Callable
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -76,10 +77,13 @@ def _run_eval(
     repeat: int,
     llm_model: str,
     judge_model: str,
+    warn: Callable[[str], None] | None = None,
 ) -> "EvalResult":
     from app.domains.games_advisor.evaluation import Judge, run_eval
 
     repo = make_eval_repo() if repo is None else repo
+    # 沒給 warn 就不傳，用 run_eval 的預設
+    extra: dict[str, Any] = {} if warn is None else {"warn": warn}
     return run_eval(
         data,
         games=repo,
@@ -92,6 +96,7 @@ def _run_eval(
         judge=None if judge is None else Judge(llm=judge, model=judge_model),
         out_path=out_path,
         repeat=repeat,
+        **extra,
     )
 
 
@@ -105,13 +110,16 @@ def evaluate(
     repeat: int = 1,
     llm_model: str = "model-a",
     judge_model: str = "model-b",
+    llm: FakeLLMProvider | None = None,
+    warn: Callable[[str], None] | None = None,
 ) -> EvalRun:
     """跑評估題組，報告寫到 out_path。
 
-    對話照 responses 的腳本回應。judge_outputs 是評審的腳本；給 None 等於加了 --no-judge，
-    不建評審的 provider。
+    對話照 responses 的腳本回應；要在執行前拿到對話的 fake（例如在 warn 裡看它被呼叫了幾次），
+    就自己建好傳 llm，這時 responses 不用。judge_outputs 是評審的腳本；給 None 等於加了
+    --no-judge，不建評審的 provider。warn 收到開始前檢查的提醒。
     """
-    llm = FakeLLMProvider(responses=responses)
+    llm = FakeLLMProvider(responses=responses) if llm is None else llm
     judge = None if judge_outputs is None else FakeLLMProvider(json_outputs=judge_outputs)
     result = _run_eval(
         out_path,
@@ -122,6 +130,7 @@ def evaluate(
         repeat=repeat,
         llm_model=llm_model,
         judge_model=judge_model,
+        warn=warn,
     )
     return EvalRun(result, llm, judge, out_path.read_text(encoding="utf-8"))
 

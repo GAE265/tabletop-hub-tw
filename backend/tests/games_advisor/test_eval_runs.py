@@ -12,6 +12,7 @@ from typing import Any
 import pytest
 
 from app.integrations.llm import (
+    FakeLLMProvider,
     FakeResponse,
     LLMConversationNotFound,
     LLMError,
@@ -342,6 +343,28 @@ def test_games_without_vectors_only_warn(tmp_path: Path) -> None:
     assert not any("甲" in warning for warning in warnings)
     # 照常執行
     assert run.result.runs[0].turns[0].status == "matched"
+
+
+def test_vector_warnings_come_before_any_model_call(tmp_path: Path) -> None:
+    repo = make_eval_repo()
+    del repo.summary_models[4]  # 丁沒有心得摘要向量
+    llm = FakeLLMProvider(responses=[final("請問幾個人？")])
+    warned: list[tuple[str, int]] = []
+
+    evaluate(
+        tmp_path / "report.md",
+        FOLLOW_UP_CASE,
+        [],
+        repo=repo,
+        llm=llm,
+        warn=lambda message: warned.append((message, len(llm.calls))),
+    )
+
+    # 提醒在呼叫模型之前就送出：指令收到就印，執行的人可以先停下、不花額度（spec §15.1）
+    assert any("丁" in message for message, _ in warned)
+    assert all(calls == 0 for _, calls in warned)
+    # 提醒之後照常執行
+    assert len(llm.calls) == 1
 
 
 @pytest.mark.parametrize(
