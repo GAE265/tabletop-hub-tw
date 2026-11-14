@@ -1,4 +1,6 @@
-"""批次指令讀寫的檔案格式與檢查：games.json、匯出檔（spec §8.1、§8.10、§8.11）、
+"""推薦對話 API 的請求與回應（spec §13.1，在檔案最後）。
+
+批次指令讀寫的檔案格式與檢查：games.json、匯出檔（spec §8.1、§8.10、§8.11）、
 reviews.json（spec §8.2）、tag_vocabulary.json（spec §8.6），以及歸納詞彙表時 LLM 的輸出
 （spec §8.5）。
 
@@ -14,6 +16,7 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    StringConstraints,
     ValidationError,
     ValidationInfo,
     field_validator,
@@ -299,3 +302,49 @@ def describe_problems(
             where = ".".join(str(part) for part in location) or "檔案內容"
         lines.append(f"{where}：{_reason(error)}")
     return lines
+
+
+# --- 推薦對話 API（spec §13.1）。⚠️ 改這裡等於改前後端的契約 ---
+
+# 欄位超過上限的訊息不送給 LLM
+MESSAGE_MAX_CHARS = 500
+
+
+class MessageRequest(BaseModel):
+    # 去掉前後空白後 1–500 字；送給 LLM 的是去掉空白後的文字
+    content: Annotated[
+        str, StringConstraints(strip_whitespace=True, min_length=1, max_length=MESSAGE_MAX_CHARS)
+    ]
+    # 上一則回應的 response_id；新對話給 null，空字串回 422
+    previous_response_id: Annotated[str, StringConstraints(min_length=1)] | None = None
+
+
+class AdvisorGame(BaseModel):
+    id: int
+    name: str
+    min_players: int
+    max_players: int
+    min_playtime: int
+    max_playtime: int
+    min_age: int
+    weight: float
+
+
+class AdvisorExcerpt(BaseModel):
+    id: str
+    text: str
+    language: str
+
+
+class AdvisorRecommendation(BaseModel):
+    game: AdvisorGame
+    reason: str
+    excerpts: list[AdvisorExcerpt]
+
+
+class MessageResponse(BaseModel):
+    # 固定文字時是請求帶來的舊 id；第一則訊息就固定文字時是 null
+    response_id: str | None
+    reply: str
+    relaxed_constraint: Literal["playtime", "age"] | None
+    recommendations: list[AdvisorRecommendation]
