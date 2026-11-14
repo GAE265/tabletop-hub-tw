@@ -18,3 +18,12 @@ TAG_HIGH_CONFIDENCE_MIN_REVIEWS = 2
 
 # 上標籤的提醒（spec §8.7）：有這個比例以上的桌遊都用到同一個標籤，就提醒「詞彙表可能有問題」
 TAG_USAGE_WARNING_RATIO = 0.8
+
+# 查桌遊（spec §11）：信心分數低於門檻的標籤當作這款沒有這個標籤
+TAG_CONFIDENCE_THRESHOLD = 0.5
+# 查桌遊回傳的桌遊數，也是一則訊息最多推薦幾款
+MAX_RECOMMENDATIONS = 3
+# 查桌遊時每款桌遊回傳幾段心得片段
+EXCERPTS_PER_GAME = 2
+# RRF 合併名次時的 k：合併分數 = Σ 1/(k + 名次)
+RRF_K = 60

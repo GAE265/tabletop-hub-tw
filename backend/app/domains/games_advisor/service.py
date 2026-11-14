@@ -301,7 +301,7 @@ def _for_each_game(
     return BatchResult(done=done, skipped=skipped)
 
 
-def _embedding_model_name(config: EmbeddingConfig) -> str:
+def embedding_model_name(config: EmbeddingConfig) -> str:
     """記在每個向量上的模型名稱；用 fake 時記 fake（spec §8.9）。"""
     return "fake" if config.provider == "fake" or config.model is None else config.model
 
@@ -320,7 +320,7 @@ def summarize_reviews(
     # 讀取也放進交易：讀完就結束交易，不會開著交易等模型回應
     with store.transaction():
         work = _reviews_by_game(games, data, only_bgg_ids)
-    embedding_model = _embedding_model_name(embedding_config)
+    embedding_model = embedding_model_name(embedding_config)
 
     def process(game: dict[str, Any], reviews: list[Review]) -> None:
         if not reviews:
@@ -349,7 +349,7 @@ def build_excerpts(
     """把每款桌遊的心得切成心得片段，一款的片段一起轉成向量後存。不用 LLM。"""
     with store.transaction():
         work = _reviews_by_game(games, data, only_bgg_ids)
-    embedding_model = _embedding_model_name(embedding_config)
+    embedding_model = embedding_model_name(embedding_config)
 
     def process(game: dict[str, Any], reviews: list[Review]) -> None:
         excerpts = split_reviews(reviews, limits)

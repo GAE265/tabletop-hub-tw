@@ -9,6 +9,7 @@ from sqlalchemy.orm import sessionmaker
 from app.core.config import Settings, get_settings
 from app.core.db import create_db_engine
 from app.core.errors import register_error_handlers
+from app.domains.games_advisor.router import router as games_advisor_router
 from app.domains.health.router import router as health_router
 from app.integrations.embedding import EmbeddingConfig, get_embedding_provider
 from app.integrations.llm import get_llm_provider
@@ -30,14 +31,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.session_factory = sessionmaker(engine)
     # LLM_PROVIDER、GAMES_ADVISOR_EMBEDDING_* 設錯時在啟動就明確報錯
     app.state.llm = get_llm_provider(settings.llm_provider, settings)
+    app.state.games_advisor_embedding_config = EmbeddingConfig(
+        provider=settings.games_advisor_embedding_provider,
+        dim=settings.games_advisor_embedding_dim,
+        endpoint=settings.games_advisor_embedding_endpoint,
+        api_key=settings.games_advisor_embedding_api_key,
+        model=settings.games_advisor_embedding_model,
+    )
     app.state.games_advisor_embedding = get_embedding_provider(
-        EmbeddingConfig(
-            provider=settings.games_advisor_embedding_provider,
-            dim=settings.games_advisor_embedding_dim,
-            endpoint=settings.games_advisor_embedding_endpoint,
-            api_key=settings.games_advisor_embedding_api_key,
-            model=settings.games_advisor_embedding_model,
-        )
+        app.state.games_advisor_embedding_config
     )
 
     if settings.cors_origins:
@@ -50,6 +52,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
     register_error_handlers(app)
     app.include_router(health_router, prefix=API_PREFIX)
+    app.include_router(games_advisor_router, prefix=API_PREFIX)
 
     if settings.auth_mode == "dev":
         # app/dev 任何地方都不得 import（AGENTS.md 4.2），所以只在 dev 模式動態載入
