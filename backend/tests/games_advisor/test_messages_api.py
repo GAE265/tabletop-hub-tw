@@ -179,6 +179,18 @@ def test_empty_previous_response_id_is_422(
     assert llm.calls == []
 
 
+def test_missing_previous_response_id_is_422(
+    client: TestClient, as_player: Any, use_script: UseScript
+) -> None:
+    llm = use_script([final("好")])
+
+    response = client.post(URL, json={"content": "我們 4 個人"})
+
+    assert response.status_code == 422
+    assert error_code(response) == "VALIDATION_ERROR"
+    assert llm.calls == []
+
+
 # --- 權限 ---
 
 
