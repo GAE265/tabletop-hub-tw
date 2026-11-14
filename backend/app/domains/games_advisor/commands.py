@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 from app.core.config import Settings, get_settings
 from app.core.db import create_db_engine
 from app.core.games.repository import GameRepository
-from app.domains.games_advisor import service
+from app.domains.games_advisor import evaluation, service
 from app.domains.games_advisor.repository import ReviewRepository, TagRepository
 from app.domains.games_advisor.service import BatchResult, Refused, SkippedGame
 from app.integrations.embedding.base import EmbeddingProvider
@@ -53,6 +53,16 @@ def _bgg_ids(value: str) -> list[int]:
         ) from None
 
 
+def _positive_int(value: str) -> int:
+    try:
+        number = int(value)
+    except ValueError:
+        number = 0
+    if number < 1:
+        raise argparse.ArgumentTypeError("要是 1 以上的整數")
+    return number
+
+
 # --- 建立 provider ---
 
 
@@ -70,13 +80,18 @@ def batch_llm_settings(settings: Settings) -> Settings:
     )
 
 
-def _batch_llm(settings: Settings) -> LLMProvider:
+def _real_llm(settings: Settings) -> LLMProvider:
+    """照 settings 的 LLM_* 建 provider；LLM_PROVIDER=fake 就拒絕執行（spec §7.2 規則 3）。"""
     if settings.llm_provider == "fake":
         raise Refused("需要真的模型，請設定 LLM_*")
     try:
-        return get_llm_provider(settings.llm_provider, batch_llm_settings(settings))
+        return get_llm_provider(settings.llm_provider, settings)
     except (ValueError, NotImplementedError) as exc:
         raise Refused(str(exc)) from exc
+
+
+def _batch_llm(settings: Settings) -> LLMProvider:
+    return _real_llm(batch_llm_settings(settings))
 
 
 def _embedding(settings: Settings) -> tuple[EmbeddingProvider, EmbeddingConfig]:
@@ -223,6 +238,48 @@ def _import_tags(args: argparse.Namespace, session: Session, settings: Settings)
     return EXIT_OK
 
 
+def _eval(args: argparse.Namespace, session: Session, settings: Settings) -> int:
+    # 先確認有真的模型，再讀檔案。對話用 API 的設定，評審用批次的設定；--no-judge 時不建評審的
+    # provider（spec §15.1）
+    llm = _real_llm(settings)
+    judge = None
+    if not args.no_judge:
+        judge_settings = batch_llm_settings(settings)
+        judge = evaluation.Judge(
+            llm=_real_llm(judge_settings), model=judge_settings.llm_model or ""
+        )
+    embedding, embedding_config = _embedding(settings)
+    result = evaluation.run_eval(
+        service.read_json(args.eval_cases),
+        games=GameRepository(session),
+        tags=TagRepository(session),
+        reviews=ReviewRepository(session),
+        embedding=embedding,
+        embedding_model=service.embedding_model_name(embedding_config),
+        llm=llm,
+        llm_model=settings.llm_model or "",
+        judge=judge,
+        out_path=args.out,
+        repeat=args.repeat,
+    )
+    for warning in result.warnings:
+        print(f"提醒：{warning}", file=sys.stderr)
+    condition, preference = result.condition, result.preference
+    print(f"評估報告：{args.out}")
+    print(
+        f"條件分 {condition.passed}/{condition.total}、"
+        f"偏好分 {preference.passed}/{preference.total}、"
+        f"人工項目 {result.manual_items} 項（請在報告勾選後自己統計）"
+    )
+    for case_id, passed in result.demo.items():
+        state = (
+            f"程式比對 {evaluation.DEMO_RUNS} 次全過，人工項目請勾選後確認" if passed else "沒過"
+        )
+        print(f"Demo 題 {case_id}：{state}")
+    print(f"token 用量（只算對話）：輸入 {result.input_tokens:,}、輸出 {result.output_tokens:,}")
+    return EXIT_OK
+
+
 def _add_reviews_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("reviews_json", type=Path, metavar="<reviews.json>")
     parser.add_argument(
@@ -295,6 +352,21 @@ def _build_parser() -> argparse.ArgumentParser:
     import_tags = commands.add_parser("import-tags", help="匯入標籤草稿：把審核過的標籤寫進資料庫")
     import_tags.add_argument("draft_json", type=Path, metavar="<標籤草稿>")
     import_tags.set_defaults(handler=_import_tags)
+
+    eval_cases = commands.add_parser(
+        "eval", help="評估題組：用真的模型跑 eval_cases.json，產生分數與人工勾選用的報告"
+    )
+    eval_cases.add_argument("eval_cases", type=Path, metavar="<eval_cases.json>")
+    eval_cases.add_argument("--out", type=Path, required=True, metavar="<報告>")
+    eval_cases.add_argument(
+        "--repeat",
+        type=_positive_int,
+        default=1,
+        metavar="N",
+        help="非 Demo 題各跑幾次，預設 1；Demo 題固定跑 3 次",
+    )
+    eval_cases.add_argument("--no-judge", action="store_true", help="這次不跑評審建議")
+    eval_cases.set_defaults(handler=_eval)
 
     return parser
 

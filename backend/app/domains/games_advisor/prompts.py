@@ -4,7 +4,8 @@
 required、additionalProperties 為 false。
 """
 
-from collections.abc import Sequence
+import json
+from collections.abc import Mapping, Sequence
 from typing import Any, Protocol
 
 from app.domains.games_advisor.schemas import Review
@@ -298,3 +299,45 @@ ADVISOR_REPLY_SCHEMA = JsonSchema(
         "additionalProperties": False,
     },
 )
+
+
+# --- 評估題組的評審（spec §15.6） ---
+
+# 只判斷有沒有依據，不評文筆，也不評推薦得好不好。評審也會判錯，結果只給立倫勾選時參考、不算分
+REASON_CHECK_INSTRUCTIONS = """\
+你負責檢查桌遊推薦卡片上的推薦理由有沒有依據。輸入是一張卡片的 JSON：
+- reason：推薦理由。
+- excerpts：卡片上引用的心得片段原文。
+- matches：這款桌遊在查詢結果裡命中的偏好（matched_preferences）與負面偏好（matched_avoids）；\
+查詢了兩次時有兩筆。
+
+規則：
+1. 把推薦理由拆成一個一個說法，逐一判斷能不能在 excerpts 或 matches 裡找到依據。
+2. 心得片段是英文時，意思相同就算有依據。命中的標籤（名稱與定義）、類別、機制，以及難度在範圍內\
+（weight_in_range 是 true），都算依據。
+3. 找不到依據的說法逐條寫進 unsupported，每條一句繁體中文，說明是哪個說法、為什麼找不到。
+4. 只判斷有沒有依據：不評文筆，也不評推薦得好不好。
+5. 每個說法都找得到依據時，unsupported 是空陣列。"""
+
+# ⚠️ 要和 schemas.ReasonCheckOutput 一致
+REASON_CHECK_SCHEMA = JsonSchema(
+    name="advisor_reason_check",
+    schema={
+        "type": "object",
+        "properties": {"unsupported": {"type": "array", "items": {"type": "string"}}},
+        "required": ["unsupported"],
+        "additionalProperties": False,
+    },
+)
+
+
+def reason_check_input(
+    reason: str, excerpts: Sequence[str], matches: Sequence[Mapping[str, Any]]
+) -> str:
+    """評審看的一張卡片：推薦理由、卡片上的心得片段原文、這款命中的偏好與負面偏好。"""
+    card = {
+        "reason": reason,
+        "excerpts": list(excerpts),
+        "matches": [dict(match) for match in matches],
+    }
+    return json.dumps(card, ensure_ascii=False, indent=2)
