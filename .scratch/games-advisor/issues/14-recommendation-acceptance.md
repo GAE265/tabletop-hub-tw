@@ -144,3 +144,11 @@ Map: [桌遊推薦 Agent + 桌遊 RAG](../map.md)
 - 2026-11-08（來自「[推薦理由要寫什麼、要不要附出處](11-recommendation-reasons.md)」）：pytest（fake LLM）驗：這則訊息沒呼叫工具時不出卡片；不在工具結果裡的 `game_id` 整款丟掉；不屬於該款的片段 ID 只丟該 ID；卡片照工具順序排列；全部丟掉時 `reply` 換成固定文字；第 1 次查詢 0 款、第 2 次拿掉或放寬時長或年齡時標出放寬條件；卡片的基本資料與出處來自資料庫。情境題組用真的模型檢查：推薦理由只寫命中的偏好與心得片段裡有的感受、命中負面偏好時有說出來、不寫條件與信心分數、最多 2 句、有心得片段時至少引用 1 段、`reply` 不列桌遊名單。
 - 2026-11-08（來自「[需要整合層提供哪些介面](12-integrations-interface.md)」）：pytest 一律用 fake 和 httpx `MockTransport`，CI 不連真的 Azure。真實模型只在兩個地方測得到：第一張實作 ticket（手動驗證 `tools` 加 `text.format`），以及這張的情境題組。`LLMResponse` 帶 token 用量，可以用來估算跑一次情境題組要花多少錢。
 - 2026-11-08（來自「[API 契約與 prototype 頁面](13-api-contract-and-prototype.md)」）：API 是 `POST /api/v1/advisor/messages`。pytest 至少要涵蓋：201 的一般回覆與推薦（`relaxed_constraint`、卡片照工具順序、`excerpts` 只有 `id`、`text`、`language`）；422（空白、超過 500 字）；401（JWT 模式未登入）；404 `GAMES_ADVISOR_CONVERSATION_NOT_FOUND`；503 `GAMES_ADVISOR_UNAVAILABLE`（LLM 與 embedding 都算）；500。固定文字兩種（模型拒答、推薦全部被丟掉）回 201 和請求帶來的舊 `response_id`。完整對照表見該 ticket 第 2、3 點。
+- 2026-11-14 加上 LLM 評審建議（立倫定案，spec 標〔評審〕，細節在 spec §15.6）：
+  - 起因：第 6 點的人工項目裡，「推薦理由有沒有寫出心得片段沒提到的事」只能靠立倫讀報告判斷。「[RAG 教材有哪些可以重用](01-rag-materials-reuse.md)」的研究筆記（不進 repo）留給這張的建議是「LLM 裁判只當輔助，而且要先校準」；這張的 Answer 當時沒有採用，也沒有寫明不採用。
+  - 決定做最小版：每張卡片呼叫 1 次評審，檢查推薦理由有沒有寫出依據裡沒有的內容。依據是卡片上顯示的心得片段，加上工具回傳的命中偏好。一次只看一張卡片，不做兩兩比較；沒有片段或推薦理由是空的就不送。
+  - 評審建議寫在報告的卡片下方，不算進條件分、偏好分、人工項目，也不影響 Demo 題。立倫仍然做最後勾選。
+  - 評審用批次的模型（`LLM_BATCH_MODEL`），不和寫推薦理由的模型同一個；`--no-judge` 可以關掉。評審出錯只標「評審失敗」，報告照寫。
+  - 校準：第一次跑完後，對照評審建議和人工勾選，把一致的張數寫進 MR 說明。
+  - 沒有採用：RAGAS 套件與它的另外三個指標（answer relevance、context precision、context recall）、兩兩比較、讓評審結果算分。只需要一個指標，不值得新增套件（AGENTS.md §2.4）；兩兩比較會受答案位置影響；評審也會判錯，所以不算分。
+  - 費用粗估（沒有實測）：每張卡片約 NTD 0.3–0.5（gpt-5.6-terra，含推理 token），一次完整評估約 NTD 20–80。報告印不出評審的 token 用量（`generate_json` 不回傳），實際花費到 Azure 看。
