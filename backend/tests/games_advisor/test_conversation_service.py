@@ -31,6 +31,7 @@ from tests.games_advisor.conversation_support import (
     responds,
     search,
 )
+from tests.games_advisor.support import make_tag
 
 if TYPE_CHECKING:
     from app.domains.games_advisor.conversation import AdvisorReply, ConversationService
@@ -424,6 +425,17 @@ def test_other_llm_error_propagates() -> None:
 
     with pytest.raises(LLMError):
         send(service)
+
+
+def test_tool_enum_is_read_again_for_each_message() -> None:
+    service, llm, repo = make_service([final("請問幾個人？"), final("請問想玩多久？")])
+    first = send(service, "想找桌遊")
+
+    repo.tags = [make_tag("cozy")]
+    send(service, "4 個人", previous_response_id=first.response_id)
+
+    [tool] = responds(llm)[1]["tools"]
+    assert tool.parameters["properties"]["prefer_tags"]["items"]["enum"] == ["cozy"]
 
 
 @pytest.mark.parametrize("user", [TEST_PLAYER, TEST_SHOP_STAFF, TEST_ADMIN])

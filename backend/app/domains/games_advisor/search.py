@@ -29,7 +29,7 @@ MAX_PLAYERS = 30
 MIN_WEIGHT = 1
 MAX_WEIGHT = 5
 
-# 回傳給 LLM、也用來組卡片的基本資料（spec §11.7、§13.1）
+# ⚠️ 回傳給 LLM、也用來組卡片的基本資料（spec §11.7、§13.1）；要和 schemas.AdvisorGame 的欄位一致
 GAME_FIELDS = (
     "id",
     "name",

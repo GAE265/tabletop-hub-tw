@@ -273,6 +273,7 @@ ADVISOR_INSTRUCTIONS = """\
 - 無關的話題：簡短拒絕，把話題帶回推薦。
 - 英文的 BGG 類別與機制名稱，回覆時翻成中文。"""
 
+# ⚠️ 要和 conversation._FinalOutput 一致
 ADVISOR_REPLY_SCHEMA = JsonSchema(
     name="advisor_reply",
     schema={

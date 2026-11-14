@@ -65,6 +65,7 @@ class _Recommendation(BaseModel):
     excerpt_ids: list[str]
 
 
+# ⚠️ 要和 prompts.ADVISOR_REPLY_SCHEMA 一致
 class _FinalOutput(BaseModel):
     """最終輸出 advisor_reply（spec §12.3）。多出來的欄位不理會。"""
 
@@ -211,6 +212,7 @@ def _cards(
             logger.warning("桌遊 %d 引用的心得片段不屬於它，丟掉：%s", game_id, "、".join(dropped))
         valid = [excerpt_id for excerpt_id in recommendation.excerpt_ids if excerpt_id in allowed]
         game = found[game_id][1]
+        # ⚠️ 心得片段只回 id、text、language，要和 schemas.AdvisorExcerpt 一致
         kept[game_id] = RecommendationCard(
             game={name: game[name] for name in GAME_FIELDS},
             reason=recommendation.reason,
