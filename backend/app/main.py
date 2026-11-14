@@ -9,6 +9,7 @@ from sqlalchemy.orm import sessionmaker
 from app.core.config import Settings, get_settings
 from app.core.db import create_db_engine
 from app.core.errors import register_error_handlers
+from app.domains.groups.router import router as groups_router
 from app.domains.health.router import router as health_router
 from app.integrations.embedding import EmbeddingConfig, get_embedding_provider
 from app.integrations.llm import get_llm_provider
@@ -50,6 +51,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
     register_error_handlers(app)
     app.include_router(health_router, prefix=API_PREFIX)
+    app.include_router(groups_router, prefix=API_PREFIX)
 
     if settings.auth_mode == "dev":
         # app/dev 任何地方都不得 import（AGENTS.md 4.2），所以只在 dev 模式動態載入
