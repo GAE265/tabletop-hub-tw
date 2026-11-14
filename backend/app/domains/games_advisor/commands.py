@@ -94,6 +94,18 @@ def _batch_llm(settings: Settings) -> LLMProvider:
     return _real_llm(batch_llm_settings(settings))
 
 
+def eval_model_names(settings: Settings, *, judge: bool) -> tuple[str, str | None]:
+    """評估題組報告開頭印的模型名稱：（對話模型，評審模型）。不跑評審時，評審模型是 None。
+
+    對話用 API 的設定（LLM_MODEL）；評審用批次的設定，LLM_BATCH_MODEL 留空就退回 LLM_MODEL
+    （spec §15.6、§7.2 規則 4）。
+    """
+    conversation = settings.llm_model or ""
+    if not judge:
+        return conversation, None
+    return conversation, batch_llm_settings(settings).llm_model or ""
+
+
 def _embedding(settings: Settings) -> tuple[EmbeddingProvider, EmbeddingConfig]:
     """games_advisor 自己的 embedding：只讀 GAMES_ADVISOR_EMBEDDING_*（spec §7.2 規則 5）。"""
     config = EmbeddingConfig(
@@ -242,12 +254,10 @@ def _eval(args: argparse.Namespace, session: Session, settings: Settings) -> int
     # 先確認有真的模型，再讀檔案。對話用 API 的設定，評審用批次的設定；--no-judge 時不建評審的
     # provider（spec §15.1）
     llm = _real_llm(settings)
+    llm_model, judge_model = eval_model_names(settings, judge=not args.no_judge)
     judge = None
-    if not args.no_judge:
-        judge_settings = batch_llm_settings(settings)
-        judge = evaluation.Judge(
-            llm=_real_llm(judge_settings), model=judge_settings.llm_model or ""
-        )
+    if judge_model is not None:
+        judge = evaluation.Judge(llm=_batch_llm(settings), model=judge_model)
     embedding, embedding_config = _embedding(settings)
     result = evaluation.run_eval(
         service.read_json(args.eval_cases),
@@ -257,13 +267,13 @@ def _eval(args: argparse.Namespace, session: Session, settings: Settings) -> int
         embedding=embedding,
         embedding_model=service.embedding_model_name(embedding_config),
         llm=llm,
-        llm_model=settings.llm_model or "",
+        llm_model=llm_model,
         judge=judge,
         out_path=args.out,
         repeat=args.repeat,
+        # 開跑前就印：沒有向量的桌遊會讓分數不準，執行的人可以先按 Ctrl+C 停下（spec §15.1）
+        warn=lambda warning: print(f"提醒：{warning}", file=sys.stderr, flush=True),
     )
-    for warning in result.warnings:
-        print(f"提醒：{warning}", file=sys.stderr)
     condition, preference = result.condition, result.preference
     print(f"評估報告：{args.out}")
     print(

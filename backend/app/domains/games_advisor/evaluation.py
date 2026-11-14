@@ -11,7 +11,7 @@
 import json
 import uuid
 from collections import Counter
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal, NamedTuple, Protocol
@@ -538,13 +538,18 @@ def run_eval(
     judge: Judge | None,
     out_path: Path,
     repeat: int = 1,
+    warn: Callable[[str], None] | None = None,
 ) -> EvalResult:
     """跑一次評估題組，報告寫到 out_path。開始前檢查不通過就拋 Refused，不呼叫模型。
 
     data 是 eval_cases.json 的內容。題目照檔案順序跑，每題連續跑完它的次數：Demo 題 3 次，
     其他題 repeat 次。judge 是 None 代表 --no-judge。
+    warn 在開始前檢查之後、呼叫模型之前收到每一則提醒（沒有向量的桌遊），讓執行的人來得及停下。
     """
     plan = _prepare(data, games, reviews, embedding_model, out_path)
+    if warn is not None:
+        for warning in plan.warnings:
+            warn(warning)
     recorder = _RecordingLLM(llm)
     search = GameSearch(
         games=games,
