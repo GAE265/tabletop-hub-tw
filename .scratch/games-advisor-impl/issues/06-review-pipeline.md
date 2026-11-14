@@ -1,9 +1,9 @@
 # 06：心得管線
 
-Status: ready-for-agent
+Status: resolved
 Blocked by: 05
 Spec: [spec](../../games-advisor/spec.md) §6–§9
-MR: （還沒開）
+MR: [#24](https://github.com/GAE265/tabletop-hub-tw/pull/24)
 
 ## 要做什麼
 
@@ -16,8 +16,8 @@ MR: （還沒開）
 
 ## 驗收條件
 
-- [ ] 開 Draft MR，MR 說明列出情境表格（AGENTS.md §7.2、§7.4）
-- [ ] spec §7.2、§8.1–§8.8、§8.10、§8.11、§9 的每一列都有測試而且通過
-- [ ] MR 說明寫出其他組員怎麼同步（下載 GAE265G5 的匯出檔 → 執行 `sync-games`），合併後通知組員
-- [ ] AGENTS.md §2 第 7 點的三項檢查通過
-- [ ] 合併前把本檔的 `Status` 改成 `resolved`、`MR` 填上連結
+- [x] 開 Draft MR，MR 說明列出情境表格（AGENTS.md §7.2、§7.4）
+- [x] spec §7.2、§8.1–§8.8、§8.10、§8.11、§9 的每一列都有測試而且通過
+- [x] MR 說明寫出其他組員怎麼同步（下載 GAE265G5 的匯出檔 → 執行 `sync-games`），合併後通知組員
+- [x] AGENTS.md §2 第 7 點的三項檢查通過
+- [x] 合併前把本檔的 `Status` 改成 `resolved`、`MR` 填上連結

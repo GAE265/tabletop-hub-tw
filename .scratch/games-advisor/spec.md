@@ -57,7 +57,7 @@
 | 部分 | 位置 |
 |---|---|
 | 後端 | `backend/app/domains/games_advisor/`：`router`、`schemas`、`service`、`repository`、`models`（AGENTS.md §4.1），加上一個批次指令模組（§7）〔管線〕§8 |
-| 共用桌遊表 | `backend/app/core/games/`：`games`、`genres`、`game_genres` 的資料表定義與唯讀查詢，負責人立倫（§3、〔ADR 0003〕） |
+| 共用桌遊表 | `backend/app/core/games/`：`games`、`genres`、`game_genres` 的資料表定義與 `GameRepository`（共用表只有這一個 repository，AGENTS.md §4.2），負責人立倫（§3、〔ADR 0003〕、〔1.8〕） |
 | 整合層 | `backend/app/integrations/llm/`、`integrations/embedding/`（瑋鋐擁有），介面照[整合層提案](integrations-proposal.md) |
 | 測試 | `backend/tests/games_advisor/` |
 | 前端 | `frontend/lib/domains/games_advisor/` 的 `data/`、`state/`，`frontend/lib/prototypes/games_advisor/`，交接說明 `docs/handoff/games_advisor.md`（§14） |
