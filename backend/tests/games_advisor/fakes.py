@@ -236,6 +236,9 @@ class FakeSearchRepository:
     def list_game_ids(self) -> list[int]:
         return [game["id"] for game in self.games]
 
+    def list_games(self) -> list[dict[str, Any]]:
+        return [dict(game) for game in self.games]
+
     # TagRepository
     def list_tags(self) -> list[dict[str, str]]:
         return sorted((dict(tag) for tag in self.tags), key=lambda tag: tag["code"])
