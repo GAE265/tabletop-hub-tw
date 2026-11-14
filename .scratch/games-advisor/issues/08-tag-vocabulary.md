@@ -30,6 +30,11 @@ Map: [桌遊推薦 Agent + 桌遊 RAG](../map.md)
   - 人工驗證只能刪除標籤，不能新增，也不能改信心分數。
   - 信心分數的給分標準（AI 助理提的 3 段參考標準）：立倫要再開討論，處理方式待確認。
 - 2026-11-07 grilling 第 4 輪（立倫）：信心分數的給分標準移到「心得怎麼變成標籤」一起決定。
+- 2026-11-15（實作 ticket「[評估題組與詞彙表](../../games-advisor-impl/issues/10-eval-and-vocabulary.md)」，立倫審核真資料的詞彙表草稿）：草稿把 122 個候選詞合併成 30 個標籤；立倫參考歸納報告逐條審核，定案 30 個（`backend/app/domains/games_advisor/tag_vocabulary.json`）。其中 7 個刻意破例，違反 Answer 第 3 點：
+  - 和 BGG 類別、機制重複：協力合作（`Cooperative Game`）、團隊默契（`Team-Based Game`）、動手操作（`Action / Dexterity`）、交易談判（`Trading`、`Negotiation`）、派對聚會（`Party Game`）。
+  - 耐玩多變：原本是在評價好不好，也和機制 `Variable Set-up` 重疊；定義改成講「每局都有新變化」的感受。
+  - 溫馨療癒：和「緊張刺激」是同一個面向的兩個方向；定義避開「放鬆」「輕鬆」，免得和對話規則的難度換算撞在一起。
+  - 影響：同一個偏好可能同時用標籤和類別、機制表達，同一批桌遊會被加兩次分。寫評估題組時，這幾種偏好的 `tool_args` 不要只認標籤，或只認類別、機制其中一種。
 
 ## Answer
 
