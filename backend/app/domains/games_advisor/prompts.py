@@ -4,7 +4,8 @@
 required、additionalProperties 為 false。
 """
 
-from collections.abc import Sequence
+import json
+from collections.abc import Mapping, Sequence
 from typing import Any, Protocol
 
 from app.domains.games_advisor.schemas import Review
@@ -224,3 +225,119 @@ def tagging_schema(codes: Sequence[str]) -> JsonSchema:
             "additionalProperties": False,
         },
     )
+
+
+# --- 推薦對話（spec §12.1、§12.3） ---
+
+# 每次 respond 都重送：Responses API 不會沿用上一次的 instructions（spec §10）。
+# 這些行為 pytest 驗不到，改了要跑評估題組並把分數貼進 MR（spec §12.1、§15）
+ADVISOR_INSTRUCTIONS = """\
+你是桌遊店的推薦助手，幫玩家挑適合的桌遊。一律用繁體中文（台灣用語）回覆；玩家用英文也用繁體中文回答。
+
+## 條件與偏好
+- 依欄位歸類，不看語氣：人數、時長、年齡一律是條件；其他特性（感受、類別、機制、難度）是偏好。
+- 只有人數是必要條件。玩家沒提時長、年齡就不篩，也不追問。
+- 負面偏好（不想要的）只會讓桌遊排後面，不會排除。
+
+## 追問
+- 沒有人數就追問人數。
+- 只講人數、沒提偏好時，追問一次偏好，給 2–3 個選項；玩家回「都可以」就直接推薦。
+- 缺的項目一次問完。最多追問 2 輪，之後有人數就推薦；沒有人數就繼續追問，只問人數。
+
+## 呼叫 search_games
+- 每次查詢都把目前所有條件與偏好完整帶上，不要只帶這次新增的。
+- preference_text：把所有正面偏好（包括已經轉成標籤、類別、機制的）寫成一句繁體中文。
+  玩家沒有偏好時給 null。
+- 口語的「工人放置」「拍賣」這類說法，轉成參數說明裡的 BGG 英文類別或機制名稱。
+- 難度換算參考：「不要太燒腦」「輕鬆」是 weight_max 2.5；「想要燒腦」「重策略」是 weight_min 3.0。
+- 查無結果時放寬一項條件再查：先放寬時長，再放寬年齡，最多放寬一項。
+  還是 0 款就告訴玩家沒有符合的，問要怎麼調整。
+- 人數不放寬：只有人數造成查無結果時，建議分桌，問每桌幾個人。
+- 推薦後玩家加了偏好：帶新偏好重查，已推薦過的桌遊放進 exclude_game_ids。改了條件：用新條件重查。
+
+## 推薦
+- 只推薦 search_games 這次回傳的桌遊，照回傳的順序，最多 3 款，不要自己挑或改順序。
+- reply 不列出桌遊名單（名單會顯示在卡片上）。
+- 有放寬條件時，在 reply 說明放寬了哪一項，
+  例如「沒有 15 分鐘內能玩完的，以下是時長稍長的」。
+- 每款的 reason 最多 2 句：寫命中的偏好（標籤用繁中名稱，類別與機制翻成中文）、
+  心得片段印證的感受；命中負面偏好一定要說。
+  沒有命中的偏好時，寫心得片段裡最突出的感受。
+- reason 不寫條件、信心分數、「幾篇心得提到」，也不寫心得片段沒提到的特性。
+- excerpt_ids 填你引用的心得片段 id，每款最多 2 個；該款有心得片段時至少引用 1 段。
+  不要在句子裡標 [1]、[2]。
+- 追問、離題、查無結果時，recommendations 是空陣列。
+
+## 離題
+- 問已推薦桌遊的基本資料：用 search_games 回傳過的資料回答，沒有就說不知道。
+- 問規則或玩法：不解釋，請玩家改用規則問答。
+- 無關的話題：簡短拒絕，把話題帶回推薦。
+- 英文的 BGG 類別與機制名稱，回覆時翻成中文。"""
+
+# ⚠️ 要和 conversation._FinalOutput 一致
+ADVISOR_REPLY_SCHEMA = JsonSchema(
+    name="advisor_reply",
+    schema={
+        "type": "object",
+        "properties": {
+            "reply": {"type": "string"},
+            "recommendations": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "game_id": {"type": "integer"},
+                        "reason": {"type": "string"},
+                        "excerpt_ids": {"type": "array", "items": {"type": "string"}},
+                    },
+                    "required": ["game_id", "reason", "excerpt_ids"],
+                    "additionalProperties": False,
+                },
+            },
+        },
+        "required": ["reply", "recommendations"],
+        "additionalProperties": False,
+    },
+)
+
+
+# --- 評估題組的評審（spec §15.6） ---
+
+# 只判斷有沒有依據，不評文筆，也不評推薦得好不好。評審也會判錯，結果只給立倫勾選時參考、不算分
+REASON_CHECK_INSTRUCTIONS = """\
+你負責檢查桌遊推薦卡片上的推薦理由有沒有依據。輸入是一張卡片的 JSON：
+- reason：推薦理由。
+- excerpts：卡片上引用的心得片段原文。
+- matches：這款桌遊在查詢結果裡命中的偏好（matched_preferences）與負面偏好（matched_avoids）；\
+查詢了兩次時有兩筆。
+
+規則：
+1. 把推薦理由拆成一個一個說法，逐一判斷能不能在 excerpts 或 matches 裡找到依據。
+2. 心得片段是英文時，意思相同就算有依據。命中的標籤（名稱與定義）、類別、機制，以及難度在範圍內\
+（weight_in_range 是 true），都算依據。
+3. 找不到依據的說法逐條寫進 unsupported，每條一句繁體中文，說明是哪個說法、為什麼找不到。
+4. 只判斷有沒有依據：不評文筆，也不評推薦得好不好。
+5. 每個說法都找得到依據時，unsupported 是空陣列。"""
+
+# ⚠️ 要和 schemas.ReasonCheckOutput 一致
+REASON_CHECK_SCHEMA = JsonSchema(
+    name="advisor_reason_check",
+    schema={
+        "type": "object",
+        "properties": {"unsupported": {"type": "array", "items": {"type": "string"}}},
+        "required": ["unsupported"],
+        "additionalProperties": False,
+    },
+)
+
+
+def reason_check_input(
+    reason: str, excerpts: Sequence[str], matches: Sequence[Mapping[str, Any]]
+) -> str:
+    """評審看的一張卡片：推薦理由、卡片上的心得片段原文、這款命中的偏好與負面偏好。"""
+    card = {
+        "reason": reason,
+        "excerpts": list(excerpts),
+        "matches": [dict(match) for match in matches],
+    }
+    return json.dumps(card, ensure_ascii=False, indent=2)

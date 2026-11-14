@@ -1,6 +1,8 @@
-"""批次指令讀寫的檔案格式與檢查：games.json、匯出檔（spec §8.1、§8.10、§8.11）、
+"""推薦對話 API 的請求與回應（spec §13.1，在檔案最後）。
+
+批次指令讀寫的檔案格式與檢查：games.json、匯出檔（spec §8.1、§8.10、§8.11）、
 reviews.json（spec §8.2）、tag_vocabulary.json（spec §8.6），以及歸納詞彙表時 LLM 的輸出
-（spec §8.5）。
+（spec §8.5）。評估題組的題組檔 eval_cases.json 與評審的輸出（spec §15.2、§15.6）也在檔案最後。
 
 型別一律嚴格比對：整數欄位不接受 "2"、2.0、true。
 types 的代碼是否存在，要給 context={"type_codes": 代碼集合} 才檢查；沒給就不檢查。
@@ -14,6 +16,7 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    StringConstraints,
     ValidationError,
     ValidationInfo,
     field_validator,
@@ -267,8 +270,12 @@ def _reason(error: Any) -> str:
         "extra_forbidden": "不認得的欄位",
         "int_type": "要是整數",
         "float_type": "要是數字",
+        "bool_type": "要是 true 或 false",
         "string_type": "要是文字",
+        "string_too_short": f"至少要 {context.get('min_length')} 個字",
+        "string_too_long": f"不能超過 {context.get('max_length')} 個字",
         "list_type": "要是陣列",
+        "too_short": f"至少要有 {context.get('min_length')} 個",
         "model_type": "要是物件",
         "greater_than": f"要大於 {context.get('gt')}",
         "greater_than_equal": f"不能小於 {context.get('ge')}",
@@ -299,3 +306,174 @@ def describe_problems(
             where = ".".join(str(part) for part in location) or "檔案內容"
         lines.append(f"{where}：{_reason(error)}")
     return lines
+
+
+def describe_eval_problems(exc: ValidationError, data: object) -> list[str]:
+    """題組檔檢查不通過的地方，一行一個問題：第幾題（id）第幾輪的哪個欄位、為什麼。
+
+    expect 有好幾層，所以寫出完整的欄位路徑，例如 expect.tool_args.players。
+    """
+    cases = data.get("cases") if isinstance(data, dict) else None
+    lines = []
+    for error in exc.errors():
+        location = list(error["loc"])
+        if len(location) >= 2 and location[0] == "cases" and isinstance(location[1], int):
+            index = location[1]
+            entry = cases[index] if isinstance(cases, list) and index < len(cases) else None
+            case_id = entry.get("id", "？") if isinstance(entry, dict) else "？"
+            where = f"第 {index + 1} 題（id {case_id}）"
+            rest = location[2:]
+            if len(rest) >= 2 and rest[0] == "turns" and isinstance(rest[1], int):
+                where += f"第 {rest[1] + 1} 輪"
+                rest = rest[2:]
+            if rest:
+                where += "的 " + ".".join(str(part) for part in rest)
+        else:
+            where = ".".join(str(part) for part in location) or "題組檔"
+        lines.append(f"{where}：{_reason(error)}")
+    return lines
+
+
+# --- 推薦對話 API（spec §13.1）。⚠️ 改這裡等於改前後端的契約 ---
+
+# 欄位超過上限的訊息不送給 LLM
+MESSAGE_MAX_CHARS = 500
+
+
+class MessageRequest(BaseModel):
+    # 去掉前後空白後 1–500 字；送給 LLM 的是去掉空白後的文字
+    content: Annotated[
+        str, StringConstraints(strip_whitespace=True, min_length=1, max_length=MESSAGE_MAX_CHARS)
+    ]
+    # 上一則回應的 response_id；必填，新對話給 null。漏了這個欄位或給空字串回 422：
+    # 漏送會讓 Agent 默默忘記前面的對話，寧可讓前端在開發時就看到錯誤
+    previous_response_id: Annotated[str, StringConstraints(min_length=1)] | None
+
+
+class AdvisorGame(BaseModel):
+    id: int
+    name: str
+    min_players: int
+    max_players: int
+    min_playtime: int
+    max_playtime: int
+    min_age: int
+    weight: float
+
+
+class AdvisorExcerpt(BaseModel):
+    id: str
+    text: str
+    language: str
+
+
+class AdvisorRecommendation(BaseModel):
+    game: AdvisorGame
+    reason: str
+    excerpts: list[AdvisorExcerpt]
+
+
+class MessageResponse(BaseModel):
+    # 固定文字時是請求帶來的舊 id；第一則訊息就固定文字時是 null
+    response_id: str | None
+    reply: str
+    relaxed_constraint: Literal["playtime", "age"] | None
+    recommendations: list[AdvisorRecommendation]
+
+
+# --- 評估題組的題組檔 eval_cases.json（spec §15.2） ---
+
+
+class EvalToolArgs(BaseModel):
+    """一輪預期的工具參數：只寫要檢查的參數，寫 null 代表模型必須沒帶。
+
+    model_fields_set 分得出「沒寫」和「寫 null」。排除清單用 BGG ID 寫（exclude_bgg_ids），
+    比對前換成桌遊 id。preference_text 是自由文字，沒辦法比對，所以不能寫。
+    ⚠️ 欄位要和「查桌遊」工具的參數（search.build_search_tool）一致
+    """
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    players: int | None = None
+    max_minutes: int | None = None
+    min_minutes: int | None = None
+    youngest_age: int | None = None
+    weight_min: float | None = None
+    weight_max: float | None = None
+    prefer_tags: list[str] | None = None
+    avoid_tags: list[str] | None = None
+    prefer_categories: list[str] | None = None
+    avoid_categories: list[str] | None = None
+    prefer_mechanics: list[str] | None = None
+    avoid_mechanics: list[str] | None = None
+    exclude_bgg_ids: list[int] | None = None
+
+
+class EvalExpect(BaseModel):
+    """一輪的預期結果：只寫這一輪要檢查的欄位。桌遊用 BGG ID 寫。
+
+    只有 relaxed_constraint 可以寫 null（代表必須沒有放寬）；其他欄位不檢查就不要寫。
+    """
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    action: Literal["follow_up", "recommend", "off_topic"] | None = None
+    tool_args: EvalToolArgs | None = None
+    relaxed_constraint: Literal["playtime", "age"] | None = None
+    expect_any: list[int] | None = None
+    forbid: list[int] | None = None
+    manual: list[NonBlank] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _only_relaxed_constraint_can_be_null(self) -> Self:
+        nulls = [
+            name
+            for name in ("action", "tool_args", "expect_any", "forbid")
+            if name in self.model_fields_set and getattr(self, name) is None
+        ]
+        if nulls:
+            raise ValueError(f"{'、'.join(nulls)} 不能是 null：這一輪不檢查就不要寫")
+        return self
+
+
+class EvalTurn(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    # 同 MessageRequest.content：API 收得下的訊息才放得進題組
+    player: Annotated[
+        str, StringConstraints(strip_whitespace=True, min_length=1, max_length=MESSAGE_MAX_CHARS)
+    ]
+    expect: EvalExpect
+
+
+class EvalCase(BaseModel):
+    """一題評估題：一段對話腳本。demo 標 true 的是 Demo 題，固定跑 3 次。"""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    id: NonBlank
+    demo: bool = False
+    turns: list[EvalTurn] = Field(min_length=1)
+
+
+class EvalCasesFile(BaseModel):
+    """eval_cases.json：立倫寫的玩家訊息與預期結果，進 repo。"""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    cases: list[EvalCase]
+
+    @model_validator(mode="after")
+    def _ids_are_unique(self) -> Self:
+        if problems := _repeated(self.cases, "id", "題"):
+            raise ValueError("；".join(problems))
+        return self
+
+
+class ReasonCheckOutput(BaseModel):
+    """評審的輸出（spec §15.6）：推薦理由裡找不到依據的說法，空的就是「有依據」。
+
+    ⚠️ 要和 prompts.REASON_CHECK_SCHEMA 一致
+    """
+
+    unsupported: list[str]

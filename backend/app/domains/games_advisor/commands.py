@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 from app.core.config import Settings, get_settings
 from app.core.db import create_db_engine
 from app.core.games.repository import GameRepository
-from app.domains.games_advisor import service
+from app.domains.games_advisor import evaluation, service
 from app.domains.games_advisor.repository import ReviewRepository, TagRepository
 from app.domains.games_advisor.service import BatchResult, Refused, SkippedGame
 from app.integrations.embedding.base import EmbeddingProvider
@@ -53,6 +53,16 @@ def _bgg_ids(value: str) -> list[int]:
         ) from None
 
 
+def _positive_int(value: str) -> int:
+    try:
+        number = int(value)
+    except ValueError:
+        number = 0
+    if number < 1:
+        raise argparse.ArgumentTypeError("要是 1 以上的整數")
+    return number
+
+
 # --- 建立 provider ---
 
 
@@ -70,13 +80,30 @@ def batch_llm_settings(settings: Settings) -> Settings:
     )
 
 
-def _batch_llm(settings: Settings) -> LLMProvider:
+def _real_llm(settings: Settings) -> LLMProvider:
+    """照 settings 的 LLM_* 建 provider；LLM_PROVIDER=fake 就拒絕執行（spec §7.2 規則 3）。"""
     if settings.llm_provider == "fake":
         raise Refused("需要真的模型，請設定 LLM_*")
     try:
-        return get_llm_provider(settings.llm_provider, batch_llm_settings(settings))
+        return get_llm_provider(settings.llm_provider, settings)
     except (ValueError, NotImplementedError) as exc:
         raise Refused(str(exc)) from exc
+
+
+def _batch_llm(settings: Settings) -> LLMProvider:
+    return _real_llm(batch_llm_settings(settings))
+
+
+def eval_model_names(settings: Settings, *, judge: bool) -> tuple[str, str | None]:
+    """評估題組報告開頭印的模型名稱：（對話模型，評審模型）。不跑評審時，評審模型是 None。
+
+    對話用 API 的設定（LLM_MODEL）；評審用批次的設定，LLM_BATCH_MODEL 留空就退回 LLM_MODEL
+    （spec §15.6、§7.2 規則 4）。
+    """
+    conversation = settings.llm_model or ""
+    if not judge:
+        return conversation, None
+    return conversation, batch_llm_settings(settings).llm_model or ""
 
 
 def _embedding(settings: Settings) -> tuple[EmbeddingProvider, EmbeddingConfig]:
@@ -223,6 +250,46 @@ def _import_tags(args: argparse.Namespace, session: Session, settings: Settings)
     return EXIT_OK
 
 
+def _eval(args: argparse.Namespace, session: Session, settings: Settings) -> int:
+    # 先確認有真的模型，再讀檔案。對話用 API 的設定，評審用批次的設定；--no-judge 時不建評審的
+    # provider（spec §15.1）
+    llm = _real_llm(settings)
+    llm_model, judge_model = eval_model_names(settings, judge=not args.no_judge)
+    judge = None
+    if judge_model is not None:
+        judge = evaluation.Judge(llm=_batch_llm(settings), model=judge_model)
+    embedding, embedding_config = _embedding(settings)
+    result = evaluation.run_eval(
+        service.read_json(args.eval_cases),
+        games=GameRepository(session),
+        tags=TagRepository(session),
+        reviews=ReviewRepository(session),
+        embedding=embedding,
+        embedding_model=service.embedding_model_name(embedding_config),
+        llm=llm,
+        llm_model=llm_model,
+        judge=judge,
+        out_path=args.out,
+        repeat=args.repeat,
+        # 開跑前就印：沒有向量的桌遊會讓分數不準，執行的人可以先按 Ctrl+C 停下（spec §15.1）
+        warn=lambda warning: print(f"提醒：{warning}", file=sys.stderr, flush=True),
+    )
+    constraint, preference = result.constraint, result.preference
+    print(f"評估報告：{args.out}")
+    print(
+        f"條件分 {constraint.passed}/{constraint.total}、"
+        f"偏好分 {preference.passed}/{preference.total}、"
+        f"人工項目 {result.manual_items} 項（請在報告勾選後自己統計）"
+    )
+    for case_id, passed in result.demo.items():
+        state = (
+            f"程式比對 {evaluation.DEMO_RUNS} 次全過，人工項目請勾選後確認" if passed else "沒過"
+        )
+        print(f"Demo 題 {case_id}：{state}")
+    print(f"token 用量（只算對話）：輸入 {result.input_tokens:,}、輸出 {result.output_tokens:,}")
+    return EXIT_OK
+
+
 def _add_reviews_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("reviews_json", type=Path, metavar="<reviews.json>")
     parser.add_argument(
@@ -295,6 +362,21 @@ def _build_parser() -> argparse.ArgumentParser:
     import_tags = commands.add_parser("import-tags", help="匯入標籤草稿：把審核過的標籤寫進資料庫")
     import_tags.add_argument("draft_json", type=Path, metavar="<標籤草稿>")
     import_tags.set_defaults(handler=_import_tags)
+
+    eval_cases = commands.add_parser(
+        "eval", help="評估題組：用真的模型跑 eval_cases.json，產生分數與人工勾選用的報告"
+    )
+    eval_cases.add_argument("eval_cases", type=Path, metavar="<eval_cases.json>")
+    eval_cases.add_argument("--out", type=Path, required=True, metavar="<報告>")
+    eval_cases.add_argument(
+        "--repeat",
+        type=_positive_int,
+        default=1,
+        metavar="N",
+        help="非 Demo 題各跑幾次，預設 1；Demo 題固定跑 3 次",
+    )
+    eval_cases.add_argument("--no-judge", action="store_true", help="這次不跑評審建議")
+    eval_cases.set_defaults(handler=_eval)
 
     return parser
 

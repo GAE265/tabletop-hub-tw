@@ -1,0 +1,344 @@
+{
+  "cases": [
+    {
+      "id": "follow-up-01",
+      "demo": false,
+      "turns": [
+        {
+          "player": "想找一款桌遊來玩",
+          "expect": {
+            "action": "follow_up",
+            "manual": [
+              "只問人數，沒有問時長、年齡或偏好"
+            ]
+          }
+        },
+        {
+          "player": "我們 4 個人",
+          "expect": {
+            "action": "follow_up",
+            "manual": [
+              "追問偏好，並給 2–3 個選項"
+            ]
+          }
+        },
+        {
+          "player": "都可以，你推薦就好",
+          "expect": {
+            "action": "recommend",
+            "tool_args": {
+              "players": 4,
+              "prefer_tags": null
+            },
+            "manual": [
+              "沒有再追問，直接推薦"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "demo-arcane-academy",
+      "demo": true,
+      "turns": [
+        {
+          "player": "我們兩個人想找桌遊",
+          "expect": {
+            "action": "follow_up",
+            "manual": [
+              "追問偏好，並給 2–3 個選項"
+            ]
+          }
+        },
+        {
+          "player": "想要可以拼連鎖、打出很多效果的那種",
+          "expect": {
+            "action": "recommend",
+            "tool_args": {
+              "players": 2,
+              "prefer_tags": [
+                "combo_satisfaction"
+              ]
+            },
+            "expect_any": [
+              144734
+            ],
+            "manual": [
+              "阿不思學院的推薦理由有提到連鎖",
+              "卡片至少引用 1 段心得片段"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "params-family-01",
+      "demo": false,
+      "turns": [
+        {
+          "player": "我們 3 個大人帶一個 7 歲的小孩，30 分鐘內要玩完，不要太燒腦",
+          "expect": {
+            "action": "recommend",
+            "tool_args": {
+              "players": 4,
+              "max_minutes": 30,
+              "youngest_age": 7,
+              "weight_max": 2.5
+            },
+            "expect_any": [
+              17329,
+              91514
+            ],
+            "forbid": [
+              178900
+            ],
+            "manual": [
+              "推薦理由沒有寫人數、時長、年齡這些條件"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "demo-blades-and-rose",
+      "demo": true,
+      "turns": [
+        {
+          "player": "我們6個人，想玩可以猜別人的心思、真真假假，可以互相嘴砲的，半小時可以玩完",
+          "expect": {
+            "action": "recommend",
+            "tool_args": {
+              "players": 6,
+              "max_minutes": 30,
+              "prefer_tags": [
+                "psychological_game",
+                "verbal_interaction"
+              ]
+            },
+            "expect_any": [
+              400566
+            ],
+            "manual": [
+              "血與刃的白薔薇的推薦理由有提到猜心思或嘴砲",
+              "卡片至少引用 1 段心得片段"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "relax-and-split-01",
+      "demo": false,
+      "turns": [
+        {
+          "player": "我們 4 個人，10 分鐘內要玩完，想要策略一點的",
+          "expect": {
+            "action": "recommend",
+            "tool_args": {
+              "players": 4,
+              "max_minutes": 10
+            },
+            "relaxed_constraint": "playtime",
+            "manual": [
+              "回覆有說明放寬了時長"
+            ]
+          }
+        },
+        {
+          "player": "改成 4 個人，其中有一個 3 歲的小孩，時間不限",
+          "expect": {
+            "action": "recommend",
+            "tool_args": {
+              "players": 4,
+              "youngest_age": 3,
+              "max_minutes": null
+            },
+            "relaxed_constraint": "age",
+            "manual": [
+              "回覆有說明放寬了年齡"
+            ]
+          }
+        },
+        {
+          "player": "如果改成 12 個人，時間不限呢？",
+          "expect": {
+            "action": "follow_up",
+            "tool_args": {
+              "players": 12,
+              "max_minutes": null
+            },
+            "manual": [
+              "沒有放寬人數，建議分桌並問每桌幾個人"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "exclude-recommended-01",
+      "demo": false,
+      "turns": [
+        {
+          "player": "我們 2 個人，15 分鐘內玩完",
+          "expect": {
+            "action": "recommend",
+            "tool_args": {
+              "players": 2,
+              "max_minutes": 15
+            }
+          }
+        },
+        {
+          "player": "這幾款都玩過了，想要更燒腦一點的",
+          "expect": {
+            "action": "recommend",
+            "tool_args": {
+              "players": 2,
+              "max_minutes": 15,
+              "weight_min": 3.0,
+              "exclude_bgg_ids": [
+                178900,
+                17329,
+                91514
+              ]
+            },
+            "relaxed_constraint": "playtime",
+            "expect_any": [
+              463
+            ],
+            "forbid": [
+              178900,
+              17329,
+              91514
+            ],
+            "manual": [
+              "回覆有說明放寬了時長"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "demo-marco-polo",
+      "demo": true,
+      "turns": [
+        {
+          "player": "我們 4 個人想玩燒腦一點的策略遊戲，最好每一局的玩法都不太一樣，不要太靠運氣",
+          "expect": {
+            "action": "recommend",
+            "tool_args": {
+              "players": 4,
+              "weight_min": 3.0,
+              "avoid_tags": [
+                "luck_impact"
+              ]
+            },
+            "expect_any": [
+              171623
+            ],
+            "manual": [
+              "推薦理由只寫命中的偏好或心得裡的感受",
+              "每款推薦理由最多 2 句",
+              "reply 沒有列出桌遊名單",
+              "卡片有命中「運氣影響大」的話，理由有說出來"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "reasons-english-excerpts-01",
+      "demo": false,
+      "turns": [
+        {
+          "player": "我們 2 個人想玩二戰主題的戰爭遊戲，要有身歷其境的感覺",
+          "expect": {
+            "action": "recommend",
+            "tool_args": {
+              "players": 2,
+              "prefer_tags": [
+                "thematic_immersion"
+              ]
+            },
+            "expect_any": [
+              10630
+            ],
+            "manual": [
+              "大戰回憶錄引用的英文心得片段和推薦理由對得上",
+              "推薦理由用繁體中文寫"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "off-topic-01",
+      "demo": false,
+      "turns": [
+        {
+          "player": "我們 4 個人，30 分鐘內，想要歡樂一點的",
+          "expect": {
+            "action": "recommend",
+            "tool_args": {
+              "players": 4,
+              "max_minutes": 30,
+              "prefer_tags": [
+                "laughter"
+              ]
+            },
+            "expect_any": [
+              91514
+            ]
+          }
+        },
+        {
+          "player": "剛剛第一款最多可以幾個人玩？",
+          "expect": {
+            "action": "off_topic",
+            "manual": [
+              "用剛才查到的資料回答第一款的最多人數"
+            ]
+          }
+        },
+        {
+          "player": "那它要怎麼玩？規則可以講一下嗎？",
+          "expect": {
+            "action": "off_topic",
+            "manual": [
+              "沒有解釋規則，請玩家改用規則問答"
+            ]
+          }
+        },
+        {
+          "player": "對了，你覺得明天會下雨嗎？",
+          "expect": {
+            "action": "off_topic",
+            "manual": [
+              "簡短拒絕，把話題帶回推薦"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "english-date-01",
+      "demo": false,
+      "turns": [
+        {
+          "player": "We're a couple looking for something good for a date night, under 30 minutes.",
+          "expect": {
+            "action": "recommend",
+            "tool_args": {
+              "players": 2,
+              "max_minutes": 30
+            },
+            "manual": [
+              "回覆和推薦理由都用繁體中文",
+              "沒有把「約會」硬套成不相干的標籤（看工具參數）"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
