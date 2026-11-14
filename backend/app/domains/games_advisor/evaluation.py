@@ -52,17 +52,17 @@ FIXED_REPLIES = (REJECTED_REPLY, DROPPED_REPLY)
 # 在本機執行，沒有登入者；對話 service 要一個身分，用玩家
 _EVAL_USER = CurrentUser(id=uuid.UUID(int=0), role="player")
 
-Category = Literal["condition", "preference"]
+ScoreKind = Literal["constraint", "preference"]
 TurnStatus = Literal["matched", "mismatched", "not_run"]
 JudgeStatus = Literal["supported", "unsupported", "not_judged", "failed"]
 
 # 每個工具參數算進哪一種分數，順序也是報告的順序（spec §15.2）。
 # ⚠️ 要和 schemas.EvalToolArgs 的欄位一致
-_TOOL_ARG_CATEGORIES: dict[str, Category] = {
-    "players": "condition",
-    "max_minutes": "condition",
-    "min_minutes": "condition",
-    "youngest_age": "condition",
+_TOOL_ARG_KINDS: dict[str, ScoreKind] = {
+    "players": "constraint",
+    "max_minutes": "constraint",
+    "min_minutes": "constraint",
+    "youngest_age": "constraint",
     "weight_min": "preference",
     "weight_max": "preference",
     "prefer_tags": "preference",
@@ -71,10 +71,10 @@ _TOOL_ARG_CATEGORIES: dict[str, Category] = {
     "avoid_categories": "preference",
     "prefer_mechanics": "preference",
     "avoid_mechanics": "preference",
-    "exclude_bgg_ids": "condition",
+    "exclude_bgg_ids": "constraint",
 }
 # 檢查「有沒有包含」的清單參數：模型多帶其他值不算錯。其他參數比數值相等
-_LIST_ARGS = {name for name in _TOOL_ARG_CATEGORIES if name.startswith(("prefer_", "avoid_"))}
+_LIST_ARGS = {name for name in _TOOL_ARG_KINDS if name.startswith(("prefer_", "avoid_"))}
 # 題組檔用 BGG ID 寫排除清單，工具參數是桌遊 id
 _EXCLUDE = "exclude_bgg_ids"
 _TOOL_ARGUMENT_NAMES = {_EXCLUDE: "exclude_game_ids"}
@@ -94,7 +94,7 @@ class CheckResult:
     """程式比對的一個項目，算 1 分。name 例如 action、tool_args.players。"""
 
     name: str
-    category: Category
+    kind: ScoreKind
     expected: Any
     actual: Any
     passed: bool
@@ -165,7 +165,7 @@ class CaseRun:
 @dataclass(frozen=True)
 class EvalResult:
     runs: list[CaseRun]
-    condition: Score
+    constraint: Score
     preference: Score
     # 人工項目共幾項；勾選由立倫在報告做，程式不知道過了幾項
     manual_items: int
@@ -204,7 +204,7 @@ def check_turn(
     """
     cards = set(outcome.card_game_ids)
     results = []
-    for name, category, expected in _expected_items(expect):
+    for name, kind, expected in _expected_items(expect):
         actual: Any
         if name == "action":
             actual = "有卡片" if cards else "沒有卡片"
@@ -222,28 +222,28 @@ def check_turn(
         else:
             argument = name.removeprefix("tool_args.")
             actual, passed = _check_tool_arg(argument, expected, outcome.searches, game_ids)
-        results.append(CheckResult(name, category, expected, actual, passed))
+        results.append(CheckResult(name, kind, expected, actual, passed))
     return results
 
 
-def _expected_items(expect: EvalExpect) -> list[tuple[str, Category, Any]]:
+def _expected_items(expect: EvalExpect) -> list[tuple[str, ScoreKind, Any]]:
     """expect 寫了的項目：（名稱，算進哪種分數，預期值），照固定的順序。"""
     written = expect.model_fields_set
-    items: list[tuple[str, Category, Any]] = []
+    items: list[tuple[str, ScoreKind, Any]] = []
     if "action" in written:
-        items.append(("action", "condition", expect.action))
+        items.append(("action", "constraint", expect.action))
     if expect.tool_args is not None:
         items += [
-            (f"tool_args.{name}", category, getattr(expect.tool_args, name))
-            for name, category in _TOOL_ARG_CATEGORIES.items()
+            (f"tool_args.{name}", kind, getattr(expect.tool_args, name))
+            for name, kind in _TOOL_ARG_KINDS.items()
             if name in expect.tool_args.model_fields_set
         ]
     if "relaxed_constraint" in written:
-        items.append(("relaxed_constraint", "condition", expect.relaxed_constraint))
+        items.append(("relaxed_constraint", "constraint", expect.relaxed_constraint))
     if expect.expect_any is not None:
         items.append(("expect_any", "preference", expect.expect_any))
     if expect.forbid is not None:
-        items.append(("forbid", "condition", expect.forbid))
+        items.append(("forbid", "constraint", expect.forbid))
     return items
 
 
@@ -278,8 +278,8 @@ def _as_set(value: Any) -> set[Any]:
 def _unchecked(expect: EvalExpect, actual: str) -> list[CheckResult]:
     """沒有拿回覆比對的輪次（未執行，或拿到錯誤、固定文字）：項目全部算沒通過。"""
     return [
-        CheckResult(name, category, expected, actual, passed=False)
-        for name, category, expected in _expected_items(expect)
+        CheckResult(name, kind, expected, actual, passed=False)
+        for name, kind, expected in _expected_items(expect)
     ]
 
 
@@ -349,6 +349,8 @@ class _RecordingLLM(LLMProvider):
     def matches(self, game_id: int) -> list[dict[str, Any]]:
         """這一款在這一輪各次工具結果裡命中的偏好與負面偏好（spec §11.7），照查詢先後。"""
         found = []
+        # ⚠️ 要和 search._game_output 回傳給 LLM 的欄位一致（games、id、matched_preferences、
+        # matched_avoids）
         for exchange in self.exchanges:
             if isinstance(exchange.input, str):
                 continue
@@ -614,10 +616,11 @@ class _Runner:
         try:
             reply = self.conversation.send_message(_EVAL_USER, turn.player, previous_id)
         except AppError as exc:
-            # 503：LLM 或 embedding 暫時連不上；404：對話過期
+            # ⚠️ 要和 ConversationService.send_message 的錯誤轉換一致：503 是 LLM 或 embedding
+            # 暫時連不上，404 是對話過期
             error = f"{exc.status_code} {exc.code}：{exc.message}"
         except LLMError as exc:
-            # 其他 LLMError：API 會回 500
+            # ⚠️ 要和 API 一致：send_message 不攔截其他 LLMError，API 會回 500
             error = f"500 {type(exc).__name__}：{exc}"
         else:
             if reply.reply in FIXED_REPLIES:
@@ -676,7 +679,7 @@ def _result(runs: list[CaseRun], runner: _Runner, warnings: list[str]) -> EvalRe
             demo[run.case_id] = demo.get(run.case_id, True) and run.all_matched
     return EvalResult(
         runs=runs,
-        condition=_score(checks, "condition"),
+        constraint=_score(checks, "constraint"),
         preference=_score(checks, "preference"),
         manual_items=sum(len(turn.manual) for run in runs for turn in run.turns),
         demo=demo,
@@ -687,8 +690,8 @@ def _result(runs: list[CaseRun], runner: _Runner, warnings: list[str]) -> EvalRe
     )
 
 
-def _score(checks: list[CheckResult], category: Category) -> Score:
-    picked = [check for check in checks if check.category == category]
+def _score(checks: list[CheckResult], kind: ScoreKind) -> Score:
+    picked = [check for check in checks if check.kind == kind]
     return Score(passed=sum(check.passed for check in picked), total=len(picked))
 
 
@@ -753,11 +756,11 @@ class _Report:
         manual = f"共 {result.manual_items} 項，請在下面勾選後自己統計"
         if unchecked:
             manual += f"；其中 {unchecked} 項在未執行或出錯的輪次，算沒通過"
-        condition, preference = result.condition, result.preference
+        constraint, preference = result.constraint, result.preference
         return [
             "| 分數 | 結果 |",
             "|---|---|",
-            f"| 條件分 | {condition.passed}/{condition.total} |",
+            f"| 條件分 | {constraint.passed}/{constraint.total} |",
             f"| 偏好分 | {preference.passed}/{preference.total} |",
             f"| 人工項目 | {manual} |",
         ]

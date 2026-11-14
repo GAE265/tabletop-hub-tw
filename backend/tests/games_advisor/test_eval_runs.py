@@ -64,7 +64,7 @@ def test_mismatch_stops_the_case(tmp_path: Path) -> None:
     # 只送出第 1 輪的玩家訊息
     assert [call["input"] for call in responds(run.llm)] == ["我們 4 個人"]
     # 未執行輪次的項目算沒通過，分母固定
-    assert run.result.condition == (0, 3)
+    assert run.result.constraint == (0, 3)
     assert run.result.manual_items == 1
     assert "未執行" in run.report
 
@@ -92,7 +92,7 @@ def test_unavailable_or_fixed_reply_stops_the_case(
     assert reason in first.error
     assert reason in run.report
     # 拿到錯誤或固定文字的那一輪，項目全部算沒通過（MR 說明的解讀 4）
-    assert run.result.condition == (0, 2)
+    assert run.result.constraint == (0, 2)
 
 
 @pytest.mark.parametrize(
@@ -203,7 +203,7 @@ def test_scores_by_category(tmp_path: Path) -> None:
     run = evaluate(tmp_path / "report.md", data, responses)
 
     # 條件：score-01 6/6；score-02 第 1 輪 2/2、第 2 輪未執行 0/2
-    assert run.result.condition == (8, 10)
+    assert run.result.constraint == (8, 10)
     # 偏好：score-01 3/3；score-02 第 1 輪 0/2、第 2 輪未執行 0/1
     assert run.result.preference == (3, 6)
     # 人工項目只算有幾項，由立倫在報告勾選後自己統計：2 + 1 + 2
@@ -252,7 +252,7 @@ def test_repeat_applies_to_non_demo_cases(tmp_path: Path) -> None:
         "demo-01": 3,
     }
     # 每一次的項目都算分：5 次各 1 個項目
-    assert run.result.condition == (5, 5)
+    assert run.result.constraint == (5, 5)
 
 
 # --- 報告（spec §15.4） ---

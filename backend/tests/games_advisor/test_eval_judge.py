@@ -131,7 +131,7 @@ def test_judge_does_not_affect_scores(tmp_path: Path) -> None:
 
     def scores(run: EvalRun) -> tuple[object, ...]:
         result = run.result
-        return (result.condition, result.preference, result.manual_items, result.demo)
+        return (result.constraint, result.preference, result.manual_items, result.demo)
 
     assert scores(doubtful) == scores(supported)
     assert doubtful.result.demo == {"demo-01": True}

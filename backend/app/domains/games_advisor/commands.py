@@ -274,10 +274,10 @@ def _eval(args: argparse.Namespace, session: Session, settings: Settings) -> int
         # 開跑前就印：沒有向量的桌遊會讓分數不準，執行的人可以先按 Ctrl+C 停下（spec §15.1）
         warn=lambda warning: print(f"提醒：{warning}", file=sys.stderr, flush=True),
     )
-    condition, preference = result.condition, result.preference
+    constraint, preference = result.constraint, result.preference
     print(f"評估報告：{args.out}")
     print(
-        f"條件分 {condition.passed}/{condition.total}、"
+        f"條件分 {constraint.passed}/{constraint.total}、"
         f"偏好分 {preference.passed}/{preference.total}、"
         f"人工項目 {result.manual_items} 項（請在報告勾選後自己統計）"
     )

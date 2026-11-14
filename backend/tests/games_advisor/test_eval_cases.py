@@ -1,7 +1,7 @@
 """repo 裡的題組檔 eval_cases.json（spec §15.2、§15.5）。
 
-讀真的 eval_cases.json 與 tag_vocabulary.json。兩個檔要等心得管線跑完、立倫定案後才會放進
-repo，在那之前這兩個測試是紅燈。
+讀 repo 裡定案的 eval_cases.json 與 tag_vocabulary.json：題組檔的格式要對，用到的標籤代碼要在
+詞彙表裡。詞彙表刪改代碼時，題組檔也要跟著改（spec §8.6）。
 """
 
 import json
