@@ -315,8 +315,9 @@ class MessageRequest(BaseModel):
     content: Annotated[
         str, StringConstraints(strip_whitespace=True, min_length=1, max_length=MESSAGE_MAX_CHARS)
     ]
-    # 上一則回應的 response_id；新對話給 null，空字串回 422
-    previous_response_id: Annotated[str, StringConstraints(min_length=1)] | None = None
+    # 上一則回應的 response_id；必填，新對話給 null。漏了這個欄位或給空字串回 422：
+    # 漏送會讓 Agent 默默忘記前面的對話，寧可讓前端在開發時就看到錯誤
+    previous_response_id: Annotated[str, StringConstraints(min_length=1)] | None
 
 
 class AdvisorGame(BaseModel):
