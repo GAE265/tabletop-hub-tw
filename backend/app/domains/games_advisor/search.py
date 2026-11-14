@@ -92,6 +92,8 @@ class ReviewSource(Protocol):
         query_vector: Sequence[float] | None,
     ) -> list[dict[str, Any]]: ...
 
+    def list_excerpt_models(self, game_ids: Collection[int]) -> dict[int, list[str]]: ...
+
 
 @dataclass(frozen=True)
 class SearchVocabulary:
@@ -201,6 +203,7 @@ class GameSearch:
 
         with self._games.transaction():
             games = self._ranked_games(query, query_vector)
+            self._warn_other_excerpt_models(games)
             output_games = [
                 _game_output(
                     game,
@@ -278,6 +281,23 @@ class GameSearch:
         if stale:
             logger.warning(
                 "心得摘要向量的模型和目前設定 %s 不同，當作沒有向量：%s",
+                self._embedding_model,
+                "、".join(stale),
+            )
+
+    def _warn_other_excerpt_models(self, games: list[dict[str, Any]]) -> None:
+        """回傳的桌遊有心得片段用的不是目前的模型時寫 log；那些片段查不到（spec §11.6）。"""
+        if not games:
+            return
+        models = self._reviews.list_excerpt_models([game["id"] for game in games])
+        stale = [
+            f"{game['id']} 號「{game['name']}」（{'、'.join(others)}）"
+            for game in games
+            if (others := [m for m in models.get(game["id"], []) if m != self._embedding_model])
+        ]
+        if stale:
+            logger.warning(
+                "心得片段向量的模型和目前設定 %s 不同，這些片段當作沒有：%s",
                 self._embedding_model,
                 "、".join(stale),
             )

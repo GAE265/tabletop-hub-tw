@@ -120,6 +120,24 @@ class ReviewRepository(SessionRepository):
             for excerpt_id, excerpt_text, language in rows
         ]
 
+    def list_excerpt_models(self, game_ids: Collection[int]) -> dict[int, list[str]]:
+        """這幾款桌遊的心得片段用過哪些模型：桌遊 id → 模型名稱（照字母排）。
+
+        沒有心得片段的桌遊不會出現在結果裡。
+        """
+        if not game_ids:
+            return {}
+        rows = self.session.execute(
+            select(ReviewExcerpt.game_id, ReviewExcerpt.embedding_model)
+            .where(ReviewExcerpt.game_id.in_(list(game_ids)))
+            .distinct()
+            .order_by(ReviewExcerpt.game_id, ReviewExcerpt.embedding_model)
+        )
+        result: dict[int, list[str]] = {}
+        for game_id, model in rows:
+            result.setdefault(game_id, []).append(model)
+        return result
+
 
 class TagRepository(SessionRepository):
     """標籤詞彙表與每款桌遊的標籤的讀寫。以代碼認出同一個標籤。"""
