@@ -63,7 +63,8 @@ class _GamesAdvisorProtoPageState extends ConsumerState<GamesAdvisorProtoPage> {
       appBar: AppBar(
         title: const Text('推薦 Agent（參考畫面）'),
         actions: [
-          TextButton(
+          // 目前主題的 TextButton 和 AppBar 同色會看不見，所以用 tonal
+          FilledButton.tonal(
             onPressed: state.canStartNew ? _advisor.startNewConversation : null,
             child: const Text('開始新對話'),
           ),
