@@ -179,7 +179,13 @@
       "demo": false,
       "turns": [
         {
-          "player": "我們 2 個人，15 分鐘內玩完，什麼類型都可以",
+          "player": "我們 2 個人，15 分鐘內玩完",
+          "expect": {
+            "action": "follow_up"
+          }
+        },
+        {
+          "player": "都可以",
           "expect": {
             "action": "recommend",
             "tool_args": {
