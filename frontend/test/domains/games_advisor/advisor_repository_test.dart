@@ -58,7 +58,7 @@ AdvisorRepository makeRepository(RecordingAdapter adapter) {
   return container.read(advisorRepositoryProvider);
 }
 
-Matcher apiExceptionWithCode(String code) =>
+TypeMatcher<ApiException> apiExceptionWithCode(String code) =>
     isA<ApiException>().having((e) => e.code, 'code', code);
 
 void main() {
