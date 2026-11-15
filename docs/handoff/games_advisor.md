@@ -66,7 +66,18 @@
 
 ## 4. 參考畫面截圖
 
-<!-- 🚧 截圖待補：空畫面、載入中、推薦卡片（片段摺疊與展開）、放寬提示、對話已失效、暫時無法回應 -->
+截圖以 Flutter Web 開發建置（`flutter run -d web-server`，寬 800）取得，後端是 dev 模式、連真的模型與正式編號的桌遊資料。最上面一行是開發身分切換器（不是推薦 Agent 的一部分；當時的資料庫沒有測試帳號，所以顯示「尚無測試帳號」）。「對話已失效」與「暫時無法回應」是用瀏覽器工具假造後端的 404、503 回應拍的，畫面和真的發生時一樣。
+
+| 狀態 | 截圖 |
+|---|---|
+| 空畫面（新對話） | ![空畫面](images/games_advisor/empty.png) |
+| 載入中 | ![載入中](images/games_advisor/loading.png) |
+| 追問：只有文字，沒有卡片 | ![追問](images/games_advisor/follow-up.png) |
+| 推薦卡片：心得片段摺疊 | ![推薦卡片，片段摺疊](images/games_advisor/cards-collapsed.png) |
+| 推薦卡片：心得片段展開，英文片段標「英文」 | ![推薦卡片，片段展開](images/games_advisor/cards-expanded.png) |
+| 放寬提示：卡片上方一行 | ![放寬提示](images/games_advisor/relaxed.png) |
+| 對話已失效 | ![對話已失效](images/games_advisor/expired.png) |
+| 暫時無法回應：前面的對話保留，剛剛那句回到輸入框 | ![暫時無法回應](images/games_advisor/unavailable.png) |
 
 ## 5. 給永傑的備註
 
