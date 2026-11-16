@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../core/config/app_config.dart';
 import '../domains/health/pages/health_page.dart';
+import '../prototypes/games_advisor/games_advisor_proto_page.dart';
 import '../prototypes/health/health_proto_page.dart';
 import 'shell.dart';
 
@@ -18,6 +19,11 @@ GoRouter createRouter(AppConfig config) => GoRouter(
           GoRoute(
             path: '/proto/health',
             builder: (context, state) => const HealthProtoPage(),
+          ),
+        if (config.showPrototypes)
+          GoRoute(
+            path: '/proto/games_advisor',
+            builder: (context, state) => const GamesAdvisorProtoPage(),
           ),
       ],
     ),
