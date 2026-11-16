@@ -18,6 +18,8 @@ class AuthUser(Base):
     )
     display_name: Mapped[str] = mapped_column(Text)
     role: Mapped[str] = mapped_column(Text)
+    # 訂位的「同電話重疊」規則使用；本欄位由 booking 的 change 先行加入
+    phone: Mapped[str | None] = mapped_column(Text, nullable=True)
     shop_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, ForeignKey("booking_shops.id"), nullable=True
     )
