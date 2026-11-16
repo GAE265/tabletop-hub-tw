@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tabletop_hub/app/app.dart';
+import 'package:tabletop_hub/app/theme/app_fonts.dart';
 import 'package:tabletop_hub/core/config/app_config.dart';
 import 'package:tabletop_hub/core/dev/data/dev_users_repository.dart';
 import 'package:tabletop_hub/domains/health/data/health_repository.dart';
@@ -25,6 +26,7 @@ Future<void> pumpApp(
             devUserEnabled: dev,
           ),
         ),
+        appFontsProvider.overrideWithValue(const FakeAppFonts()),
         devUsersRepositoryProvider.overrideWithValue(FakeDevUsersRepository()),
         healthRepositoryProvider.overrideWithValue(
           FakeHealthRepository(
@@ -55,6 +57,21 @@ void main() {
     goTo(tester, '/proto/health');
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('health-proto-page')), findsNothing);
+    expect(find.text('找不到頁面'), findsOneWidget);
+  });
+
+  testWidgets('SHOW_PROTOTYPES 開啟：/proto/theme 顯示主題預覽', (tester) async {
+    await pumpApp(tester, showPrototypes: true);
+    goTo(tester, '/proto/theme');
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('theme-preview-page')), findsOneWidget);
+  });
+
+  testWidgets('SHOW_PROTOTYPES 關閉：/proto/theme 顯示找不到頁面', (tester) async {
+    await pumpApp(tester, showPrototypes: false);
+    goTo(tester, '/proto/theme');
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('theme-preview-page')), findsNothing);
     expect(find.text('找不到頁面'), findsOneWidget);
   });
 

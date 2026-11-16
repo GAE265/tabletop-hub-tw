@@ -1,8 +1,24 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/material.dart';
+import 'package:tabletop_hub/app/theme/app_fonts.dart';
 import 'package:tabletop_hub/core/dev/data/dev_user.dart';
 import 'package:tabletop_hub/core/dev/data/dev_users_repository.dart';
 import 'package:tabletop_hub/domains/health/data/health_repository.dart';
 import 'package:tabletop_hub/domains/health/data/health_status.dart';
+
+/// 測試用字型：只換字型名稱，不連網路下載。
+class FakeAppFonts implements AppFonts {
+  const FakeAppFonts();
+
+  static const headingFamily = 'FakeHeading';
+  static const bodyFamily = 'FakeBody';
+
+  @override
+  TextStyle heading(TextStyle style) => style.copyWith(fontFamily: headingFamily);
+
+  @override
+  TextStyle body(TextStyle style) => style.copyWith(fontFamily: bodyFamily);
+}
 
 const fakePlayer = DevUser(id: 'u-player', displayName: '測試玩家', role: 'player');
 const fakeStaff = DevUser(
