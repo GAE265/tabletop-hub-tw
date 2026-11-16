@@ -2,7 +2,7 @@
 
 - 專案已有 `backend/`（FastAPI、SQLAlchemy 2 同步 session、psycopg、Alembic），`app/domains/booking/` 目前只有共用表 `BookingShop`（`booking_shops`：`id`、`name`）。`auth_users` 為共用表，欄位 `id`、`display_name`、`role`、`shop_id`，`phone` 由 `auth` 擁有者另行加入。
 - 現有 migration 為 `0001_baseline`、`0002_games_tables`。本 change 的 migration 接在最新 revision 之後。
-- 訂位規則來自一間實際合作店家。營業時間、桌位與費率是合作店家資料，不得提交進 repo；程式與測試只用虛構的同結構資料，真實資料透過匯入指令（D12）在本機匯入。
+- 訂位規則來自一間實際合作店家。營業時間、桌位與費率是合作店家資料，不得提交進 repo；程式與測試只用虛構的同結構資料，真實資料由使用者自行以 DML 寫入（D12）。
 - 認證（登入、JWT）由 `auth` 負責；本 change 只使用 `CurrentUser`、`get_current_user`、`require_role`（AGENTS.md §4.5），開發期間以 `X-Dev-User` 取得身分。
 
 ## Goals / Non-Goals
@@ -103,13 +103,12 @@
 
 錯誤碼對應：桌位被訂走或不足 409（`BOOKING_TABLE_TAKEN`、`BOOKING_NO_TABLE_AVAILABLE`）、同電話或合併需確認 409、狀態不允許 409、時間規則違反與欄位驗證 422、未登入 401、沒有權限 403、找不到 404。
 
-### D12：真實店家資料以匯入指令帶入
-因為真實營業時間、桌位與費率屬合作店家資料，不寫進 migration、seed 或測試。提供 booking 匯入指令（`repository` 之外的指令模組，同 games_advisor 匯入指令的做法）：
+### D12：真實店家資料由使用者自行以 DML 寫入
+因為真實營業時間、桌位與費率屬合作店家資料，不寫進 migration、seed 或測試，也不提供匯入指令。使用者自行準備 DML 寫入 `booking_business_hours`、`booking_closing_hours`、`booking_tables`、`booking_table_links`、`booking_pricing_rules`。
 
-- 只用 `DATABASE_URL` 一個連線：以唯讀 session 讀同一個資料庫內來源 schema（預設 `booking_source`，`--source-schema` 可改）的營業時間、公休、桌位、關係與費率規則，寫入本專案資料表；指令以 `booking_shops` 的名稱找到目標店家，並可重複執行（以 `table_code`、`rule_code` 等唯一欄位 upsert）。
-- 關係表去除重複與反向重複；來源 schema 不存在時直接失敗並提示 `--source-schema`。
-- 測試用虛構資料，結構與真實配置相同（容量、相鄰、可併桌關係），不依賴來源 schema（測試自建臨時 schema）。
-- 來源資料表的內容只存在資料庫，不得出現在 repo 與 MR 說明。
+- 測試用虛構資料，結構與真實配置相同（容量、相鄰、可併桌關係）。
+- 費率至少需要 `WEEKDAY_HOURLY_FEE` 與 `WEEKEND_HOURLY_FEE`，缺少時回 503。
+- 資料內容只存在資料庫，不得出現在 repo 與 MR 說明。
 
 ## Risks / Trade-offs
 
@@ -124,7 +123,7 @@
 1. 與立倫確認 `auth_users.phone` 的 MR 與順序；群組告知 8 個表名。
 2. 先寫 migration 測試（表、約束、exclusion constraint 存在且生效），再寫 revision。
 3. 以 `uv run alembic upgrade head` 套用，並驗證 `downgrade` 可回復（刪除 8 張表；`btree_gist` extension 保留）。
-4. 以匯入指令在本機匯入真實資料，供手動驗證。
+4. 使用者自行以 DML 寫入店家設定資料，供手動驗證。
 
 ## Open Questions
 

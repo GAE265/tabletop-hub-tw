@@ -10,7 +10,6 @@
      - 連線字串：`postgresql+psycopg://<user>:<password>@localhost:7501/tabletop_hub_tw`
      - 注意：`vector`、`btree_gist` extension 會裝在 migration 當時的 search_path。若指定其他 schema，之後改用預設連線會出現 `type "vector" does not exist`。
    - `AUTH_MODE=dev`：用 `X-Dev-User` 標頭取得身分。
-   - 只需要 `DATABASE_URL` 一個連線。匯入店家設定時，舊訂位資料表放在同一個資料庫的 `booking_source` schema（見下方匯入步驟）。
 2. 以下指令都在 `backend/` 執行：
 
 ```bash
@@ -21,12 +20,6 @@ uv run alembic upgrade head
 
 # 建立開發用測試帳號與「測試桌遊店」（可重複執行）
 uv run python -m app.dev.seed
-
-# 匯入店家的營業時間、桌位、費率（沒有這一步，任何訂位都會被拒絕；可重複執行）
-# 前提：同一個資料庫已有 booking_source schema，內含舊訂位的 business_hours、closing_hours、
-# seating_tables、seating_tables_rel、pricing_rules 五張表（例如用 pg_dump 還原；資料不進 repo）。
-# 其他 schema 名稱用 --source-schema 指定。
-uv run python -m app.domains.booking.commands import-shop --shop-name 測試桌遊店
 
 # 訂位需要電話：替預設測試玩家補上電話
 uv run python - <<'PY'
@@ -44,7 +37,17 @@ with Session(create_db_engine(settings.database_url)) as s, s.begin():
 PY
 ```
 
-預期：seed 印出「已建立（或確認存在）3 個測試帳號與 1 間測試店家」，匯入印出各項筆數。
+預期：seed 印出「已建立（或確認存在）3 個測試帳號與 1 間測試店家」。
+
+**店家設定資料（自行準備 DML，不進 repo）**：沒有這些資料，任何訂位都會被拒絕。請以「測試桌遊店」的 `booking_shops.id` 為 `shop_id`，寫入：
+
+| 資料表 | 必要內容 |
+|---|---|
+| `booking_business_hours` | 各 `weekday`（0=日）的 `open_time`、`close_time` |
+| `booking_closing_hours` | 公休日期與時段（可為空） |
+| `booking_tables` | 桌位 `table_code`、`min_capacity`、`max_capacity`、`is_active` |
+| `booking_table_links` | 桌位相鄰與 `is_combinable`（不可 `table_a_id = table_b_id`，同一對不可重複） |
+| `booking_pricing_rules` | 至少 `WEEKDAY_HOURLY_FEE`、`WEEKEND_HOURLY_FEE` 兩筆的 `price`，否則回 503 `BOOKING_PRICING_NOT_CONFIGURED` |
 
 ## 2. 啟動服務
 

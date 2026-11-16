@@ -65,19 +65,18 @@
 
 ## 8. 匯入指令（D12）
 
-- [x] 8.1 撰寫匯入指令測試：用 fake 來源讀取器驗證 upsert、可重複執行、關係去重、來源 schema 不存在時失敗並說明
-- [x] 8.2 實作 booking 匯入指令（來源庫唯讀、以 `booking_shops` 名稱找目標店家）
+- [x] 8.1 取消：依使用者決定，不提供匯入指令，店家設定由使用者自行準備 DML（已移除先前實作與測試）
 
 ## 9. 並發與收尾
 
 - [x] 9.1 撰寫並發整合測試（兩個請求搶最後一張桌，一個成功、一個桌位不足），以及批次失敗回復、重疊取代、合併的整合測試
 - [x] 9.2 `uv run ruff check .`、`uv run ruff format --check .`、`uv run pytest` 全部通過
-- [x] 9.3 以 `AUTH_MODE=dev` 啟動服務，用 `X-Dev-User` 手動走過主要流程，並以匯入指令匯入真實資料驗證
+- [x] 9.3 以 `AUTH_MODE=dev` 啟動服務，用 `X-Dev-User` 手動走過主要流程，店家設定資料由使用者自行以 DML 提供
 - [ ] 9.4 依 `.github/pull_request_template.md` 產出 MR 說明（含情境表格與對應測試）貼給使用者，並標註 @ 瑋鋐審核 migration、@ 立倫（API 契約與 `auth_users.phone`）
 
 ## 實作備註（與原計畫不同之處）
 
 - 依使用者指示，未採測試先行；`auth_users.phone` 直接加在 `0003_booking_tables` migration，不等 auth 的 MR（合併時要與立倫對齊，避免兩支 migration 都加 phone）。
 - repository 與 service 沒有另寫 `FakeBookingRepository` 單元測試，改由 `tests/booking/test_api.py`（真實資料庫）與 `tests/migrations/test_booking_tables.py` 涵蓋；既有的 `test_baseline.py` 因 `auth_users` 新增 `phone` 而更新欄位清單。
-- 並發測試（9.1）以 `RacingRepository` 讓兩個請求同時讀到空桌位再寫入，驗證 exclusion constraint 與重試；匯入指令（8.1）用測試資料庫內臨時建立的來源表驗證。
-- 本機開發用獨立資料庫 `tabletop_hub_tw`（7501、`public` schema，連線字串不帶 `options=`）；匯入指令的來源資料表放在同一個資料庫的 `booking_source` schema，不再使用第二個連線。
+- 並發測試（9.1）以 `RacingRepository` 讓兩個請求同時讀到空桌位再寫入，驗證 exclusion constraint 與重試。
+- 本機開發用獨立資料庫 `tabletop_hub_tw`（7501、`public` schema，連線字串不帶 `options=`），只使用一個連線；店家設定資料由使用者自行以 DML 寫入。
