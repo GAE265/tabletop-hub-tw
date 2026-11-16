@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/group.dart';
 import '../data/groups_repository.dart';
+import 'current_user.dart';
 import 'group_clock.dart';
 
 /// 月曆一次載入的筆數上限（後端 page_size 最大 100）。
@@ -55,6 +56,10 @@ class GroupsCalendarNotifier extends Notifier<GroupsCalendarState> {
 
   @override
   GroupsCalendarState build() {
+    // 後端依目前使用者回傳 my_status；換人後要重新查詢，月份與選取的日期保留
+    ref.listen(currentUserIdProvider, (previous, next) {
+      if (previous != next) reload();
+    });
     final today = _today();
     final month = DateTime(today.year, today.month);
     // build 期間不能改 state，所以排到下一個 microtask 才開始載入

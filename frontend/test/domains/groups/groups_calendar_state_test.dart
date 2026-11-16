@@ -71,6 +71,36 @@ void main() {
       expect(container.read(calendarCountsProvider), isEmpty);
     });
 
+    test('切換使用者：重新查詢，保留月份與選取的日期', () async {
+      // 後端依目前使用者回傳 my_status，換人後同一團的資料就不同
+      final repo = FakeGroupsRepository(
+        groups: [
+          fakeGroup(id: 'dec', startAt: taipei(12, 2), myStatus: 'member'),
+        ],
+      );
+      final container = makeContainer(repo, userId: 'u-staff');
+      // 畫面開著時一直在監聽月曆；沒人監聽的 provider 會暫停，收不到換人的通知
+      container.listen(groupsCalendarProvider, (_, _) {});
+      final notifier = container.read(groupsCalendarProvider.notifier);
+      await notifier.loaded;
+      notifier
+        ..nextMonth()
+        ..selectDate(DateTime(2026, 12, 2));
+      await notifier.loaded;
+      final callsBefore = repo.listCalls.length;
+
+      repo.groups = [fakeGroup(id: 'dec', startAt: taipei(12, 2))];
+      await switchUser(container, 'u-admin');
+      await notifier.loaded;
+
+      final state = container.read(groupsCalendarProvider);
+      expect(repo.listCalls.length, callsBefore + 1);
+      expect(repo.listCalls.last.startFrom, taipei(12, 1, 0));
+      expect(state.month, DateTime(2026, 12));
+      expect(state.selectedDate, DateTime(2026, 12, 2));
+      expect(container.read(selectedDayGroupsProvider).single.myStatus, isNull);
+    });
+
     test('今天：回到本月並選取今天', () async {
       final container = makeContainer(FakeGroupsRepository());
       final notifier = container.read(groupsCalendarProvider.notifier);

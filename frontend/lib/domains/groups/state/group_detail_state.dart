@@ -72,6 +72,10 @@ class GroupDetailNotifier extends Notifier<GroupDetailState> {
 
   @override
   GroupDetailState build() {
+    // 報名狀態與按鈕依目前使用者而定；換人後要重新載入
+    ref.listen(currentUserIdProvider, (previous, next) {
+      if (previous != next) reload();
+    });
     _pending = Future.microtask(_fetch);
     return const GroupDetailState(group: AsyncLoading());
   }

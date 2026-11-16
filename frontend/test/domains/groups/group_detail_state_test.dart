@@ -105,6 +105,33 @@ void main() {
         isEmpty,
       );
     });
+
+    test('切換使用者：重新載入，按鈕依新身分決定', () async {
+      // 店家人員已報名，額滿；換成管理員後，後端回傳的 my_status 是空的
+      final repo = FakeGroupsRepository(
+        groups: [
+          fakeGroup(
+            startAt: start,
+            capacity: 2,
+            memberCount: 2,
+            myStatus: 'member',
+          ),
+        ],
+      );
+      final container = makeContainer(repo, userId: 'u-staff');
+      final notifier = await open(container, 'g-1');
+      expect(container.read(groupDetailProvider('g-1')).actionsFor('u-staff'), [
+        GroupAction.leave,
+      ]);
+
+      repo.groups = [fakeGroup(startAt: start, capacity: 2, memberCount: 2)];
+      await switchUser(container, 'u-admin');
+      await notifier.loaded;
+
+      expect(container.read(groupDetailProvider('g-1')).actionsFor('u-admin'), [
+        GroupAction.joinWaitlist,
+      ]);
+    });
   });
 
   test('報名成功：顯示訊息、重新載入揪團與月曆', () async {

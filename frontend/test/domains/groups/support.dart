@@ -19,6 +19,22 @@ DateTime taipei(int month, int day, [int hour = 19, int minute = 0]) =>
       minute,
     ).subtract(const Duration(hours: 8));
 
+/// 測試中的目前使用者，可以用 [switchUser] 切換（模擬身分切換器或換人登入）。
+class TestUserId extends Notifier<String?> {
+  TestUserId(this.initial);
+
+  final String? initial;
+
+  @override
+  String? build() => initial;
+
+  void set(String? id) => state = id;
+}
+
+final testUserIdProvider = NotifierProvider<TestUserId, String?>(
+  () => TestUserId(null),
+);
+
 ProviderContainer makeContainer(
   FakeGroupsRepository repo, {
   FixedOffsetClock? clock,
@@ -28,9 +44,18 @@ ProviderContainer makeContainer(
     overrides: [
       groupsRepositoryProvider.overrideWithValue(repo),
       groupClockProvider.overrideWithValue(clock ?? FixedOffsetClock(nowUtc)),
-      currentUserIdProvider.overrideWithValue(userId),
+      testUserIdProvider.overrideWith(() => TestUserId(userId)),
+      currentUserIdProvider.overrideWith(
+        (ref) => ref.watch(testUserIdProvider),
+      ),
     ],
   );
   addTearDown(container.dispose);
   return container;
+}
+
+/// 切換目前使用者，並等 Riverpod 通知完監聽者（重新載入在這之後才開始）。
+Future<void> switchUser(ProviderContainer container, String? userId) {
+  container.read(testUserIdProvider.notifier).set(userId);
+  return container.pump();
 }
