@@ -10,7 +10,7 @@
 - 各介面有手寫的 `Fake`（可腳本化回應、記錄呼叫）與 `Cloud` 實作（Azure Document Intelligence、Azure OpenAI）。
 - factory 依 `OCR_PROVIDER`（`fake`｜`cloud`）選擇實作；`cloud` 缺設定時拋出 `OCRNotConfigured`，並列出缺哪些欄位（之後 API 轉成 503）。
 - 例外：`OCRError`、`OCRNotConfigured`、`OCRUnavailable`、`OCROutputRejected`。
-- 新增設定：`OCR_PROVIDER`、`OCR_DI_ENDPOINT`、`OCR_DI_API_KEY`、`OCR_VISION_MODEL`（選填，留空用 `LLM_MODEL`）、`OCR_VISION_TIMEOUT_SECONDS`（預設 120）。視覺模型沿用 `LLM_ENDPOINT`、`LLM_API_KEY`。同步更新 `.env.example`。
+- 新增設定：`OCR_PROVIDER`、`OCR_DI_ENDPOINT`（Document Intelligence，cognitiveservices）、`OCR_VISION_ENDPOINT`（選填，留空用 `LLM_ENDPOINT`）、`OCR_VISION_MODEL`（選填，留空用 `LLM_MODEL`）、`OCR_VISION_TIMEOUT_SECONDS`（預設 120）。**金鑰全部沿用 `LLM_API_KEY`，端點各自獨立設定。** 同步更新 `.env.example`。
 - 新增套件 `azure-ai-documentintelligence`。
 - 外部服務測試加 `@pytest.mark.external`，缺金鑰時直接失敗並說明缺哪個設定（§7.6）。
 - 不含：影像轉正與裁圖（Pillow，屬 `rules_ingest`）、API 端點、資料庫。

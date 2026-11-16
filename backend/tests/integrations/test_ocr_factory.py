@@ -36,13 +36,23 @@ def test_cloud_ocr_lists_missing_settings() -> None:
     with pytest.raises(OCRNotConfigured) as info:
         get_ocr_provider("cloud", settings())
 
-    assert info.value.missing == ["OCR_DI_ENDPOINT", "OCR_DI_API_KEY"]
+    assert info.value.missing == ["OCR_DI_ENDPOINT", "LLM_API_KEY"]
     assert "OCR_DI_ENDPOINT" in str(info.value)
+
+
+def test_cloud_ocr_does_not_borrow_llm_endpoint() -> None:
+    with pytest.raises(OCRNotConfigured) as info:
+        get_ocr_provider(
+            "cloud",
+            settings(llm_endpoint="https://res.openai.azure.com/openai/v1/", llm_api_key="k"),
+        )
+    assert info.value.missing == ["OCR_DI_ENDPOINT"]
 
 
 def test_cloud_ocr_with_settings() -> None:
     provider = get_ocr_provider(
-        "cloud", settings(ocr_di_endpoint="https://x.example/", ocr_di_api_key="k")
+        "cloud",
+        settings(ocr_di_endpoint="https://res.cognitiveservices.azure.com/", llm_api_key="k"),
     )
     assert isinstance(provider, AzureDocumentIntelligenceProvider)
 
@@ -51,7 +61,24 @@ def test_cloud_vision_lists_missing_settings() -> None:
     with pytest.raises(OCRNotConfigured) as info:
         get_vision_provider("cloud", settings())
 
-    assert info.value.missing == ["LLM_ENDPOINT", "LLM_API_KEY", "OCR_VISION_MODEL（或 LLM_MODEL）"]
+    assert info.value.missing == [
+        "OCR_VISION_ENDPOINT（或 LLM_ENDPOINT）",
+        "LLM_API_KEY",
+        "OCR_VISION_MODEL（或 LLM_MODEL）",
+    ]
+
+
+def test_cloud_vision_uses_ocr_vision_endpoint_when_set() -> None:
+    provider = get_vision_provider(
+        "cloud",
+        settings(
+            llm_endpoint="https://llm.openai.azure.com/openai/v1/",
+            ocr_vision_endpoint="https://vision.openai.azure.com/openai/v1/",
+            llm_api_key="k",
+            llm_model="m",
+        ),
+    )
+    assert str(provider._client.base_url).startswith("https://vision.openai.azure.com")
 
 
 def test_cloud_vision_falls_back_to_llm_model() -> None:
@@ -60,6 +87,7 @@ def test_cloud_vision_falls_back_to_llm_model() -> None:
     )
     assert isinstance(provider, CloudVisionProvider)
     assert provider._model == "m"
+    assert str(provider._client.base_url).startswith("https://x.example")
 
 
 def test_cloud_vision_prefers_ocr_vision_model() -> None:

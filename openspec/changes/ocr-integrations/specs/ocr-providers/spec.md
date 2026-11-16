@@ -61,12 +61,20 @@
 - **THEN** 拋出說明合法值的 `ValueError`，不退回 fake
 
 #### Scenario: 缺少版面分析設定
-- **WHEN** `OCR_PROVIDER=cloud` 且 `OCR_DI_ENDPOINT`、`OCR_DI_API_KEY` 沒填，呼叫 `get_ocr_provider`
-- **THEN** 拋出 `OCRNotConfigured`，`missing` 包含 `OCR_DI_ENDPOINT` 與 `OCR_DI_API_KEY`
+- **WHEN** `OCR_PROVIDER=cloud` 且 `OCR_DI_ENDPOINT`、`LLM_API_KEY` 沒填，呼叫 `get_ocr_provider`
+- **THEN** 拋出 `OCRNotConfigured`，`missing` 包含 `OCR_DI_ENDPOINT` 與 `LLM_API_KEY`
+
+#### Scenario: 版面分析不借用 LLM_ENDPOINT
+- **WHEN** `OCR_PROVIDER=cloud`，`LLM_ENDPOINT` 與 `LLM_API_KEY` 有填但 `OCR_DI_ENDPOINT` 沒填
+- **THEN** 拋出 `OCRNotConfigured`，`missing` 只有 `OCR_DI_ENDPOINT`
 
 #### Scenario: 缺少視覺模型設定
-- **WHEN** `OCR_PROVIDER=cloud` 且 `LLM_ENDPOINT`、`LLM_API_KEY` 沒填，呼叫 `get_vision_provider`
-- **THEN** 拋出 `OCRNotConfigured`，`missing` 包含 `LLM_ENDPOINT` 與 `LLM_API_KEY`
+- **WHEN** `OCR_PROVIDER=cloud` 且 `OCR_VISION_ENDPOINT`、`LLM_ENDPOINT`、`LLM_API_KEY` 都沒填，呼叫 `get_vision_provider`
+- **THEN** 拋出 `OCRNotConfigured`，`missing` 說明要填 `OCR_VISION_ENDPOINT` 或 `LLM_ENDPOINT`，並包含 `LLM_API_KEY`
+
+#### Scenario: 視覺端點的退回
+- **WHEN** `OCR_VISION_ENDPOINT` 有填，且 `LLM_ENDPOINT` 也有填
+- **THEN** 視覺實作連到 `OCR_VISION_ENDPOINT`；沒填時才用 `LLM_ENDPOINT`
 
 #### Scenario: 視覺模型名稱的退回
 - **WHEN** `OCR_VISION_MODEL` 沒填但 `LLM_MODEL` 有填

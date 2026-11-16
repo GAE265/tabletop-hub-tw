@@ -183,7 +183,7 @@ def test_vision_rejects_unknown_image_format_before_any_request() -> None:
 
 def test_wrong_vision_key_is_ocr_error_not_unavailable(ocr_external_settings: Settings) -> None:
     provider = CloudVisionProvider(
-        endpoint=ocr_external_settings.llm_endpoint,  # type: ignore[arg-type]
+        endpoint=ocr_external_settings.ocr_vision_endpoint or ocr_external_settings.llm_endpoint,  # type: ignore[arg-type]
         api_key="wrong-key-for-test",
         model=ocr_external_settings.llm_model,  # type: ignore[arg-type]
         timeout_seconds=30,

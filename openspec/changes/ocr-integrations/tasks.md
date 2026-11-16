@@ -1,7 +1,7 @@
 ## 1. 設定與依賴
 
 - [x] 1.1 `backend/pyproject.toml` 新增 `azure-ai-documentintelligence`，更新 `uv.lock`
-- [x] 1.2 `backend/app/core/config.py` 新增 `ocr_provider`（預設 `fake`）、`ocr_di_endpoint`、`ocr_di_api_key`、`ocr_vision_model`、`ocr_vision_timeout_seconds`（預設 120）
+- [x] 1.2 `backend/app/core/config.py` 新增 `ocr_provider`（預設 `fake`）、`ocr_di_endpoint`、`ocr_vision_endpoint`、`ocr_vision_model`、`ocr_vision_timeout_seconds`（預設 120）
 - [x] 1.3 `.env.example` 同步新增 `OCR_*` 欄位與說明（只寫欄位名與說明，不寫值）
 
 ## 2. 介面與假實作

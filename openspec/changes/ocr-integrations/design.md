@@ -38,8 +38,8 @@ integration 不該知道檔案系統與 Pillow；API 收到的上傳內容本來
 **6. factory 回傳的實作在被呼叫時才報缺設定？不，在建立時報。**
 `get_ocr_provider(settings)` 與 `get_vision_provider(settings)` 在 `OCR_PROVIDER=cloud` 且缺欄位時立刻拋出，不延到第一次呼叫。這樣 service 在處理請求的最前面就知道，不會做完轉正才失敗。`fake` 不需要任何設定。
 
-**7. 視覺實作沿用 `LLM_ENDPOINT`／`LLM_API_KEY`，模型另有 `OCR_VISION_MODEL`。**
-v6 用同一個 Azure OpenAI 資源，不需要再要一組金鑰；模型留空用 `LLM_MODEL`。逾時預設 120 秒，因為 v6 單頁轉錄約 30 秒，加上上傳 4K 圖，`LLM_TIMEOUT_SECONDS` 的 30 秒會誤判。`OCR_DI_ENDPOINT`／`OCR_DI_API_KEY` 是另一個資源，所以單獨設定。
+**7. 金鑰全部沿用 `LLM_API_KEY`，端點各自獨立設定。**
+組員決定：Document Intelligence（`*.cognitiveservices.azure.com`）、Azure OpenAI（`*.openai.azure.com`）是不同網域，端點不互相推導，各有自己的設定：`OCR_DI_ENDPOINT`、`OCR_VISION_ENDPOINT`（留空用 `LLM_ENDPOINT`）。金鑰不另設，兩者都用 `LLM_API_KEY`；視覺模型名稱 `OCR_VISION_MODEL` 留空用 `LLM_MODEL`。逾時預設 120 秒，因為 v6 單頁轉錄約 30 秒，加上上傳大圖，`LLM_TIMEOUT_SECONDS` 的 30 秒會誤判。替代方案：(a) 由 `LLM_ENDPOINT` 的資源名稱推得 Document Intelligence 端點，被否決，因為依賴 Azure 網域命名，換成自訂網域就失效；(b) 另設 `OCR_DI_API_KEY`，被否決，目前同一個資源共用一把金鑰。代價：若日後兩個服務改用不同的金鑰，要再加回專用欄位。
 
 **8. Fake 可腳本化並記錄呼叫。**
 `FakeOCRProvider(layouts=..., angle=...)` 與 `FakeVisionProvider(replies=[...])`：依序回傳預先放入的結果，用完拋 `AssertionError`；`calls` 記錄收到的參數（不記錄圖片 bytes 內容，只記長度與 MIME），讓 service 測試能驗證「呼叫了幾次、帶了什麼指令」。不使用 `unittest.mock`（§7.5）。

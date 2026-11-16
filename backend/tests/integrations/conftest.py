@@ -21,7 +21,6 @@ EXTERNAL_REQUIRED = (
 # OCR 的外部服務測試（直連 Azure Document Intelligence 與 Azure OpenAI 視覺模型）
 OCR_EXTERNAL_REQUIRED = (
     "OCR_DI_ENDPOINT",
-    "OCR_DI_API_KEY",
     "LLM_ENDPOINT",
     "LLM_API_KEY",
     "LLM_MODEL",

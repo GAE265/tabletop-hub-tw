@@ -42,9 +42,12 @@ class Settings(BaseSettings):
     # --- OCR 與視覺模型（integrations/ocr；規則書圖片入庫用） ---
     # fake：測試用，沒有腳本時呼叫會回 503；cloud：Azure Document Intelligence + Azure OpenAI 視覺
     ocr_provider: str = "fake"
+    # 金鑰全部沿用 llm_api_key；端點各自獨立設定。
+    # Document Intelligence（cognitiveservices.azure.com）的端點
     ocr_di_endpoint: str | None = None
-    ocr_di_api_key: str | None = None
-    # 視覺模型的部署名稱；沒填就用 llm_model。端點與金鑰沿用 llm_endpoint、llm_api_key
+    # 視覺模型的端點；沒填就用 llm_endpoint
+    ocr_vision_endpoint: str | None = None
+    # 視覺模型的部署名稱；沒填就用 llm_model
     ocr_vision_model: str | None = None
     # 逐頁轉錄單次約 30 秒，加上上傳大圖，所以比 llm_timeout_seconds 長
     ocr_vision_timeout_seconds: float = 120

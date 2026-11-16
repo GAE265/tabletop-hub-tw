@@ -13,8 +13,9 @@
    |---|---|---|---|
    | `DATABASE_URL`、`AUTH_MODE=dev` | 資料庫與開發模式 | 需要 | 不需要 |
    | `OCR_PROVIDER=cloud` | 使用真的 Azure | 不需要 | 需要 |
-   | `OCR_DI_ENDPOINT`、`OCR_DI_API_KEY` | Azure Document Intelligence | 不需要 | 需要 |
-   | `LLM_ENDPOINT`、`LLM_API_KEY`、`LLM_MODEL` | Azure OpenAI 視覺模型（`OCR_VISION_MODEL` 有填就優先用它） | 不需要 | 需要 |
+   | `OCR_DI_ENDPOINT` | Azure Document Intelligence 端點（`https://<資源名稱>.cognitiveservices.azure.com/`） | 不需要 | 需要 |
+   | `LLM_ENDPOINT`、`LLM_MODEL` | Azure OpenAI 視覺模型的端點與部署名稱；`OCR_VISION_ENDPOINT`、`OCR_VISION_MODEL` 有填時優先用它們 | 不需要 | 需要 |
+   | `LLM_API_KEY` | **所有連線共用的金鑰**（Document Intelligence 與視覺模型都用它） | 不需要 | 需要 |
 
 3. 升級資料庫到最新版（`0003` 會建立 `games_manual`）：
 
@@ -272,6 +273,6 @@ uv run pytest tests/integrations/test_ocr_external.py -m external
 |---|---|
 | 案例 2 出現 `relation "games_manual" does not exist` | 還沒升級資料庫，執行 `uv run alembic upgrade head` |
 | 案例 3 出現 `UniqueViolation` | 上次中斷時 900001 號假桌遊沒清掉，手動刪除 `games_manual` 與 `games` 中 `id = 900001` 的列 |
-| 案例 4 出現 `OCRNotConfigured` | `.env` 缺欄位，錯誤訊息會列出缺哪些；`OCR_PROVIDER` 要填 `cloud` |
+| 案例 4 出現 `OCRNotConfigured` | `.env` 缺欄位，錯誤訊息會列出缺哪些（例如 `OCR_DI_ENDPOINT`）；`OCR_PROVIDER` 要填 `cloud` |
 | 案例 4 出現 `OCRUnavailable` | Azure 連不上或逾時；確認網路與端點，或稍後重試 |
 | 案例 4 出現 `OCRError`（401） | 金鑰錯誤；錯誤訊息不會包含金鑰本身 |
