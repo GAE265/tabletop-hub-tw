@@ -51,3 +51,6 @@ $RECYCLE.BIN/
 *.log
 
 # uv.lock 與 pubspec.lock 必須提交，不可加進這裡
+
+
+.idea

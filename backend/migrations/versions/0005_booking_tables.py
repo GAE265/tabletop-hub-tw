@@ -1,7 +1,7 @@
 """booking tables: 依舊訂位資料庫的表名、欄位、型別與約束建立訂位相關資料表
 
 與舊庫的差異（刻意的）：
-- companies 由共用表 booking_shops 取代：所有 company_id 改為 uuid，參照 booking_shops.id，
+- companies 由共用表 booking_shops 取代：所有 shop_id 改為 uuid，參照 booking_shops.id，
   並在 booking_shops 補上 companies 的資訊欄位。
 - customers 由 auth_users 取代：customer_id 改為 uuid，參照 auth_users.id；auth_users 新增 phone。
 - 擴充欄位（舊庫沒有）：reservations 的 seated_at、completed_at、final_fee、cancelled_at、
@@ -32,7 +32,7 @@ def _id() -> sa.Column:
 
 
 def _company() -> sa.Column:
-    return sa.Column("company_id", sa.Uuid(), nullable=False)
+    return sa.Column("shop_id", sa.Uuid(), nullable=False)
 
 
 def _created_at() -> sa.Column:
@@ -41,7 +41,7 @@ def _created_at() -> sa.Column:
 
 def _company_fk(table: str) -> sa.ForeignKeyConstraint:
     return sa.ForeignKeyConstraint(
-        ["company_id"], ["booking_shops.id"], name=f"fk_{table}_company", ondelete="RESTRICT"
+        ["shop_id"], ["booking_shops.id"], name=f"fk_{table}_company", ondelete="RESTRICT"
     )
 
 
@@ -80,8 +80,8 @@ def upgrade() -> None:
         sa.Column("open_time", sa.Time(), nullable=False),
         sa.Column("close_time", sa.Time(), nullable=False),
         sa.PrimaryKeyConstraint("id", name="business_hours_pkey"),
-        sa.UniqueConstraint("company_id", "id", name="uq_business_hours_company_id_id"),
-        sa.UniqueConstraint("company_id", "weekday", name="uq_business_hours_company_weekday"),
+        sa.UniqueConstraint("shop_id", "id", name="uq_business_hours_shop_id_id"),
+        sa.UniqueConstraint("shop_id", "weekday", name="uq_business_hours_company_weekday"),
         sa.CheckConstraint("open_time < close_time", name="chk_business_hours_time"),
         sa.CheckConstraint("weekday >= 0 AND weekday <= 6", name="chk_business_hours_weekday"),
         _company_fk("business_hours"),
@@ -96,7 +96,7 @@ def upgrade() -> None:
         sa.Column("end_time", sa.Time(), nullable=True),
         sa.Column("reason", sa.String(255), nullable=True),
         sa.PrimaryKeyConstraint("id", name="closing_hours_pkey"),
-        sa.UniqueConstraint("company_id", "id", name="uq_closing_hours_company_id_id"),
+        sa.UniqueConstraint("shop_id", "id", name="uq_closing_hours_shop_id_id"),
         sa.CheckConstraint(
             "(start_time IS NULL AND end_time IS NULL) OR "
             "(start_time IS NOT NULL AND end_time IS NOT NULL AND start_time < end_time)",
@@ -105,7 +105,7 @@ def upgrade() -> None:
         _company_fk("closing_hours"),
     )
     op.create_index(
-        "idx_closing_hours_company_date", "closing_hours", ["company_id", "closing_date"]
+        "idx_closing_hours_company_date", "closing_hours", ["shop_id", "closing_date"]
     )
 
     op.create_table(
@@ -120,8 +120,8 @@ def upgrade() -> None:
         sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.text("true")),
         _created_at(),
         sa.PrimaryKeyConstraint("id", name="seating_tables_pkey"),
-        sa.UniqueConstraint("company_id", "id", name="uq_seating_tables_company_id_id"),
-        sa.UniqueConstraint("company_id", "table_code", name="uq_seating_tables_company_code"),
+        sa.UniqueConstraint("shop_id", "id", name="uq_seating_tables_shop_id_id"),
+        sa.UniqueConstraint("shop_id", "table_code", name="uq_seating_tables_company_code"),
         sa.CheckConstraint(
             "min_capacity >= 1 AND max_capacity >= min_capacity",
             name="chk_seating_tables_capacity",
@@ -131,7 +131,7 @@ def upgrade() -> None:
     op.create_index(
         "idx_seating_tables_company_capacity",
         "seating_tables",
-        ["company_id", "max_capacity"],
+        ["shop_id", "max_capacity"],
         postgresql_where=sa.text("is_active = true"),
     )
 
@@ -144,7 +144,7 @@ def upgrade() -> None:
         sa.Column("is_combinable", sa.Boolean(), nullable=False, server_default=sa.text("false")),
         sa.PrimaryKeyConstraint("id", name="seating_tables_groups_pk"),
         sa.ForeignKeyConstraint(
-            ["company_id"],
+            ["shop_id"],
             ["booking_shops.id"],
             name="combinable_seating_tables_companies_fk",
             ondelete="CASCADE",
@@ -178,8 +178,8 @@ def upgrade() -> None:
         sa.Column("effective_to", sa.Date(), nullable=True),
         _created_at(),
         sa.PrimaryKeyConstraint("id", name="pricing_rules_pkey"),
-        sa.UniqueConstraint("company_id", "id", name="uq_pricing_rules_company_id_id"),
-        sa.UniqueConstraint("company_id", "rule_code", name="uq_pricing_rules_company_code"),
+        sa.UniqueConstraint("shop_id", "id", name="uq_pricing_rules_shop_id_id"),
+        sa.UniqueConstraint("shop_id", "rule_code", name="uq_pricing_rules_company_code"),
         sa.CheckConstraint(
             "effective_to IS NULL OR effective_from IS NULL OR effective_to >= effective_from",
             name="chk_pricing_rules_effective_date",
@@ -194,7 +194,7 @@ def upgrade() -> None:
     op.create_index(
         "idx_pricing_rules_company_active",
         "pricing_rules",
-        ["company_id", "rule_code", "is_active"],
+        ["shop_id", "rule_code", "is_active"],
     )
 
     op.create_table(
@@ -221,8 +221,8 @@ def upgrade() -> None:
         sa.Column("cancelled_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("cancel_reason", sa.Text(), nullable=True),
         sa.PrimaryKeyConstraint("id", name="reservations_pkey"),
-        sa.UniqueConstraint("company_id", "id", name="uq_reservations_company_id_id"),
-        sa.UniqueConstraint("company_id", "reservation_code", name="uq_reservations_company_code"),
+        sa.UniqueConstraint("shop_id", "id", name="uq_reservations_shop_id_id"),
+        sa.UniqueConstraint("shop_id", "reservation_code", name="uq_reservations_company_code"),
         sa.CheckConstraint("party_size >= 1", name="chk_reservations_party_size"),
         sa.CheckConstraint(
             "source IN ('customer_service', 'phone', 'walk_in', 'online')",
@@ -241,12 +241,12 @@ def upgrade() -> None:
     op.create_index(
         "idx_reservations_company_customer",
         "reservations",
-        ["company_id", "customer_id", sa.text("created_at DESC")],
+        ["shop_id", "customer_id", sa.text("created_at DESC")],
     )
     op.create_index(
-        "idx_reservations_company_time_status", "reservations", ["company_id", "start_at", "status"]
+        "idx_reservations_company_time_status", "reservations", ["shop_id", "start_at", "status"]
     )
-    op.create_index("idx_reservations_company_status", "reservations", ["company_id", "status"])
+    op.create_index("idx_reservations_company_status", "reservations", ["shop_id", "status"])
 
     op.create_table(
         "reservation_tables",
@@ -258,23 +258,23 @@ def upgrade() -> None:
         sa.Column("end_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.text("true")),
         sa.PrimaryKeyConstraint(
-            "company_id", "reservation_id", "table_id", name="pk_reservation_tables"
+            "shop_id", "reservation_id", "table_id", name="pk_reservation_tables"
         ),
         sa.ForeignKeyConstraint(
-            ["company_id", "reservation_id"],
-            ["reservations.company_id", "reservations.id"],
+            ["shop_id", "reservation_id"],
+            ["reservations.shop_id", "reservations.id"],
             name="fk_reservation_tables_reservation",
             ondelete="RESTRICT",
         ),
         sa.ForeignKeyConstraint(
-            ["company_id", "table_id"],
-            ["seating_tables.company_id", "seating_tables.id"],
+            ["shop_id", "table_id"],
+            ["seating_tables.shop_id", "seating_tables.id"],
             name="fk_reservation_tables_table",
             ondelete="RESTRICT",
         ),
         sa.CheckConstraint("end_at > start_at", name="chk_reservation_tables_time"),
         postgresql.ExcludeConstraint(
-            ("company_id", "="),
+            ("shop_id", "="),
             ("table_id", "="),
             (sa.text("tstzrange(start_at, end_at, '[)')"), "&&"),
             using="gist",
@@ -283,7 +283,7 @@ def upgrade() -> None:
         ),
     )
     op.create_index(
-        "idx_reservation_tables_company_table", "reservation_tables", ["company_id", "table_id"]
+        "idx_reservation_tables_company_table", "reservation_tables", ["shop_id", "table_id"]
     )
 
     op.create_table(
@@ -305,8 +305,8 @@ def upgrade() -> None:
         ),
         _company_fk("reservation_logs"),
         sa.ForeignKeyConstraint(
-            ["company_id", "reservation_id"],
-            ["reservations.company_id", "reservations.id"],
+            ["shop_id", "reservation_id"],
+            ["reservations.shop_id", "reservations.id"],
             name="fk_reservation_logs_reservation",
             ondelete="RESTRICT",
         ),
@@ -314,7 +314,7 @@ def upgrade() -> None:
     op.create_index(
         "idx_reservation_logs_company_reservation",
         "reservation_logs",
-        ["company_id", "reservation_id", sa.text("created_at DESC")],
+        ["shop_id", "reservation_id", sa.text("created_at DESC")],
     )
 
     op.create_table(
@@ -349,12 +349,12 @@ def upgrade() -> None:
     op.create_index(
         "idx_customer_inquiries_company_created",
         "customer_inquiries",
-        ["company_id", sa.text("created_at DESC")],
+        ["shop_id", sa.text("created_at DESC")],
     )
     op.create_index(
         "idx_customer_inquiries_company_customer",
         "customer_inquiries",
-        ["company_id", "customer_id", sa.text("created_at DESC")],
+        ["shop_id", "customer_id", sa.text("created_at DESC")],
         postgresql_where=sa.text("customer_id IS NOT NULL"),
     )
 
@@ -371,11 +371,11 @@ def upgrade() -> None:
         _created_at(),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=NOW),
         sa.PrimaryKeyConstraint("id", name="faqs_pkey"),
-        sa.UniqueConstraint("company_id", "id", name="uq_faqs_company_id_id"),
+        sa.UniqueConstraint("shop_id", "id", name="uq_faqs_shop_id_id"),
         _company_fk("faqs"),
     )
     op.create_index(
-        "idx_faqs_company_category_active", "faqs", ["company_id", "category", "is_active"]
+        "idx_faqs_company_category_active", "faqs", ["shop_id", "category", "is_active"]
     )
     op.create_index("idx_faqs_keywords", "faqs", ["keywords"], postgresql_using="gin")
 
@@ -387,7 +387,7 @@ def upgrade() -> None:
         sa.Column("sort_order", sa.Integer(), nullable=False, server_default=sa.text("0")),
         sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.text("true")),
         sa.PrimaryKeyConstraint("id", name="menu_categories_pkey"),
-        sa.UniqueConstraint("company_id", "id", name="uq_menu_categories_company_id_id"),
+        sa.UniqueConstraint("shop_id", "id", name="uq_menu_categories_shop_id_id"),
         _company_fk("menu_categories"),
     )
 
@@ -404,17 +404,17 @@ def upgrade() -> None:
         sa.Column("is_test_data", sa.Boolean(), nullable=False, server_default=sa.text("false")),
         _created_at(),
         sa.PrimaryKeyConstraint("id", name="menu_items_pkey"),
-        sa.UniqueConstraint("company_id", "id", name="uq_menu_items_company_id_id"),
+        sa.UniqueConstraint("shop_id", "id", name="uq_menu_items_shop_id_id"),
         sa.CheckConstraint("price >= 0", name="chk_menu_items_price"),
         _company_fk("menu_items"),
         sa.ForeignKeyConstraint(
-            ["company_id", "category_id"],
-            ["menu_categories.company_id", "menu_categories.id"],
+            ["shop_id", "category_id"],
+            ["menu_categories.shop_id", "menu_categories.id"],
             name="fk_menu_items_category",
             ondelete="RESTRICT",
         ),
     )
-    op.create_index("idx_menu_items_company_category", "menu_items", ["company_id", "category_id"])
+    op.create_index("idx_menu_items_company_category", "menu_items", ["shop_id", "category_id"])
 
 
 def downgrade() -> None:
