@@ -250,7 +250,7 @@ def _reviews_by_game(
     ]
 
 
-class _LLMFailed(Exception):
+class LLMFailed(Exception):
     """模型這一次沒有給出能用的結果：輸出重試後仍被拒絕，或模型連不上。"""
 
     def __init__(self, reason: str) -> None:
@@ -258,11 +258,12 @@ class _LLMFailed(Exception):
         self.reason = reason
 
 
-def _ask_llm[Answer](ask: Callable[[], Answer]) -> Answer:
+def ask_llm[Answer](ask: Callable[[], Answer]) -> Answer:
     """呼叫模型；輸出被拒絕就重試 1 次（spec §7.2 規則 6）。
 
-    重試後仍被拒絕、或模型連不上（SDK 已經重試過）時拋 _LLMFailed，由呼叫端跳過這一款。
+    重試後仍被拒絕、或模型連不上（SDK 已經重試過）時拋 LLMFailed，由呼叫端跳過這一款。
     其他 LLMError（金鑰錯誤、schema 不符合規定）不攔截，讓整個指令失敗。
+    評估題組的評審也用它，但評審連其他 LLMError 都自己攔下（spec §15.6）。
     """
     try:
         try:
@@ -270,12 +271,12 @@ def _ask_llm[Answer](ask: Callable[[], Answer]) -> Answer:
         except LLMOutputRejected:
             return ask()
     except LLMOutputRejected as exc:
-        raise _LLMFailed(f"模型的輸出重試 1 次後仍然不能用：{exc}") from exc
+        raise LLMFailed(f"模型的輸出重試 1 次後仍然不能用：{exc}") from exc
     except LLMUnavailable as exc:
-        raise _LLMFailed(f"模型連不上：{exc}") from exc
+        raise LLMFailed(f"模型連不上：{exc}") from exc
 
 
-def _parsed[Output: BaseModel](model: type[Output], output: dict[str, Any]) -> Output:
+def parse_output[Output: BaseModel](model: type[Output], output: dict[str, Any]) -> Output:
     """確認模型的輸出符合預期的格式；不符合就當作輸出被拒絕，可以重試。"""
     try:
         return model.model_validate(output)
@@ -292,7 +293,7 @@ def _for_each_game(
     for game, reviews in work:
         try:
             process(game, reviews)
-        except _LLMFailed as exc:
+        except LLMFailed as exc:
             skipped.append(SkippedGame(game["bgg_id"], game["name"], exc.reason))
         except EmbeddingError as exc:
             skipped.append(SkippedGame(game["bgg_id"], game["name"], f"轉成向量失敗：{exc}"))
@@ -328,7 +329,7 @@ def summarize_reviews(
             with store.transaction():
                 store.delete_review_summary(game["id"])
             return
-        summary = _ask_llm(lambda: llm.generate(prompts.summary_prompt(game, reviews)))
+        summary = ask_llm(lambda: llm.generate(prompts.summary_prompt(game, reviews)))
         [vector] = embedding.embed([summary])
         with store.transaction():
             store.save_review_summary(game["id"], summary, vector, embedding_model)
@@ -407,9 +408,9 @@ def _extract_candidates(
             input=prompts.reviews_input(game, reviews),
             schema=prompts.CANDIDATES_SCHEMA,
         )
-        return _parsed(CandidatesOutput, output)
+        return parse_output(CandidatesOutput, output)
 
-    return _ask_llm(ask)
+    return ask_llm(ask)
 
 
 def _merge_candidates(llm: LLMProvider, candidates: list[_NumberedCandidate]) -> MergeOutput:
@@ -419,9 +420,9 @@ def _merge_candidates(llm: LLMProvider, candidates: list[_NumberedCandidate]) ->
             input=prompts.merge_input(candidates),
             schema=prompts.MERGE_SCHEMA,
         )
-        return _parsed(MergeOutput, output)
+        return parse_output(MergeOutput, output)
 
-    return _ask_llm(ask)
+    return ask_llm(ask)
 
 
 def _table(header: list[str], rows: list[list[str]]) -> list[str]:
@@ -511,7 +512,7 @@ def draft_vocabulary(
             continue
         try:
             output = _extract_candidates(llm, game, reviews)
-        except _LLMFailed as exc:
+        except LLMFailed as exc:
             skipped.append(SkippedGame(game["bgg_id"], game["name"], exc.reason))
             continue
         for candidate in output.candidates:
@@ -532,7 +533,7 @@ def draft_vocabulary(
 
     try:
         output = _merge_candidates(llm, candidates)
-    except _LLMFailed as exc:
+    except LLMFailed as exc:
         raise Refused(f"合併同義詞失敗，兩個檔案都沒有寫：{exc.reason}") from exc
 
     by_id = {candidate.id: candidate for candidate in candidates}
@@ -695,7 +696,7 @@ def _judge_tags(
     review_urls = {review.source_url for review in reviews}
 
     def ask() -> TagsOutput:
-        output = _parsed(
+        output = parse_output(
             TagsOutput,
             llm.generate_json(
                 instructions=prompts.tagging_instructions(tags),
@@ -708,7 +709,7 @@ def _judge_tags(
             raise LLMOutputRejected("自動檢查不通過：" + "；".join(problems))
         return output
 
-    return _ask_llm(ask)
+    return ask_llm(ask)
 
 
 def _tag_usage_lines(
@@ -767,7 +768,7 @@ def draft_tags(
         if reviews:
             try:
                 judged = [tag.model_dump() for tag in _judge_tags(llm, game, reviews, tags).tags]
-            except _LLMFailed as exc:
+            except LLMFailed as exc:
                 skipped.append(SkippedGame(game["bgg_id"], game["name"], exc.reason))
                 continue
         entries.append({"bgg_id": game["bgg_id"], "name": game["name"], "tags": judged})

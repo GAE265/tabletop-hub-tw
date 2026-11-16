@@ -1,9 +1,9 @@
 # 12：收集心得
 
-Status: ready-for-human
+Status: resolved
 Blocked by: 無
 Spec: [spec](../../games-advisor/spec.md) §5、§8.2
-MR: 不開 MR，在 10 的 MR 裡結案
+MR: 不開 MR，在 10 的 MR [#28](https://github.com/GAE265/tabletop-hub-tw/pull/28) 裡結案
 
 ## 要做什麼
 
@@ -13,7 +13,7 @@ Codex 收心得時會讀 `games.json` 的 `bgg_id`、`name`、`english_name`，�
 
 ## 驗收條件
 
-- [ ] 確認 `prompts/collect-reviews.md` 的輸出格式符合 spec §8.2，不符合就先改提示詞
-- [ ] 立倫用 Codex 產生 `reviews.json`
-- [ ] `reviews.json` 在 repo 外，沒有進 git
-- [ ] 在 10 的分支把本檔的 `Status` 改成 `resolved`；改過的提示詞也在那裡 commit
+- [x] 確認 `prompts/collect-reviews.md` 的輸出格式符合 spec §8.2，不符合就先改提示詞
+- [x] 立倫用 Codex 產生 `reviews.json`
+- [x] `reviews.json` 在 repo 外，沒有進 git
+- [x] 在 10 的分支把本檔的 `Status` 改成 `resolved`；改過的提示詞也在那裡 commit
