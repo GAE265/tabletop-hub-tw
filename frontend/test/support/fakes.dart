@@ -1,4 +1,10 @@
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:dio/dio.dart';
+import 'package:tabletop_hub/core/platform/image_picker.dart';
+import 'package:tabletop_hub/domains/rules_ingest/data/manual_page.dart';
+import 'package:tabletop_hub/domains/rules_ingest/data/manual_pages_repository.dart';
 import 'package:tabletop_hub/core/dev/data/dev_user.dart';
 import 'package:tabletop_hub/core/dev/data/dev_users_repository.dart';
 import 'package:tabletop_hub/domains/health/data/health_repository.dart';
@@ -58,6 +64,104 @@ class RecordingAdapter implements HttpClientAdapter {
     return ResponseBody.fromString(
       '{}',
       200,
+      headers: {
+        Headers.contentTypeHeader: ['application/json'],
+      },
+    );
+  }
+
+  @override
+  void close({bool force = false}) {}
+}
+
+class FakeImagePicker implements ImagePicker {
+  List<PickedImage>? images;
+  Object? error;
+  int calls = 0;
+
+  @override
+  Future<List<PickedImage>?> pickImages() async {
+    calls++;
+    if (error != null) throw error!;
+    return images;
+  }
+}
+
+class FakeManualPagesRepository implements ManualPagesRepository {
+  final imports = <({int gamesId, int page, PickedImage image})>[];
+  final rows = <int, String>{};
+  final failures = <int, Object>{};
+  final lists = <int>[];
+  String ocrProvider = 'fake';
+  Object? listError;
+  Completer<void>? importGate;
+  Completer<void>? listGate;
+  int active = 0;
+  int maxActive = 0;
+
+  @override
+  Future<ManualPage> importPage(
+    int gamesId,
+    int page,
+    PickedImage image,
+  ) async {
+    imports.add((gamesId: gamesId, page: page, image: image));
+    active++;
+    if (active > maxActive) maxActive = active;
+    try {
+      if (importGate != null) await importGate!.future;
+      if (failures[page] != null) throw failures[page]!;
+      final content = '# ${image.name}';
+      rows[page] = content;
+      return ManualPage(page: page, content: content);
+    } finally {
+      active--;
+    }
+  }
+
+  @override
+  Future<ManualPageList> list(int gamesId) async {
+    lists.add(gamesId);
+    if (listGate != null) await listGate!.future;
+    if (listError != null) throw listError!;
+    final pages = rows.keys.toList()..sort();
+    return ManualPageList(
+      items: [
+        for (final page in pages) ManualPage(page: page, content: rows[page]!),
+      ],
+      total: rows.length,
+      ocrProvider: ocrProvider,
+    );
+  }
+}
+
+class FakeManualPagesAdapter implements HttpClientAdapter {
+  final requests = <RequestOptions>[];
+  final bodies = <String>[];
+  int status = 200;
+  Map<String, dynamic> response = {
+    'games_id': 1,
+    'page': 1,
+    'content': '# title',
+  };
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<List<int>>? requestStream,
+    Future<void>? cancelFuture,
+  ) async {
+    requests.add(options);
+    if (requestStream != null) {
+      final bytes = <int>[];
+      await for (final chunk in requestStream) {
+        bytes.addAll(chunk);
+      }
+      bodies.add(latin1.decode(bytes));
+    }
+    return ResponseBody.fromString(
+      jsonEncode(response),
+      status,
       headers: {
         Headers.contentTypeHeader: ['application/json'],
       },

@@ -1,7 +1,7 @@
-# 手動測試：規則書入庫的資料表與 OCR 整合層
+# 手動測試：規則書入庫、OCR 整合層與前端匯入
 
-> 適用變更：`games-manual-table`（`games_manual` 資料表與覆蓋寫入）、`ocr-integrations`（版面分析與視覺模型介面）。
-> 這兩個變更**還沒有 API 端點**，所以這份流程用後端的健康檢查、資料庫查詢與小段 Python 腳本驗證；之後有 `PUT /api/v1/games/{game_id}/manual-pages/{page}` 時再補。
+> 適用變更：`games-manual-table`、`ocr-integrations`、`rules-ingest-manual-import-e2e`。
+> 案例 1–5 驗證資料表與 OCR 整合層；案例 6 從參考畫面使用逐頁匯入與讀回 API。
 > 本檔只寫欄位名與預期結果，**不要把金鑰、密碼貼進來**。
 
 ## 0. 前置條件
@@ -266,6 +266,145 @@ uv run pytest tests/integrations/test_ocr_external.py -m external
 ```
 
 預期 `12 passed`。缺少任何一個必要欄位時會**直接失敗**並說明缺哪個設定，不會自動跳過。
+
+## 案例 6：從前端匯入並驗證（網頁操作）
+
+> 全程在瀏覽器操作參考畫面 `/proto/rules-ingest`，搭配 `psql` 核對資料庫。
+> 此流程只呼叫視覺模型，不呼叫 Document Intelligence，也不轉正或裁圖。
+
+### 6-1 前置準備
+
+1. `.env` 設定 `DATABASE_URL`、`AUTH_MODE=dev`、`OCR_PROVIDER=cloud`，以及案例 4 的視覺模型端點、部署名稱與 `LLM_API_KEY`。cloud 缺必要設定時後端啟動立即報錯。
+2. 升級資料庫並建立種子資料：
+
+   ```bash
+   cd backend
+   uv run alembic upgrade head
+   uv run python -m app.dev.seed
+   ```
+
+3. 在資料庫放一筆測試桌遊（自行編寫的示範桌遊，或使用已授權的現有桌遊），記下 `games.id`。
+4. 準備兩張自畫的英文字 PNG／JPEG，命名 `page_01.png`、`page_02.png`，各檔不超過 10 MB。可沿用案例 4 的 Pillow 畫圖方法；不提交真實規則書全文。
+
+### 6-2 啟動服務
+
+1. 啟動後端：
+
+   ```bash
+   cd backend
+   uv run uvicorn app.main:create_app --factory --port 8000
+   ```
+
+   開啟 <http://localhost:8000/docs>，確認 `PUT /api/v1/games/{games_id}/manual-pages/{page}` 使用 multipart 的 `file` 欄位，`GET /api/v1/games/{games_id}/manual-pages` 顯示列表 schema。
+
+2. 另開終端機啟動前端：
+
+   ```bash
+   cd frontend
+   flutter pub get
+   dart run build_runner build
+   flutter run -d web-server --web-port 5000 --dart-define=API_BASE_URL=http://localhost:8000 --dart-define=SHOW_PROTOTYPES=true
+   ```
+
+### 6-3 首次讀回（確認 OCR 實作）
+
+1. 開啟 <http://localhost:5000/#/proto/rules-ingest>。
+2. 用身分切換器切成 `admin`。
+3. 在「桌遊編號」輸入測試桌遊的 `games_id`。
+4. 按「讀回已入庫頁面」。
+
+| 預期 |
+|---|
+| 畫面顯示「OCR：cloud」與「使用雲端 OCR 匯入會產生費用」 |
+| 尚未入庫時顯示「這款桌遊還沒有規則書頁面」 |
+
+### 6-4 逐頁匯入圖片
+
+1. 起始頁碼設為 `1`。
+2. 按「選擇 JPEG／PNG 圖片」，選取 `page_01.png` 和 `page_02.png`。
+3. 畫面顯示檔名排序後的順序與對應頁碼（按字元排序，建議頁碼補零）。
+
+   | 預期 |
+   |---|
+   | `1. page_01.png → 第 1 頁` |
+   | `2. page_02.png → 第 2 頁` |
+
+4. 按「匯入」。
+
+   | 預期 |
+   |---|
+   | 匯入中按鈕不可重按 |
+   | 顯示「匯入中：1／2」→「匯入中：2／2」 |
+   | 結果列表：兩筆皆顯示「成功」 |
+   | 自動讀回並顯示第 1 頁與第 2 頁的 Markdown 內容 |
+
+### 6-5 用 psql 核對資料庫
+
+另開終端機，連上測試資料庫（自行帶入連線設定，勿將密碼貼入文件）：
+
+```sql
+\set games_id '<你的桌遊編號>'
+SELECT games_id, page, content
+FROM games_manual
+WHERE games_id = :games_id
+ORDER BY page;
+
+SELECT games_id, page, count(*) AS row_count
+FROM games_manual
+WHERE games_id = :games_id
+GROUP BY games_id, page
+ORDER BY page;
+```
+
+| 預期 |
+|---|
+| 第一個查詢的 `content` 與畫面讀回一致 |
+| 第二個查詢各頁 `row_count` 為 `1` |
+
+### 6-6 同頁覆蓋
+
+1. 回到 `/proto/rules-ingest` 頁面。
+2. 用另一張自畫圖片，起始頁碼設為 `1`，只選該張圖片，按「匯入」。
+3. 觀察結果列表與自動讀回的內容。
+
+| 預期 |
+|---|
+| 結果列表顯示第 1 頁「成功」 |
+| 讀回列表第 1 頁內容更新為新圖片的轉錄結果 |
+| 重新執行 6-5 的第二個查詢，第 1 頁 `row_count` 仍為 `1` |
+
+4. 如果模型回傳空文字（例如圖片上完全沒字），畫面顯示「（整頁沒文字）」。
+
+### 6-7 單頁失敗不中止
+
+1. 把 `.env` 改為 `OCR_PROVIDER=fake`，重啟後端。
+2. 回到 `/proto/rules-ingest`，同一個桌遊編號，起始頁碼 `1`，選兩張圖片。
+3. 按「匯入」。
+
+| 預期 |
+|---|
+| 兩頁結果都顯示 503 `OCR_UNAVAILABLE` |
+| 既有已入庫的內容不受影響（用 6-5 的查詢確認） |
+| 讀回顯示「OCR：fake（內容不是真實辨識結果）」 |
+
+### 6-8 錯誤驗證
+
+以下每項操作後，把 `.env` 和後端恢復成 `OCR_PROVIDER=cloud` 再繼續下一項。
+
+| # | 操作 | 預期 |
+|---|---|---|
+| 1 | 用身分切換器切成 `player`，按「讀回」或「匯入」 | 畫面顯示 403 錯誤訊息，並提示切換成 `shop_staff` 或 `admin` |
+| 2 | 切回 `admin`，輸入不存在的桌遊編號（例如 `99999`），先按「讀回」再按「匯入」 | 兩者皆顯示 404 `GAME_NOT_FOUND`；讀回保留原有成功列表並標示其桌遊編號 |
+| 3 | 桌遊編號輸入 `abc` | 顯示「桌遊編號必須是正整數」，匯入與讀回按鈕停用 |
+| 4 | 起始頁碼輸入 `0` | 顯示「起始頁碼必須大於或等於 1」，匯入按鈕停用 |
+| 5 | 不選圖片，直接按「匯入」 | 匯入按鈕停用（`canImport` 為 false） |
+| 6 | 改 `.env` 為 `OCR_PROVIDER=fake`，重啟後端，按「匯入」 | 回 503 `OCR_UNAVAILABLE`，既有內容不受影響 |
+| 7 | 關閉 `SHOW_PROTOTYPES` 重新啟動前端，開啟 `/proto/rules-ingest` | 顯示「找不到頁面」 |
+
+### 6-9 驗證紀錄
+
+本次自動化檢查以手寫 fake 驗證 domain 與 API；雲端與瀏覽器的實測結果記錄於交接說明。測試執行時移除僅測試程序的 `DATABASE_URL` 之 `options`，讓既有測試使用 `public` schema；原本 `.env` 與開發 schema 不變。
+
 
 ## 常見問題
 

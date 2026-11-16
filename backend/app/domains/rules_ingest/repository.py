@@ -1,6 +1,7 @@
 """rules_ingest 的資料存取：規則書頁面（games_manual）。"""
 
 from psycopg.errors import ForeignKeyViolation
+from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
 
@@ -17,6 +18,15 @@ class GameNotFoundError(Exception):
 
 
 class ManualPageRepository(SessionRepository):
+    def list_pages(self, games_id: int) -> list[dict[str, object]]:
+        """依頁碼讀回一般資料，不向 service 暴露 ORM 物件。"""
+        rows = self.session.execute(
+            select(GameManualPage.page, GameManualPage.content)
+            .where(GameManualPage.games_id == games_id)
+            .order_by(GameManualPage.page)
+        ).mappings()
+        return [dict(row) for row in rows]
+
     def upsert_page(self, games_id: int, page: int, content: str) -> None:
         """寫入一頁；該頁已存在就用新的 content 取代（同頁重送是冪等的）。
 

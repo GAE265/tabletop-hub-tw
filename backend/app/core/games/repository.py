@@ -29,6 +29,9 @@ class GameInUseError(Exception):
 class GameRepository(SessionRepository):
     """共用桌遊表 games、genres、game_genres 與 games.id 計數器的讀寫。"""
 
+    def game_exists(self, game_id: int) -> bool:
+        return bool(self.session.scalar(select(select(Game.id).where(Game.id == game_id).exists())))
+
     def count_games(self) -> int:
         return self.session.scalar(select(func.count()).select_from(Game)) or 0
 
