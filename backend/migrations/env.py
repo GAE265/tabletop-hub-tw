@@ -11,6 +11,7 @@ from app.core.games import models as games_models  # noqa: F401
 from app.domains.auth import models as auth_models  # noqa: F401
 from app.domains.booking import models as booking_models  # noqa: F401
 from app.domains.games_advisor import models as games_advisor_models  # noqa: F401
+from app.domains.groups import models as groups_models  # noqa: F401
 
 config = context.config
 if config.config_file_name is not None:
