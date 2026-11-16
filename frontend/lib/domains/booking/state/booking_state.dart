@@ -69,7 +69,7 @@ class BookingNotifier extends Notifier<BookingState> {
           partySize: partySize,
           slots: slots,
         );
-        return (s) => s.copyWith(quote: items, message: '預估完成');
+        return (BookingState s) => s.copyWith(quote: items, message: '預估完成');
       });
 
   Future<void> create(
@@ -85,7 +85,7 @@ class BookingNotifier extends Notifier<BookingState> {
       specialRequests: specialRequests,
     );
     final mine = await _repo.listMine();
-    return (s) => s.copyWith(
+    return (BookingState s) => s.copyWith(
       mine: mine.items,
       message: '已建立 ${items.length} 筆訂位',
     );
@@ -93,7 +93,10 @@ class BookingNotifier extends Notifier<BookingState> {
 
   Future<void> loadMine() => _run(() async {
     final page = await _repo.listMine();
-    return (s) => s.copyWith(mine: page.items, message: '我的訂位共 ${page.total} 筆');
+    return (BookingState s) => s.copyWith(
+      mine: page.items,
+      message: '我的訂位共 ${page.total} 筆',
+    );
   });
 
   Future<void> loadBoard(String shopId, String from, String to) =>
@@ -103,7 +106,7 @@ class BookingNotifier extends Notifier<BookingState> {
           from: from,
           to: to,
         );
-        return (s) => s.copyWith(
+        return (BookingState s) => s.copyWith(
           board: page.items,
           message: '店員看板共 ${page.total} 筆',
         );
@@ -111,7 +114,8 @@ class BookingNotifier extends Notifier<BookingState> {
 
   Future<void> refreshOne(int id) => _run(() async {
     final b = await _repo.get(id);
-    return (s) => _replace(s, b, '查詢：${b.reservationCode} ${b.status}');
+    return (BookingState s) =>
+        _replace(s, b, '查詢：${b.reservationCode} ${b.status}');
   });
 
   /// 修改時間與人數。
@@ -121,13 +125,14 @@ class BookingNotifier extends Notifier<BookingState> {
       'end_at': slot.endAt,
       'party_size': partySize,
     });
-    return (s) => _replace(s, b, '已修改${b.notice == null ? '' : '：${b.notice}'}');
+    return (BookingState s) =>
+        _replace(s, b, '已修改${b.notice == null ? '' : '：${b.notice}'}');
   });
 
   /// 變更狀態：`cancelled`、`seated`、`completed`。
   Future<void> setStatus(int id, String status) => _run(() async {
     final b = await _repo.patch(id, {'status': status});
-    return (s) => _replace(
+    return (BookingState s) => _replace(
       s,
       b,
       '狀態已改為 ${b.status}${b.finalFee == null ? '' : '，結算 ${b.finalFee}'}',
