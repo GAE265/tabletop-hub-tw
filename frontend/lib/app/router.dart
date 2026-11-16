@@ -29,6 +29,7 @@ GoRouter createRouter(AppConfig config) => GoRouter(
             path: '/proto/games_advisor',
             builder: (context, state) => const GamesAdvisorProtoPage(),
           ),
+        ],
       ],
     ),
   ],
