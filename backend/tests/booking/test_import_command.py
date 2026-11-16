@@ -89,8 +89,22 @@ def test_unknown_shop_fails(source, seeded):
         run(source, "不存在的店")
 
 
-def test_command_requires_source_setting(monkeypatch, tmp_path, capsys):
-    monkeypatch.delenv("BOOKING_SOURCE_DATABASE_URL", raising=False)
-    monkeypatch.setattr("app.core.config.REPO_ROOT", tmp_path)  # 沒有 .env
-    assert commands.main(["import-shop", "--shop-name", "x"]) == commands.EXIT_FAILED
-    assert "BOOKING_SOURCE_DATABASE_URL" in capsys.readouterr().err
+def test_missing_source_schema_fails_with_hint(db: Engine):
+    with Session(db) as session, pytest.raises(LookupError, match="--source-schema"):
+        commands.use_source_schema(session, "no_such_schema")
+
+
+def test_source_schema_is_used_for_reads(db: Engine, seeded):
+    with db.begin() as conn:
+        conn.execute(text("CREATE SCHEMA src_test"))
+        conn.execute(text("SET LOCAL search_path TO src_test"))
+        for sql in SOURCE_DDL + SOURCE_DML:
+            conn.execute(text(sql))
+    try:
+        with Session(db) as src, Session(db) as dst, dst.begin():
+            commands.use_source_schema(src, "src_test")
+            counts = commands.import_shop(src, dst, "測試店", 1)
+        assert counts.tables == 2
+    finally:
+        with db.begin() as conn:
+            conn.execute(text("DROP SCHEMA src_test CASCADE"))

@@ -106,10 +106,10 @@
 ### D12：真實店家資料以匯入指令帶入
 因為真實營業時間、桌位與費率屬合作店家資料，不寫進 migration、seed 或測試。提供 booking 匯入指令（`repository` 之外的指令模組，同 games_advisor 匯入指令的做法）：
 
-- 讀取 `.env` 的 `BOOKING_SOURCE_DATABASE_URL`（唯讀連線），讀來源庫的營業時間、公休、桌位、關係與費率規則，寫入本專案資料表；指令以 `booking_shops` 的名稱找到目標店家，並可重複執行（以 `table_code`、`rule_code` 等唯一欄位 upsert）。
-- 關係表去除重複與反向重複；缺少 `BOOKING_SOURCE_DATABASE_URL` 時直接失敗並說明缺哪個設定。
-- 測試用虛構資料，結構與真實配置相同（容量、相鄰、可併桌關係），不連來源庫。
-- 來源庫的連線字串只放 `.env`，不得出現在 repo 與 MR 說明。
+- 只用 `DATABASE_URL` 一個連線：以唯讀 session 讀同一個資料庫內來源 schema（預設 `booking_source`，`--source-schema` 可改）的營業時間、公休、桌位、關係與費率規則，寫入本專案資料表；指令以 `booking_shops` 的名稱找到目標店家，並可重複執行（以 `table_code`、`rule_code` 等唯一欄位 upsert）。
+- 關係表去除重複與反向重複；來源 schema 不存在時直接失敗並提示 `--source-schema`。
+- 測試用虛構資料，結構與真實配置相同（容量、相鄰、可併桌關係），不依賴來源 schema（測試自建臨時 schema）。
+- 來源資料表的內容只存在資料庫，不得出現在 repo 與 MR 說明。
 
 ## Risks / Trade-offs
 

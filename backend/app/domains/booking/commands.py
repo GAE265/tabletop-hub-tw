@@ -2,18 +2,17 @@
 
 執行方式：uv run python -m app.domains.booking.commands import-shop --shop-name <店家名稱>
 
-從 .env 的 BOOKING_SOURCE_DATABASE_URL（唯讀）讀來源庫的營業時間、公休、桌位、桌位關係與
-費率規則，寫入目標店家（以 booking_shops 的名稱找）。可重複執行。
-真實店家資料只留在資料庫，不寫進 repo。
+只使用 DATABASE_URL 一個連線：從同一個資料庫的來源 schema（預設 booking_source，唯讀）
+讀舊訂位系統的營業時間、公休、桌位、桌位關係與費率規則，寫入目標店家
+（以 booking_shops 的名稱找）。可重複執行。真實店家資料只留在資料庫，不寫進 repo。
 """
 
 import argparse
-import os
 import sys
 import uuid
 from dataclasses import dataclass
 
-from sqlalchemy import create_engine, delete, select, text
+from sqlalchemy import delete, select, text
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
@@ -29,6 +28,7 @@ from app.domains.booking.models import (
 
 EXIT_OK = 0
 EXIT_FAILED = 1
+DEFAULT_SOURCE_SCHEMA = "booking_source"
 
 
 @dataclass
@@ -160,52 +160,50 @@ def import_shop(
     return counts
 
 
+def use_source_schema(source: Session, schema: str) -> None:
+    """讓來源 session 只讀指定 schema 的舊訂位表（business_hours、seating_tables…）。"""
+    exists = source.scalar(
+        text("SELECT 1 FROM information_schema.schemata WHERE schema_name = :s"), {"s": schema}
+    )
+    if not exists:
+        raise LookupError(
+            f"找不到來源 schema：{schema}（請先把舊訂位資料表放進同一個資料庫的該 schema，"
+            "或用 --source-schema 指定）"
+        )
+    quoted = source.get_bind().dialect.identifier_preparer.quote_schema(schema)
+    source.execute(text(f"SET LOCAL search_path TO {quoted}"))
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="booking.commands")
     sub = parser.add_subparsers(dest="command", required=True)
-    cmd = sub.add_parser("import-shop", help="從來源庫匯入店家的訂位設定")
+    cmd = sub.add_parser("import-shop", help="從來源 schema 匯入店家的訂位設定")
     cmd.add_argument("--shop-name", required=True, help="目標店家在 booking_shops 的名稱")
     cmd.add_argument("--source-company-id", type=int, default=1)
+    cmd.add_argument(
+        "--source-schema",
+        default=DEFAULT_SOURCE_SCHEMA,
+        help=f"舊訂位資料表所在的 schema，同一個資料庫（預設 {DEFAULT_SOURCE_SCHEMA}）",
+    )
     args = parser.parse_args(argv)
 
-    source_url = os.environ.get("BOOKING_SOURCE_DATABASE_URL") or _env_value(
-        "BOOKING_SOURCE_DATABASE_URL"
-    )
-    if not source_url:
-        print("缺少設定：BOOKING_SOURCE_DATABASE_URL（請在 .env 設定來源資料庫）", file=sys.stderr)
-        return EXIT_FAILED
-
-    source_engine = create_engine(source_url)
-    target_engine = create_db_engine(get_settings().database_url)
+    engine = create_db_engine(get_settings().database_url)
     try:
-        with Session(source_engine) as source, Session(target_engine) as target:
+        with Session(engine) as source, Session(engine) as target:
             source.connection(execution_options={"postgresql_readonly": True})
+            use_source_schema(source, args.source_schema)
             with target.begin():
                 counts = import_shop(source, target, args.shop_name, args.source_company_id)
     except LookupError as error:
         print(error, file=sys.stderr)
         return EXIT_FAILED
     finally:
-        source_engine.dispose()
-        target_engine.dispose()
+        engine.dispose()
     print(
         f"已匯入：營業時間 {counts.business_hours}、公休 {counts.closing_hours}、"
         f"桌位 {counts.tables}、桌位關係 {counts.table_links}、費率規則 {counts.pricing_rules}"
     )
     return EXIT_OK
-
-
-def _env_value(name: str) -> str | None:
-    from app.core.config import REPO_ROOT
-
-    env_file = REPO_ROOT / ".env"
-    if not env_file.exists():
-        return None
-    for line in env_file.read_text(encoding="utf-8").splitlines():
-        key, _, value = line.strip().partition("=")
-        if key == name and value:
-            return value
-    return None
 
 
 if __name__ == "__main__":

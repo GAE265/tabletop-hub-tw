@@ -3,7 +3,7 @@
 - [ ] 0.1 在群組告知 8 個新表名（`booking_business_hours`、`booking_closing_hours`、`booking_tables`、`booking_table_links`、`booking_pricing_rules`、`booking_reservations`、`booking_reservation_tables`、`booking_reservation_logs`）
 - [ ] 0.2 與立倫（auth 擁有者）確認 `auth_users.phone` 的 MR 與合併順序，以及電話是否唯一、是否必填
 - [ ] 0.3 從 specs 整理「情境／操作／預期結果」表格（§7.4）給使用者確認，作為 Draft MR 說明（MR 由使用者自行開）
-- [x] 0.4 `.env.example` 新增 `BOOKING_SOURCE_DATABASE_URL`（只寫欄位名與說明）
+- [x] 0.4 設定只使用 `DATABASE_URL` 一個連線（不新增環境變數）
 
 ## 1. 資料庫（先測試後 migration）
 
@@ -65,7 +65,7 @@
 
 ## 8. 匯入指令（D12）
 
-- [x] 8.1 撰寫匯入指令測試：用 fake 來源讀取器驗證 upsert、可重複執行、關係去重、缺少 `BOOKING_SOURCE_DATABASE_URL` 時失敗並說明
+- [x] 8.1 撰寫匯入指令測試：用 fake 來源讀取器驗證 upsert、可重複執行、關係去重、來源 schema 不存在時失敗並說明
 - [x] 8.2 實作 booking 匯入指令（來源庫唯讀、以 `booking_shops` 名稱找目標店家）
 
 ## 9. 並發與收尾
@@ -80,4 +80,4 @@
 - 依使用者指示，未採測試先行；`auth_users.phone` 直接加在 `0003_booking_tables` migration，不等 auth 的 MR（合併時要與立倫對齊，避免兩支 migration 都加 phone）。
 - repository 與 service 沒有另寫 `FakeBookingRepository` 單元測試，改由 `tests/booking/test_api.py`（真實資料庫）與 `tests/migrations/test_booking_tables.py` 涵蓋；既有的 `test_baseline.py` 因 `auth_users` 新增 `phone` 而更新欄位清單。
 - 並發測試（9.1）以 `RacingRepository` 讓兩個請求同時讀到空桌位再寫入，驗證 exclusion constraint 與重試；匯入指令（8.1）用測試資料庫內臨時建立的來源表驗證。
-- 本機開發用的 `.env` 指向 `127.0.0.1:7501` 的 `tabletop-hub-tw` schema；執行測試時需把 `DATABASE_URL` 指到沒有 `options=` 的連線字串。
+- 本機開發用獨立資料庫 `tabletop_hub_tw`（7501、`public` schema，連線字串不帶 `options=`）；匯入指令的來源資料表放在同一個資料庫的 `booking_source` schema，不再使用第二個連線。

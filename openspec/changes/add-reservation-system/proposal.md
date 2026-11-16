@@ -15,7 +15,7 @@
 - 新增預估費用計算（平日 60、假日 80，每人每小時，進位至小時，上限 5 小時）。
 - 新增店員操作：標記入座、完成（含結算費用）、取消、手動標記 no_show、修改桌位。
 - 新增權限：玩家只能操作自己的訂位；店員只能操作自己所屬店家的訂位；每個端點附「沒有權限」測試。
-- 新增 booking 的匯入指令：從 `.env` 的 `BOOKING_SOURCE_DATABASE_URL` 指向的來源資料庫，匯入營業時間、公休、桌位、關係與費率規則。真實店家資料不提交進 repo（AGENTS.md §2 規則 2）。
+- 新增 booking 的匯入指令：從同一個資料庫（`DATABASE_URL`）的來源 schema（預設 `booking_source`，用 `--source-schema` 指定）讀舊訂位資料表，匯入營業時間、公休、桌位、關係與費率規則。真實店家資料不提交進 repo（AGENTS.md §2 規則 2）。
 - 前置依賴：`auth_users` 需要 `phone` 欄位（同電話重疊規則使用）。由 `auth` 擁有者（立倫）以另一個 MR 與 migration 提供，本 change 不修改 `auth_users`。
 - 不含：Google OAuth、登入（`auth` domain 負責）、個資管理、付款、通知、國定假日、跨午夜營業、點餐與飲料低消驗證（由店員核對）、前端畫面。
 
@@ -35,5 +35,5 @@
 - 後端：新增 `backend/app/domains/booking/`、`backend/migrations/versions/` 一支 migration、`backend/tests/booking/`、`backend/tests/migrations/`；`app/main.py` 掛載 booking router。
 - 資料庫：新增上述 8 張表，並啟用 `btree_gist` extension。共用表 `booking_shops`（瑋鋐擁有）與 `auth_users`（立倫擁有）只被參照，不修改結構。
 - 依賴 `auth_users.phone`（立倫的 MR）。在它合併前，本 change 的 migration 與同電話測試無法完成。
-- 設定：`.env.example` 新增 `BOOKING_SOURCE_DATABASE_URL`（只寫欄位名與說明）。
+- 設定：只使用 `DATABASE_URL` 一個資料庫連線，不新增環境變數。
 - 不新增第三方套件（fastapi、sqlalchemy、psycopg、alembic 皆已存在）。

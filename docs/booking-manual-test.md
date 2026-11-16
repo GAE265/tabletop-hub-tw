@@ -10,7 +10,7 @@
      - 連線字串：`postgresql+psycopg://<user>:<password>@localhost:7501/tabletop_hub_tw`
      - 注意：`vector`、`btree_gist` extension 會裝在 migration 當時的 search_path。若指定其他 schema，之後改用預設連線會出現 `type "vector" does not exist`。
    - `AUTH_MODE=dev`：用 `X-Dev-User` 標頭取得身分。
-   - `BOOKING_SOURCE_DATABASE_URL`：匯入店家設定的來源庫（只有第 4 步用到）。
+   - 只需要 `DATABASE_URL` 一個連線。匯入店家設定時，舊訂位資料表放在同一個資料庫的 `booking_source` schema（見下方匯入步驟）。
 2. 以下指令都在 `backend/` 執行：
 
 ```bash
@@ -23,6 +23,9 @@ uv run alembic upgrade head
 uv run python -m app.dev.seed
 
 # 匯入店家的營業時間、桌位、費率（沒有這一步，任何訂位都會被拒絕；可重複執行）
+# 前提：同一個資料庫已有 booking_source schema，內含舊訂位的 business_hours、closing_hours、
+# seating_tables、seating_tables_rel、pricing_rules 五張表（例如用 pg_dump 還原；資料不進 repo）。
+# 其他 schema 名稱用 --source-schema 指定。
 uv run python -m app.domains.booking.commands import-shop --shop-name 測試桌遊店
 
 # 訂位需要電話：替預設測試玩家補上電話
