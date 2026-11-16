@@ -75,14 +75,14 @@ def seeded(db: Engine) -> dict[str, dict[str, int]]:
         for weekday in (0, 1, 3, 4, 5, 6):
             conn.execute(
                 text(
-                    "INSERT INTO business_hours (company_id, weekday, open_time, close_time) "
+                    "INSERT INTO business_hours (shop_id, weekday, open_time, close_time) "
                     "VALUES (:s, :w, '13:00', '22:00')"
                 ),
                 {"s": SHOP, "w": weekday},
             )
         conn.execute(
             text(
-                "INSERT INTO closing_hours (company_id, closing_date, start_time, end_time) "
+                "INSERT INTO closing_hours (shop_id, closing_date, start_time, end_time) "
                 "VALUES (:s, '2026-12-02', '15:00', '17:00')"
             ),
             {"s": SHOP},
@@ -91,7 +91,7 @@ def seeded(db: Engine) -> dict[str, dict[str, int]]:
             tables[code] = conn.execute(
                 text(
                     "INSERT INTO seating_tables "
-                    "(company_id, table_code, min_capacity, max_capacity) "
+                    "(shop_id, table_code, min_capacity, max_capacity) "
                     "VALUES (:s, :c, 1, :m) RETURNING id"
                 ),
                 {"s": SHOP, "c": code, "m": cap},
@@ -100,7 +100,7 @@ def seeded(db: Engine) -> dict[str, dict[str, int]]:
             conn.execute(
                 text(
                     "INSERT INTO seating_tables_rel "
-                    "(company_id, seating_tables_id_a, seating_tables_id_b, is_combinable) "
+                    "(shop_id, seating_tables_id_a, seating_tables_id_b, is_combinable) "
                     "VALUES (:s, :a, :b, :c)"
                 ),
                 {"s": SHOP, "a": tables[a], "b": tables[b], "c": combinable},
@@ -116,7 +116,7 @@ def seeded(db: Engine) -> dict[str, dict[str, int]]:
             conn.execute(
                 text(
                     "INSERT INTO pricing_rules "
-                    "(company_id, rule_code, rule_name, rule_type, price, unit) "
+                    "(shop_id, rule_code, rule_name, rule_type, price, unit) "
                     "VALUES (:s, :c, :c, 'other', :p, 'x')"
                 ),
                 {"s": SHOP, "c": code, "p": price},

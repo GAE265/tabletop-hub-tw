@@ -40,8 +40,8 @@ def _id() -> Mapped[int]:
 
 
 def _shop_fk() -> Mapped[uuid.UUID]:
-    """舊庫的 company_id（店家）。程式內仍叫 shop_id，欄位名稱與舊庫相同。"""
-    return mapped_column("company_id", Uuid, ForeignKey("booking_shops.id"), nullable=False)
+    """舊庫的 shop_id（店家）。程式內仍叫 shop_id，欄位名稱與舊庫相同。"""
+    return mapped_column("shop_id", Uuid, ForeignKey("booking_shops.id"), nullable=False)
 
 
 def _created_at() -> Mapped[datetime]:
@@ -65,8 +65,8 @@ class BookingShop(Base):
 class BookingBusinessHours(Base):
     __tablename__ = "business_hours"
     __table_args__ = (
-        UniqueConstraint("company_id", "id", name="uq_business_hours_company_id_id"),
-        UniqueConstraint("company_id", "weekday", name="uq_business_hours_company_weekday"),
+        UniqueConstraint("shop_id", "id", name="uq_business_hours_shop_id_id"),
+        UniqueConstraint("shop_id", "weekday", name="uq_business_hours_shop_weekday"),
         CheckConstraint("open_time < close_time", name="chk_business_hours_time"),
         CheckConstraint("weekday >= 0 AND weekday <= 6", name="chk_business_hours_weekday"),
     )
@@ -81,7 +81,7 @@ class BookingBusinessHours(Base):
 class BookingClosingHours(Base):
     __tablename__ = "closing_hours"
     __table_args__ = (
-        UniqueConstraint("company_id", "id", name="uq_closing_hours_company_id_id"),
+        UniqueConstraint("shop_id", "id", name="uq_closing_hours_shop_id_id"),
         CheckConstraint(
             "(start_time IS NULL AND end_time IS NULL) OR "
             "(start_time IS NOT NULL AND end_time IS NOT NULL AND start_time < end_time)",
@@ -100,8 +100,8 @@ class BookingClosingHours(Base):
 class BookingTable(Base):
     __tablename__ = "seating_tables"
     __table_args__ = (
-        UniqueConstraint("company_id", "id", name="uq_seating_tables_company_id_id"),
-        UniqueConstraint("company_id", "table_code", name="uq_seating_tables_company_code"),
+        UniqueConstraint("shop_id", "id", name="uq_seating_tables_shop_id_id"),
+        UniqueConstraint("shop_id", "table_code", name="uq_seating_tables_shop_code"),
         CheckConstraint(
             "min_capacity >= 1 AND max_capacity >= min_capacity", name="chk_seating_tables_capacity"
         ),
@@ -135,8 +135,8 @@ class BookingTableLink(Base):
 class BookingPricingRule(Base):
     __tablename__ = "pricing_rules"
     __table_args__ = (
-        UniqueConstraint("company_id", "id", name="uq_pricing_rules_company_id_id"),
-        UniqueConstraint("company_id", "rule_code", name="uq_pricing_rules_company_code"),
+        UniqueConstraint("shop_id", "id", name="uq_pricing_rules_shop_id_id"),
+        UniqueConstraint("shop_id", "rule_code", name="uq_pricing_rules_shop_code"),
         CheckConstraint("price >= 0", name="chk_pricing_rules_price"),
     )
 
@@ -157,8 +157,8 @@ class BookingPricingRule(Base):
 class BookingReservation(Base):
     __tablename__ = "reservations"
     __table_args__ = (
-        UniqueConstraint("company_id", "id", name="uq_reservations_company_id_id"),
-        UniqueConstraint("company_id", "reservation_code", name="uq_reservations_company_code"),
+        UniqueConstraint("shop_id", "id", name="uq_reservations_shop_id_id"),
+        UniqueConstraint("shop_id", "reservation_code", name="uq_reservations_shop_code"),
         CheckConstraint("end_at > start_at", name="chk_reservations_time"),
         CheckConstraint("party_size >= 1", name="chk_reservations_party_size"),
         CheckConstraint(
@@ -201,19 +201,19 @@ class BookingReservationTable(Base):
     __tablename__ = "reservation_tables"
     __table_args__ = (
         ForeignKeyConstraint(
-            ["company_id", "reservation_id"],
-            ["reservations.company_id", "reservations.id"],
+            ["shop_id", "reservation_id"],
+            ["reservations.shop_id", "reservations.id"],
             name="fk_reservation_tables_reservation",
             ondelete="RESTRICT",
         ),
         ForeignKeyConstraint(
-            ["company_id", "table_id"],
-            ["seating_tables.company_id", "seating_tables.id"],
+            ["shop_id", "table_id"],
+            ["seating_tables.shop_id", "seating_tables.id"],
             name="fk_reservation_tables_table",
             ondelete="RESTRICT",
         ),
         ExcludeConstraint(
-            ("company_id", "="),
+            ("shop_id", "="),
             ("table_id", "="),
             (text("tstzrange(start_at, end_at, '[)')"), "&&"),
             using="gist",
@@ -223,7 +223,7 @@ class BookingReservationTable(Base):
         CheckConstraint("end_at > start_at", name="chk_reservation_tables_time"),
     )
 
-    shop_id: Mapped[uuid.UUID] = mapped_column("company_id", Uuid, primary_key=True)
+    shop_id: Mapped[uuid.UUID] = mapped_column("shop_id", Uuid, primary_key=True)
     reservation_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     table_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     start_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
@@ -235,8 +235,8 @@ class BookingReservationLog(Base):
     __tablename__ = "reservation_logs"
     __table_args__ = (
         ForeignKeyConstraint(
-            ["company_id", "reservation_id"],
-            ["reservations.company_id", "reservations.id"],
+            ["shop_id", "reservation_id"],
+            ["reservations.shop_id", "reservations.id"],
             name="fk_reservation_logs_reservation",
             ondelete="RESTRICT",
         ),
@@ -245,8 +245,8 @@ class BookingReservationLog(Base):
             name="chk_reservation_logs_operator_type",
         ),
         Index(
-            "idx_reservation_logs_company_reservation",
-            "company_id",
+            "idx_reservation_logs_shop_reservation",
+            "shop_id",
             "reservation_id",
             text("created_at DESC"),
         ),
