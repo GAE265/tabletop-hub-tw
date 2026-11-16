@@ -51,3 +51,6 @@ $RECYCLE.BIN/
 *.log
 
 # uv.lock 與 pubspec.lock 必須提交，不可加進這裡
+
+# 手動測試腳本（docs/manual-test-rules-ingest.md），不提交
+backend/manual_case_*.py

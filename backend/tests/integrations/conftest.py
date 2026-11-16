@@ -18,12 +18,19 @@ EXTERNAL_REQUIRED = (
     "GAMES_ADVISOR_EMBEDDING_API_KEY",
     "GAMES_ADVISOR_EMBEDDING_MODEL",
 )
+# OCR 的外部服務測試（直連 Azure Document Intelligence 與 Azure OpenAI 視覺模型）
+OCR_EXTERNAL_REQUIRED = (
+    "OCR_DI_ENDPOINT",
+    "OCR_DI_API_KEY",
+    "LLM_ENDPOINT",
+    "LLM_API_KEY",
+    "LLM_MODEL",
+)
 # 外部服務測試不連資料庫，給一個用不到的值，.env 沒有 DATABASE_URL 也能跑
 UNUSED_DB = "postgresql+psycopg://unused:unused@127.0.0.1:1/unused"
 
 
-@pytest.fixture
-def external_settings(monkeypatch: pytest.MonkeyPatch) -> Settings:
+def _load_external_settings(monkeypatch: pytest.MonkeyPatch, required: tuple[str, ...]) -> Settings:
     env_file = REPO_ROOT / ".env"
     if not env_file.exists():
         pytest.fail(f"外部服務測試要讀 {env_file}，但檔案不存在；請照 .env.example 建立並填好金鑰")
@@ -35,7 +42,17 @@ def external_settings(monkeypatch: pytest.MonkeyPatch) -> Settings:
             monkeypatch.delenv(key)
 
     settings = Settings(_env_file=env_file, database_url=UNUSED_DB)
-    missing = [name for name in EXTERNAL_REQUIRED if not getattr(settings, name.lower())]
+    missing = [name for name in required if not getattr(settings, name.lower())]
     if missing:
         pytest.fail(f"外部服務測試缺少設定：{'、'.join(missing)}（請在 {env_file} 填好）")
     return settings
+
+
+@pytest.fixture
+def external_settings(monkeypatch: pytest.MonkeyPatch) -> Settings:
+    return _load_external_settings(monkeypatch, EXTERNAL_REQUIRED)
+
+
+@pytest.fixture
+def ocr_external_settings(monkeypatch: pytest.MonkeyPatch) -> Settings:
+    return _load_external_settings(monkeypatch, OCR_EXTERNAL_REQUIRED)
