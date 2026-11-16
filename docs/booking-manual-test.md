@@ -5,7 +5,10 @@
 ## 1. 前置準備
 
 1. 啟動資料庫（`docker compose up -d postgres`），並在專案根目錄的 `.env` 設定：
-   - `DATABASE_URL`：後端連線字串。
+   - `DATABASE_URL`：後端連線字串。建議為本專案獨立建一個資料庫（例如 `tabletop_hub_tw`），使用預設的 `public` schema，不要加 `options=-csearch_path=...`：
+     - 先建立資料庫：`CREATE DATABASE tabletop_hub_tw;`
+     - 連線字串：`postgresql+psycopg://<user>:<password>@localhost:7501/tabletop_hub_tw`
+     - 注意：`vector`、`btree_gist` extension 會裝在 migration 當時的 search_path。若指定其他 schema，之後改用預設連線會出現 `type "vector" does not exist`。
    - `AUTH_MODE=dev`：用 `X-Dev-User` 標頭取得身分。
    - `BOOKING_SOURCE_DATABASE_URL`：匯入店家設定的來源庫（只有第 4 步用到）。
 2. 以下指令都在 `backend/` 執行：
@@ -137,6 +140,6 @@ curl -s -X PATCH $API/bookings/$CANCEL -H "$PLAYER" -H 'Content-Type: applicatio
 ## 5. 自動化測試
 
 ```bash
-# DATABASE_URL 要指到「不帶 options= 的連線字串」，測試會自己建立 `<資料庫名>_test`
+# DATABASE_URL 不要帶 options=，測試會自己建立 `<資料庫名>_test`（例如 `tabletop_hub_tw_test`）
 uv run pytest
 ```
