@@ -6,6 +6,7 @@ import 'package:tabletop_hub/app/app.dart';
 import 'package:tabletop_hub/app/theme/app_fonts.dart';
 import 'package:tabletop_hub/core/config/app_config.dart';
 import 'package:tabletop_hub/core/dev/data/dev_users_repository.dart';
+import 'package:tabletop_hub/domains/games_advisor/data/advisor_repository.dart';
 import 'package:tabletop_hub/domains/health/data/health_repository.dart';
 import 'package:tabletop_hub/domains/health/data/health_status.dart';
 
@@ -33,6 +34,7 @@ Future<void> pumpApp(
             result: const HealthStatus(status: 'ok', database: 'up'),
           ),
         ),
+        advisorRepositoryProvider.overrideWithValue(FakeAdvisorRepository()),
       ],
       child: const App(),
     ),
@@ -57,6 +59,25 @@ void main() {
     goTo(tester, '/proto/health');
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('health-proto-page')), findsNothing);
+    expect(find.text('找不到頁面'), findsOneWidget);
+  });
+
+  testWidgets('SHOW_PROTOTYPES 開啟：/proto/games_advisor 顯示推薦 Agent 參考畫面', (
+    tester,
+  ) async {
+    await pumpApp(tester, showPrototypes: true);
+    goTo(tester, '/proto/games_advisor');
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('games_advisor-proto-page')), findsOneWidget);
+  });
+
+  testWidgets('SHOW_PROTOTYPES 關閉：/proto/games_advisor 顯示找不到頁面', (
+    tester,
+  ) async {
+    await pumpApp(tester, showPrototypes: false);
+    goTo(tester, '/proto/games_advisor');
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('games_advisor-proto-page')), findsNothing);
     expect(find.text('找不到頁面'), findsOneWidget);
   });
 
