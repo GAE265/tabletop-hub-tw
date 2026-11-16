@@ -14,7 +14,8 @@ class FakeAppFonts implements AppFonts {
   static const bodyFamily = 'FakeBody';
 
   @override
-  TextStyle heading(TextStyle style) => style.copyWith(fontFamily: headingFamily);
+  TextStyle heading(TextStyle style) =>
+      style.copyWith(fontFamily: headingFamily);
 
   @override
   TextStyle body(TextStyle style) => style.copyWith(fontFamily: bodyFamily);

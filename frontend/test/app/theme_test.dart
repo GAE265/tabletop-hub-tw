@@ -127,7 +127,12 @@ void main() {
         expect(style!.fontFamily, FakeAppFonts.bodyFamily);
       }
       expect(t.bodyMedium!.color, AppColors.ink);
-      expect(theme.appBarTheme.titleTextStyle!.fontFamily, FakeAppFonts.headingFamily);
+      // 直接拿來用的樣式（AppBar 標題）也要有字級大小
+      expect(theme.appBarTheme.titleTextStyle!.fontSize, 22);
+      expect(
+        theme.appBarTheme.titleTextStyle!.fontFamily,
+        FakeAppFonts.headingFamily,
+      );
     });
   });
 
@@ -142,7 +147,9 @@ void main() {
         await tester.pumpWidget(
           MaterialApp(
             theme: theme,
-            home: Scaffold(body: PillBadge(label: '4 人', tone: tone)),
+            home: Scaffold(
+              body: PillBadge(label: '4 人', tone: tone),
+            ),
           ),
         );
         final box = tester.widget<DecoratedBox>(
