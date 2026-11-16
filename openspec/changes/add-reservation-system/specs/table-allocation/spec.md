@@ -14,7 +14,7 @@
 - **THEN** 系統分配 A
 
 ### Requirement: 多桌合併分配
-單桌無法容納時，系統 SHALL 嘗試多桌組合，且合併後 MUST NOT 檢查 `min_capacity`、組合總 `max_capacity` MUST 大於等於人數。`booking_table_links` 的每筆紀錄 SHALL 視為雙向關係。候選組合依等級排序：
+單桌無法容納時，系統 SHALL 嘗試多桌組合，且合併後 MUST NOT 檢查 `min_capacity`、組合總 `max_capacity` MUST 大於等於人數。`seating_tables_rel` 的每筆紀錄 SHALL 視為雙向關係。候選組合依等級排序：
 1. 等級 1：組合內的桌位可僅透過 `is_combinable=true` 的關係連通（含鏈狀，例如 B+C+E）。
 2. 等級 2：組合需經過 `is_combinable=false` 的相鄰關係才能連通。
 3. 等級 3：組合內的桌位不相鄰。

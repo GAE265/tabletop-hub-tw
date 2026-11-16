@@ -39,15 +39,15 @@ PY
 
 預期：seed 印出「已建立（或確認存在）3 個測試帳號與 1 間測試店家」。
 
-**店家設定資料（自行準備 DML，不進 repo）**：沒有這些資料，任何訂位都會被拒絕。請以「測試桌遊店」的 `booking_shops.id` 為 `shop_id`，寫入：
+**店家設定資料（自行準備 DML，不進 repo）**：沒有這些資料，任何訂位都會被拒絕。表名與欄位和舊訂位資料庫相同，只有 `company_id` 改為「測試桌遊店」的 `booking_shops.id`（uuid），請依此寫入：
 
 | 資料表 | 必要內容 |
 |---|---|
-| `booking_business_hours` | 各 `weekday`（0=日）的 `open_time`、`close_time` |
-| `booking_closing_hours` | 公休日期與時段（可為空） |
-| `booking_tables` | 桌位 `table_code`、`min_capacity`、`max_capacity`、`is_active` |
-| `booking_table_links` | 桌位相鄰與 `is_combinable`（不可 `table_a_id = table_b_id`，同一對不可重複） |
-| `booking_pricing_rules` | 至少 `WEEKDAY_HOURLY_FEE`、`WEEKEND_HOURLY_FEE` 兩筆的 `price`，否則回 503 `BOOKING_PRICING_NOT_CONFIGURED` |
+| `business_hours` | 各 `weekday`（0=日）的 `open_time`、`close_time` |
+| `closing_hours` | `closing_date` 與選填的 `start_time`、`end_time`（可為空） |
+| `seating_tables` | `table_code`、`table_name`、`min_capacity`、`max_capacity`、`is_active` |
+| `seating_tables_rel` | `seating_tables_id_a`、`seating_tables_id_b`、`is_combinable`（與舊庫相同，不檢查重複，程式讀取時會合併重複與反向重複） |
+| `pricing_rules` | `rule_code`、`rule_name`、`rule_type`、`price`、`unit`；至少 `WEEKDAY_HOURLY_FEE`、`WEEKEND_HOURLY_FEE` 兩筆的 `price`，否則回 503 `BOOKING_PRICING_NOT_CONFIGURED` |
 
 ## 2. 啟動服務
 
@@ -141,7 +141,7 @@ curl -s -X PATCH $API/bookings/$CANCEL -H "$PLAYER" -H 'Content-Type: applicatio
 ## 4. 重複執行與清理
 
 - 步驟 2 與步驟 9 若時段與玩家既有的有效訂位重疊，會回 409 `BOOKING_OVERLAP_CONFIRM_REQUIRED`；重跑時換一個日期（把 `D` 往後延一週），或在請求加上 `"confirm_overlap": true`（會取消舊訂位）。
-- 想清掉測試訂位：在開發資料庫對 `booking_reservation_logs`、`booking_reservation_tables`、`booking_reservations` 執行 `TRUNCATE ... CASCADE`。
+- 想清掉測試訂位：在開發資料庫對 `reservation_logs`、`reservation_tables`、`reservations` 執行 `TRUNCATE ... CASCADE`。
 
 ## 5. 自動化測試
 

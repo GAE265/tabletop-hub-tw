@@ -50,9 +50,9 @@ ADMIN_H = header(ADMIN, "admin")
 
 
 @pytest.fixture
-def seeded(db: Engine) -> dict[str, dict[str, uuid.UUID]]:
+def seeded(db: Engine) -> dict[str, dict[str, int]]:
     """兩間店、四個使用者，以及虛構的 9 桌配置、營業時間（週二公休）與費率。"""
-    tables: dict[str, uuid.UUID] = {}
+    tables: dict[str, int] = {}
     with db.begin() as conn:
         for shop, name in ((SHOP, "測試店"), (OTHER_SHOP, "別家店")):
             conn.execute(
@@ -75,14 +75,14 @@ def seeded(db: Engine) -> dict[str, dict[str, uuid.UUID]]:
         for weekday in (0, 1, 3, 4, 5, 6):
             conn.execute(
                 text(
-                    "INSERT INTO booking_business_hours (shop_id, weekday, open_time, close_time) "
+                    "INSERT INTO business_hours (company_id, weekday, open_time, close_time) "
                     "VALUES (:s, :w, '13:00', '22:00')"
                 ),
                 {"s": SHOP, "w": weekday},
             )
         conn.execute(
             text(
-                "INSERT INTO booking_closing_hours (shop_id, closing_date, start_time, end_time) "
+                "INSERT INTO closing_hours (company_id, closing_date, start_time, end_time) "
                 "VALUES (:s, '2026-12-02', '15:00', '17:00')"
             ),
             {"s": SHOP},
@@ -90,7 +90,8 @@ def seeded(db: Engine) -> dict[str, dict[str, uuid.UUID]]:
         for code, cap in CAPACITY.items():
             tables[code] = conn.execute(
                 text(
-                    "INSERT INTO booking_tables (shop_id, table_code, min_capacity, max_capacity) "
+                    "INSERT INTO seating_tables "
+                    "(company_id, table_code, min_capacity, max_capacity) "
                     "VALUES (:s, :c, 1, :m) RETURNING id"
                 ),
                 {"s": SHOP, "c": code, "m": cap},
@@ -98,8 +99,9 @@ def seeded(db: Engine) -> dict[str, dict[str, uuid.UUID]]:
         for a, b, combinable in LINK_SPECS:
             conn.execute(
                 text(
-                    "INSERT INTO booking_table_links "
-                    "(shop_id, table_a_id, table_b_id, is_combinable) VALUES (:s, :a, :b, :c)"
+                    "INSERT INTO seating_tables_rel "
+                    "(company_id, seating_tables_id_a, seating_tables_id_b, is_combinable) "
+                    "VALUES (:s, :a, :b, :c)"
                 ),
                 {"s": SHOP, "a": tables[a], "b": tables[b], "c": combinable},
             )
@@ -113,8 +115,8 @@ def seeded(db: Engine) -> dict[str, dict[str, uuid.UUID]]:
         for code, price in rules:
             conn.execute(
                 text(
-                    "INSERT INTO booking_pricing_rules "
-                    "(shop_id, rule_code, rule_name, rule_type, price, unit) "
+                    "INSERT INTO pricing_rules "
+                    "(company_id, rule_code, rule_name, rule_type, price, unit) "
                     "VALUES (:s, :c, :c, 'other', :p, 'x')"
                 ),
                 {"s": SHOP, "c": code, "p": price},

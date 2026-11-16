@@ -5,7 +5,7 @@
 
 #### Scenario: 成功建立
 - **WHEN** 玩家提交有效訂位
-- **THEN** 訂位 `status` 為 `confirmed`，並寫入 `booking_reservation_logs`（action 為建立、operator_type 為 customer、operator_id 為建立者）
+- **THEN** 訂位 `status` 為 `confirmed`，並寫入 `reservation_logs`（action 為建立、operator_type 為 customer、operator_id 為建立者）
 
 #### Scenario: 備註
 - **WHEN** 玩家於 `special_requests` 填寫座位偏好
@@ -35,7 +35,7 @@
 - **THEN** 系統拒絕
 
 ### Requirement: 取消訂位
-玩家與店員 SHALL 能取消訂位，不設最晚時間限制，且取消原因不必填（店員可選填）。取消 SHALL 立即釋放桌位、記錄 `cancelled_at` 與 `cancel_reason`，並於 `booking_reservation_logs` 記錄取消者（`operator_type`、`operator_id`、`operator_name`）。訂位開始後的玩家取消 SHALL 標記為 `no_show` 並同樣立即釋放桌位。
+玩家與店員 SHALL 能取消訂位，不設最晚時間限制，且取消原因不必填（店員可選填）。取消 SHALL 立即釋放桌位、記錄 `cancelled_at` 與 `cancel_reason`，並於 `reservation_logs` 記錄取消者（`operator_type`、`operator_id`、`operator_name`）。訂位開始後的玩家取消 SHALL 標記為 `no_show` 並同樣立即釋放桌位。
 
 #### Scenario: 開始前取消
 - **WHEN** 玩家於訂位開始前取消

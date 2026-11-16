@@ -70,7 +70,7 @@ def race(db: Engine) -> list[object]:
 
 def only_table_g(db: Engine) -> None:
     with db.begin() as conn:
-        conn.execute(text("UPDATE booking_tables SET is_active = false WHERE table_code <> 'G'"))
+        conn.execute(text("UPDATE seating_tables SET is_active = false WHERE table_code <> 'G'"))
 
 
 def test_only_one_of_two_simultaneous_requests_gets_the_last_table(db: Engine, seeded):
@@ -80,10 +80,8 @@ def test_only_one_of_two_simultaneous_requests_gets_the_last_table(db: Engine, s
     assert len(outcomes) == 2 and len(errors) == 1
     assert errors[0].status_code == 409 and errors[0].code == "BOOKING_NO_TABLE_AVAILABLE"
     with db.connect() as conn:
-        assert conn.execute(text("SELECT count(*) FROM booking_reservations")).scalar_one() == 1
-        assert (
-            conn.execute(text("SELECT count(*) FROM booking_reservation_tables")).scalar_one() == 1
-        )
+        assert conn.execute(text("SELECT count(*) FROM reservations")).scalar_one() == 1
+        assert conn.execute(text("SELECT count(*) FROM reservation_tables")).scalar_one() == 1
 
 
 def test_repeated_races_never_double_book(db: Engine, seeded):
@@ -92,10 +90,7 @@ def test_repeated_races_never_double_book(db: Engine, seeded):
     for _ in range(3):
         with db.begin() as conn:
             conn.execute(
-                text(
-                    "TRUNCATE booking_reservation_logs, booking_reservation_tables, "
-                    "booking_reservations CASCADE"
-                )
+                text("TRUNCATE reservation_logs, reservation_tables, reservations CASCADE")
             )
         outcomes = race(db)
         assert sum(isinstance(o, AppError) for o in outcomes) == 1 and len(outcomes) == 2

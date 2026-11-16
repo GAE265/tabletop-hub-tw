@@ -1,22 +1,22 @@
 ## 0. 前置與流程（AGENTS.md §7.2、§4.4）
 
-- [ ] 0.1 在群組告知 8 個新表名（`booking_business_hours`、`booking_closing_hours`、`booking_tables`、`booking_table_links`、`booking_pricing_rules`、`booking_reservations`、`booking_reservation_tables`、`booking_reservation_logs`）
+- [ ] 0.1 在群組告知新表名（依舊庫命名：`business_hours`、`closing_hours`、`seating_tables`、`seating_tables_rel`、`pricing_rules`、`reservations`、`reservation_tables`、`reservation_logs`、`customer_inquiries`、`faqs`、`menu_categories`、`menu_items`），以及 `booking_shops` 新增的欄位
 - [ ] 0.2 與立倫（auth 擁有者）確認 `auth_users.phone` 的 MR 與合併順序，以及電話是否唯一、是否必填
 - [ ] 0.3 從 specs 整理「情境／操作／預期結果」表格（§7.4）給使用者確認，作為 Draft MR 說明（MR 由使用者自行開）
 - [x] 0.4 設定只使用 `DATABASE_URL` 一個連線（不新增環境變數）
 
 ## 1. 資料庫（先測試後 migration）
 
-- [x] 1.1 撰寫 migration 測試 `tests/migrations/test_booking_tables.py`：8 張表與欄位存在；UUID 主鍵；唯一與 CHECK 約束；table_links 禁止重複與反向重複；exclusion constraint 擋下同桌時間重疊，`is_active=false` 時不擋
-- [x] 1.2 新增單一 Alembic revision：`CREATE EXTENSION IF NOT EXISTS btree_gist` 與 8 張表、約束、exclusion constraint；驗證 downgrade
-- [x] 1.3 在 `domains/booking/models.py` 定義 8 個 SQLAlchemy model
+- [x] 1.1 撰寫 migration 測試 `tests/migrations/test_booking_tables.py`：12 張表的欄位與舊庫一致（含擴充欄位）；唯一與 CHECK 約束；關係表允許舊資料的重複；exclusion constraint 擋下同桌時間重疊，`is_active=false` 時不擋
+- [x] 1.2 新增單一 Alembic revision：`CREATE EXTENSION IF NOT EXISTS btree_gist` 與 12 張表、約束、exclusion constraint；驗證 downgrade
+- [x] 1.3 在 `domains/booking/models.py` 定義 SQLAlchemy model（`company_id`、`customer_id` 對應程式內的 `shop_id`、`user_id`）
 - [x] 1.4 對本機資料庫執行 `uv run alembic upgrade head`，確認 1.1 的測試通過
 
 ## 2. Repository（API 測試等級，連本機資料庫）
 
 - [x] 2.1 撰寫 repository 測試：營業時間、公休、啟用桌位與關係、費率規則的查詢
 - [x] 2.2 撰寫 repository 測試：時段內有效訂位及其桌位、同電話有效訂位、同使用者有效訂位
-- [x] 2.3 撰寫 repository 測試：建立訂位與桌位關聯、更新狀態、寫入 `booking_reservation_logs`、產生唯一 `reservation_code`、釋放桌位、時間變更同步桌位列
+- [x] 2.3 撰寫 repository 測試：建立訂位與桌位關聯、更新狀態、寫入 `reservation_logs`、產生唯一 `reservation_code`、釋放桌位、時間變更同步桌位列
 - [x] 2.4 實作 `repository.py`，通過 2.1–2.3
 
 ## 3. 時間規則（booking-rules，純函式）
@@ -80,3 +80,4 @@
 - repository 與 service 沒有另寫 `FakeBookingRepository` 單元測試，改由 `tests/booking/test_api.py`（真實資料庫）與 `tests/migrations/test_booking_tables.py` 涵蓋；既有的 `test_baseline.py` 因 `auth_users` 新增 `phone` 而更新欄位清單。
 - 並發測試（9.1）以 `RacingRepository` 讓兩個請求同時讀到空桌位再寫入，驗證 exclusion constraint 與重試。
 - 本機開發用獨立資料庫 `tabletop_hub_tw`（7501、`public` schema，連線字串不帶 `options=`），只使用一個連線；店家設定資料由使用者自行以 DML 寫入。
+- 依使用者指示，資料表與欄位完全照舊訂位資料庫命名（見 design D2）；舊庫的 `companies` 由 `booking_shops` 取代、`customers` 由 `auth_users` 取代，reservations 與 reservation_tables 另加擴充欄位。`customer_inquiries`、`faqs`、`menu_*` 只建表，沒有程式使用。

@@ -5,11 +5,11 @@
 ## What Changes
 
 - 在既有 `backend/` 新增 `app/domains/booking/`（router、schemas、service、repository、models），依 AGENTS.md §4 的分層與 RESTful 規則實作。
-- 新增 Alembic migration（單一 revision，瑋鋐審核），建立 8 張訂位相關資料表：`booking_business_hours`、`booking_closing_hours`、`booking_tables`、`booking_table_links`、`booking_pricing_rules`、`booking_reservations`、`booking_reservation_tables`、`booking_reservation_logs`。主鍵一律 UUID，店家使用既有共用表 `booking_shops`，使用者使用共用表 `auth_users`。
-- `booking_reservation_tables` 帶 `start_at`、`end_at`、`is_active` 與 `btree_gist` exclusion constraint，作為併發防重複訂桌的資料庫保護。
+- 新增 Alembic migration（單一 revision，瑋鋐審核），建立 12 張訂位相關資料表，表名、欄位與型別完全依舊訂位資料庫（`business_hours`、`closing_hours`、`seating_tables`、`seating_tables_rel`、`pricing_rules`、`reservations`、`reservation_tables`、`reservation_logs`、`customer_inquiries`、`faqs`、`menu_categories`、`menu_items`；主鍵為 `bigint` identity）。舊庫的 `companies` 由共用表 `booking_shops` 取代（`company_id` 為 uuid），`customers` 由 `auth_users` 取代（`customer_id` 為 uuid，`auth_users` 新增 `phone`）。
+- `reservation_tables` 擴充 `start_at`、`end_at`、`is_active` 與 `btree_gist` exclusion constraint，作為併發防重複訂桌的資料庫保護。
 - 新增訂位建立、多時段批次建立（全有或全無）、修改、取消 API。
 - 新增營業時間、公休時段、單日不跨日、最長提前 3 個日曆月、不得早於現在等驗證。
-- 新增自動桌位分配：單桌優先，必要時多桌合併（`booking_table_links` 的相鄰與可併桌關係）。
+- 新增自動桌位分配：單桌優先，必要時多桌合併（`seating_tables_rel` 的相鄰與可併桌關係）。
 - 新增同電話時段重疊的處理：提醒後由玩家確認，確認後取消舊訂位並建立新訂位。
 - 修改訂位與自己其他訂位重疊時，合併成一筆涵蓋兩者時間的新訂位。
 - 新增預估費用計算（平日 60、假日 80，每人每小時，進位至小時，上限 5 小時）。
@@ -33,7 +33,7 @@
 ## Impact
 
 - 後端：新增 `backend/app/domains/booking/`、`backend/migrations/versions/` 一支 migration、`backend/tests/booking/`、`backend/tests/migrations/`；`app/main.py` 掛載 booking router。
-- 資料庫：新增上述 8 張表，並啟用 `btree_gist` extension。共用表 `booking_shops`（瑋鋐擁有）與 `auth_users`（立倫擁有）只被參照，不修改結構。
+- 資料庫：新增上述 12 張表，並啟用 `btree_gist` extension。共用表 `booking_shops` 補上店家資訊欄位、`auth_users` 新增 `phone`（皆由本 migration 加入，需與擁有者確認）。
 - 依賴 `auth_users.phone`（立倫的 MR）。在它合併前，本 change 的 migration 與同電話測試無法完成。
 - 設定：只使用 `DATABASE_URL` 一個資料庫連線，不新增環境變數。
 - 不新增第三方套件（fastapi、sqlalchemy、psycopg、alembic 皆已存在）。

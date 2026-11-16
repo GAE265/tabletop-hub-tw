@@ -59,7 +59,7 @@ class BookingService:
                     raise NoTableAvailable() from None
         raise AssertionError("unreachable")
 
-    def _load(self, booking_id: uuid.UUID) -> ReservationRecord:
+    def _load(self, booking_id: int) -> ReservationRecord:
         record = self.repo.get_reservation(booking_id)
         if record is None:
             raise AppError(404, "BOOKING_NOT_FOUND", "找不到訂位")
@@ -214,7 +214,7 @@ class BookingService:
         self._validate(req.shop_id, slots, rules)
 
         def work() -> list[ReservationRecord]:
-            overlaps: dict[uuid.UUID, ReservationRecord] = {}
+            overlaps: dict[int, ReservationRecord] = {}
             for slot in slots:
                 for old in self.repo.find_overlapping_by_phone(
                     req.shop_id, info.phone, slot.start_at, slot.end_at
@@ -265,7 +265,7 @@ class BookingService:
     @staticmethod
     def _summary(record: ReservationRecord) -> dict[str, Any]:
         return {
-            "id": str(record.id),
+            "id": record.id,
             "reservation_code": record.reservation_code,
             "start_at": record.start_at.isoformat(),
             "end_at": record.end_at.isoformat(),
@@ -273,7 +273,7 @@ class BookingService:
 
     # --- 查詢 ---
 
-    def get(self, user: CurrentUser, booking_id: uuid.UUID) -> BookingOut:
+    def get(self, user: CurrentUser, booking_id: int) -> BookingOut:
         record = self._load(booking_id)
         self._assert_access(user, record)
         return self._out(record, self.repo.get_pricing_rules(record.shop_id))
@@ -310,7 +310,7 @@ class BookingService:
 
     # --- 修改與合併 ---
 
-    def modify(self, user: CurrentUser, booking_id: uuid.UUID, patch: BookingPatch) -> BookingOut:
+    def modify(self, user: CurrentUser, booking_id: int, patch: BookingPatch) -> BookingOut:
         require_role(user, "player", "admin")
         record = self._load(booking_id)
         self._assert_access(user, record)
@@ -413,9 +413,7 @@ class BookingService:
 
     # --- 狀態變更 ---
 
-    def change_status(
-        self, user: CurrentUser, booking_id: uuid.UUID, patch: BookingPatch
-    ) -> BookingOut:
+    def change_status(self, user: CurrentUser, booking_id: int, patch: BookingPatch) -> BookingOut:
         record = self._load(booking_id)
         self._assert_access(user, record)
         target = patch.status
@@ -495,9 +493,7 @@ class BookingService:
 
     # --- 店員改桌 ---
 
-    def change_tables(
-        self, user: CurrentUser, booking_id: uuid.UUID, table_ids: list[uuid.UUID]
-    ) -> BookingOut:
+    def change_tables(self, user: CurrentUser, booking_id: int, table_ids: list[int]) -> BookingOut:
         require_role(user, "shop_staff", "admin")
         record = self._load(booking_id)
         self._assert_access(user, record)

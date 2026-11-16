@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: 場地費計算
-系統 SHALL 依訂位日期的星期（公司時區）選擇費率：星期一至五採 `WEEKDAY_HOURLY_FEE`（NT$60），星期六、日採 `WEEKEND_HOURLY_FEE`（NT$80），單位為每人每小時。計費時數 SHALL 以 `BILLING_ROUNDING_UNIT_HOURS` 無條件進位，並以 `BILLING_MAX_HOURS`（5 小時）為上限。場地費 = 人數 × 計費時數 × 費率。費率與規則值 SHALL 從 `booking_pricing_rules` 讀取。系統 MUST NOT 考慮國定假日。
+系統 SHALL 依訂位日期的星期（公司時區）選擇費率：星期一至五採 `WEEKDAY_HOURLY_FEE`（NT$60），星期六、日採 `WEEKEND_HOURLY_FEE`（NT$80），單位為每人每小時。計費時數 SHALL 以 `BILLING_ROUNDING_UNIT_HOURS` 無條件進位，並以 `BILLING_MAX_HOURS`（5 小時）為上限。場地費 = 人數 × 計費時數 × 費率。費率與規則值 SHALL 從 `pricing_rules` 讀取。系統 MUST NOT 考慮國定假日。
 
 #### Scenario: 平日整點
 - **WHEN** 平日 4 人訂位 2 小時

@@ -48,11 +48,11 @@ class BookingPatch(BaseModel):
 
 
 class TablesPut(BaseModel):
-    table_ids: Annotated[list[uuid.UUID], Field(min_length=1)]
+    table_ids: Annotated[list[int], Field(min_length=1)]
 
 
 class TableOut(BaseModel):
-    id: uuid.UUID
+    id: int
     table_code: str
 
 
@@ -64,7 +64,7 @@ class FeeOut(BaseModel):
 
 
 class BookingOut(BaseModel):
-    id: uuid.UUID
+    id: int
     reservation_code: str
     shop_id: uuid.UUID
     user_id: uuid.UUID

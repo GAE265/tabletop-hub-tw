@@ -106,7 +106,15 @@ class BookingRepository(SessionRepository):
         rows = self.session.scalars(
             select(BookingTableLink).where(BookingTableLink.shop_id == shop_id)
         )
-        return [TableLink(r.table_a_id, r.table_b_id, r.is_combinable) for r in rows]
+        # 舊庫的關係表沒有唯一限制，可能有重複或反向重複；同一對桌位只要有一筆可併桌就算可併桌
+        merged: dict[frozenset[int], tuple[int, int, bool]] = {}
+        for r in rows:
+            if r.table_a_id == r.table_b_id:
+                continue
+            key = frozenset((r.table_a_id, r.table_b_id))
+            a, b, combinable = merged.get(key, (r.table_a_id, r.table_b_id, False))
+            merged[key] = (a, b, combinable or r.is_combinable)
+        return [TableLink(a, b, c) for a, b, c in merged.values()]
 
     # --- 訂位查詢 ---
 
@@ -115,7 +123,7 @@ class BookingRepository(SessionRepository):
         shop_id: uuid.UUID,
         start_at: datetime,
         end_at: datetime,
-        exclude_reservation_ids: Sequence[uuid.UUID] = (),
+        exclude_reservation_ids: Sequence[int] = (),
     ) -> list[Occupancy]:
         rt, res = BookingReservationTable, BookingReservation
         rows = self.session.execute(
@@ -152,18 +160,18 @@ class BookingRepository(SessionRepository):
         return [self._record(r) for r in rows]
 
     def find_overlapping_by_phone(
-        self, shop_id, phone: str, start_at, end_at, exclude: Sequence[uuid.UUID] = ()
+        self, shop_id, phone: str, start_at, end_at, exclude: Sequence[int] = ()
     ) -> list[ReservationRecord]:
         return self._overlapping(shop_id, start_at, end_at, exclude, AuthUser.phone == phone)
 
     def find_overlapping_by_user(
-        self, shop_id, user_id: uuid.UUID, start_at, end_at, exclude: Sequence[uuid.UUID] = ()
+        self, shop_id, user_id: uuid.UUID, start_at, end_at, exclude: Sequence[int] = ()
     ) -> list[ReservationRecord]:
         return self._overlapping(
             shop_id, start_at, end_at, exclude, BookingReservation.user_id == user_id
         )
 
-    def get_reservation(self, reservation_id: uuid.UUID) -> ReservationRecord | None:
+    def get_reservation(self, reservation_id: int) -> ReservationRecord | None:
         row = self.session.get(BookingReservation, reservation_id)
         return None if row is None else self._record(row)
 
@@ -230,7 +238,7 @@ class BookingRepository(SessionRepository):
         end_at: datetime,
         party_size: int,
         special_requests: str | None,
-        table_ids: Sequence[uuid.UUID],
+        table_ids: Sequence[int],
         source: str = "online",
     ) -> ReservationRecord:
         row = BookingReservation(
@@ -261,15 +269,15 @@ class BookingRepository(SessionRepository):
 
     def replace_tables(
         self,
-        reservation_id: uuid.UUID,
-        table_ids: Sequence[uuid.UUID],
+        reservation_id: int,
+        table_ids: Sequence[int],
         start_at: datetime,
         end_at: datetime,
     ) -> None:
-        """換成新的一組桌位（含時間）。先刪掉目前占用的桌位列，再寫入新的。"""
+        """換成新的一組桌位（含時間）。先刪掉這筆訂位的桌位列，再寫入新的。"""
         row = self.session.get(BookingReservation, reservation_id)
         rt = BookingReservationTable
-        self.session.execute(delete(rt).where(rt.reservation_id == reservation_id, rt.is_active))
+        self.session.execute(delete(rt).where(rt.reservation_id == reservation_id))
         for table_id in table_ids:
             self.session.add(
                 rt(
@@ -282,7 +290,7 @@ class BookingRepository(SessionRepository):
             )
         self._flush()
 
-    def set_tables_active(self, reservation_id: uuid.UUID, active: bool) -> None:
+    def set_tables_active(self, reservation_id: int, active: bool) -> None:
         rt = BookingReservationTable
         try:
             self.session.execute(
@@ -294,7 +302,7 @@ class BookingRepository(SessionRepository):
                 raise TableConflict() from error
             raise
 
-    def update_reservation(self, reservation_id: uuid.UUID, **fields: object) -> ReservationRecord:
+    def update_reservation(self, reservation_id: int, **fields: object) -> ReservationRecord:
         row = self.session.get(BookingReservation, reservation_id)
         for key, value in fields.items():
             setattr(row, key, value)
@@ -322,7 +330,7 @@ class BookingRepository(SessionRepository):
                 old_data=old_data,
                 new_data=new_data,
                 operator_type=operator_type,
-                operator_id=operator_id,
+                operator_id=None if operator_id is None else str(operator_id),
                 operator_name=operator_name,
             )
         )

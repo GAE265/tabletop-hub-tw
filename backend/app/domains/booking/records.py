@@ -17,13 +17,13 @@ class UserInfo:
 
 @dataclass(frozen=True)
 class TableRef:
-    id: uuid.UUID
+    id: int
     table_code: str
 
 
 @dataclass
 class ReservationRecord:
-    id: uuid.UUID
+    id: int
     shop_id: uuid.UUID
     reservation_code: str
     user_id: uuid.UUID
@@ -42,5 +42,5 @@ class ReservationRecord:
     tables: list[TableRef] = field(default_factory=list)
 
     @property
-    def table_ids(self) -> list[uuid.UUID]:
+    def table_ids(self) -> list[int]:
         return [t.id for t in self.tables]

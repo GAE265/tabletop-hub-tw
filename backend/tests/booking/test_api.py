@@ -71,7 +71,7 @@ def test_quote_does_not_write(api, db):
     response = api.post("/api/v1/booking-quotes", json=payload(), headers=PLAYER_H)
     assert response.status_code == 200
     with db.connect() as conn:
-        assert conn.execute(text("SELECT count(*) FROM booking_reservations")).scalar_one() == 0
+        assert conn.execute(text("SELECT count(*) FROM reservations")).scalar_one() == 0
 
 
 @pytest.mark.parametrize(
@@ -128,7 +128,7 @@ def test_batch_is_all_or_nothing(api, db):
     response = api.post("/api/v1/bookings", json=body, headers=PLAYER_H)
     assert response.status_code == 422
     with db.connect() as conn:
-        assert conn.execute(text("SELECT count(*) FROM booking_reservations")).scalar_one() == 0
+        assert conn.execute(text("SELECT count(*) FROM reservations")).scalar_one() == 0
 
 
 def test_batch_overlapping_slots_rejected(api):
@@ -147,7 +147,7 @@ def test_overlap_requires_confirmation_then_replaces_old(api, db):
     assert ask.status_code == 409 and code(ask) == "BOOKING_OVERLAP_CONFIRM_REQUIRED"
     assert ask.json()["error"]["details"]["overlaps"][0]["id"] == old["id"]
     with db.connect() as conn:
-        assert conn.execute(text("SELECT count(*) FROM booking_reservations")).scalar_one() == 1
+        assert conn.execute(text("SELECT count(*) FROM reservations")).scalar_one() == 1
 
     new = api.post("/api/v1/bookings", json=payload(confirm_overlap=True), headers=PLAYER_H)
     assert new.status_code == 201
@@ -360,7 +360,7 @@ def test_staff_cannot_create_booking(api):
 
 
 def test_unknown_booking_is_404(api):
-    response = api.get("/api/v1/bookings/00000000-0000-4000-8000-000000000000", headers=PLAYER_H)
+    response = api.get("/api/v1/bookings/999999999", headers=PLAYER_H)
     assert response.status_code == 404 and code(response) == "BOOKING_NOT_FOUND"
 
 
@@ -379,7 +379,7 @@ def test_logs_record_operator(api, db):
     with db.connect() as conn:
         rows = conn.execute(
             text(
-                "SELECT action, operator_type, operator_name FROM booking_reservation_logs "
+                "SELECT action, operator_type, operator_name FROM reservation_logs "
                 "ORDER BY created_at"
             )
         ).all()

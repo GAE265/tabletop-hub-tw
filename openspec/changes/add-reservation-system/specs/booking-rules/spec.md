@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: 營業日與營業時間驗證
-系統 SHALL 依 `booking_business_hours` 驗證訂位：訂位日期的星期（0=星期日）必須有營業時間設定，且 `start_at`、`end_at` 必須落在 `open_time` 至 `close_time` 之內。所有時間 SHALL 以公司時區（`Asia/Taipei`）判斷。
+系統 SHALL 依 `business_hours` 驗證訂位：訂位日期的星期（0=星期日）必須有營業時間設定，且 `start_at`、`end_at` 必須落在 `open_time` 至 `close_time` 之內。所有時間 SHALL 以公司時區（`Asia/Taipei`）判斷。
 
 #### Scenario: 公休日被拒絕
 - **WHEN** 客戶訂星期二（weekday=2，無營業時間設定）的位
@@ -16,7 +16,7 @@
 - **THEN** 系統接受時間驗證
 
 ### Requirement: 公休時段驗證
-系統 SHALL 拒絕與 `booking_closing_hours` 有任何時間交集的訂位。`start_time` 與 `end_time` 皆為 NULL 的紀錄代表整天公休。
+系統 SHALL 拒絕與 `closing_hours` 有任何時間交集的訂位。`start_time` 與 `end_time` 皆為 NULL 的紀錄代表整天公休。
 
 #### Scenario: 與休息時段有交集
 - **WHEN** 公休時段為 2026-11-18 12:00–14:00，客戶訂當日 13:00–15:00
@@ -27,11 +27,11 @@
 - **THEN** 系統拒絕訂位
 
 #### Scenario: 整天公休
-- **WHEN** 某日 `booking_closing_hours` 的 `start_time` 與 `end_time` 為 NULL
+- **WHEN** 某日 `closing_hours` 的 `start_time` 與 `end_time` 為 NULL
 - **THEN** 系統拒絕該日所有訂位
 
 ### Requirement: 訂位時長與跨日限制
-單筆訂位 SHALL 至少 1 小時（以 `booking_pricing_rules.BOOKING_MIN_HOURS` 為準），開始時間不限整點或半點。單筆訂位 MUST NOT 跨越日曆日期；第一階段不支援跨午夜拆單。
+單筆訂位 SHALL 至少 1 小時（以 `pricing_rules.BOOKING_MIN_HOURS` 為準），開始時間不限整點或半點。單筆訂位 MUST NOT 跨越日曆日期；第一階段不支援跨午夜拆單。
 
 #### Scenario: 不足 1 小時
 - **WHEN** 客戶訂 14:00–14:45

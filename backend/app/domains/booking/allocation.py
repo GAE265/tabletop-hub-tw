@@ -17,7 +17,7 @@ BUFFER_MINUTES = 5
 
 @dataclass(frozen=True)
 class TableInfo:
-    id: uuid.UUID
+    id: int
     table_code: str
     min_capacity: int
     max_capacity: int
@@ -25,8 +25,8 @@ class TableInfo:
 
 @dataclass(frozen=True)
 class TableLink:
-    table_a_id: uuid.UUID
-    table_b_id: uuid.UUID
+    table_a_id: int
+    table_b_id: int
     is_combinable: bool
 
 
@@ -34,7 +34,7 @@ class TableLink:
 class Occupancy:
     """某張桌位上，其他有效訂位占用的區間。"""
 
-    table_id: uuid.UUID
+    table_id: int
     user_id: uuid.UUID
     start_at: datetime
     end_at: datetime
@@ -62,7 +62,7 @@ def free_tables(
     end_at: datetime,
     buffer_minutes: int = BUFFER_MINUTES,
 ) -> list[TableInfo]:
-    by_table: dict[uuid.UUID, list[Occupancy]] = defaultdict(list)
+    by_table: dict[int, list[Occupancy]] = defaultdict(list)
     for occupancy in occupancies:
         by_table[occupancy.table_id].append(occupancy)
     return [
@@ -77,10 +77,8 @@ def free_tables(
     ]
 
 
-def _adjacency(
-    links: Iterable[TableLink], *, combinable_only: bool
-) -> dict[uuid.UUID, set[uuid.UUID]]:
-    graph: dict[uuid.UUID, set[uuid.UUID]] = defaultdict(set)
+def _adjacency(links: Iterable[TableLink], *, combinable_only: bool) -> dict[int, set[int]]:
+    graph: dict[int, set[int]] = defaultdict(set)
     for link in links:
         if combinable_only and not link.is_combinable:
             continue
@@ -89,7 +87,7 @@ def _adjacency(
     return graph
 
 
-def _connected(ids: Sequence[uuid.UUID], graph: dict[uuid.UUID, set[uuid.UUID]]) -> bool:
+def _connected(ids: Sequence[int], graph: dict[int, set[int]]) -> bool:
     members = set(ids)
     seen = {ids[0]}
     stack = [ids[0]]
@@ -101,9 +99,9 @@ def _connected(ids: Sequence[uuid.UUID], graph: dict[uuid.UUID, set[uuid.UUID]])
 
 
 def combination_grade(
-    ids: Sequence[uuid.UUID],
-    combinable_graph: dict[uuid.UUID, set[uuid.UUID]],
-    all_graph: dict[uuid.UUID, set[uuid.UUID]],
+    ids: Sequence[int],
+    combinable_graph: dict[int, set[int]],
+    all_graph: dict[int, set[int]],
 ) -> int:
     if _connected(ids, combinable_graph):
         return 1
@@ -148,7 +146,7 @@ def allocate(
     user_id: uuid.UUID,
     start_at: datetime,
     end_at: datetime,
-    preferred_ids: Sequence[uuid.UUID] = (),
+    preferred_ids: Sequence[int] = (),
     buffer_minutes: int = BUFFER_MINUTES,
 ) -> list[TableInfo]:
     """回傳分配到的桌位；找不到時拋出 NoTableAvailable。

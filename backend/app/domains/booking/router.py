@@ -51,23 +51,19 @@ def list_my_bookings(
 
 
 @router.get("/bookings/{booking_id}", response_model=BookingOut)
-def get_booking(booking_id: uuid.UUID, user: CurrentUserDep, service: ServiceDep):
+def get_booking(booking_id: int, user: CurrentUserDep, service: ServiceDep):
     return service.get(user, booking_id)
 
 
 @router.patch("/bookings/{booking_id}", response_model=BookingOut)
-def patch_booking(
-    booking_id: uuid.UUID, body: BookingPatch, user: CurrentUserDep, service: ServiceDep
-):
+def patch_booking(booking_id: int, body: BookingPatch, user: CurrentUserDep, service: ServiceDep):
     if body.status is not None:
         return service.change_status(user, booking_id, body)
     return service.modify(user, booking_id, body)
 
 
 @router.put("/bookings/{booking_id}/tables", response_model=BookingOut)
-def put_booking_tables(
-    booking_id: uuid.UUID, body: TablesPut, user: CurrentUserDep, service: ServiceDep
-):
+def put_booking_tables(booking_id: int, body: TablesPut, user: CurrentUserDep, service: ServiceDep):
     return service.change_tables(user, booking_id, body.table_ids)
 
 
