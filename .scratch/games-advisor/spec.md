@@ -1,7 +1,7 @@
 # spec：桌遊推薦 Agent + 桌遊 RAG（games_advisor）
 
 - Map：[桌遊推薦 Agent + 桌遊 RAG](map.md)
-- 狀態：前半（共用部分、桌遊資料與心得管線）2026-11-08、後半（推薦對話與 API）2026-11-09 立倫看過。2026-11-10 補上外部服務測試（§2、§17、§18）；同日依 AGENTS.md 7.6（#18）改用 `external` 標記。2026-11-11 資料表改版：桌遊改成共用表 `games`、新增類型、心得摘要搬到自己的表（§3，〔改表〕、ADR 0003）。2026-11-12 `games.id` 改成整數、自動給號，其他組員用匯出檔同步（§3、§8.1、§8.10、§8.11，〔整數編號〕）。2026-11-13 依 AGENTS.md 1.8：類型的兩張表改名為 `genres`、`game_genres`，`genres.id` 改成流水號，共用表不再是例外，只剩 `games.id` 是例外（§3，〔1.8〕）。
+- 狀態：前半（共用部分、桌遊資料與心得管線）2026-11-08、後半（推薦對話與 API）2026-11-09 立倫看過。2026-11-10 補上外部服務測試（§2、§17、§18）；同日依 AGENTS.md 7.6（#18）改用 `external` 標記。2026-11-11 資料表改版：桌遊改成共用表 `games`、新增類型、心得摘要搬到自己的表（§3，〔改表〕、ADR 0003）。2026-11-12 `games.id` 改成整數、自動給號，其他組員用匯出檔同步（§3、§8.1、§8.10、§8.11，〔整數編號〕）。2026-11-13 依 AGENTS.md 1.8：類型的兩張表改名為 `genres`、`game_genres`，`genres.id` 改成流水號，共用表不再是例外，只剩 `games.id` 是例外（§3，〔1.8〕）。2026-11-14 評估題組加上 LLM 評審建議，不算分（§15.1、§15.3、§15.4、§15.6，〔評審〕）。
 - 這份 spec 只整理已定案的決定，不重新決定。標〔Qn〕的地方是寫 spec 時發現的缺漏：Q1–Q8 記在「[spec：桌遊資料與心得管線](issues/20-spec-data-and-review-pipeline.md)」的 Comments，Q9 起記在「[spec：推薦對話與 API](issues/21-spec-conversation-and-api.md)」的 Comments。
 
 ## 怎麼讀
@@ -29,6 +29,7 @@
 | 〔改表〕 | 2026-11-11 資料表改版的決定，記在「[把 spec 拆成 TDD 實作 ticket](issues/22-split-spec-into-tdd-tickets.md)」的 Comments |
 | 〔整數編號〕 | 2026-11-12 `games.id` 改成整數、自動給號，其他組員用匯出檔同步的決定：組員在 [MR #22](https://github.com/GAE265/tabletop-hub-tw/pull/22) 提出，立倫 grilling 後定案，記在〔ADR 0003〕 |
 | 〔1.8〕 | 2026-11-13 對齊 AGENTS.md 1.8（[MR #23](https://github.com/GAE265/tabletop-hub-tw/pull/23)）：第 3 節「共用資料表」清單、§4.2 共用表的 repository、§4.4 主鍵預設 UUID 與分類表可用流水號 |
+| 〔評審〕 | 2026-11-14 評估題組加上 LLM 評審建議的決定，記在「[怎麼驗收推薦結果](issues/14-recommendation-acceptance.md)」的 Comments |
 | 〔提案 §n〕 | [整合層提案](integrations-proposal.md)第 n 節 |
 | 〔map〕 | map 的 Notes（固定偏好）與 Out of scope |
 | 〔Qn〕 | 寫 spec 時發現的缺漏，由立倫決定。Q1–Q8 見「[spec：桌遊資料與心得管線](issues/20-spec-data-and-review-pipeline.md)」的 Comments；Q9 起見「[spec：推薦對話與 API](issues/21-spec-conversation-and-api.md)」的 Comments |
@@ -354,7 +355,7 @@ uv run python -m app.domains.games_advisor.commands <子指令> <參數>
 | `sync-vocabulary <tag_vocabulary.json>` | 同步詞彙表（§8.6） | 詞彙表檔案 | `games_advisor_tags`；刪代碼時也刪 `games_advisor_game_tags` | — | — |
 | `draft-tags <reviews.json> --out <草稿>` | 上標籤（§8.7） | `reviews.json`、`games_advisor_tags` | 標籤草稿 | `generate_json` | — |
 | `import-tags <草稿>` | 匯入標籤草稿（§8.8） | 標籤草稿 | `games_advisor_game_tags` | — | — |
-| `eval` | 評估題組（§15） | `eval_cases.json` | 評估報告 | `respond` | 是 |
+| `eval` | 評估題組（§15） | `eval_cases.json` | 評估報告 | `respond`；評審用 `generate_json`（§15.6） | 是 |
 
 - `summarize-reviews`、`build-excerpts`、`draft-tags` 可以加 `--bgg-id <id>`，只跑指定的桌遊，用來補跑失敗的那幾款；可以給多個〔Q8〕。〔管線〕§8
 
@@ -1435,12 +1436,13 @@ LLM 的最終輸出用 strict JSON schema（名稱 `advisor_reply`〔Q14〕）�
 ### 15.1 怎麼執行
 
 ```
-uv run python -m app.domains.games_advisor.commands eval <eval_cases.json> --out <報告> [--repeat N]
+uv run python -m app.domains.games_advisor.commands eval <eval_cases.json> --out <報告> [--repeat N] [--no-judge]
 ```
 
 - 在本機開發資料庫上執行：先跑完匯入桌遊與心得管線，用真的 16 款、標籤與向量，連真的 Azure。不進 CI、不擋合併。〔驗收〕§3、§4
 - 直接呼叫 service，不經過 HTTP API（API 回應裡沒有工具參數）。真的 LLM provider 外面包一層記錄器，記下每次呼叫模型的內容和回應，從裡面取工具參數。〔驗收〕§4
 - 對話用的 provider 和 API 相同（`LLM_MODEL`、`LLM_REASONING_EFFORT`、`LLM_TIMEOUT_SECONDS`），不是批次的設定。〔部署〕§1
+- 評審（§15.6）另外建一個 provider，用批次的設定（§7.2 第 4 點）；加 `--no-judge` 就不跑評審，也不建這個 provider。〔評審〕
 
 開始前檢查，不通過就拒絕執行（結束碼 1），不呼叫模型：
 
@@ -1498,6 +1500,7 @@ uv run python -m app.domains.games_advisor.commands eval <eval_cases.json> --out
 〔驗收〕§6、§8：
 
 - 三種分數各算通過比例，例如「條件分 38/40」：條件分、偏好分、人工項目（人工項目由立倫在報告勾選後自己統計，不混進前兩種）。
+- 評審建議（§15.6）不算進三種分數，也不影響 Demo 題過不過。〔評審〕
 - 某一輪不符合預期時，這題停在那一輪，後面的輪次標成「未執行」。〔驗收〕§5
 - 細節〔Q14〕：
   - 每個寫在 `expect` 的項目算 1 分；「未執行」輪次的項目算沒通過，分母固定，不同次執行的分數才比得起來。
@@ -1510,7 +1513,8 @@ uv run python -m app.domains.games_advisor.commands eval <eval_cases.json> --out
 
 - Markdown，寫到 `--out` 指定的 repo 外路徑；報告裡有心得片段原文，所以不進 repo。〔驗收〕§9
 - 內容：每題每輪的玩家訊息、`reply`、卡片（名稱、推薦理由、片段原文）、工具參數、每個項目過或不過、`manual` 的勾選框；三種分數；Demo 題過了沒；token 用量（`LLMResponse` 的 `input_tokens`、`output_tokens` 加總）。〔驗收〕§8、〔提案 §3.1〕
-- MR 說明只貼三種分數與 token 用量，不貼回覆內容，放在 §7.4 的表格外面。〔驗收〕§3、§9
+- 評審建議（§15.6）：開頭印出對話與評審的模型名稱，每張卡片下方一行評審建議，結尾有評審統計。token 用量只算對話，不含評審。〔評審〕
+- MR 說明只貼三種分數、token 用量與評審統計，不貼回覆內容，放在 §7.4 的表格外面。〔驗收〕§3、§9、〔評審〕
 
 ### 15.5 測試（進 CI）
 
@@ -1538,6 +1542,77 @@ uv run python -m app.domains.games_advisor.commands eval <eval_cases.json> --out
 | 有向量的模型和目前設定不同 | 執行 | 結束碼 1；印出哪幾款；沒有呼叫 LLM |
 | 沒有權限 | — | 不適用：本機指令 |
 
+### 15.6 評審建議
+
+〔評審〕。再呼叫一次模型，檢查每張卡片的推薦理由有沒有寫出依據裡沒有的內容。這是 §12.1「推薦理由」那一列裡，程式比對不出來的部分。結果只當建議：立倫勾選 `manual` 時參考，仍由立倫做最後判斷。
+
+**送什麼給評審**
+
+- 每張卡片呼叫 1 次，一次只看一張卡片，不做兩兩比較。
+- 用 `generate_json`，輸入是這張卡片的三樣東西：
+  1. 推薦理由（卡片的 `reason`）。
+  2. 卡片上顯示的心得片段原文（卡片的 `excerpts`）。工具有回傳、但沒被引用的片段不給：玩家只看得到卡片上的。
+  3. 這款桌遊在這則訊息的工具結果裡的 `matched_preferences`、`matched_avoids`（§11.7），從記錄器取（§15.1）；兩次查詢都回傳這一款時，兩次的都給。對話規則允許推薦理由寫命中的偏好（§12.1），只給片段會把合規的內容判成沒有依據。
+- 評審規則是程式裡的一段固定文字：只判斷推薦理由的每個說法能不能在上面的依據裡找到；找不到的逐條列出；不評文筆，也不評推薦得好不好。
+- 輸出用 strict JSON schema（名稱 `advisor_reason_check`）：
+
+  ```json
+  {"unsupported": ["理由說「適合新手」，片段和命中的偏好都沒有提到"]}
+  ```
+
+  空陣列是「有依據」，有內容是「有疑慮」。
+
+**用哪個模型**
+
+- 評審的 provider 用批次的設定（§7.2 第 4 點），和對話的 provider 分開建立：對話的只呼叫 `respond`，評審的只呼叫 `generate_json`。
+- `LLM_BATCH_MODEL` 留空時照 §7.2 退回 `LLM_MODEL`，照常執行；報告開頭多一行「評審和對話是同一個模型」。
+
+**不送評審、評審出錯**
+
+| 情況 | 怎麼做 | 報告寫 |
+|---|---|---|
+| 卡片沒有心得片段 | 不呼叫評審 | 未評審：沒有引用心得片段 |
+| 推薦理由是空字串 | 不呼叫評審 | 未評審：推薦理由是空的 |
+| 沒有卡片的輪次（追問、離題、固定文字、未執行） | 不呼叫評審 | — |
+| `--no-judge` | 整次都不呼叫評審 | 開頭寫「這次沒有跑評審」 |
+| `LLMOutputRejected` | 重試 1 次（§7.2 第 6 點的共用函式），仍然失敗就放棄這張 | 評審失敗＋原因 |
+| 其他 `LLMError`（包括 `LLMUnavailable`） | 不重試，放棄這張 | 評審失敗＋原因 |
+
+- 和 §7.2 第 6 點不同的地方：那裡「其他 `LLMError`」不攔截、整個指令失敗；評審一律攔下來。對話的 token 已經花了，評審出錯不該讓整份報告消失。
+- 評審失敗不影響其他卡片、分數與結束碼（§15.3）。
+
+**報告**
+
+- 開頭：對話模型與評審模型的名稱。
+- 每張卡片下方一行「評審建議」：有依據／有疑慮（列出 `unsupported` 的每一筆）／未評審／評審失敗。
+- 結尾：四種標示各幾張，以及一句「評審建議不算分，以人工勾選為準」。
+- 評審的 token 不列入報告的 token 用量：`generate_json` 只回傳內容、不回傳用量〔提案 §3.2〕，要算就得改整合層。報告只印評審呼叫了幾次，實際花費到 Azure 看。
+- 評審也會判錯。第一次跑完後，立倫對照評審建議和自己的勾選，把一致的張數寫進 MR 說明。
+
+測試（進 CI）。對話用 `FakeLLMProvider(responses=[...])`，評審用另一個 `FakeLLMProvider(json_outputs=[...])`：
+
+| 情境 | 操作 | 預期結果 |
+|---|---|---|
+| 1 張卡片，評審回 `unsupported: []` | 執行 | 該卡片寫「評審建議：有依據」 |
+| 評審回 `unsupported` 有 1 筆 | 執行 | 寫「評審建議：有疑慮」並列出那 1 筆 |
+| 同上 | 看評審的 fake 收到的 `input` | 有推薦理由、卡片上的片段原文、`matched_preferences`、`matched_avoids`；沒有未被引用的片段 |
+| 同一款在兩次查詢都有回傳 | 同上 | 兩次的 `matched_preferences`、`matched_avoids` 都有 |
+| 一輪 3 張卡片 | 執行 | 評審呼叫 3 次，每次只有 1 張卡片的內容 |
+| 同一段對話，評審回「有疑慮」或「有依據」 | 各執行一次 | 條件分、偏好分、人工項目數、Demo 題過不過都相同 |
+| 卡片沒有心得片段 | 執行 | 不呼叫評審；寫「未評審：沒有引用心得片段」 |
+| 推薦理由是空字串 | 執行 | 不呼叫評審；寫「未評審：推薦理由是空的」 |
+| 追問、離題、固定文字的輪次 | 執行 | 不呼叫評審 |
+| `--no-judge` | 執行 | 沒有任何 `generate_json` 呼叫；報告寫「這次沒有跑評審」 |
+| 評審第 1 次拋 `LLMOutputRejected`、第 2 次正常 | 執行 | 用第 2 次的結果 |
+| 評審連 2 次拋 `LLMOutputRejected` | 執行 | 該卡片寫「評審失敗」和原因；其他卡片照常評審；報告照寫；結束碼 0 |
+| 評審拋 `LLMUnavailable` | 執行 | 不重試；該卡片寫「評審失敗」；報告照寫；結束碼 0 |
+| 評審拋其他 `LLMError` | 執行 | 同上 |
+| 對話與評審各一個 provider | 執行 | 對話的 fake 只收到 `respond`；評審的 fake 只收到 `generate_json` |
+| `LLM_MODEL=a`、`LLM_BATCH_MODEL=b` | 寫報告 | 開頭印出對話模型 a、評審模型 b |
+| `LLM_BATCH_MODEL` 留空 | 寫報告 | 評審模型也是 a；多一行「評審和對話是同一個模型」 |
+| 有依據 2 張、有疑慮 1 張、未評審 1 張、評審失敗 1 張 | 寫報告 | 結尾的評審統計是 2／1／1／1 |
+| 沒有權限 | — | 不適用：本機指令 |
+
 ## 16. 模型、推理強度、逾時
 
 設定欄位見 §4.1，這裡只列對話相關的值〔部署〕：
@@ -1556,7 +1631,7 @@ uv run python -m app.domains.games_advisor.commands eval <eval_cases.json> --out
 ## 17. 整合層
 
 - 介面、例外、fake、設定照[整合層提案](integrations-proposal.md)；測試案例直接用提案第 11 節的表格，這裡不重抄。〔提案 §11〕
-- games_advisor 依賴的部分：`respond`（對話）、`generate_json`（歸納詞彙表、上標籤）、`generate`（心得摘要）、`embed`；`FakeLLMProvider` 的 `responses`、`json_outputs` 腳本與 `calls`；`FakeEmbeddingProvider` 的 `vectors`、`error`；沒給腳本時拋 `LLMUnavailable`。〔提案 §3、§6〕
+- games_advisor 依賴的部分：`respond`（對話）、`generate_json`（歸納詞彙表、上標籤、評估題組的評審）、`generate`（心得摘要）、`embed`；`FakeLLMProvider` 的 `responses`、`json_outputs` 腳本與 `calls`；`FakeEmbeddingProvider` 的 `vectors`、`error`；沒給腳本時拋 `LLMUnavailable`。〔提案 §3、§6〕
 - `integrations/llm/`、`integrations/embedding/` 由瑋鋐擁有；誰實作、OpenSpec `llm-provider` 規格的更新放在哪一張，由「[把 spec 拆成 TDD 實作 ticket](issues/22-split-spec-into-tdd-tickets.md)」決定。〔提案 §9〕
 - 第一張實作 ticket 要在 Azure 驗證提案第 10 節的 5 件事，排在「建立 Foundry 與三個部署」之後。〔提案 §10〕、〔部署〕§8
 - 雲端實作另外有 4 個外部服務測試（§2），在本機確認真的連得上 Azure，範圍見提案 §11.6。`external` 標記已由 #18 註冊在 `backend/pyproject.toml`，不用再加。〔提案 §11.6〕、AGENTS.md 7.6
