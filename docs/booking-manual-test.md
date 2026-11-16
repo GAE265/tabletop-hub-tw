@@ -138,12 +138,40 @@ curl -s -X PATCH $API/bookings/$CANCEL -H "$PLAYER" -H 'Content-Type: applicatio
   -d '{"status": "cancelled"}' | jq '{status, cancelled_at}'
 ```
 
-## 4. 重複執行與清理
+## 4. 前端參考畫面手動測試
+
+前端參考畫面（`frontend/lib/prototypes/booking/`）對應上面 10 個案例，只用預設元件，不含美工。完成第 1、2 節後，另開終端機啟動：
+
+```bash
+cd frontend
+flutter pub get
+# port 要用 5000：後端 CORS 預設只允許 http://localhost:5000
+flutter run -d web-server --web-port 5000 --dart-define=SHOW_PROTOTYPES=true
+```
+
+開啟 http://localhost:5000/#/proto/booking。頁面最上方的「開發身分」下拉選單用來切換玩家／店員／管理員。
+
+| # | 案例 | 操作（身分） | 預期 |
+|---|---|---|---|
+| 1 | 預估費用 | 玩家。`shop_id` 填 `44444444-4444-4444-8444-444444444444`，日期用預設（一週後，需為星期三，否則自行改），人數 4，時段 14:00–16:00，按「預估費用」 | 下方出現 2 小時、480 元，「我的訂位」沒有新增 |
+| 2 | 建立訂位 | 同上，按「建立訂位」 | 顯示「已建立 1 筆訂位」，「我的訂位」多一筆，狀態 `confirmed`，有訂位代碼與桌位 |
+| 3 | 查詢單筆 | 該筆按「查詢」 | 顯示「查詢：<代碼> confirmed」 |
+| 4 | 修改訂位 | 時段改 14:30–16:30，該筆按「改成上方第一個時段與人數」 | 顯示「已修改」，列上時間延後 30 分鐘，有提醒文字 |
+| 5 | 我的訂位清單 | 按「我的訂位」旁的「重新整理」 | 顯示「我的訂位共 N 筆」（N ≥ 1） |
+| 6 | 店員看板 | 切換成店家人員（`shop_id` 會自動帶入），按「店員看板」旁的「查詢」 | 看得到該筆訂位 |
+| 7 | 店員標記入座 | 看板該筆按「入座」 | 狀態 `seated` |
+| 8 | 店員完成結算 | 該筆按「完成結算」 | 狀態 `completed`，顯示結算金額（入座後馬上完成為 240 元） |
+| 9 | 批次建立 | 切回玩家，人數 2，按「新增時段」，時段改 18:00–19:30 與 20:00–21:30，按「建立訂位」 | 顯示「已建立 2 筆訂位」 |
+| 10 | 取消訂位 | 批次建立的第一筆按「取消」 | 狀態 `cancelled` |
+
+錯誤情境（順便確認）：`shop_id` 留空或亂填，畫面紅字顯示後端錯誤碼與訊息；玩家身分看不到「店員看板」。
+
+## 5. 重複執行與清理
 
 - 步驟 2 與步驟 9 若時段與玩家既有的有效訂位重疊，會回 409 `BOOKING_OVERLAP_CONFIRM_REQUIRED`；重跑時換一個日期（把 `D` 往後延一週），或在請求加上 `"confirm_overlap": true`（會取消舊訂位）。
 - 想清掉測試訂位：在開發資料庫對 `reservation_logs`、`reservation_tables`、`reservations` 執行 `TRUNCATE ... CASCADE`。
 
-## 5. 自動化測試
+## 6. 自動化測試
 
 ```bash
 # DATABASE_URL 不要帶 options=，測試會自己建立 `<資料庫名>_test`（例如 `tabletop_hub_tw_test`）
