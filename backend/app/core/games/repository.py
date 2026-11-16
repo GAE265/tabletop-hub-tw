@@ -59,6 +59,49 @@ class GameRepository(SessionRepository):
         ).mappings()
         return [dict(game) for game in games]
 
+    def filter_games(
+        self,
+        *,
+        players: int,
+        max_minutes: int | None = None,
+        min_minutes: int | None = None,
+        youngest_age: int | None = None,
+        exclude_ids: Collection[int] = (),
+    ) -> list[dict[str, Any]]:
+        """符合條件的桌遊，照 id 排；沒給的條件不篩。每款是 id 與 11 個欄位，不含 types。
+
+        時長上下限都和最長時長 max_playtime 比（games_advisor spec §11.3）。
+        """
+        statement = select(Game.__table__).where(
+            Game.min_players <= players, Game.max_players >= players
+        )
+        if max_minutes is not None:
+            statement = statement.where(Game.max_playtime <= max_minutes)
+        if min_minutes is not None:
+            statement = statement.where(Game.max_playtime >= min_minutes)
+        if youngest_age is not None:
+            statement = statement.where(Game.min_age <= youngest_age)
+        if exclude_ids:
+            statement = statement.where(Game.id.not_in(list(exclude_ids)))
+        games = self.session.execute(statement.order_by(Game.id)).mappings()
+        return [dict(game) for game in games]
+
+    def list_categories(self) -> list[str]:
+        """所有桌遊類別的聯集，不重複，照字母排。"""
+        return self._distinct_values(Game.categories)
+
+    def list_mechanics(self) -> list[str]:
+        """所有桌遊機制的聯集，不重複，照字母排。"""
+        return self._distinct_values(Game.mechanics)
+
+    def _distinct_values(self, column: Any) -> list[str]:
+        values = select(func.unnest(column).label("value")).subquery()
+        statement = select(values.c.value).distinct().order_by(values.c.value)
+        return list(self.session.scalars(statement))
+
+    def list_game_ids(self) -> list[int]:
+        return list(self.session.scalars(select(Game.id).order_by(Game.id)))
+
     def list_genre_codes(self) -> set[str]:
         return set(self.session.scalars(select(Genre.code)))
 

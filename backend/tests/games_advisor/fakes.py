@@ -159,3 +159,137 @@ class FakeEmbeddingProviderFailingOnCall(FakeEmbeddingProvider):
             self.calls.append(list(texts))
             raise self._failure
         return super().embed(texts)
+
+
+class FakeSearchRepository:
+    """假的「查桌遊」資料來源：同一個物件當作 GameRepository、TagRepository、ReviewRepository。
+
+    - games：桌遊清單，每款是 id 加上 games 的欄位（至少要有篩條件用到的欄位）。
+    - game_tags：桌遊 id → {代碼: 信心分數}；tags：詞彙表，每個是 code、name、definition。
+    - summary_models：桌遊 id → 心得摘要向量的模型名稱；沒列的桌遊就是沒有心得摘要。
+    - similarities：桌遊 id → 帶查詢向量、而且模型相同時回傳的相似度。
+    - excerpts：桌遊 id → 心得片段清單，照「由近到遠」的順序寫。
+    - excerpt_models：桌遊 id → 這款心得片段用過的模型名稱；沒列的桌遊當作沒有心得片段。
+    - filter_calls、excerpt_calls 記下 service 怎麼查的。
+    """
+
+    def __init__(
+        self,
+        games: list[dict[str, Any]],
+        *,
+        tags: list[dict[str, str]] | None = None,
+        game_tags: dict[int, dict[str, float]] | None = None,
+        summary_models: dict[int, str] | None = None,
+        similarities: dict[int, float] | None = None,
+        excerpts: dict[int, list[dict[str, Any]]] | None = None,
+        excerpt_models: dict[int, list[str]] | None = None,
+    ) -> None:
+        self.games = sorted(games, key=lambda game: game["id"])
+        self.excerpt_models = dict(excerpt_models or {})
+        self.tags = list(tags or [])
+        self.game_tags = dict(game_tags or {})
+        self.summary_models = dict(summary_models or {})
+        self.similarities = dict(similarities or {})
+        self.excerpts = dict(excerpts or {})
+        self.filter_calls: list[dict[str, Any]] = []
+        self.excerpt_calls: list[dict[str, Any]] = []
+
+    @contextmanager
+    def transaction(self) -> Iterator[None]:
+        yield
+
+    # GameRepository
+    def filter_games(
+        self,
+        *,
+        players: int,
+        max_minutes: int | None = None,
+        min_minutes: int | None = None,
+        youngest_age: int | None = None,
+        exclude_ids: Collection[int] = (),
+    ) -> list[dict[str, Any]]:
+        self.filter_calls.append(
+            {
+                "players": players,
+                "max_minutes": max_minutes,
+                "min_minutes": min_minutes,
+                "youngest_age": youngest_age,
+                "exclude_ids": list(exclude_ids),
+            }
+        )
+        return [
+            dict(game)
+            for game in self.games
+            if game["min_players"] <= players <= game["max_players"]
+            and (max_minutes is None or game["max_playtime"] <= max_minutes)
+            and (min_minutes is None or game["max_playtime"] >= min_minutes)
+            and (youngest_age is None or game["min_age"] <= youngest_age)
+            and game["id"] not in set(exclude_ids)
+        ]
+
+    def list_categories(self) -> list[str]:
+        return sorted({value for game in self.games for value in game["categories"]})
+
+    def list_mechanics(self) -> list[str]:
+        return sorted({value for game in self.games for value in game["mechanics"]})
+
+    def list_game_ids(self) -> list[int]:
+        return [game["id"] for game in self.games]
+
+    def list_games(self) -> list[dict[str, Any]]:
+        return [dict(game) for game in self.games]
+
+    # TagRepository
+    def list_tags(self) -> list[dict[str, str]]:
+        return sorted((dict(tag) for tag in self.tags), key=lambda tag: tag["code"])
+
+    def list_game_tags(self, game_ids: Collection[int]) -> dict[int, dict[str, float]]:
+        return {
+            game_id: dict(self.game_tags[game_id])
+            for game_id in game_ids
+            if game_id in self.game_tags
+        }
+
+    # ReviewRepository
+    def summary_similarities(
+        self,
+        game_ids: Collection[int],
+        *,
+        embedding_model: str,
+        query_vector: Sequence[float] | None,
+    ) -> dict[int, dict[str, Any]]:
+        result: dict[int, dict[str, Any]] = {}
+        for game_id in game_ids:
+            if game_id not in self.summary_models:
+                continue
+            model = self.summary_models[game_id]
+            usable = query_vector is not None and model == embedding_model
+            result[game_id] = {
+                "embedding_model": model,
+                "similarity": self.similarities.get(game_id) if usable else None,
+            }
+        return result
+
+    def nearest_excerpts(
+        self,
+        game_id: int,
+        *,
+        embedding_model: str,
+        limit: int,
+        query_vector: Sequence[float] | None,
+    ) -> list[dict[str, Any]]:
+        self.excerpt_calls.append(
+            {
+                "game_id": game_id,
+                "query_vector": None if query_vector is None else list(query_vector),
+                "limit": limit,
+            }
+        )
+        return [dict(excerpt) for excerpt in self.excerpts.get(game_id, [])[:limit]]
+
+    def list_excerpt_models(self, game_ids: Collection[int]) -> dict[int, list[str]]:
+        return {
+            game_id: sorted(self.excerpt_models[game_id])
+            for game_id in game_ids
+            if game_id in self.excerpt_models
+        }
