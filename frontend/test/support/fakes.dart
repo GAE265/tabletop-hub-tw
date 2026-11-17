@@ -13,6 +13,7 @@ import 'package:tabletop_hub/core/api/api_exception.dart';
 import 'package:tabletop_hub/core/dev/data/dev_user.dart';
 import 'package:tabletop_hub/core/dev/data/dev_users_repository.dart';
 
+import 'package:tabletop_hub/core/platform/lesson_video_player.dart';
 import 'package:tabletop_hub/domains/rules_qa/data/rules_qa_models.dart';
 import 'package:tabletop_hub/domains/rules_qa/data/rules_qa_repository.dart';
 import 'package:tabletop_hub/domains/booking/data/booking.dart';
@@ -534,6 +535,18 @@ class FakeRulesQaRepository implements RulesQaRepository {
 
   /// 最早那個還在等的發問失敗。
   void fail(Object error) => _pending.removeAt(0).completeError(error);
+}
+
+/// 不載入 YouTube 的影片播放器：只顯示影片 ID，讓 widget 測試能檢查有沒有放播放器。
+class FakeLessonVideoPlayer implements LessonVideoPlayer {
+  const FakeLessonVideoPlayer();
+
+  @override
+  Widget build(BuildContext context, LessonVideo video) => SizedBox(
+    key: const Key('fake-video-player'),
+    height: 180,
+    child: Text('影片：${video.youtubeId ?? video.videoUrl}'),
+  );
 }
 
 class FakeImagePicker implements ImagePicker {
