@@ -34,8 +34,8 @@ abstract interface class GroupsRepository {
   /// 開團表單的店家選項（`GET /api/v1/shops`，booking 的 API）。
   Future<List<ShopRef>> listShops();
 
-  /// 依名稱搜尋遊戲（`GET /api/v1/games?q=`），最多 20 筆。
-  Future<List<GameRef>> searchGames(String query);
+  /// 全部遊戲（`GET /api/v1/games`，依名稱排序；超過一頁時自動補齊）。
+  Future<List<GameRef>> listGames();
 }
 
 class HttpGroupsRepository implements GroupsRepository {
@@ -131,15 +131,22 @@ class HttpGroupsRepository implements GroupsRepository {
   });
 
   @override
-  Future<List<GameRef>> searchGames(String query) => _call(() async {
-    final response = await _dio.get<Map<String, dynamic>>(
-      '/api/v1/games',
-      queryParameters: {'q': query, 'page_size': 20},
-    );
-    final items = response.data!['items'] as List<dynamic>;
-    return [
-      for (final item in items) GameRef.fromJson(item as Map<String, dynamic>),
-    ];
+  Future<List<GameRef>> listGames() => _call(() async {
+    const pageSize = 100;
+    final games = <GameRef>[];
+    for (var page = 1; ; page++) {
+      final response = await _dio.get<Map<String, dynamic>>(
+        '/api/v1/games',
+        queryParameters: {'page': page, 'page_size': pageSize},
+      );
+      final items = response.data!['items'] as List<dynamic>;
+      games.addAll([
+        for (final item in items)
+          GameRef.fromJson(item as Map<String, dynamic>),
+      ]);
+      final total = response.data!['total'] as int;
+      if (items.isEmpty || games.length >= total) return games;
+    }
   });
 }
 
