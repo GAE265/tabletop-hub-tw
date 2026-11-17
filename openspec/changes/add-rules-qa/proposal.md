@@ -15,12 +15,12 @@
 - 新增 `rules_qa` domain 的後端：
   - `GET /api/v1/rules-lessons`：列出有教材（規則書或影片）的遊戲。
   - `GET /api/v1/rules-lessons/{game_id}`：某款遊戲的教學內容：影片（有的話）、是否有規則書、建議問題。
-  - `PUT /api/v1/rules-lessons/{game_id}/video`：設定（或取代）某款遊戲的教學影片網址與標題。限店家人員與管理員。
+  - `PUT /api/v1/rules-lessons/{game_id}/video`：設定（或取代）某款遊戲的教學影片（YouTube 網址）與標題。限店家人員與管理員。
   - `POST /api/v1/rules-lessons/{game_id}/messages`：規則問答。可以連續追問；每次都先從這款遊戲的規則書檢索相關段落，再交給 LLM 回答，並附上頁碼。
   - 後端指令：把某款遊戲的規則書頁面切段、轉成向量，建立檢索索引。
 - 新增兩張資料表 `rules_qa_videos`、`rules_qa_chunks`（一個 migration）。
 - 新增前端 `frontend/lib/domains/rules_qa/`：`data/`、`state/`、`prototypes/rules_qa/` 參考畫面、`pages/` 正式頁面，以及交接說明 `docs/handoff/rules_qa.md`。
-- **不做**：從影片找答案（影片只播放）、影片的上傳與代管（只存網址，影片放在哪裡由組內決定）、語音問答（屬於 #3 AI 遊戲主持）、自動產生分段教學內容、規則書入庫本身（屬於 `rules_ingest`）。
+- **不做**：從影片找答案（影片只播放）、影片的上傳與代管（組內自製影片放在 YouTube，這裡只存網址與影片 ID）、語音問答（屬於 #3 AI 遊戲主持）、自動產生分段教學內容、規則書入庫本身（屬於 `rules_ingest`）。
 
 ## Capabilities
 
@@ -46,6 +46,6 @@
   - `frontend/lib/app/router.dart`：新增路由，屬於永傑的共用區，主責本人修改。
 - **契約**：有改動，新增上列 API（要 @ 立倫）。
 - **migration**：一個，新增 `rules_qa_videos`、`rules_qa_chunks`（要 @ 瑋鋐）。建表前先在群組告知表名（4.4）。
-- **新增套件**：前端播放影片可能需要 `video_player`（見 design.md D9，待確認）。
+- **新增套件**：前端新增 `youtube_player_iframe`，用來在頁面內嵌播放 YouTube（見 design.md D9），MR 2 要寫理由並徵得組內同意。
 - **資料**：測試只用 `docs/samples/` 的片段或自行編寫的假資料，不提交規則書全文（AGENTS.md 第 2 節規則 2）。
 - **不修改** `AGENTS.md`、`CLAUDE.md`、`openspec/changes/archive/`。

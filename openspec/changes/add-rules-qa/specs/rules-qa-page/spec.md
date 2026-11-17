@@ -24,11 +24,11 @@
 - **THEN** 分別顯示載入中，或錯誤訊息與「重試」按鈕
 
 ### Requirement: 教學頁
-選一款遊戲後，`RulesLessonNotifier` SHALL 載入 `GET /api/v1/rules-lessons/{game_id}`。有影片時，頁面先顯示影片播放器與「看完了，開始提問」按鈕，按下後才顯示問答區；沒有影片時，直接顯示問答區與建議問題。
+選一款遊戲後，`RulesLessonNotifier` SHALL 載入 `GET /api/v1/rules-lessons/{game_id}`。有影片時，頁面先顯示影片播放器（`source=youtube` 用 YouTube 播放器；`source=file` 的 mp4 由 `add-rules-video-maker` 加上支援）與「看完了，開始提問」按鈕，按下後才顯示問答區；沒有影片時，直接顯示問答區與建議問題。
 
 #### Scenario: 有影片
-- **WHEN** 開啟有影片的遊戲
-- **THEN** 顯示影片播放器與「看完了，開始提問」，問答區尚未顯示
+- **WHEN** 開啟有 YouTube 影片的遊戲
+- **THEN** 頁面內嵌 YouTube 播放器（用 `youtube_id`），顯示「看完了，開始提問」，問答區尚未顯示
 
 #### Scenario: 看完影片開始提問
 - **WHEN** 按「看完了，開始提問」

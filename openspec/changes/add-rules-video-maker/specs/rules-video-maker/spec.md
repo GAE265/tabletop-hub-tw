@@ -160,7 +160,7 @@
 - **THEN** 回 409，`RULES_VIDEO_INVALID_STATUS`
 
 ### Requirement: 發布
-`PATCH /api/v1/rules-videos/{video_id}` 帶 `{"status": "published"}` SHALL 把完成的影片設為這款遊戲的教學影片：寫入 `rules_qa_videos`（取代既有影片，標題為「《遊戲名稱》規則教學」），狀態改為 `published`。
+`PATCH /api/v1/rules-videos/{video_id}` 帶 `{"status": "published"}` SHALL 把完成的影片設為這款遊戲的教學影片：寫入 `rules_qa_videos`（`source=file`、`video_url` 為儲存中的 mp4 網址、`youtube_id` 為空；取代既有影片，標題為「《遊戲名稱》規則教學」），狀態改為 `published`。
 
 #### Scenario: 發布影片
 - **WHEN** 建立者發布 `ready` 的影片

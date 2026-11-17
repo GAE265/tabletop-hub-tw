@@ -24,11 +24,11 @@
 - **THEN** 回 401
 
 ### Requirement: 教學內容
-`GET /api/v1/rules-lessons/{game_id}` SHALL 回傳 `game_id`、`game_name`、`video`（`{video_url, title}`，沒有影片時為 `null`）、`has_rulebook`，以及固定的建議問題（例如「怎麼開始一局？」「一個回合可以做什麼？」「怎麼計分？」「遊戲什麼時候結束？」）。
+`GET /api/v1/rules-lessons/{game_id}` SHALL 回傳 `game_id`、`game_name`、`video`（`{source, video_url, youtube_id, title}`，沒有影片時為 `null`；`source` 為 `youtube` 時 `youtube_id` 為影片 ID，`source` 為 `file`（影片生產器產生的 mp4，見 `add-rules-video-maker`）時為 `null`）、`has_rulebook`，以及固定的建議問題（例如「怎麼開始一局？」「一個回合可以做什麼？」「怎麼計分？」「遊戲什麼時候結束？」）。
 
 #### Scenario: 有影片的遊戲
 - **WHEN** 查詢有影片的遊戲
-- **THEN** 回 200，`video` 有網址與標題，`suggested_questions` 不為空
+- **THEN** 回 200，`video` 有來源、網址、YouTube 影片 ID 與標題，`suggested_questions` 不為空
 
 #### Scenario: 沒有影片的遊戲
 - **WHEN** 查詢只有規則書的遊戲
@@ -43,7 +43,7 @@
 - **THEN** 回 404，`RULES_LESSON_NOT_FOUND`
 
 ### Requirement: 設定教學影片
-`PUT /api/v1/rules-lessons/{game_id}/video` SHALL 設定或取代該遊戲的教學影片（一款遊戲最多一支），body 為 `video_url`（http 或 https 網址）與 `title`。影片只供教學頁播放，不建立檢索索引。只有 `shop_staff` 與 `admin` 可以設定。
+`PUT /api/v1/rules-lessons/{game_id}/video` SHALL 設定或取代該遊戲的教學影片（一款遊戲最多一支），body 為 `video_url`（YouTube 影片網址）與 `title`。後端從網址取出 YouTube 影片 ID，以 `source=youtube` 儲存。接受的網址格式：`https://www.youtube.com/watch?v=<ID>`、`https://youtu.be/<ID>`、`https://www.youtube.com/embed/<ID>`、`https://www.youtube.com/shorts/<ID>`（可以沒有 `www.`、可以帶其他查詢參數）。影片只供教學頁播放，不建立檢索索引。只有 `shop_staff` 與 `admin` 可以設定。
 
 #### Scenario: 設定影片
 - **WHEN** 管理員送出網址與標題
@@ -53,8 +53,16 @@
 - **WHEN** 該遊戲已有影片，再送一次新的網址與標題
 - **THEN** 回 200，影片資料被取代，該遊戲仍只有一支影片
 
-#### Scenario: 網址或欄位格式錯誤
-- **WHEN** `video_url` 不是 http／https 網址，或 `title` 為空
+#### Scenario: YouTube 短網址
+- **WHEN** 送出 `https://youtu.be/<ID>?si=xxx`
+- **THEN** 回 200，`youtube_id` 為 `<ID>`
+
+#### Scenario: 不是 YouTube 網址
+- **WHEN** `video_url` 不是上述 YouTube 格式（例如其他網站，或 YouTube 首頁沒有影片 ID）
+- **THEN** 回 422，`RULES_QA_INVALID_VIDEO_URL`，資料不變
+
+#### Scenario: 欄位格式錯誤
+- **WHEN** `title` 為空，或缺少 `video_url`
 - **THEN** 回 422，資料不變
 
 #### Scenario: 玩家沒有權限

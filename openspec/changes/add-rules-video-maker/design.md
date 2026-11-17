@@ -84,7 +84,7 @@
 **D9 前端。**
 - `state/`：`RulesVideoProjectsNotifier`（清單）、`RulesVideoProjectNotifier`（單一專案，family by id：腳本編輯、確認、上傳、合成、輪詢、發布）。輪詢用 `Timer`，在 `ref.onDispose` 取消。
 - 拍照：沿用 `rules_ingest` 已新增的 `core/platform/image_picker.dart`（`feature/ocr` 分支，使用 `file_picker`），不另外加套件。
-- 影片預覽：與 `add-rules-qa` D9 使用同一個播放器介面。
+- 影片播放：組內自製影片在 YouTube（`add-rules-qa` D9，`youtube_player_iframe`）；本 change 產生的是 mp4（`source=file`），在 `add-rules-qa` 的 `LessonVideoPlayer` 介面加上 mp4 實作，新增官方的 `video_player` 套件（需組內同意）。預覽與教學頁共用這個介面，依 `source` 自動切換。
 - 參考畫面 `/proto/rules_video`；正式頁面 `/rules-videos`、`/rules-videos/{video_id}`，入口只對店家人員與管理員顯示。
 
 **D10 測試。**
@@ -113,5 +113,5 @@
 1. `integrations/tts`、`storage`、`video` 的擁有者（AGENTS.md 第 3 節需要組員更新）。
 2. 雲端儲存與 TTS 用哪個服務（建議 Azure Blob Storage 與 Azure AI Speech，與其他服務同在 Azure）？新增 `azure-storage-blob` 套件需要組內同意。
 3. 旁白的聲音（男聲／女聲、語速）。
-4. 合成後的影片網址是否就是 `add-rules-qa` 待確認的「影片放在哪裡」的答案：組內自製的 3 支影片也上傳到同一個雲端儲存？
+4. ~~組內自製影片放在哪裡~~：已決定放 YouTube（2026-11-17）；本 change 的 mp4 存在雲端儲存，兩種來源都支援。
 5. 新表名 `rules_qa_video_projects`、`rules_qa_video_sections`、`rules_qa_video_materials` 需要在群組告知（4.4）。

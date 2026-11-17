@@ -4,7 +4,7 @@
 
 - `rules_ingest`（瑋鋐）把規則書逐頁轉成 Markdown，存在 `games_manual(games_id, page, content)`。表屬於 `rules_ingest`，不是共用表；目前沒有切段、沒有向量（他的設計文件把 embedding 列為不做）。程式在 `feature/ocr` 分支，尚未合併。
 - `ManualPagesService.list_pages(user, games_id)` 限 `shop_staff`、`admin`，是給 API 用的。
-- 組內已自製規則教學影片：一款遊戲一支，目前 3 款有影片。影片放在哪裡尚未決定，本 change 只存網址。
+- 組內已自製規則教學影片：一款遊戲一支，目前 3 款有影片，**放在 YouTube**。本 change 只存網址與影片 ID。
 - `integrations/llm` 有 `generate`、`generate_json`、`respond`（有狀態、靠 `previous_response_id` 接續對話）；`integrations/embedding` 有 `embed(texts)`。兩者都有 fake 實作。
 - `games_advisor`（立倫）是現成的參考：`Vector()` 欄位、自己一組 `GAMES_ADVISOR_EMBEDDING_*` 設定、`POST /api/v1/advisor/messages` 的對話格式與錯誤碼。
 - `games.id` 是 bigint（ADR 0003），參照它的表不可設定 cascade。
@@ -31,12 +31,16 @@
 
 **D2 資料表。**
 
+`PUT /api/v1/rules-lessons/{game_id}/video` 只接受 YouTube 網址，後端用自己寫的解析函式取出影片 ID（不新增套件），解析失敗回 422 `RULES_QA_INVALID_VIDEO_URL`。
+
 `rules_qa_videos`（一款遊戲最多一支影片）：
 
 | 欄位 | 型別 | 說明 |
 |---|---|---|
 | `game_id` | bigint，主鍵，外鍵 `games.id`（不 cascade） | 這支教學影片教哪一款遊戲 |
-| `video_url` | text | 影片網址（http／https） |
+| `source` | text，CHECK in (`youtube`, `file`) | 影片來源：`youtube` 是組內上傳到 YouTube 的影片；`file` 是影片生產器產生、存在我們雲端儲存的 mp4（`add-rules-video-maker` 才會寫入） |
+| `video_url` | text | 影片網址：YouTube 網址，或 mp4 的網址 |
+| `youtube_id` | text，可為空 | YouTube 影片 ID；`source=youtube` 時必填，`file` 時為空 |
 | `title` | text | 影片標題，顯示在教學頁 |
 | `updated_at` | timestamptz | 最後一次設定的時間 |
 
@@ -87,8 +91,11 @@
 
 設定影片權限比照 `rules_ingest` 的匯入：店家人員與管理員。遊戲不屬於某間店家，所以不檢查 `shop_id`。
 
-**D9 前端影片播放。**
-影片網址可能是自己代管的 mp4，也可能是 YouTube。建議用官方的 `video_player` 套件（支援 Web、Android、iOS），包在 `core/platform/` 的介面後面（5.3）。**新增套件需要組內同意**；如果影片放在 YouTube，`video_player` 不能播，需要改用其他套件或 iframe。這點要在 MR 2 開始前確定。
+**D9 前端影片播放：YouTube 用 `youtube_player_iframe`。**
+組內自製影片放在 YouTube（tasks 1.3）。前端用 `youtube_player_iframe` 套件在頁面內嵌播放：支援 Web、Android、iOS，之後轉 App 不用改。播放器包在 `core/platform/` 的 `LessonVideoPlayer` 介面後面（5.3），依 `video.source` 選擇實作；測試用 fake 實作，不載入 YouTube。
+- **新增套件**：`youtube_player_iframe`，MR 2 說明要寫理由（Flutter 沒有內建 YouTube 播放元件；自己嵌 iframe 只能在網頁用），並徵得組內同意。
+- `source=file`（影片生產器的 mp4）的播放由 `add-rules-video-maker` 加上，屆時再新增 `video_player` 套件；本 change 不加，避免裝了用不到的套件。
+- 替代方案：自己用 `HtmlElementView` 嵌 iframe（不加套件，但只能在網頁用）；按鈕在新分頁開 YouTube（最簡單，但玩家要離開頁面）。都被否決。
 
 **D10 前端分層。**
 - `data/`：freezed DTO（`RulesLessonSummary`、`RulesLesson`、`RulesAnswer`、`Citation`）與 `RulesQaRepository`、`HttpRulesQaRepository`。
@@ -116,5 +123,4 @@
 
 ## Open Questions
 
-1. 影片放在哪裡（自己代管的 mp4，或 YouTube）？這會決定 D9 的套件。`add-rules-video-maker` 產生的影片是 mp4，存在新增的 `integrations/storage`；若組內自製的影片也放在同一處，D9 就可以確定用 `video_player`。
-2. 表名 `rules_qa_videos`、`rules_qa_chunks` 需要在群組告知（4.4）。
+1. 表名 `rules_qa_videos`、`rules_qa_chunks` 需要在群組告知（4.4）。

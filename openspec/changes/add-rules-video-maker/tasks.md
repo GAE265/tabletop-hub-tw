@@ -6,7 +6,8 @@
 
 - [ ] 1.1 在組內決定 `integrations/tts`、`storage`、`video` 的擁有者，並由組員更新 AGENTS.md 第 3 節（design.md Open Questions 1），驗證：AGENTS.md 已列出擁有者
 - [ ] 1.2 決定雲端儲存與 TTS 服務、是否新增 `azure-storage-blob`、旁白的聲音（Open Questions 2、3），驗證：結論記在本檔
-- [ ] 1.3 確認組內自製的 3 支影片是否也放到同一個雲端儲存（Open Questions 4），結論同步到 `add-rules-qa` design.md D9，驗證：兩份 design.md 一致
+- [x] 1.3 確認組內自製的 3 支影片是否也放到同一個雲端儲存（Open Questions 4），結論同步到 `add-rules-qa` design.md D9，驗證：兩份 design.md 一致
+  - 結論（2026-11-17）：自製影片放 YouTube；本 change 的 mp4 存在雲端儲存，`rules_qa_videos.source` 區分兩種來源，播放器依來源自動切換（mp4 用 `video_player`，在本 change 新增）。
 - [ ] 1.4 在群組告知新表名（4.4），驗證：沒有人提出撞名或反對
 - [ ] 1.5 等 `add-rules-qa` MR 1 合併（`rules_qa_videos`、`rules_ingest` 頁面讀取方法），驗證：`dev` 上有 `backend/app/domains/rules_qa/`
 
