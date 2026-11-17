@@ -1,4 +1,4 @@
-"""訂位資料表：表名、欄位、型別與約束與舊訂位資料庫一致（company_id 改指向 booking_shops、
+"""訂位資料表：表名、欄位、型別與約束與舊訂位資料庫一致（shop_id 改指向 booking_shops、
 customer_id 改指向 auth_users），並驗證擴充欄位與防止同桌重疊的 exclusion constraint。"""
 
 import uuid
@@ -11,11 +11,11 @@ SHOP = uuid.UUID("c0ffee00-0000-4000-8000-0000000000aa")
 USER = uuid.UUID("a1000000-0000-4000-8000-0000000000aa")
 
 OLD_TABLES = {
-    "business_hours": {"id", "company_id", "weekday", "open_time", "close_time"},
-    "closing_hours": {"id", "company_id", "closing_date", "start_time", "end_time", "reason"},
+    "business_hours": {"id", "shop_id", "weekday", "open_time", "close_time"},
+    "closing_hours": {"id", "shop_id", "closing_date", "start_time", "end_time", "reason"},
     "seating_tables": {
         "id",
-        "company_id",
+        "shop_id",
         "table_code",
         "table_name",
         "min_capacity",
@@ -28,12 +28,12 @@ OLD_TABLES = {
         "id",
         "seating_tables_id_a",
         "seating_tables_id_b",
-        "company_id",
+        "shop_id",
         "is_combinable",
     },
     "pricing_rules": {
         "id",
-        "company_id",
+        "shop_id",
         "rule_code",
         "rule_name",
         "rule_type",
@@ -47,7 +47,7 @@ OLD_TABLES = {
     },
     "reservations": {
         "id",
-        "company_id",
+        "shop_id",
         "reservation_code",
         "customer_id",
         "start_at",
@@ -67,7 +67,7 @@ OLD_TABLES = {
         "cancel_reason",
     },
     "reservation_tables": {
-        "company_id",
+        "shop_id",
         "reservation_id",
         "table_id",
         # 擴充欄位
@@ -77,7 +77,7 @@ OLD_TABLES = {
     },
     "reservation_logs": {
         "id",
-        "company_id",
+        "shop_id",
         "reservation_id",
         "action",
         "old_data",
@@ -89,7 +89,7 @@ OLD_TABLES = {
     },
     "customer_inquiries": {
         "id",
-        "company_id",
+        "shop_id",
         "customer_id",
         "channel",
         "question",
@@ -101,7 +101,7 @@ OLD_TABLES = {
     },
     "faqs": {
         "id",
-        "company_id",
+        "shop_id",
         "question",
         "answer",
         "category",
@@ -111,10 +111,10 @@ OLD_TABLES = {
         "created_at",
         "updated_at",
     },
-    "menu_categories": {"id", "company_id", "name", "sort_order", "is_active"},
+    "menu_categories": {"id", "shop_id", "name", "sort_order", "is_active"},
     "menu_items": {
         "id",
-        "company_id",
+        "shop_id",
         "category_id",
         "name",
         "description",
@@ -146,7 +146,7 @@ def test_table_has_old_database_columns(db: Engine, table: str):
 
 def test_ids_are_bigint_and_company_is_uuid(db: Engine):
     assert _columns(db, "reservations")["id"] == "bigint"
-    assert _columns(db, "reservations")["company_id"] == "uuid"
+    assert _columns(db, "reservations")["shop_id"] == "uuid"
     assert _columns(db, "reservations")["customer_id"] == "uuid"
     assert _columns(db, "reservation_logs")["operator_id"] == "character varying"
     assert _columns(db, "seating_tables_rel")["seating_tables_id_a"] == "bigint"
@@ -163,7 +163,7 @@ def base(db: Engine):
         ids = [
             conn.execute(
                 text(
-                    "INSERT INTO seating_tables (company_id, table_code, max_capacity) "
+                    "INSERT INTO seating_tables (shop_id, table_code, max_capacity) "
                     "VALUES (:s, :c, 4) RETURNING id"
                 ),
                 {"s": SHOP, "c": c},
@@ -176,7 +176,7 @@ def base(db: Engine):
 def _reservation(conn, code: str) -> int:
     return conn.execute(
         text(
-            "INSERT INTO reservations (company_id, reservation_code, customer_id, start_at, "
+            "INSERT INTO reservations (shop_id, reservation_code, customer_id, start_at, "
             "end_at, party_size, status, source) VALUES (:s, :c, :u, now(), now() + interval "
             "'1 hour', 2, 'confirmed', 'online') RETURNING id"
         ),
@@ -188,7 +188,7 @@ def _occupy(conn, reservation, table, start="2026-12-01 14:00+08", end="2026-12-
     conn.execute(
         text(
             "INSERT INTO reservation_tables "
-            "(company_id, reservation_id, table_id, start_at, end_at) VALUES (:s, :r, :t, :a, :b)"
+            "(shop_id, reservation_id, table_id, start_at, end_at) VALUES (:s, :r, :t, :a, :b)"
         ),
         {"s": SHOP, "r": reservation, "t": table, "a": start, "b": end},
     )
@@ -232,7 +232,7 @@ def test_status_check_and_default(db, base):
     with db.begin() as conn:
         conn.execute(
             text(
-                "INSERT INTO reservations (company_id, reservation_code, customer_id, start_at, "
+                "INSERT INTO reservations (shop_id, reservation_code, customer_id, start_at, "
                 "end_at, party_size) VALUES (:s, 'D', :u, now(), now() + interval '1 hour', 2)"
             ),
             {"s": SHOP, "u": USER},
@@ -242,7 +242,7 @@ def test_status_check_and_default(db, base):
     with pytest.raises(IntegrityError), db.begin() as conn:
         conn.execute(
             text(
-                "INSERT INTO reservations (company_id, reservation_code, customer_id, start_at, "
+                "INSERT INTO reservations (shop_id, reservation_code, customer_id, start_at, "
                 "end_at, party_size, status) VALUES (:s, 'E', :u, now(), now() + interval "
                 "'1 hour', 2, 'bogus')"
             ),
@@ -257,7 +257,7 @@ def test_rel_allows_old_duplicates(db, base):
             conn.execute(
                 text(
                     "INSERT INTO seating_tables_rel "
-                    "(company_id, seating_tables_id_a, seating_tables_id_b) VALUES (:s, :a, :b)"
+                    "(shop_id, seating_tables_id_a, seating_tables_id_b) VALUES (:s, :a, :b)"
                 ),
                 {"s": SHOP, "a": a, "b": b},
             )

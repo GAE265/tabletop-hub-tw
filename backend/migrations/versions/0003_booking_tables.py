@@ -8,8 +8,8 @@
   cancel_reason；reservation_tables 的 start_at、end_at、is_active 與防止同桌重疊的
   exclusion constraint。
 
-Revision ID: 0005
-Revises: 0004
+Revision ID: 0003
+Revises: 0002
 Create Date: 2026-11-16
 """
 
@@ -19,8 +19,8 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
-revision: str = "0005"
-down_revision: str | None = "0004"
+revision: str = "0003"
+down_revision: str | None = "0002"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
