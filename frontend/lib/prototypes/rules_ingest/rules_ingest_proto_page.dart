@@ -101,7 +101,7 @@ class RulesIngestProtoPage extends ConsumerWidget {
                           width: 60,
                           height: 80,
                           fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => CircleAvatar(
+                          errorBuilder: (_, error, stack) => CircleAvatar(
                             backgroundColor:
                                 Theme.of(context).colorScheme.primaryContainer,
                             child: Text('${index + 1}'),
