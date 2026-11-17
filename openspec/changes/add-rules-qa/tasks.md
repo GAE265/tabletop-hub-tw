@@ -18,7 +18,7 @@
 
 ## 2. MR 1：後端 API、索引指令與 migration（@ 立倫、瑋鋐）
 
-- [ ] 2.1 永傑開 Draft MR 1，AI 從 `specs/rules-qa` 整理情境表格供貼上，驗證：Draft MR 已存在，並 @ 立倫、瑋鋐
+- [x] 2.1 永傑開 Draft MR 1，AI 從 `specs/rules-qa` 整理情境表格供貼上，驗證：Draft MR 已存在，並 @ 立倫、瑋鋐
 - [x] 2.2 撰寫 migration 測試（`tests/migrations/test_rules_qa_tables.py`）：兩張表存在、外鍵沒有 cascade、`page >= 1` 的 CHECK、`rules_qa_videos` 一款遊戲一筆、`source` 的 CHECK 與 `youtube` 時 `youtube_id` 必填、可以 downgrade，驗證：測試存在且失敗，沒有使用 skip 或 xfail
 - [x] 2.3 撰寫切段的單元測試（`tests/rules_qa/test_chunking.py`）：段落不跨頁、合併到上限、超長段落切開、空白頁略過，驗證：測試存在且失敗
 - [x] 2.4 撰寫 service 單元測試（`tests/rules_qa/test_service.py`，使用 `FakeLLMProvider`、`FakeEmbeddingProvider`、`FakeRulesQaRepository`、`FakeManualPagesSource`）：教學清單、教學內容、設定影片與取代、YouTube 網址解析（各種格式與不合法的網址）、建立索引與重建、問答（出處對回頁碼、同頁合併、丟棄來源外出處、找不到答案、只檢索該遊戲、追問帶 `previous_response_id`、用語改寫一次與拒絕、沒有段落時不呼叫 LLM、錯誤對應）、設定影片的權限，驗證：測試存在且失敗
@@ -27,7 +27,7 @@
 - [x] 2.7 新增 `RULES_QA_EMBEDDING_*` 設定（`core/config.py`、`.env.example` 只寫欄位名與說明），驗證：沒填時使用 fake，`uv run pytest` 不需要金鑰
 - [x] 2.8 新增 `app/domains/rules_qa/models.py` 與 migration（版本號依當時 `dev` 的最新 migration 決定），驗證：2.2 的測試全部通過
 - [x] 2.9 實作 `chunking.py`、`repository.py`（pgvector cosine 檢索）、`prompts.py`、`service.py`、`schemas.py`、`router.py`、索引指令，在 `main.py` 掛載 router 並建立 embedding provider，驗證：2.3–2.5 的測試全部通過，`/docs` 列出 4 個 rules_qa 端點
-- [ ] 2.10 自我檢查：在 `backend/` 跑 `uv run ruff check .`、`uv run ruff format --check .`、`uv run pytest`，驗證：全部通過、CI 全綠；MR 標明有改契約、含 migration，再改成 Ready for review
+- [x] 2.10 自我檢查：在 `backend/` 跑 `uv run ruff check .`、`uv run ruff format --check .`、`uv run pytest`，驗證：全部通過、CI 全綠；MR 標明有改契約、含 migration，再改成 Ready for review
 
 ## 3. MR 2：前端 data、state、參考畫面與交接說明（於 MR 1 合併後從 dev 開分支）
 
