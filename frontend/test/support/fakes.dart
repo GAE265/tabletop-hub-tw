@@ -171,6 +171,17 @@ class FakeBookingRepository implements BookingRepository {
   List<Booking> board;
   int shopCallCount = 0;
 
+  /// 正式頁面測試用：有值時對應的 API 拋出這個錯誤。
+  Object? quoteError;
+  Object? createError;
+  Object? patchError;
+
+  /// 正式頁面測試用：送出的請求。
+  final createCalls =
+      <({String shopId, int partySize, String startAt, String endAt})>[];
+  final patchCalls = <({int id, Map<String, dynamic> patch})>[];
+  final boardQueries = <({String shopId, String from, String to})>[];
+
   @override
   Future<List<Shop>> listShops() async {
     shopCallCount++;
@@ -184,12 +195,15 @@ class FakeBookingRepository implements BookingRepository {
     required int partySize,
     required String startAt,
     required String endAt,
-  }) async => QuoteResult(
-    startAt: startAt,
-    endAt: endAt,
-    fee: const Fee(billableHours: '2.00', venueFee: '480.00'),
-    tableCodes: ['T1'],
-  );
+  }) async {
+    if (quoteError != null) throw quoteError!;
+    return QuoteResult(
+      startAt: startAt,
+      endAt: endAt,
+      fee: const Fee(billableHours: '2.00', venueFee: '480.00'),
+      tableCodes: ['T1'],
+    );
+  }
 
   @override
   Future<Booking> create({
@@ -199,24 +213,50 @@ class FakeBookingRepository implements BookingRepository {
     required String endAt,
     String? specialRequests,
     bool confirmOverlap = false,
-  }) async => Booking(
-    id: 1,
-    reservationCode: 'BKFAKE',
-    shopId: shopId,
-    startAt: startAt,
-    endAt: endAt,
-    partySize: partySize,
-    status: 'confirmed',
-    tableCodes: ['T1'],
-    estimatedFee: const Fee(billableHours: '2.00', venueFee: '480.00'),
-  );
+  }) async {
+    if (createError != null) throw createError!;
+    createCalls.add((
+      shopId: shopId,
+      partySize: partySize,
+      startAt: startAt,
+      endAt: endAt,
+    ));
+    return Booking(
+      id: 1,
+      reservationCode: 'BKFAKE',
+      shopId: shopId,
+      startAt: startAt,
+      endAt: endAt,
+      partySize: partySize,
+      status: 'confirmed',
+      tableCodes: ['T1'],
+      estimatedFee: const Fee(billableHours: '2.00', venueFee: '480.00'),
+    );
+  }
 
   @override
   Future<Booking> get(int id) => throw UnimplementedError();
 
+  /// 只支援改狀態：從 [mine] 或 [board] 找到訂位，回傳改好狀態的新訂位。
   @override
-  Future<Booking> patch(int id, Map<String, dynamic> patch) =>
-      throw UnimplementedError();
+  Future<Booking> patch(int id, Map<String, dynamic> patch) async {
+    patchCalls.add((id: id, patch: patch));
+    if (patchError != null) throw patchError!;
+    final b = [...mine, ...board].firstWhere((x) => x.id == id);
+    return Booking(
+      id: b.id,
+      reservationCode: b.reservationCode,
+      shopId: b.shopId,
+      startAt: b.startAt,
+      endAt: b.endAt,
+      partySize: b.partySize,
+      status: patch['status'] as String? ?? b.status,
+      tableCodes: b.tableCodes,
+      estimatedFee: b.estimatedFee,
+      finalFee: patch['status'] == 'completed' ? '480.00' : b.finalFee,
+      notice: b.notice,
+    );
+  }
 
   @override
   Future<BookingPage> listMine({
@@ -230,7 +270,10 @@ class FakeBookingRepository implements BookingRepository {
     required String shopId,
     required String from,
     required String to,
-  }) async => BookingPage(items: board, total: board.length);
+  }) async {
+    boardQueries.add((shopId: shopId, from: from, to: to));
+    return BookingPage(items: board, total: board.length);
+  }
 }
 
 const fakeShopA = Shop(id: 's-a', name: '甲店');
