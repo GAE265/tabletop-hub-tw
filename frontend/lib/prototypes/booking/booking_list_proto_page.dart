@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../domains/booking/data/booking.dart';
 import '../../domains/booking/state/booking_state.dart';
 
 /// booking 查詢參考畫面：依狀態與日期篩選。
@@ -66,7 +65,7 @@ class _BookingListProtoPageState extends ConsumerState<BookingListProtoPage> {
               Expanded(
                 child: DropdownButtonFormField<String?>(
                   key: const Key('status-filter'),
-                  value: _status,
+                  initialValue: _status,
                   decoration: const InputDecoration(labelText: '狀態'),
                   items: [
                     for (final (value, label) in _statusOptions)
