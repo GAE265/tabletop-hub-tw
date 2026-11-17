@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tabletop_hub/core/platform/image_picker.dart';
+import 'package:tabletop_hub/domains/rules_ingest/data/game_option.dart';
+import 'package:tabletop_hub/domains/rules_ingest/data/game_search_repository.dart';
 import 'package:tabletop_hub/domains/rules_ingest/data/manual_pages_repository.dart';
 import 'package:tabletop_hub/prototypes/rules_ingest/rules_ingest_proto_page.dart';
 
@@ -12,13 +14,20 @@ import '../../support/fakes.dart';
 Future<void> pumpPrototype(
   WidgetTester tester,
   FakeManualPagesRepository repo,
-  FakeImagePicker picker,
-) async {
+  FakeImagePicker picker, {
+  FakeGameSearchRepository? gameRepo,
+}) async {
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
         manualPagesRepositoryProvider.overrideWithValue(repo),
         imagePickerProvider.overrideWithValue(picker),
+        gameSearchRepositoryProvider.overrideWithValue(
+          gameRepo ??
+              FakeGameSearchRepository(allGames: [
+                GameOption(id: 1, name: 'Test Game', englishName: 'test'),
+              ]),
+        ),
       ],
       child: const MaterialApp(home: RulesIngestProtoPage()),
     ),
@@ -28,7 +37,9 @@ Future<void> pumpPrototype(
 void main() {
   testWidgets('欄位與按鈕存在，缺欄位禁用匯入', (tester) async {
     await pumpPrototype(tester, FakeManualPagesRepository(), FakeImagePicker());
-    expect(find.byKey(const Key('games-id-input')), findsOneWidget);
+    // 等 _loadAllGames microtask 完成
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('games-name-input')), findsOneWidget);
     expect(find.byKey(const Key('start-page-input')), findsOneWidget);
     expect(
       tester
@@ -36,15 +47,23 @@ void main() {
           .onPressed,
       isNull,
     );
-    await tester.enterText(find.byKey(const Key('games-id-input')), 'abc');
-    await tester.pump();
-    expect(find.text('桌遊編號必須是正整數'), findsOneWidget);
+    // 輸入名稱但未從下拉選取 → canImport 仍為 false
+    await tester.enterText(find.byKey(const Key('games-name-input')), 'abc');
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('import-button')),
+        findsOneWidget); // 匯入按鈕仍在，但 disabled
   });
 
   testWidgets('讀回空列表與 fake 提示', (tester) async {
     await pumpPrototype(tester, FakeManualPagesRepository(), FakeImagePicker());
-    await tester.enterText(find.byKey(const Key('games-id-input')), '1');
-    await tester.pump();
+    await tester.pumpAndSettle();
+    // 選一款遊戲 → 呼叫 selectGame
+    // 因為 Autocomplete 的選項來自 allGames，我們用 enterText + 選取
+    await tester.enterText(find.byKey(const Key('games-name-input')), 'Test');
+    await tester.pumpAndSettle();
+    // Autocomplete 會顯示下拉選項 "Test Game"，點選
+    await tester.tap(find.text('Test Game').last);
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('read-pages-button')));
     await tester.pumpAndSettle();
     expect(find.text('這款桌遊還沒有規則書頁面'), findsOneWidget);
@@ -56,7 +75,12 @@ void main() {
     final picker = FakeImagePicker()
       ..images = [PickedImage(name: 'sample.png', bytes: Uint8List(1))];
     await pumpPrototype(tester, repo, picker);
-    await tester.enterText(find.byKey(const Key('games-id-input')), '1');
+    await tester.pumpAndSettle();
+    // 選遊戲
+    await tester.enterText(find.byKey(const Key('games-name-input')), 'Test');
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Test Game').last);
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('pick-images-button')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('import-button')));
@@ -75,8 +99,12 @@ void main() {
   testWidgets('空文字顯示整頁沒文字', (tester) async {
     final repo = FakeManualPagesRepository()..rows[1] = '';
     await pumpPrototype(tester, repo, FakeImagePicker());
-    await tester.enterText(find.byKey(const Key('games-id-input')), '1');
-    await tester.pump();
+    await tester.pumpAndSettle();
+    // 選遊戲
+    await tester.enterText(find.byKey(const Key('games-name-input')), 'Test');
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Test Game').last);
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('read-pages-button')));
     await tester.pumpAndSettle();
     expect(find.text('（整頁沒文字）'), findsOneWidget);

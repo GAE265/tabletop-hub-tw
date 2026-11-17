@@ -8,7 +8,6 @@ import '../domains/groups/pages/groups_page.dart';
 import '../domains/health/pages/health_page.dart';
 import '../prototypes/booking/booking_list_proto_page.dart';
 import '../prototypes/booking/booking_proto_page.dart';
-import '../prototypes/health/health_proto_page.dart';
 import '../prototypes/rules_ingest/rules_ingest_proto_page.dart';
 import 'shell.dart';
 import 'theme/theme_preview_page.dart';
@@ -32,10 +31,6 @@ GoRouter createRouter(AppConfig config) => GoRouter(
           GoRoute(
             path: '/proto/theme',
             builder: (context, state) => const ThemePreviewPage(),
-          ),
-          GoRoute(
-            path: '/proto/health',
-            builder: (context, state) => const HealthProtoPage(),
           ),
           GoRoute(
             path: '/proto/rules-ingest',

@@ -33,9 +33,7 @@ def seeded(app, api_engine):
     with api_engine.begin() as connection:
         connection.execute(text("TRUNCATE games CASCADE"))
         connection.execute(INSERT_GAME, {"id": 1})
-        connection.execute(
-            INSERT_TWO, {"id": 2, "name": "璀璨寶石", "english": "Splendor"}
-        )
+        connection.execute(INSERT_TWO, {"id": 2, "name": "璀璨寶石", "english": "Splendor"})
 
     def session():
         with Session(api_engine) as value:
@@ -66,6 +64,9 @@ def test_search_no_match_returns_empty(client, seeded):
     assert response.json() == {"items": [], "total": 0}
 
 
-def test_search_missing_name_is_validation_error(client, seeded):
+def test_search_without_name_returns_all(client, seeded):
     response = client.get(URL)
-    assert response.status_code == 422
+    assert response.status_code == 200
+    items = response.json()["items"]
+    assert len(items) == 2
+    assert {item["id"] for item in items} == {1, 2}

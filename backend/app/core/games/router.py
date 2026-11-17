@@ -13,13 +13,19 @@ router = APIRouter(prefix="/games", tags=["games"])
 @router.get("", response_model=GameSearchOut)
 def search_games(
     name: Annotated[str | None, Query(min_length=1)] = None,
-    session: Session = Depends(get_session),
+    session: Session = Depends(get_session),  # noqa: B008
 ) -> GameSearchOut:
     repo = GameRepository(session)
     if name is not None:
         rows = repo.search_games_by_name(name)
-        items = [GameSummary(id=row["id"], name=row["name"], english_name=row["english_name"]) for row in rows]
+        items = [
+            GameSummary(id=row["id"], name=row["name"], english_name=row["english_name"])
+            for row in rows
+        ]
     else:
         rows = repo.list_games()
-        items = [GameSummary(id=row["id"], name=row["name"], english_name=row["english_name"]) for row in rows]
+        items = [
+            GameSummary(id=row["id"], name=row["name"], english_name=row["english_name"])
+            for row in rows
+        ]
     return GameSearchOut(items=items, total=len(items))
