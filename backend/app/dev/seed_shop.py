@@ -179,7 +179,7 @@ def main() -> int:
                 text(
                     "INSERT INTO faqs (shop_id, question, answer, category, keywords, "
                     "is_active, sort_order) "
-                    "SELECT :sid, :q, :a, :cat, :kw::text[], true, :so "
+                    "SELECT :sid, :q, :a, :cat, CAST(:kw AS text[]), true, :so "
                     "WHERE NOT EXISTS ("
                     "  SELECT 1 FROM faqs "
                     "  WHERE shop_id = :sid2 AND question = :q2"
@@ -221,8 +221,8 @@ def main() -> int:
             session.execute(
                 text(
                     "INSERT INTO menu_items (shop_id, category_id, name, description, price, "
-                    "is_active, sort_order, is_available) "
-                    "SELECT :sid, c.id, :n, :d, :p, true, :so, true "
+                    "sort_order, is_available) "
+                    "SELECT :sid, c.id, :n, :d, :p, :so, true "
                     "FROM menu_categories c "
                     "WHERE c.shop_id = :sid2 AND c.name = :cn "
                     "  AND NOT EXISTS ("
