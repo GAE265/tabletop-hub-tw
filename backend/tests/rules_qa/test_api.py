@@ -8,6 +8,7 @@ from collections.abc import Callable
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from httpx import Response
 
 from app.core.auth import CurrentUser
 from app.integrations.llm.fake import FakeLLMProvider, FakeResponse
@@ -20,7 +21,7 @@ AddPages = Callable[[int, list[tuple[int, str]]], None]
 IndexGame = Callable[[int], int]
 
 
-def error_code(response) -> str:  # noqa: ANN001
+def error_code(response: Response) -> str:
     return response.json()["error"]["code"]
 
 
