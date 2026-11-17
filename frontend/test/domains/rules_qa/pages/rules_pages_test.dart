@@ -1,4 +1,4 @@
-// 規則教學正式頁面（spec：openspec/changes/add-rules-qa/specs/rules-qa-page）。
+// 規則教學正式頁面（spec：openspec/specs/rules-qa-page）。
 // 對話邏輯已由 state 測試涵蓋，這裡確認畫面有正確呈現 state，以及 RWD。
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
