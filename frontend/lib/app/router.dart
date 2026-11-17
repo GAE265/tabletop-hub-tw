@@ -6,6 +6,8 @@ import '../core/config/app_config.dart';
 import '../domains/games_advisor/pages/games_advisor_page.dart';
 import '../domains/groups/pages/groups_page.dart';
 import '../domains/health/pages/health_page.dart';
+import '../prototypes/booking/booking_list_proto_page.dart';
+import '../prototypes/booking/booking_proto_page.dart';
 import 'shell.dart';
 import 'theme/theme_preview_page.dart';
 
@@ -28,6 +30,16 @@ GoRouter createRouter(AppConfig config) => GoRouter(
           GoRoute(
             path: '/proto/theme',
             builder: (context, state) => const ThemePreviewPage(),
+          ),
+        if (config.showPrototypes)
+          GoRoute(
+            path: '/proto/booking',
+            builder: (context, state) => const BookingProtoPage(),
+          ),
+        if (config.showPrototypes)
+          GoRoute(
+            path: '/proto/booking/list',
+            builder: (context, state) => const BookingListProtoPage(),
           ),
         ],
       ],
