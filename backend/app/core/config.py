@@ -57,6 +57,14 @@ class Settings(BaseSettings):
     rules_qa_embedding_api_key: str | None = None
     rules_qa_embedding_model: str | None = None
     rules_qa_embedding_dim: int = 1536
+    # --- 檔案儲存（影片生產器的素材照片、旁白與影片） ---
+    # fake：存在記憶體（測試用）；local：存在本機資料夾（開發用）；cloud：Azure Blob Storage
+    storage_provider: str = "fake"
+    storage_local_dir: str | None = None
+    # local 時回傳的檔案網址前綴，例如 http://localhost:8000/media
+    storage_public_base_url: str | None = None
+    storage_connection_string: str | None = None
+    storage_container: str | None = None
     # 允許跨來源呼叫 API 的前端網址，逗號分隔。預設是本機 Flutter Web 固定的 port；
     # 部署時必須改成實際的前端網址
     cors_allow_origins: str = "http://localhost:5000"

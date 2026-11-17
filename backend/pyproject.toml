@@ -5,6 +5,7 @@ requires-python = ">=3.13"
 dependencies = [
     "alembic>=1.20.1",
     "azure-ai-documentintelligence>=1.0.2",
+    "azure-storage-blob>=12.31.1",
     "fastapi>=0.162.0",
     "openai>=3.49.0",
     "pgvector>=0.5.1",
