@@ -12,14 +12,15 @@ import 'package:tabletop_hub/app/theme/app_fonts.dart';
 import 'package:tabletop_hub/core/api/api_exception.dart';
 import 'package:tabletop_hub/core/dev/data/dev_user.dart';
 import 'package:tabletop_hub/core/dev/data/dev_users_repository.dart';
-
+import 'package:tabletop_hub/domains/booking/data/booking.dart';
+import 'package:tabletop_hub/domains/booking/data/booking_repository.dart';
+import 'package:tabletop_hub/domains/booking/data/shop.dart';
+import 'package:tabletop_hub/domains/games_advisor/data/advisor_message.dart';
+import 'package:tabletop_hub/domains/games_advisor/data/advisor_repository.dart';
 import 'package:tabletop_hub/domains/groups/data/group.dart';
 import 'package:tabletop_hub/domains/groups/data/group_input.dart';
 import 'package:tabletop_hub/domains/groups/data/groups_repository.dart';
 import 'package:tabletop_hub/domains/groups/state/group_clock.dart';
-
-import 'package:tabletop_hub/domains/games_advisor/data/advisor_message.dart';
-import 'package:tabletop_hub/domains/games_advisor/data/advisor_repository.dart';
 
 import 'package:tabletop_hub/domains/health/data/health_repository.dart';
 import 'package:tabletop_hub/domains/health/data/health_status.dart';
@@ -148,6 +149,85 @@ class RecordingAdapter implements HttpClientAdapter {
   @override
   void close({bool force = false}) {}
 }
+
+// --- booking ---
+
+/// 手寫的 booking repository 假實作（AGENTS.md 7.5，不使用 mock 套件）。
+class FakeBookingRepository implements BookingRepository {
+  FakeBookingRepository({
+    this.shops = const [fakeShopA, fakeShopB],
+    this.shopError,
+    this.mine = const [],
+    this.board = const [],
+  });
+
+  List<Shop> shops;
+  Object? shopError;
+  List<Booking> mine;
+  List<Booking> board;
+  int shopCallCount = 0;
+
+  @override
+  Future<List<Shop>> listShops() async {
+    shopCallCount++;
+    if (shopError != null) throw shopError!;
+    return shops;
+  }
+
+  @override
+  Future<QuoteResult> quote({
+    required String shopId,
+    required int partySize,
+    required String startAt,
+    required String endAt,
+  }) async => QuoteResult(
+    startAt: startAt,
+    endAt: endAt,
+    fee: const Fee(billableHours: '2.00', venueFee: '480.00'),
+    tableCodes: ['T1'],
+  );
+
+  @override
+  Future<Booking> create({
+    required String shopId,
+    required int partySize,
+    required String startAt,
+    required String endAt,
+    String? specialRequests,
+    bool confirmOverlap = false,
+  }) async => Booking(
+    id: 1,
+    reservationCode: 'BKFAKE',
+    shopId: shopId,
+    startAt: startAt,
+    endAt: endAt,
+    partySize: partySize,
+    status: 'confirmed',
+    tableCodes: ['T1'],
+    estimatedFee: const Fee(billableHours: '2.00', venueFee: '480.00'),
+  );
+
+  @override
+  Future<Booking> get(int id) => throw UnimplementedError();
+
+  @override
+  Future<Booking> patch(int id, Map<String, dynamic> patch) =>
+      throw UnimplementedError();
+
+  @override
+  Future<BookingPage> listMine({String? status, String? fromDate, String? toDate}) async =>
+      BookingPage(items: mine, total: mine.length);
+
+  @override
+  Future<BookingPage> listForShop({
+    required String shopId,
+    required String from,
+    required String to,
+  }) async => BookingPage(items: board, total: board.length);
+}
+
+const fakeShopA = Shop(id: 's-a', name: '甲店');
+const fakeShopB = Shop(id: 's-b', name: '乙店');
 
 // --- groups ---
 
