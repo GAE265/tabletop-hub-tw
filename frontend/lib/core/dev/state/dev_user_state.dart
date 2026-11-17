@@ -21,11 +21,8 @@ final selectedDevUserIdProvider = NotifierProvider<SelectedDevUserId, String?>(
   SelectedDevUserId.new,
 );
 
-/// 目前生效的測試帳號；清單未載入、失敗或為空時為 null。
-final currentDevUserProvider = Provider<DevUser?>((ref) {
-  final users = ref.watch(devUsersProvider).value;
-  if (users == null || users.isEmpty) return null;
-  final selectedId = ref.watch(selectedDevUserIdProvider);
+/// 從清單中找出目前生效的測試帳號：選取的那位；沒選或找不到時用清單中的 player。
+DevUser? resolveCurrentDevUser(List<DevUser> users, String? selectedId) {
   for (final user in users) {
     if (user.id == selectedId) return user;
   }
@@ -33,6 +30,13 @@ final currentDevUserProvider = Provider<DevUser?>((ref) {
     if (user.role == 'player') return user;
   }
   return null;
+}
+
+/// 目前生效的測試帳號；清單未載入、失敗或為空時為 null。
+final currentDevUserProvider = Provider<DevUser?>((ref) {
+  final users = ref.watch(devUsersProvider).value;
+  if (users == null || users.isEmpty) return null;
+  return resolveCurrentDevUser(users, ref.watch(selectedDevUserIdProvider));
 });
 
 /// `X-Dev-User` 的值：`<user_uuid>:<role>[:<shop_uuid>]`，shop_staff 才帶店家。
