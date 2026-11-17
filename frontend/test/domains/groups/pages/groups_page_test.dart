@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tabletop_hub/core/api/api_exception.dart';
+import 'package:tabletop_hub/domains/groups/data/group.dart';
 import 'package:tabletop_hub/domains/groups/pages/groups_page.dart';
 
 import '../../../support/fakes.dart';
@@ -167,5 +168,24 @@ void main() {
       expect(find.byKey(const Key('group-form-page')), findsOneWidget);
       expect(find.text('2026/11/14'), findsOneWidget);
     });
+  });
+
+  testWidgets('卡片顯示揪團的多款遊戲', (tester) async {
+    final repo = FakeGroupsRepository(
+      groups: [
+        fakeGroup(
+          id: 'g-games',
+          title: '桌遊之夜',
+          startAt: taipei(11, 14, 18),
+          games: const [
+            GameRef(id: 1, name: '阿瓦隆'),
+            GameRef(id: 3, name: '馬可波羅'),
+          ],
+        ),
+      ],
+    );
+    await pumpGroupsWidget(tester, const GroupsPage(), repo: repo);
+    expect(find.text('阿瓦隆'), findsOneWidget);
+    expect(find.text('馬可波羅'), findsOneWidget);
   });
 }

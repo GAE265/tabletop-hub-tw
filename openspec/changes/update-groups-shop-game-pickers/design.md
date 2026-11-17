@@ -27,7 +27,7 @@
 - 只有一個 migration：建立 `group_games` → 搬移 `game_id` 不為空的資料（position=1）→ 移除 `groups.game_id`。降級反向，取 position 最小的遊戲放回。
 
 **D2 API 契約：`game_ids`／`games`，不相容變更。**
-- 請求：`game_ids: list[int]`，預設空陣列；有重複回 422；有不存在的遊戲回 404 `GAME_NOT_FOUND`，`details.game_ids` 列出不存在的編號，整筆不寫入。
+- 請求：`game_ids: list[int]`，預設空陣列；有重複回 422；有不存在的遊戲回 404 `GROUP_GAME_NOT_FOUND`（沿用既有的錯誤代碼），`details.game_ids` 列出不存在的編號，整筆不寫入。
 - 回應：`games: [{id, name}]`，依 `position` 排序。
 - `PATCH`：帶 `game_ids` 時整份取代（先刪後加，同一個交易）；不帶時不動。
 - 列表查詢：先查出一頁揪團，再用一次查詢取得這些揪團的遊戲（`WHERE group_id IN (...)`），避免 JOIN 造成分頁筆數錯誤或 N+1。
@@ -43,11 +43,12 @@
 - 刪除 `knownShopsProvider`（從當月揪團推出店家的暫時做法）與「或輸入店家 ID」欄位。
 - 前端不 import `booking` domain 的程式；groups 只需要 `id`、`name`，自己定義 DTO。
 
-**D5 前端：可搜尋的遊戲複選。**
-- 用 Flutter 內建的 `Autocomplete` 做搜尋輸入與結果清單，已選的遊戲用 `InputChip`（可以刪除）顯示在下方；不新增套件。
-- `groups/data/` 新增 `GameOption`（`id`、`name`）與 `GroupsRepository.searchGames(q)`；`groups/state/` 的表單資料 `GroupFormData` 改成 `games: List<GameOption>`，送出時轉成 `game_ids`。
-- 搜尋在輸入停止 300 毫秒後才呼叫 API（debounce），避免每打一個字就查一次；結果排除已選的遊戲。
-- 驗證：`validateGroupForm` 移除「遊戲 ID 要是整數」；店家改為檢查有沒有選。
+**D5 前端：遊戲的下拉式選單（可搜尋、可複選）。**
+- 點欄位展開全部遊戲，每款一個 `CheckboxListTile`；清單上方的搜尋框在本機篩選；勾選的遊戲以 `InputChip`（可以刪除）顯示在欄位下方。不新增套件。
+- 遊戲清單一次載入全部（`GroupsRepository.listGames()` 以 `page_size=100` 分頁補齊），因為共用桌遊只有十幾款，在本機篩選比每打一個字就查 API 快，也不需要等待輸入停止。
+- 下拉清單直接展開在欄位下方，不用浮動的 overlay：`Autocomplete`／`DropdownMenu` 的 overlay 在 widget 測試中不好穩定操作，也不支援複選。
+- 2026-11-17 修訂：原本是「輸入關鍵字後查 `GET /api/v1/games?q=`」的搜尋框，使用者要求改成下拉式選單。後端的 `q` 參數保留，給之後遊戲變多時使用。
+- `groups/state/` 的表單資料 `GroupFormData` 存 `games: List<GameRef>`，送出時轉成 `game_ids`；`validateGroupForm` 移除「遊戲 ID 要是整數」，店家改為檢查有沒有選。
 
 **D6 前端：顯示多款遊戲。**
 `Group` DTO 的 `game` 改成 `games`；揪團卡片、詳細頁每款遊戲一個 `PillBadge`。

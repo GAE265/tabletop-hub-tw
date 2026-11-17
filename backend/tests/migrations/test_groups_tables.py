@@ -30,7 +30,9 @@ def migrate(url: str, action: str = "upgrade", revision: str = "head") -> None:
 @pytest.fixture(scope="module")
 def migrated_url() -> str:
     url = recreate_database(Settings().database_url, "groups_tables")
-    migrate(url)
+    # 本檔測 0003 建立的 groups、group_members；0006 起 groups.game_id 改由 group_games
+    # 取代（test_group_games.py），所以停在 0006 之前的版本
+    migrate(url, "upgrade", "0005")
     return url
 
 

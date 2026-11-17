@@ -210,8 +210,11 @@ class FakeBookingRepository implements BookingRepository {
       throw UnimplementedError();
 
   @override
-  Future<BookingPage> listMine({String? status, String? fromDate, String? toDate}) async =>
-      BookingPage(items: mine, total: mine.length);
+  Future<BookingPage> listMine({
+    String? status,
+    String? fromDate,
+    String? toDate,
+  }) async => BookingPage(items: mine, total: mine.length);
 
   @override
   Future<BookingPage> listForShop({
@@ -276,6 +279,7 @@ Group fakeGroup({
   String shopId = 's-shop',
   String shopName = '測試桌遊店',
   String? myStatus,
+  List<GameRef> games = const [],
 }) {
   return Group(
     id: id,
@@ -291,6 +295,7 @@ Group fakeGroup({
     waitlistCount: waitlistCount,
     remainingSlots: capacity - memberCount < 0 ? 0 : capacity - memberCount,
     myStatus: myStatus,
+    games: games,
     createdAt: DateTime.utc(2026, 11, 1),
   );
 }
@@ -307,6 +312,25 @@ class FakeGroupsRepository implements GroupsRepository {
   FakeGroupsRepository({List<Group>? groups}) : groups = groups ?? [];
 
   List<Group> groups;
+
+  /// `GET /api/v1/shops` 的店家。
+  List<ShopRef> shops = const [
+    ShopRef(id: 's-shop', name: '測試桌遊店'),
+    ShopRef(id: 's-other', name: '另一間店'),
+  ];
+
+  /// `GET /api/v1/games` 的遊戲（全部）。
+  List<GameRef> games = const [
+    GameRef(id: 1, name: '阿瓦隆'),
+    GameRef(id: 2, name: '阿不思學院'),
+    GameRef(id: 3, name: '馬可波羅'),
+  ];
+
+  /// 店家清單、遊戲清單丟出的錯誤。
+  Object? shopsError;
+  Object? gamesError;
+  int shopsCalls = 0;
+  int gamesCalls = 0;
   final members = <String, List<GroupMember>>{};
 
   /// list／get 丟出的錯誤。
@@ -354,6 +378,20 @@ class FakeGroupsRepository implements GroupsRepository {
   }
 
   @override
+  Future<List<ShopRef>> listShops() async {
+    shopsCalls++;
+    if (shopsError != null) throw shopsError!;
+    return shops;
+  }
+
+  @override
+  Future<List<GameRef>> listGames() async {
+    gamesCalls++;
+    if (gamesError != null) throw gamesError!;
+    return games;
+  }
+
+  @override
   Future<Group> get(String id) async {
     if (error != null) throw error!;
     return groups.firstWhere(
@@ -382,6 +420,9 @@ class FakeGroupsRepository implements GroupsRepository {
       fee: input.fee,
       shopId: input.shopId,
       myStatus: 'member',
+      games: [
+        for (final id in input.gameIds) games.firstWhere((g) => g.id == id),
+      ],
     );
     groups.add(group);
     return group;

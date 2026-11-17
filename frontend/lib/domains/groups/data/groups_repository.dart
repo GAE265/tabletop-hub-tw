@@ -30,6 +30,12 @@ abstract interface class GroupsRepository {
 
   /// 退出，或由開團主移除成員。
   Future<void> removeMember(String groupId, String userId);
+
+  /// 開團表單的店家選項（`GET /api/v1/shops`，booking 的 API）。
+  Future<List<ShopRef>> listShops();
+
+  /// 全部遊戲（`GET /api/v1/games`，依名稱排序；超過一頁時自動補齊）。
+  Future<List<GameRef>> listGames();
 }
 
 class HttpGroupsRepository implements GroupsRepository {
@@ -114,6 +120,34 @@ class HttpGroupsRepository implements GroupsRepository {
   @override
   Future<void> removeMember(String groupId, String userId) =>
       _call(() => _dio.delete<void>('$_base/$groupId/members/$userId'));
+
+  @override
+  Future<List<ShopRef>> listShops() => _call(() async {
+    final response = await _dio.get<Map<String, dynamic>>('/api/v1/shops');
+    final items = response.data!['items'] as List<dynamic>;
+    return [
+      for (final item in items) ShopRef.fromJson(item as Map<String, dynamic>),
+    ];
+  });
+
+  @override
+  Future<List<GameRef>> listGames() => _call(() async {
+    const pageSize = 100;
+    final games = <GameRef>[];
+    for (var page = 1; ; page++) {
+      final response = await _dio.get<Map<String, dynamic>>(
+        '/api/v1/games',
+        queryParameters: {'page': page, 'page_size': pageSize},
+      );
+      final items = response.data!['items'] as List<dynamic>;
+      games.addAll([
+        for (final item in items)
+          GameRef.fromJson(item as Map<String, dynamic>),
+      ]);
+      final total = response.data!['total'] as int;
+      if (items.isEmpty || games.length >= total) return games;
+    }
+  });
 }
 
 final groupsRepositoryProvider = Provider<GroupsRepository>(
