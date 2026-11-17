@@ -51,6 +51,12 @@ class Settings(BaseSettings):
     ocr_vision_model: str | None = None
     # 逐頁轉錄單次約 30 秒，加上上傳大圖，所以比 llm_timeout_seconds 長
     ocr_vision_timeout_seconds: float = 120
+    # --- rules_qa 自己的 embedding；沒填不退回任何全域設定 ---
+    rules_qa_embedding_provider: str = "fake"
+    rules_qa_embedding_endpoint: str | None = None
+    rules_qa_embedding_api_key: str | None = None
+    rules_qa_embedding_model: str | None = None
+    rules_qa_embedding_dim: int = 1536
     # 允許跨來源呼叫 API 的前端網址，逗號分隔。預設是本機 Flutter Web 固定的 port；
     # 部署時必須改成實際的前端網址
     cors_allow_origins: str = "http://localhost:5000"

@@ -83,3 +83,12 @@ class ManualPagesService:
         self._check_game(games_id)
         items = [ManualPageItem.model_validate(row) for row in self.pages.list_pages(games_id)]
         return ManualPageListOut(items=items, total=len(items), ocr_provider=self.ocr_provider)
+
+
+def read_manual_pages(pages: ManualPageRepository, games_id: int) -> list[tuple[int, str]]:
+    """某款遊戲的規則書頁面（頁碼、Markdown），依頁碼排序；沒有頁面時是空清單。
+
+    給後端指令與其他 domain 的 service 使用（例如 rules_qa 建立檢索索引），不檢查使用者、
+    不需要視覺模型，也不開放成 API（openspec change add-rules-qa design.md D4）。
+    """
+    return [(int(row["page"]), str(row["content"])) for row in pages.list_pages(games_id)]

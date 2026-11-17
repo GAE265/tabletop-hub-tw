@@ -13,20 +13,20 @@
     - embedding 設定瑋鋐沒有表示意見，照 D5 使用 `rules_qa` 自己一組 `RULES_QA_EMBEDDING_*`。
 - [x] 1.3 確認影片放在哪裡（design.md Open Questions 1），驗證：結論記在本檔；若影片在 YouTube，先更新 design.md D9 再開始 MR 2
   - 1.3 結論（2026-11-17）：組內自製的教學影片放在 YouTube，前端用 `youtube_player_iframe` 內嵌播放（design.md D9 已更新）。影片生產器的 mp4 存在我們自己的雲端儲存，播放器依 `source` 自動切換，mp4 的播放在 `add-rules-video-maker` 加上。
-- [ ] 1.4 等 `feature/ocr`（`games_manual`、`rules_ingest` service）合併到 `dev`，驗證：`dev` 上有 `backend/app/domains/rules_ingest/`
+- [x] 1.4 等 `feature/ocr`（`games_manual`、`rules_ingest` service）合併到 `dev`，驗證：`dev` 上有 `backend/app/domains/rules_ingest/`
   - 註記：瑋鋐的 `rules_ingest` 建在訂位（`booking`）分支上，會跟訂位一起發 PR，合併時間跟著訂位。
 
 ## 2. MR 1：後端 API、索引指令與 migration（@ 立倫、瑋鋐）
 
 - [ ] 2.1 永傑開 Draft MR 1，AI 從 `specs/rules-qa` 整理情境表格供貼上，驗證：Draft MR 已存在，並 @ 立倫、瑋鋐
-- [ ] 2.2 撰寫 migration 測試（`tests/migrations/test_rules_qa_tables.py`）：兩張表存在、外鍵沒有 cascade、`page >= 1` 的 CHECK、`rules_qa_videos` 一款遊戲一筆、`source` 的 CHECK 與 `youtube` 時 `youtube_id` 必填、可以 downgrade，驗證：測試存在且失敗，沒有使用 skip 或 xfail
-- [ ] 2.3 撰寫切段的單元測試（`tests/rules_qa/test_chunking.py`）：段落不跨頁、合併到上限、超長段落切開、空白頁略過，驗證：測試存在且失敗
-- [ ] 2.4 撰寫 service 單元測試（`tests/rules_qa/test_service.py`，使用 `FakeLLMProvider`、`FakeEmbeddingProvider`、`FakeRulesQaRepository`、`FakeManualPagesSource`）：教學清單、教學內容、設定影片與取代、YouTube 網址解析（各種格式與不合法的網址）、建立索引與重建、問答（出處對回頁碼、同頁合併、丟棄來源外出處、找不到答案、只檢索該遊戲、追問帶 `previous_response_id`、用語改寫一次與拒絕、沒有段落時不呼叫 LLM、錯誤對應）、設定影片的權限，驗證：測試存在且失敗
-- [ ] 2.5 撰寫 API 測試（`tests/rules_qa/test_api.py`，連 `_test` 資料庫，使用 `as_player`、`as_shop_staff`、`as_admin` 與 `jwt_client`）：涵蓋 `specs/rules-qa` 每個 API 情境的狀態碼、錯誤代碼與回應格式，驗證：測試存在且失敗，每個端點至少有成功與失敗案例各一
-- [ ] 2.6 依 1.2 的結論，取得 `rules_ingest` 的頁面讀取方法；若由永傑代為新增，在 MR 說明 @ 瑋鋐，驗證：`rules_qa` 沒有 import `rules_ingest` 的 model 或 repository
-- [ ] 2.7 新增 `RULES_QA_EMBEDDING_*` 設定（`core/config.py`、`.env.example` 只寫欄位名與說明），驗證：沒填時使用 fake，`uv run pytest` 不需要金鑰
-- [ ] 2.8 新增 `app/domains/rules_qa/models.py` 與 migration（版本號依當時 `dev` 的最新 migration 決定），驗證：2.2 的測試全部通過
-- [ ] 2.9 實作 `chunking.py`、`repository.py`（pgvector cosine 檢索）、`prompts.py`、`service.py`、`schemas.py`、`router.py`、索引指令，在 `main.py` 掛載 router 並建立 embedding provider，驗證：2.3–2.5 的測試全部通過，`/docs` 列出 4 個 rules_qa 端點
+- [x] 2.2 撰寫 migration 測試（`tests/migrations/test_rules_qa_tables.py`）：兩張表存在、外鍵沒有 cascade、`page >= 1` 的 CHECK、`rules_qa_videos` 一款遊戲一筆、`source` 的 CHECK 與 `youtube` 時 `youtube_id` 必填、可以 downgrade，驗證：測試存在且失敗，沒有使用 skip 或 xfail
+- [x] 2.3 撰寫切段的單元測試（`tests/rules_qa/test_chunking.py`）：段落不跨頁、合併到上限、超長段落切開、空白頁略過，驗證：測試存在且失敗
+- [x] 2.4 撰寫 service 單元測試（`tests/rules_qa/test_service.py`，使用 `FakeLLMProvider`、`FakeEmbeddingProvider`、`FakeRulesQaRepository`、`FakeManualPagesSource`）：教學清單、教學內容、設定影片與取代、YouTube 網址解析（各種格式與不合法的網址）、建立索引與重建、問答（出處對回頁碼、同頁合併、丟棄來源外出處、找不到答案、只檢索該遊戲、追問帶 `previous_response_id`、用語改寫一次與拒絕、沒有段落時不呼叫 LLM、錯誤對應）、設定影片的權限，驗證：測試存在且失敗
+- [x] 2.5 撰寫 API 測試（`tests/rules_qa/test_api.py`，連 `_test` 資料庫，使用 `as_player`、`as_shop_staff`、`as_admin` 與 `jwt_client`）：涵蓋 `specs/rules-qa` 每個 API 情境的狀態碼、錯誤代碼與回應格式，驗證：測試存在且失敗，每個端點至少有成功與失敗案例各一
+- [x] 2.6 依 1.2 的結論，取得 `rules_ingest` 的頁面讀取方法；若由永傑代為新增，在 MR 說明 @ 瑋鋐，驗證：`rules_qa` 沒有 import `rules_ingest` 的 model 或 repository
+- [x] 2.7 新增 `RULES_QA_EMBEDDING_*` 設定（`core/config.py`、`.env.example` 只寫欄位名與說明），驗證：沒填時使用 fake，`uv run pytest` 不需要金鑰
+- [x] 2.8 新增 `app/domains/rules_qa/models.py` 與 migration（版本號依當時 `dev` 的最新 migration 決定），驗證：2.2 的測試全部通過
+- [x] 2.9 實作 `chunking.py`、`repository.py`（pgvector cosine 檢索）、`prompts.py`、`service.py`、`schemas.py`、`router.py`、索引指令，在 `main.py` 掛載 router 並建立 embedding provider，驗證：2.3–2.5 的測試全部通過，`/docs` 列出 4 個 rules_qa 端點
 - [ ] 2.10 自我檢查：在 `backend/` 跑 `uv run ruff check .`、`uv run ruff format --check .`、`uv run pytest`，驗證：全部通過、CI 全綠；MR 標明有改契約、含 migration，再改成 Ready for review
 
 ## 3. MR 2：前端 data、state、參考畫面與交接說明（於 MR 1 合併後從 dev 開分支）
