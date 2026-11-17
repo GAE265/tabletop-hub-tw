@@ -262,7 +262,8 @@ void main() {
     testWidgets('送出鈕：可以按時是主色底、白色圖示', (tester) async {
       await pumpPage(tester);
       await tester.enterText(input, '我們 4 個人');
-      await tester.pump();
+      // 按鈕從停用變成可以按後，下一個畫面才換成可以按的顏色
+      await tester.pumpAndSettle();
       final scheme = Theme.of(tester.element(sendButton)).colorScheme;
       final iconColor = IconTheme.of(
         tester.element(find.byIcon(Icons.send)),

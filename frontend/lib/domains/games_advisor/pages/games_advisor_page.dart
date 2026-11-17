@@ -434,10 +434,12 @@ class _Composer extends StatelessWidget {
                     child: IconButton.filled(
                       key: const Key('advisor-send'),
                       // 主題的圖示按鈕是深色圖示；主色底的送出鈕要用白色
-                      style: IconButton.styleFrom(
-                        foregroundColor: theme.colorScheme.onPrimary,
-                        disabledForegroundColor:
-                            theme.colorScheme.onSurfaceVariant,
+                      style: ButtonStyle(
+                        iconColor: WidgetStateProperty.resolveWith(
+                          (states) => states.contains(WidgetState.disabled)
+                              ? theme.colorScheme.onSurfaceVariant
+                              : theme.colorScheme.onPrimary,
+                        ),
                       ),
                       tooltip: '送出',
                       onPressed: canSend ? onSend : null,
