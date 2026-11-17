@@ -42,7 +42,7 @@ String bookingErrorText(String message) =>
   'seated' => ('已入座', PillTone.duration),
   'completed' => ('已完成', PillTone.neutral),
   'cancelled' => ('已取消', PillTone.neutral),
-  'no_show' => ('未出席', PillTone.accent),
+  'no_show' => ('未到店', PillTone.accent),
   _ => (status, PillTone.neutral),
 };
 
