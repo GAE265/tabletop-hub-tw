@@ -105,6 +105,28 @@ void main() {
       expect(style.backgroundColor!.resolve({}), AppColors.primary);
       expect(style.foregroundColor!.resolve({}), Colors.white);
     });
+
+    const disabled = {WidgetState.disabled};
+
+    test('外框按鈕：可以按時是焦糖橘，停用時文字與外框變成暖灰', () {
+      final style = theme.outlinedButtonTheme.style!;
+      expect(style.foregroundColor!.resolve({}), AppColors.primaryText);
+      expect(style.side!.resolve({})!.color, AppColors.primary);
+      expect(style.foregroundColor!.resolve(disabled), AppColors.inkMuted);
+      expect(style.side!.resolve(disabled)!.color, AppColors.border);
+    });
+
+    test('文字按鈕：可以按時是焦糖橘，停用時文字變成暖灰', () {
+      final style = theme.textButtonTheme.style!;
+      expect(style.foregroundColor!.resolve({}), AppColors.primaryText);
+      expect(style.foregroundColor!.resolve(disabled), AppColors.inkMuted);
+    });
+
+    test('圖示按鈕：停用時變成暖灰', () {
+      final style = theme.iconButtonTheme.style!;
+      expect(style.foregroundColor!.resolve({}), AppColors.ink);
+      expect(style.foregroundColor!.resolve(disabled), AppColors.inkMuted);
+    });
   });
 
   group('字型', () {
