@@ -259,6 +259,17 @@ void main() {
   });
 
   group('輸入框', () {
+    testWidgets('送出鈕：可以按時是主色底、白色圖示', (tester) async {
+      await pumpPage(tester);
+      await tester.enterText(input, '我們 4 個人');
+      await tester.pump();
+      final scheme = Theme.of(tester.element(sendButton)).colorScheme;
+      final iconColor = IconTheme.of(
+        tester.element(find.byIcon(Icons.send)),
+      ).color;
+      expect(iconColor, scheme.onPrimary);
+    });
+
     testWidgets('顯示字數；空白時不能送出', (tester) async {
       await pumpPage(tester);
       expect(enabled(tester, sendButton), isFalse);
