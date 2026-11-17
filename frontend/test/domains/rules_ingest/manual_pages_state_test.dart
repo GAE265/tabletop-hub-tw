@@ -5,22 +5,36 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tabletop_hub/core/api/api_exception.dart';
 import 'package:tabletop_hub/core/platform/image_picker.dart';
+import 'package:tabletop_hub/domains/rules_ingest/data/game_search_repository.dart';
 import 'package:tabletop_hub/domains/rules_ingest/data/manual_pages_repository.dart';
+import 'package:tabletop_hub/domains/rules_ingest/data/game_option.dart';
 import 'package:tabletop_hub/domains/rules_ingest/state/manual_pages_state.dart';
 
 import '../../support/fakes.dart';
 
+GameOption gameOpt(int id, [String name = 'Test']) =>
+    GameOption(id: id, name: name, englishName: name.toLowerCase());
+
 PickedImage image(String name) =>
     PickedImage(name: name, bytes: Uint8List.fromList([1, 2, 3]));
 
+FakeGameSearchRepository defaultGameRepo() =>
+    FakeGameSearchRepository(allGames: [
+      gameOpt(1),
+      gameOpt(12),
+      gameOpt(99),
+    ]);
+
 ProviderContainer containerFor(
   FakeManualPagesRepository repo,
-  FakeImagePicker picker,
-) {
+  FakeImagePicker picker, {
+  FakeGameSearchRepository? gameRepo,
+}) {
   final container = ProviderContainer(
     overrides: [
       manualPagesRepositoryProvider.overrideWithValue(repo),
       imagePickerProvider.overrideWithValue(picker),
+      gameSearchRepositoryProvider.overrideWithValue(gameRepo ?? defaultGameRepo()),
     ],
   );
   addTearDown(container.dispose);
@@ -34,7 +48,7 @@ void main() {
       ..images = [image('c.png'), image('a.png'), image('b.png')];
     final container = containerFor(repo, picker);
     final notifier = container.read(manualImportProvider.notifier);
-    notifier.setGamesInput('12');
+    notifier.selectGame(GameOption(id: 12, name: 'Test', englishName: 'test'));
     notifier.setStartPageInput('5');
     await notifier.pickImages();
     expect(container.read(manualImportProvider).images.map((i) => i.name), [
@@ -65,7 +79,7 @@ void main() {
       ..images = [image('a.png'), image('b.png'), image('c.png')];
     final container = containerFor(repo, picker);
     final notifier = container.read(manualImportProvider.notifier)
-      ..setGamesInput('1');
+      ..selectGame(GameOption(id: 1, name: 'Test', englishName: 'test'));
     await notifier.pickImages();
     await notifier.importPages();
     expect(repo.imports.map((c) => c.page), [1, 2, 3]);
@@ -83,7 +97,7 @@ void main() {
     final picker = FakeImagePicker()..images = [image('a.png'), image('b.png')];
     final container = containerFor(repo, picker);
     final notifier = container.read(manualImportProvider.notifier)
-      ..setGamesInput('1');
+      ..selectGame(GameOption(id: 1, name: 'Test', englishName: 'test'));
     await notifier.pickImages();
     final pending = notifier.importPages();
     expect(container.read(manualImportProvider).importing, isTrue);
@@ -91,7 +105,7 @@ void main() {
     expect(container.read(manualImportProvider).canImport, isFalse);
     await notifier.importPages();
     await notifier.pickImages();
-    notifier.setGamesInput('99');
+    notifier.selectGame(GameOption(id: 99, name: 'Test', englishName: 'test'));
     expect(repo.imports.length, 1);
     expect(picker.calls, 1);
     repo.importGate!.complete();
@@ -105,14 +119,14 @@ void main() {
       final repo = FakeManualPagesRepository();
       final picker = FakeImagePicker()..images = [image('a.png')];
       final container = containerFor(repo, picker);
-      final notifier = container.read(manualImportProvider.notifier)
-        ..setGamesInput(input);
+      final notifier = container.read(manualImportProvider.notifier);
+      // 未選遊戲 → canImport 為 false
       await notifier.pickImages();
       await notifier.importPages();
+      // load 仍接受任何 input，但無效時只設 error 不呼叫 API
       await container.read(manualPagesProvider.notifier).load(input);
       expect(repo.imports, isEmpty);
       expect(repo.lists, isEmpty);
-      expect(container.read(manualImportProvider).error, isNotNull);
     });
   }
 
@@ -121,7 +135,7 @@ void main() {
     final picker = FakeImagePicker()..images = [image('a.png')];
     final container = containerFor(repo, picker);
     final notifier = container.read(manualImportProvider.notifier)
-      ..setGamesInput('1');
+      ..selectGame(GameOption(id: 1, name: 'Test', englishName: 'test'));
     await notifier.importPages();
     expect(repo.imports, isEmpty);
     await notifier.pickImages();

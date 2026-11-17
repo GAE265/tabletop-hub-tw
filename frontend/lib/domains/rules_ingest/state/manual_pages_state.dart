@@ -2,6 +2,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/api/api_exception.dart';
 import '../../../core/platform/image_picker.dart';
+import '../data/game_option.dart';
+import '../data/game_search_repository.dart';
 import '../data/manual_page.dart';
 import '../data/manual_pages_repository.dart';
 
@@ -88,7 +90,10 @@ class PageImportResult {
 
 class ManualImportState {
   const ManualImportState({
-    this.gamesInput = '',
+    this.gamesQuery = '',
+    this.gamesId,
+    this.selectedGame,
+    this.allGames = const [],
     this.startPageInput = '1',
     this.images = const [],
     this.results = const [],
@@ -96,8 +101,12 @@ class ManualImportState {
     this.picking = false,
     this.current = 0,
     this.error,
+    this.gamesLoading = false,
   });
-  final String gamesInput;
+  final String gamesQuery;
+  final int? gamesId;
+  final GameOption? selectedGame;
+  final List<GameOption> allGames;
   final String startPageInput;
   final List<PickedImage> images;
   final List<PageImportResult> results;
@@ -105,15 +114,30 @@ class ManualImportState {
   final bool picking;
   final int current;
   final String? error;
+  final bool gamesLoading;
 
+  /// 依目前輸入字串從 allGames 裡過濾，不分大小寫比對中英文名稱。
+  /// 輸入空白時顯示全部。
+  List<GameOption> get filteredOptions {
+    final q = gamesQuery.trim().toLowerCase();
+    if (q.isEmpty) return allGames;
+    return allGames.where((g) =>
+        g.name.toLowerCase().contains(q) ||
+        g.englishName.toLowerCase().contains(q)).toList();
+  }
+
+  /// 輸入的名稱已對應到一款桌遊（id 有值）才算有效。
   bool get validInput =>
-      positiveInteger(gamesInput) != null &&
-      positiveInteger(startPageInput) != null;
+      selectedGame != null && positiveInteger(startPageInput) != null;
   bool get canImport =>
       validInput && images.isNotEmpty && !importing && !picking;
 
   ManualImportState copyWith({
-    String? gamesInput,
+    String? gamesQuery,
+    int? gamesId,
+    GameOption? selectedGame,
+    bool clearSelectedGame = false,
+    List<GameOption>? allGames,
     String? startPageInput,
     List<PickedImage>? images,
     List<PageImportResult>? results,
@@ -121,8 +145,12 @@ class ManualImportState {
     bool? picking,
     int? current,
     String? error,
+    bool? gamesLoading,
   }) => ManualImportState(
-    gamesInput: gamesInput ?? this.gamesInput,
+    gamesQuery: gamesQuery ?? this.gamesQuery,
+    gamesId: clearSelectedGame ? null : (gamesId ?? this.gamesId),
+    selectedGame: clearSelectedGame ? null : (selectedGame ?? this.selectedGame),
+    allGames: allGames ?? this.allGames,
     startPageInput: startPageInput ?? this.startPageInput,
     images: images ?? this.images,
     results: results ?? this.results,
@@ -130,20 +158,49 @@ class ManualImportState {
     picking: picking ?? this.picking,
     current: current ?? this.current,
     error: error,
+    gamesLoading: gamesLoading ?? this.gamesLoading,
   );
 }
 
 class ManualImportNotifier extends Notifier<ManualImportState> {
   @override
-  ManualImportState build() => const ManualImportState();
+  ManualImportState build() {
+    Future.microtask(_loadAllGames);
+    return const ManualImportState();
+  }
 
-  void setGamesInput(String value) {
+  Future<void> _loadAllGames() async {
+    state = state.copyWith(gamesLoading: true);
+    try {
+      final allGames = await ref.read(gameSearchRepositoryProvider).listAll();
+      state = state.copyWith(allGames: allGames, gamesLoading: false);
+    } catch (error) {
+      state = state.copyWith(
+        allGames: const [],
+        gamesLoading: false,
+        error: operationError(error),
+      );
+    }
+  }
+
+  /// 使用者打字時更新搜尋字串，filteredOptions 會自動從 allGames 過濾。
+  void setGamesQuery(String value) {
     if (state.importing || state.picking) return;
     state = state.copyWith(
-      gamesInput: value,
-      error: value.isNotEmpty && positiveInteger(value) == null
-          ? '桌遊編號必須是正整數'
-          : null,
+      gamesQuery: value,
+      clearSelectedGame: true,
+      error: null,
+    );
+  }
+
+  /// 從下拉選單選定一款桌遊，之後匯入都寫到這個 games_id。
+  void selectGame(GameOption game) {
+    if (state.importing || state.picking) return;
+    state = state.copyWith(
+      gamesQuery: game.name,
+      gamesId: game.id,
+      selectedGame: game,
+      error: null,
     );
   }
 
@@ -153,6 +210,20 @@ class ManualImportNotifier extends Notifier<ManualImportState> {
       startPageInput: value,
       error: positiveInteger(value) == null ? '起始頁碼必須大於或等於 1' : null,
     );
+  }
+
+  void reorderImages(int oldIndex, int newIndex) {
+    if (state.importing || state.picking) return;
+    final images = [...state.images];
+    final item = images.removeAt(oldIndex);
+    images.insert(newIndex.clamp(0, images.length - 1), item);
+    state = state.copyWith(images: List.unmodifiable(images));
+  }
+
+  void removeImage(int index) {
+    if (state.importing || state.picking) return;
+    final images = [...state.images]..removeAt(index);
+    state = state.copyWith(images: List.unmodifiable(images));
   }
 
   Future<void> pickImages() async {
@@ -178,10 +249,10 @@ class ManualImportNotifier extends Notifier<ManualImportState> {
   Future<void> importPages() async {
     if (state.importing || state.picking) return;
     if (!state.canImport) {
-      state = state.copyWith(error: '請輸入正整數桌遊編號、起始頁碼並選擇圖片');
+      state = state.copyWith(error: '請選擇一款桌遊、起始頁碼並選擇圖片');
       return;
     }
-    final gamesId = positiveInteger(state.gamesInput)!;
+    final gamesId = state.gamesId!;
     final startPage = positiveInteger(state.startPageInput)!;
     final images = state.images;
     // 整批沿用同一個 repository，避免匯入途中更換依賴。

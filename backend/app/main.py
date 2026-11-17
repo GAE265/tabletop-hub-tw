@@ -9,6 +9,7 @@ from sqlalchemy.orm import sessionmaker
 from app.core.config import Settings, get_settings
 from app.core.db import create_db_engine
 from app.core.errors import register_error_handlers
+from app.core.games.router import router as games_router
 from app.domains.health.router import router as health_router
 from app.domains.rules_ingest.router import router as rules_ingest_router
 from app.integrations.embedding import EmbeddingConfig, get_embedding_provider
@@ -53,6 +54,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
     register_error_handlers(app)
     app.include_router(health_router, prefix=API_PREFIX)
+    app.include_router(games_router, prefix=API_PREFIX)
     app.include_router(rules_ingest_router, prefix=API_PREFIX)
 
     if settings.auth_mode == "dev":

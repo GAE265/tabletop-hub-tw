@@ -4,6 +4,8 @@ import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:tabletop_hub/core/platform/image_picker.dart';
 import 'package:tabletop_hub/domains/rules_ingest/data/manual_page.dart';
+import 'package:tabletop_hub/domains/rules_ingest/data/game_option.dart';
+import 'package:tabletop_hub/domains/rules_ingest/data/game_search_repository.dart';
 import 'package:tabletop_hub/domains/rules_ingest/data/manual_pages_repository.dart';
 import 'package:tabletop_hub/core/dev/data/dev_user.dart';
 import 'package:tabletop_hub/core/dev/data/dev_users_repository.dart';
@@ -84,6 +86,30 @@ class FakeImagePicker implements ImagePicker {
     calls++;
     if (error != null) throw error!;
     return images;
+  }
+}
+
+class FakeGameSearchRepository implements GameSearchRepository {
+  List<GameOption> allGames;
+  Object? error;
+
+  FakeGameSearchRepository({this.allGames = const [], this.error});
+
+  int searchCalls = 0;
+  int listAllCalls = 0;
+
+  @override
+  Future<List<GameOption>> search(String name) async {
+    searchCalls++;
+    if (error != null) throw error!;
+    return allGames;
+  }
+
+  @override
+  Future<List<GameOption>> listAll() async {
+    listAllCalls++;
+    if (error != null) throw error!;
+    return allGames;
   }
 }
 
