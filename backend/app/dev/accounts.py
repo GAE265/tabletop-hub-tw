@@ -20,12 +20,14 @@ class TestAccount:
     display_name: str
     role: str
     shop_id: UUID | None
+    # 假電話：訂位要求使用者有電話（BOOKING_PHONE_REQUIRED）；每個帳號不同，避免觸發同電話重疊規則
+    phone: str
 
 
 def get_test_accounts(settings: Settings) -> list[TestAccount]:
     """player 的 UUID 取自設定 DEV_DEFAULT_USER_ID，其餘固定在這裡。"""
     return [
-        TestAccount(settings.dev_default_user_id, "測試玩家", "player", None),
-        TestAccount(SHOP_STAFF_ID, "測試店家人員", "shop_staff", TEST_SHOP_ID),
-        TestAccount(ADMIN_ID, "測試管理員", "admin", None),
+        TestAccount(settings.dev_default_user_id, "測試玩家", "player", None, "0900000001"),
+        TestAccount(SHOP_STAFF_ID, "測試店家人員", "shop_staff", TEST_SHOP_ID, "0900000002"),
+        TestAccount(ADMIN_ID, "測試管理員", "admin", None, "0900000003"),
     ]

@@ -50,3 +50,33 @@ def test_seeded_player_is_the_default_player(
     with db.connect() as conn:
         player_id = conn.scalar(text("SELECT id::text FROM auth_users WHERE role = 'player'"))
     assert player_id == str(Settings(_env_file=None, database_url="x").dev_default_user_id)
+
+
+def phones(engine: Engine) -> dict[str, str | None]:
+    with engine.connect() as conn:
+        rows = conn.execute(text("SELECT role, phone FROM auth_users")).all()
+    return {role: phone for role, phone in rows}
+
+
+def test_accounts_have_distinct_fake_phones(
+    db: Engine, run_seed: Callable[..., CompletedProcess[str]]
+) -> None:
+    """訂位要求使用者有電話（BOOKING_PHONE_REQUIRED），測試帳號都要有，且彼此不同。"""
+    assert run_seed().returncode == 0
+    values = list(phones(db).values())
+    assert all(values), values
+    assert len(set(values)) == 3
+
+
+def test_rerun_fills_missing_phone_but_keeps_existing_one(
+    db: Engine, run_seed: Callable[..., CompletedProcess[str]]
+) -> None:
+    """已經建立過帳號的資料庫，重跑 seed 會補上空的電話，但不覆蓋已經填好的電話。"""
+    assert run_seed().returncode == 0
+    with db.begin() as conn:
+        conn.execute(text("UPDATE auth_users SET phone = NULL WHERE role = 'player'"))
+        conn.execute(text("UPDATE auth_users SET phone = '0911222333' WHERE role = 'admin'"))
+    assert run_seed().returncode == 0
+    result = phones(db)
+    assert result["player"]
+    assert result["admin"] == "0911222333"
