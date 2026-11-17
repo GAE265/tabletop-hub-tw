@@ -46,6 +46,12 @@ class _TemporaryNav extends StatelessWidget {
             icon: const Icon(Icons.groups_outlined),
             label: const Text('揪團'),
           ),
+          TextButton.icon(
+            key: const Key('shell-nav-advisor'),
+            onPressed: () => context.go('/games-advisor'),
+            icon: const Icon(Icons.casino_outlined),
+            label: const Text('推薦'),
+          ),
         ],
       ),
     );
