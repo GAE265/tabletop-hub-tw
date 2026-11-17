@@ -67,6 +67,13 @@ ThemeData buildAppTheme(AppFonts fonts) {
     textStyle: WidgetStatePropertyAll(buttonText),
   );
 
+  // 停用時一律改成暖灰，看得出來不能按
+  WidgetStateProperty<Color> enabledOr(Color color) =>
+      WidgetStateProperty.resolveWith(
+        (states) =>
+            states.contains(WidgetState.disabled) ? AppColors.inkMuted : color,
+      );
+
   final input = OutlineInputBorder(
     borderRadius: BorderRadius.circular(AppRadius.button),
     borderSide: const BorderSide(color: AppColors.border),
@@ -106,9 +113,14 @@ ThemeData buildAppTheme(AppFonts fonts) {
     elevatedButtonTheme: ElevatedButtonThemeData(style: primaryButton),
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: ButtonStyle(
-        foregroundColor: const WidgetStatePropertyAll(AppColors.primaryText),
-        side: const WidgetStatePropertyAll(
-          BorderSide(color: AppColors.primary, width: 1.5),
+        foregroundColor: enabledOr(AppColors.primaryText),
+        side: WidgetStateProperty.resolveWith(
+          (states) => BorderSide(
+            color: states.contains(WidgetState.disabled)
+                ? AppColors.border
+                : AppColors.primary,
+            width: 1.5,
+          ),
         ),
         minimumSize: const WidgetStatePropertyAll(buttonMinSize),
         padding: const WidgetStatePropertyAll(buttonPadding),
@@ -118,7 +130,7 @@ ThemeData buildAppTheme(AppFonts fonts) {
     ),
     textButtonTheme: TextButtonThemeData(
       style: ButtonStyle(
-        foregroundColor: const WidgetStatePropertyAll(AppColors.primaryText),
+        foregroundColor: enabledOr(AppColors.primaryText),
         minimumSize: const WidgetStatePropertyAll(buttonMinSize),
         padding: const WidgetStatePropertyAll(
           EdgeInsets.symmetric(horizontal: AppSpacing.medium),
@@ -127,10 +139,10 @@ ThemeData buildAppTheme(AppFonts fonts) {
         textStyle: WidgetStatePropertyAll(buttonText),
       ),
     ),
-    iconButtonTheme: const IconButtonThemeData(
+    iconButtonTheme: IconButtonThemeData(
       style: ButtonStyle(
-        foregroundColor: WidgetStatePropertyAll(AppColors.ink),
-        minimumSize: WidgetStatePropertyAll(
+        foregroundColor: enabledOr(AppColors.ink),
+        minimumSize: const WidgetStatePropertyAll(
           Size.square(AppSizes.minTouchTarget),
         ),
       ),

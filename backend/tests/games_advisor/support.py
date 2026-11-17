@@ -25,8 +25,9 @@ GAME_COLUMNS = [
     "weight",
     "categories",
     "mechanics",
+    "result_type",
 ]
-# games.json 的一款：11 個資料表欄位加上 types
+# games.json 的一款：12 個資料表欄位加上 types
 GAME_FIELDS = [*GAME_COLUMNS, "types"]
 
 _TYPES = {1: ["family"], 2: ["party", "family"], 3: [], 4: ["strategy"], 5: ["thematic", "war"]}
@@ -55,6 +56,7 @@ def make_game(number: int, **overrides: Any) -> dict[str, Any]:
         "weight": 1 + number * 0.5,
         "categories": [f"Category {number}", "Card Game"],
         "mechanics": [f"Mechanic {number}"],
+        "result_type": None,
         "types": list(_TYPES[number]),
     }
     game.update(overrides)
@@ -62,12 +64,12 @@ def make_game(number: int, **overrides: Any) -> dict[str, Any]:
 
 
 def exported(number: int, game_id: int, **overrides: Any) -> dict[str, Any]:
-    """匯出檔的一款：games.json 的 12 個欄位加上 id。"""
+    """匯出檔的一款：games.json 的 13 個欄位加上 id。"""
     return {"id": game_id, **make_game(number, **overrides)}
 
 
 def game_columns(game: dict[str, Any]) -> dict[str, Any]:
-    """只留 games 資料表的 11 個欄位（不含 id、types）。"""
+    """只留 games 資料表的 12 個欄位（不含 id、types）。"""
     return {column: game[column] for column in GAME_COLUMNS}
 
 
@@ -104,7 +106,7 @@ def _connect(db: Engine | Connection) -> Iterator[Connection]:
 
 
 def read_games(db: Engine | Connection) -> list[dict[str, Any]]:
-    """資料庫裡的全部桌遊，照 id 排；每款是 id、11 個欄位與 types（照代碼排序）。"""
+    """資料庫裡的全部桌遊，照 id 排；每款是 id、12 個欄位與 types（照代碼排序）。"""
     sql = text(
         f"SELECT g.id, {', '.join('g.' + column for column in GAME_COLUMNS)}, "
         "COALESCE(array_agg(t.code ORDER BY t.code) FILTER (WHERE t.code IS NOT NULL), '{}') "

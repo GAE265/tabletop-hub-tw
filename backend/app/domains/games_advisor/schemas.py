@@ -23,6 +23,7 @@ from pydantic import (
     model_validator,
 )
 
+from app.core.games.models import ResultType
 from app.domains.games_advisor.constants import TAG_VOCABULARY_MAX_TAGS
 
 
@@ -44,9 +45,10 @@ UniqueNames = Annotated[list[NonBlank], AfterValidator(_unique)]
 
 
 class GameData(BaseModel):
-    """games.json 的一款桌遊：12 個欄位都必填，不接受其他欄位。"""
+    """games.json 的一款桌遊：12 個欄位必填，result_type 可省略（視為空），不接受其他欄位。"""
 
-    model_config = ConfigDict(extra="forbid", strict=True)
+    # use_enum_values：result_type 讀進來就是 "faction" 這種字串，寫進資料庫與匯出都不用再轉
+    model_config = ConfigDict(extra="forbid", strict=True, use_enum_values=True)
 
     bgg_id: int = Field(gt=0)
     name: NonBlank
@@ -59,6 +61,8 @@ class GameData(BaseModel):
     weight: float = Field(ge=1, le=5)
     categories: UniqueNames
     mechanics: UniqueNames
+    # 結果類型；省略或 null 代表尚未設定。檔案裡是字串，所以這個欄位不套用嚴格比對
+    result_type: Annotated[ResultType | None, Field(strict=False)] = None
     types: Annotated[list[str], AfterValidator(_unique)]
 
     @field_validator("types")
@@ -79,12 +83,12 @@ class GameData(BaseModel):
         return self
 
     def columns(self) -> dict[str, Any]:
-        """games 資料表的 11 個欄位值（不含 id、types）。"""
+        """games 資料表的 12 個欄位值（不含 id、types）。"""
         return self.model_dump(exclude={"id", "types"})
 
 
 class ExportedGame(GameData):
-    """匯出檔的一款桌遊：games.json 的 12 個欄位加上 id。"""
+    """匯出檔的一款桌遊：games.json 的 13 個欄位加上 id。"""
 
     id: int = Field(gt=0)
 

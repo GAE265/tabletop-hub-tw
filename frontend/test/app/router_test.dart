@@ -49,18 +49,12 @@ void goTo(WidgetTester tester, String location) {
 }
 
 void main() {
-  testWidgets('SHOW_PROTOTYPES 開啟：/proto/health 顯示參考畫面', (tester) async {
+  testWidgets('health 已有正式頁面，移除 /proto/health（SHOW_PROTOTYPES 開啟也找不到）', (
+    tester,
+  ) async {
     await pumpApp(tester, showPrototypes: true);
     goTo(tester, '/proto/health');
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('health-proto-page')), findsOneWidget);
-  });
-
-  testWidgets('SHOW_PROTOTYPES 關閉：/proto/health 顯示找不到頁面', (tester) async {
-    await pumpApp(tester, showPrototypes: false);
-    goTo(tester, '/proto/health');
-    await tester.pumpAndSettle();
-    expect(find.byKey(const Key('health-proto-page')), findsNothing);
     expect(find.text('找不到頁面'), findsOneWidget);
   });
 
@@ -98,13 +92,6 @@ void main() {
   testWidgets('首頁是套主題的正式 health 頁面', (tester) async {
     await pumpApp(tester, showPrototypes: true);
     expect(find.byKey(const Key('health-page')), findsOneWidget);
-    expect(find.textContaining('ok'), findsWidgets);
-  });
-
-  testWidgets('參考畫面與正式頁面共用同一個 state（同一份資料）', (tester) async {
-    await pumpApp(tester, showPrototypes: true);
-    goTo(tester, '/proto/health');
-    await tester.pumpAndSettle();
     expect(find.textContaining('ok'), findsWidgets);
   });
 
