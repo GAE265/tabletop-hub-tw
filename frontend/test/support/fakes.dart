@@ -53,9 +53,13 @@ class FakeDevUsersRepository implements DevUsersRepository {
   Object? error;
   int callCount = 0;
 
+  /// 設定後，清單要等它完成才回應（模擬真的網路比畫面晚到）。
+  Completer<void>? gate;
+
   @override
   Future<List<DevUser>> list() async {
     callCount++;
+    if (gate != null) await gate!.future;
     if (error != null) throw error!;
     return users;
   }

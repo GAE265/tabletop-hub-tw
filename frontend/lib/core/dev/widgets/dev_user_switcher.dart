@@ -29,7 +29,12 @@ class DevUserSwitcher extends ConsumerWidget {
         if (list.isEmpty) {
           return const ListTile(dense: true, title: Text('尚無測試帳號，請先執行 seed'));
         }
-        final current = ref.watch(currentDevUserProvider);
+        // 不在這裡讀 currentDevUserProvider：清單剛載入時，讀它會讓依賴它的
+        // devUserHeaderProvider 在畫面建立途中要求重畫（setState during build）
+        final current = resolveCurrentDevUser(
+          list,
+          ref.watch(selectedDevUserIdProvider),
+        );
         return ListTile(
           dense: true,
           title: const Text('開發身分'),
