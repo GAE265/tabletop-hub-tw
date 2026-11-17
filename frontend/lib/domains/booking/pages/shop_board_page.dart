@@ -8,7 +8,7 @@ import '../data/booking.dart';
 import '../state/booking_state.dart';
 import 'widgets/booking_widgets.dart';
 
-/// 店家看板正式頁面：店家人員看自己店家某一天的訂位，辦理入座、完成結算、取消
+/// 店家看板正式頁面：店家人員看自己店家某一天的訂位，辦理客人到店、離店結帳、取消
 /// （`/booking/board`）。管理員要先選店家。
 class ShopBoardPage extends ConsumerStatefulWidget {
   const ShopBoardPage({super.key});
@@ -198,14 +198,14 @@ class _ShopBoardPageState extends ConsumerState<ShopBoardPage> {
                     FilledButton(
                       key: Key('board-seated-${b.id}'),
                       onPressed: act(() => _n.setStatus(b.id, 'seated')),
-                      child: const Text('入座'),
+                      child: const Text('客人到店'),
                     ),
                   ],
                   if (b.status == 'seated')
                     FilledButton(
                       key: Key('board-complete-${b.id}'),
                       onPressed: act(() => _n.setStatus(b.id, 'completed')),
-                      child: const Text('完成結算'),
+                      child: const Text('離店結帳'),
                     ),
                 ],
               ),

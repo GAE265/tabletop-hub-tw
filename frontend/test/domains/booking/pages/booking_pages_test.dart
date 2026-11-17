@@ -351,13 +351,27 @@ void main() {
       expect(find.byKey(const Key('board-card-7')), findsOneWidget);
     });
 
-    testWidgets('入座、完成結算：依狀態顯示按鈕，按下後更新', (tester) async {
+    testWidgets('客人到店、離店結帳：依狀態顯示按鈕，按下後更新', (tester) async {
       final repo = FakeBookingRepository()..board = [sampleBooking()];
       await pumpAt(tester, '/booking/board', repo: repo, user: staff);
       expect(find.byKey(const Key('board-complete-7')), findsNothing);
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('board-seated-7')),
+          matching: find.text('客人到店'),
+        ),
+        findsOneWidget,
+      );
 
       await tapKey(tester, 'board-seated-7');
       expect(repo.patchCalls.last.patch, {'status': 'seated'});
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('board-complete-7')),
+          matching: find.text('離店結帳'),
+        ),
+        findsOneWidget,
+      );
       final card = find.byKey(const Key('board-card-7'));
       expect(
         find.descendant(of: card, matching: find.text('已入座')),
