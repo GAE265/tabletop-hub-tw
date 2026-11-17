@@ -30,6 +30,7 @@
 | 〔整數編號〕 | 2026-11-12 `games.id` 改成整數、自動給號，其他組員用匯出檔同步的決定：組員在 [MR #22](https://github.com/GAE265/tabletop-hub-tw/pull/22) 提出，立倫 grilling 後定案，記在〔ADR 0003〕 |
 | 〔1.8〕 | 2026-11-13 對齊 AGENTS.md 1.8（[MR #23](https://github.com/GAE265/tabletop-hub-tw/pull/23)）：第 3 節「共用資料表」清單、§4.2 共用表的 repository、§4.4 主鍵預設 UUID 與分類表可用流水號 |
 | 〔評審〕 | 2026-11-14 評估題組加上 LLM 評審建議的決定，記在「[怎麼驗收推薦結果](issues/14-recommendation-acceptance.md)」的 Comments |
+| 〔結果類型〕 | 2026-11-17 共用表 `games` 新增 `result_type` 的決定：組員在 [MR #34](https://github.com/GAE265/tabletop-hub-tw/pull/34) 提出（OpenSpec change `add-games-result-type`），立倫審核通過。完整的情境在 `openspec/specs/games-result-type/spec.md` |
 | 〔提案 §n〕 | [整合層提案](integrations-proposal.md)第 n 節 |
 | 〔map〕 | map 的 Notes（固定偏好）與 Out of scope |
 | 〔Qn〕 | 寫 spec 時發現的缺漏，由立倫決定。Q1–Q8 見「[spec：桌遊資料與心得管線](issues/20-spec-data-and-review-pipeline.md)」的 Comments；Q9 起見「[spec：推薦對話與 API](issues/21-spec-conversation-and-api.md)」的 Comments |
@@ -105,6 +106,7 @@
 | `weight` | double precision | 否 | 難度 1–5，BGG `averageweight` 的原值 | 〔收錄〕§2 |
 | `categories` | text[] | 否 | 類別，BGG 英文名稱；可以是空陣列 | 〔收錄〕§2；存法〔Q2〕 |
 | `mechanics` | text[] | 否 | 機制，BGG 英文名稱；可以是空陣列 | 同上 |
+| `result_type` | text | 是 | 結果類型，給戰績（`matches`）判斷結果怎麼記：`faction`（陣營勝負）、`score`（個人分數）、`cooperative`（合作）；空值代表尚未設定。資料庫用 check 限制只能是這三個值。推薦不使用，也不出現在 API 卡片 | 〔結果類型〕 |
 
 - 數值範圍照 §8.1 的檢查，也寫成資料庫的 check 限制。
 - 1–4 號固定是 4 款 Demo 遊戲，匯入時用 `--first-four` 指定（§8.1）：〔整數編號〕
@@ -216,6 +218,7 @@
 - 7 張表放在同一個 migration，由 05 建立；一個 MR 最多一個 migration，由瑋鋐審核（AGENTS.md §4.4）。〔改表〕
 - 建立向量欄位的 migration 從 `GAMES_ADVISOR_EMBEDDING_DIM` 讀維度。〔改版〕§6
 - 改維度用的 migration 現在不寫：large 縮成 1536 維，換成 small 也是 1536 維。〔改版〕§6
+- `games.result_type` 不在 05 的 migration 裡，由 `0004` 另外新增。〔結果類型〕
 
 migration 的測試（比照 `tests/migrations/test_baseline.py`）：
 
@@ -440,9 +443,10 @@ uv run python -m app.domains.games_advisor.commands <子指令> <參數>
 | `weight` | `statistics` 的 `averageweight` | 1 ≤ 難度 ≤ 5 |
 | `categories` | `link type="boardgamecategory"` 的 `value` | 字串陣列，可以是空的；元素不是空白、不重複 |
 | `mechanics` | `link type="boardgamemechanic"` 的 `value` | 同上 |
+| `result_type` | 不是 BGG 的資料，依規則書決定〔結果類型〕 | 可省略；有給的話只能是 `faction`、`score`、`cooperative` 或 `null`。省略和 `null` 都代表尚未設定 |
 | `types` | `statistics` 的 `ranks` 裡 `type="family"` 的大類排名，換成 `genres.code`；Codex 先確認 API 有回這一段，抓不到的由立倫手填〔改表〕 | 字串陣列，可以是空的；元素是 `genres.code`、不重複 |
 
-- 12 個欄位都必填，不接受其他欄位；數值範圍〔Q8〕。`games.json` 沒有桌遊編號，編號由資料庫自動給。〔改表〕、〔整數編號〕
+- `result_type` 以外的 12 個欄位都必填；`result_type` 可省略，所以沒有這個欄位的舊檔案仍然可以通過〔結果類型〕。不接受其他欄位；數值範圍〔Q8〕。`games.json` 沒有桌遊編號，編號由資料庫自動給。〔改表〕、〔整數編號〕
 - 人數、時長、年齡一律用 BGG 的數字，不和盒子或代理商頁比對。〔收錄〕§3
 - Codex 收心得時也讀這個檔案的 `bgg_id`、`name`、`english_name`（`prompts/collect-reviews.md` 寫「欄位名稱以檔案為準」）。
 - 只有立倫在空的資料庫執行一次；之後 `games.json` 不再使用，可以刪掉。其他組員用同步（§8.11）。〔整數編號〕
@@ -485,6 +489,8 @@ uv run python -m app.domains.games_advisor.commands import-games <games.json> \
 | `min_playtime` 是 0 | 同上 | 同上 |
 | 檔案不存在，或不是合法 JSON | 同上 | 結束碼 1；資料庫沒有任何變動 |
 | 沒有權限 | — | 不適用：本機指令 |
+
+`result_type` 的情境（有值、舊格式的檔案、不合法的值）寫在 `openspec/specs/games-result-type/spec.md`，測試在 `backend/tests/games_advisor/test_result_type.py`。〔結果類型〕
 
 ### 8.2 `reviews.json`：心得管線的輸入
 
@@ -809,13 +815,14 @@ service 的測試（假的 repository、`FakeEmbeddingProvider`）：
       "weight": 1.85,
       "categories": ["Card Game", "Fantasy"],
       "mechanics": ["Hand Management", "Set Collection"],
+      "result_type": "score",
       "types": ["family"]
     }
   ]
 }
 ```
 
-- `games` 的每一款是 `games.json` 的 12 個欄位加上 `id`，照 `id` 由小到大排。
+- `games` 的每一款是 `id` 加上 `games.json` 的 13 個欄位，照 `id` 由小到大排。`result_type` 一定會寫出來，尚未設定時是 `null`。〔結果類型〕
 - `next_id`：資料庫計數器的下一個號碼。刪掉編號最大的桌遊之後，`next_id` 不會跟著變小。例如 3 款刪掉第 3 款，`next_id` 仍然是 4。
 
 行為：
@@ -840,17 +847,19 @@ service 的測試（假的 repository、`FakeEmbeddingProvider`）：
 
 行為：
 
-1. 先檢查整份匯出檔：`next_id` 是正整數，而且大於所有 `id`；每款的 `id` 是正整數、不重複；其他 12 個欄位照 §8.1 的檢查。有任何一款不符合，就整份拒絕、什麼都不寫，並印出是哪一款（`id`）的哪個欄位。
+1. 先檢查整份匯出檔：`next_id` 是正整數，而且大於所有 `id`；每款的 `id` 是正整數、不重複；其他欄位照 §8.1 的檢查。有任何一款不符合，就整份拒絕、什麼都不寫，並印出是哪一款（`id`）的哪個欄位。
 2. 以 `id` 判斷同一款：
    - 資料庫有同一個 `id`、`bgg_id` 也相同：更新欄位。
    - 資料庫有同一個 `id`，但 `bgg_id` 不同：當成不同的桌遊，先刪掉舊的再照匯出檔寫入。
    - 資料庫沒有這個 `id`：照匯出檔的 `id` 寫入。
 
-   類型照 `types` 整組替換。
+   類型照 `types` 整組替換。`result_type` 也照匯出檔寫入：匯出檔沒有這個欄位（舊格式）或是 `null` 時，同步後是空值，資料庫裡原本的值會被蓋掉。〔結果類型〕
 3. 匯出檔裡沒有的桌遊從資料庫刪掉，連帶刪除的資料照 §3。組員自己在本機加的桌遊也會被刪；測試請用寫在測試程式裡的假資料（AGENTS.md §2.2）。其他 domain 的資料還參照要刪的桌遊時，資料庫會擋下刪除：整份拒絕、什麼都不寫，印出是哪一款、被哪張表參照，由立倫決定怎麼處理（〔ADR 0003〕）。
 4. 把 `games.id` 的計數器設成 `next_id`：之後在這個資料庫新增桌遊，從 `next_id` 開始給號，不會重用以前給過的號碼。
 5. 整份檔案一個交易：任何一步失敗，什麼都不寫。
 6. 結束時印出新增幾款、更新幾款、刪除幾款，以及 `next_id`。
+
+同步前，資料表要先升級到最新（`uv run alembic upgrade head`）。資料表還沒有 `result_type` 欄位時，同步會出現資料庫錯誤、結束碼 1，什麼都不寫（2026-11-17 在全新的資料庫實測）。組員的操作步驟寫在 README「本機啟動」第 3 步的「同步共用桌遊資料」。〔結果類型〕
 
 測試（連 CI 的 PostgreSQL；假桌遊）：
 
@@ -870,6 +879,8 @@ service 的測試（假的 repository、`FakeEmbeddingProvider`）：
 | 某款的欄位不符合 §8.1 的檢查（例如 `weight` 是 5.5） | 同上 | 同上 |
 | 檔案不存在，或不是合法 JSON | 同上 | 結束碼 1；資料庫沒有任何變動 |
 | 沒有權限 | — | 不適用：本機指令 |
+
+`result_type` 的情境（同步有值、舊格式的匯出檔、不合法的值、蓋掉資料庫裡的值）同樣寫在 `openspec/specs/games-result-type/spec.md`。〔結果類型〕
 
 ## 9. repository 的測試（連 CI 的 PostgreSQL）
 

@@ -46,8 +46,19 @@ def test_upgrade_enables_vector_and_creates_tables(migrated: Engine) -> None:
         "role",
         "shop_id",
         "created_at",
+        "phone",
     }
-    assert set(column_types(migrated, "booking_shops")) == {"id", "name"}
+    assert set(column_types(migrated, "booking_shops")) == {
+        "id",
+        "name",
+        "phone",
+        "address",
+        "facebook_url",
+        "timezone",
+        "is_active",
+        "created_at",
+        "updated_at",
+    }
 
 
 def test_primary_and_reference_keys_are_uuid(migrated: Engine) -> None:
