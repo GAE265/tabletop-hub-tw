@@ -17,6 +17,9 @@ abstract final class AppSpacing {
     ScreenSize.tablet => 560,
     ScreenSize.desktop => 720,
   };
+
+  /// 左右並排版面（例如月曆＋當日列表）的最大寬度。
+  static const double splitContentMaxWidth = 1120;
 }
 
 /// 圓角。

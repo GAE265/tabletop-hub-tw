@@ -4,8 +4,8 @@ import 'package:go_router/go_router.dart';
 
 import '../core/config/app_config.dart';
 import '../domains/games_advisor/pages/games_advisor_page.dart';
+import '../domains/groups/pages/groups_page.dart';
 import '../domains/health/pages/health_page.dart';
-import '../prototypes/groups/groups_proto_page.dart';
 import '../prototypes/health/health_proto_page.dart';
 import 'shell.dart';
 import 'theme/theme_preview_page.dart';
@@ -18,6 +18,10 @@ GoRouter createRouter(AppConfig config) => GoRouter(
       routes: [
         GoRoute(path: '/', builder: (context, state) => const HealthPage()),
         GoRoute(
+          path: '/groups',
+          builder: (context, state) => const GroupsPage(),
+        ),
+        GoRoute(
           path: '/games-advisor',
           builder: (context, state) => const GamesAdvisorPage(),
         ),
@@ -25,10 +29,6 @@ GoRouter createRouter(AppConfig config) => GoRouter(
           GoRoute(
             path: '/proto/health',
             builder: (context, state) => const HealthProtoPage(),
-          ),
-          GoRoute(
-            path: '/proto/groups',
-            builder: (context, state) => const GroupsProtoPage(),
           ),
           GoRoute(
             path: '/proto/theme',

@@ -36,9 +36,10 @@
 
 ## 4. MR 3：正式月曆頁（於 MR 2 合併後從 dev 開分支）
 
-- [ ] 4.1 撰寫 widget 測試：`/groups` 路由存在、未開啟 `SHOW_PROTOTYPES` 時沒有 `/proto/groups`、寬度 < 600 時上下排列、>= 1024 時左右並排，驗證：測試存在且失敗
-- [ ] 4.2 實作 `domains/groups/pages/`（月曆、當日列表、詳細資料、開團與編輯表單），只使用 `groups/state/` 與 `app/theme/`，不寫死顏色、字級、間距，驗證：4.1 的測試通過；用 grep 確認 `pages/` 沒有 `Color(0x`、`EdgeInsets.all(數字)`、`fontSize:` 這類寫死的數值
-- [ ] 4.3 在 `app/router.dart` 註冊 `/groups`，並在畫面框架加上入口；依 5.4 刪除 `/proto/groups` 路由，驗證：`flutter test` 全部通過
+- [x] 4.1 撰寫 widget 測試：`/groups` 路由存在、未開啟 `SHOW_PROTOTYPES` 時沒有 `/proto/groups`、寬度 < 600 時上下排列、>= 1024 時左右並排，驗證：測試存在且失敗
+- [x] 4.2 實作 `domains/groups/pages/`（月曆、當日列表、詳細資料、開團與編輯表單），只使用 `groups/state/` 與 `app/theme/`，不寫死顏色、字級、間距，驗證：4.1 的測試通過；用 grep 確認 `pages/` 沒有 `Color(0x`、`EdgeInsets.all(數字)`、`fontSize:` 這類寫死的數值
+- [x] 4.3 在 `app/router.dart` 註冊 `/groups`，並在畫面框架加上入口；依 5.4 刪除 `/proto/groups` 路由，驗證：`flutter test` 全部通過
+  - 註記：入口暫時放在畫面框架上方的「首頁／揪團」連結，底部導覽列完成後取代。參考畫面的檔案 `prototypes/groups/` 也一併刪除（只刪路由會留下沒有使用的程式碼）；`formatTimeRange`、`feeLabel` 搬到 `state/group_labels.dart`。
 - [ ] 4.4 自我檢查：在 `frontend/` 跑 `flutter analyze`、`flutter test`，並在 Chrome 手動檢查手機與桌機寬度，驗證：全部通過、CI 全綠，再改成 Ready for review
 
 ## Workflow follow-up

@@ -118,19 +118,26 @@ void main() {
     expect(find.byType(DropdownButton<String>), findsNothing);
   });
 
-  testWidgets('SHOW_PROTOTYPES 開啟：/proto/groups 顯示揪團參考畫面', (tester) async {
+  testWidgets('/groups 是正式揪團月曆（SHOW_PROTOTYPES 關閉也能使用）', (tester) async {
+    await pumpApp(tester, showPrototypes: false);
+    goTo(tester, '/groups');
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('groups-page')), findsOneWidget);
+  });
+
+  testWidgets('正式頁面完成後移除 /proto/groups（SHOW_PROTOTYPES 開啟也找不到）', (
+    tester,
+  ) async {
     await pumpApp(tester, showPrototypes: true);
     goTo(tester, '/proto/groups');
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('groups-proto-page')), findsOneWidget);
-    expect(find.text('我要開團'), findsWidgets);
+    expect(find.text('找不到頁面'), findsOneWidget);
   });
 
-  testWidgets('SHOW_PROTOTYPES 關閉：/proto/groups 顯示找不到頁面', (tester) async {
+  testWidgets('畫面框架的「揪團」入口進到 /groups', (tester) async {
     await pumpApp(tester, showPrototypes: false);
-    goTo(tester, '/proto/groups');
+    await tester.tap(find.byKey(const Key('shell-nav-groups')));
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('groups-proto-page')), findsNothing);
-    expect(find.text('找不到頁面'), findsOneWidget);
+    expect(find.byKey(const Key('groups-page')), findsOneWidget);
   });
 }
