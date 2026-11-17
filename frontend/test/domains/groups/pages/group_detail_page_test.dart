@@ -182,4 +182,26 @@ void main() {
     expect(find.text('找不到這個揪團'), findsOneWidget);
     expect(find.text('重試'), findsOneWidget);
   });
+
+  testWidgets('詳細頁顯示揪團的多款遊戲', (tester) async {
+    final repo = FakeGroupsRepository(
+      groups: [
+        fakeGroup(
+          id: 'g-1',
+          startAt: taipei(11, 14, 19),
+          games: const [
+            GameRef(id: 1, name: '阿瓦隆'),
+            GameRef(id: 3, name: '馬可波羅'),
+          ],
+        ),
+      ],
+    );
+    await pumpGroupsWidget(
+      tester,
+      const GroupDetailPage(groupId: 'g-1'),
+      repo: repo,
+    );
+    expect(find.text('阿瓦隆'), findsOneWidget);
+    expect(find.text('馬可波羅'), findsOneWidget);
+  });
 }

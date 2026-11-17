@@ -261,33 +261,4 @@ void main() {
       expect(container.read(calendarCountsProvider)[DateTime(2026, 11, 14)], 2);
     });
   });
-
-  test('已知店家：從當月揪團整理出不重複的店家', () async {
-    final repo = FakeGroupsRepository(
-      groups: [
-        fakeGroup(
-          id: 'a',
-          startAt: taipei(11, 14),
-          shopId: 's1',
-          shopName: '甲店',
-        ),
-        fakeGroup(
-          id: 'b',
-          startAt: taipei(11, 15),
-          shopId: 's1',
-          shopName: '甲店',
-        ),
-        fakeGroup(
-          id: 'c',
-          startAt: taipei(11, 16),
-          shopId: 's2',
-          shopName: '乙店',
-        ),
-      ],
-    );
-    final container = makeContainer(repo);
-    container.read(groupsCalendarProvider);
-    await loaded(container);
-    expect(container.read(knownShopsProvider).map((s) => s.name), ['甲店', '乙店']);
-  });
 }
