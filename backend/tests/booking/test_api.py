@@ -8,6 +8,7 @@ from sqlalchemy import text
 
 from tests.booking.conftest import (
     ADMIN_H,
+    OTHER_SHOP,
     OTHER_STAFF_H,
     PLAYER,
     PLAYER2_H,
@@ -30,7 +31,8 @@ def payload(day=WED, start=(14, 0), end=(16, 0), party=4, **extra):
     return {
         "shop_id": str(SHOP),
         "party_size": party,
-        "slots": [{"start_at": at(day, *start), "end_at": at(day, *end)}],
+        "start_at": at(day, *start),
+        "end_at": at(day, *end),
         **extra,
     }
 
@@ -38,7 +40,7 @@ def payload(day=WED, start=(14, 0), end=(16, 0), party=4, **extra):
 def book(api, headers=PLAYER_H, **kw):
     response = api.post("/api/v1/bookings", json=payload(**kw), headers=headers)
     assert response.status_code == 201, response.text
-    return response.json()["items"][0]
+    return response.json()
 
 
 def patch(api, booking_id, body, headers=PLAYER_H):
@@ -70,6 +72,7 @@ def test_weekend_has_drink_reminder(api):
 def test_quote_does_not_write(api, db):
     response = api.post("/api/v1/booking-quotes", json=payload(), headers=PLAYER_H)
     assert response.status_code == 200
+    assert "fee" in response.json()
     with db.connect() as conn:
         assert conn.execute(text("SELECT count(*) FROM reservations")).scalar_one() == 0
 
@@ -112,32 +115,6 @@ def test_other_user_cannot_take_the_same_table(api):
     assert first["tables"] != second["tables"]
 
 
-# --- 批次 ---
-
-
-def test_batch_creates_each_slot(api):
-    body = payload()
-    body["slots"].append({"start_at": at(WED, 18), "end_at": at(WED, 20)})
-    response = api.post("/api/v1/bookings", json=body, headers=PLAYER_H)
-    assert response.status_code == 201 and len(response.json()["items"]) == 2
-
-
-def test_batch_is_all_or_nothing(api, db):
-    body = payload()
-    body["slots"].append({"start_at": at(TUE, 18), "end_at": at(TUE, 20)})  # 公休日
-    response = api.post("/api/v1/bookings", json=body, headers=PLAYER_H)
-    assert response.status_code == 422
-    with db.connect() as conn:
-        assert conn.execute(text("SELECT count(*) FROM reservations")).scalar_one() == 0
-
-
-def test_batch_overlapping_slots_rejected(api):
-    body = payload()
-    body["slots"].append({"start_at": at(WED, 15), "end_at": at(WED, 17)})
-    response = api.post("/api/v1/bookings", json=body, headers=PLAYER_H)
-    assert response.status_code == 422 and code(response) == "BOOKING_SLOTS_OVERLAP"
-
-
 # --- 同電話重疊 ---
 
 
@@ -171,7 +148,7 @@ def test_overlap_confirmed_but_no_table_keeps_old(api):
 
 def test_modify_keeps_original_table_when_possible(api):
     item = book(api)
-    response = patch(api, item["id"], {"start_at": at(WED, 14, 30), "end_at": at(WED, 16, 30)})
+    response = patch(api, item["id"], {"start_at": at(WED, 15, 0), "end_at": at(WED, 17, 0)})
     assert response.status_code == 200
     body = response.json()
     assert body["tables"] == item["tables"] and body["notice"]
@@ -388,3 +365,44 @@ def test_logs_record_operator(api, db):
         ("seat", "staff"),
     ]
     assert rows[0].operator_name == "玩家一"
+
+
+# --- 店家清單 ---
+
+
+def test_list_shops_returns_active_shops(api):
+    response = api.get("/api/v1/shops", headers=PLAYER_H)
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["total"] == 2
+    assert sorted((s["id"], s["name"]) for s in body["items"]) == sorted(
+        [(str(SHOP), "測試店"), (str(OTHER_SHOP), "別家店")]
+    )
+
+
+def test_list_shops_excludes_inactive(api, db):
+    with db.begin() as conn:
+        conn.execute(
+            text("UPDATE booking_shops SET is_active = false WHERE id = :s"),
+            {"s": SHOP},
+        )
+    response = api.get("/api/v1/shops", headers=PLAYER_H)
+    assert response.status_code == 200
+    assert [s["name"] for s in response.json()["items"]] == ["別家店"]
+
+
+def test_list_shops_empty_returns_zero(api, db):
+    with db.begin() as conn:
+        conn.execute(text("UPDATE booking_shops SET is_active = false"))
+    response = api.get("/api/v1/shops", headers=PLAYER_H)
+    assert response.status_code == 200 and response.json() == {"items": [], "total": 0}
+
+
+def test_list_shops_requires_auth(test_db_url, make_settings):
+    from fastapi.testclient import TestClient
+
+    from app.main import create_app
+
+    client = TestClient(create_app(make_settings(database_url=test_db_url, auth_mode="jwt")))
+    response = client.get("/api/v1/shops")
+    assert response.status_code == 401 and code(response) == "UNAUTHENTICATED"

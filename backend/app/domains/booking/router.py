@@ -15,6 +15,7 @@ from app.domains.booking.schemas import (
     BookingPatch,
     BookingQuote,
     BookingQuoteRequest,
+    ShopList,
     TablesPut,
 )
 from app.domains.booking.service import BookingService
@@ -33,21 +34,34 @@ def get_booking_service(session: Annotated[Session, Depends(get_session)]) -> Bo
 ServiceDep = Annotated[BookingService, Depends(get_booking_service)]
 
 
+@router.get("/shops", response_model=ShopList)
+def list_shops(user: CurrentUserDep, service: ServiceDep):
+    return service.list_shops(user)
+
+
 @router.post("/booking-quotes", response_model=BookingQuote)
 def create_quote(body: BookingQuoteRequest, user: CurrentUserDep, service: ServiceDep):
     return service.quote(user, body)
 
 
-@router.post("/bookings", response_model=BookingList, status_code=201)
+@router.post("/bookings", response_model=BookingOut, status_code=201)
 def create_bookings(body: BookingCreate, user: CurrentUserDep, service: ServiceDep):
     return service.create(user, body)
 
 
 @router.get("/bookings", response_model=BookingList)
 def list_my_bookings(
-    user: CurrentUserDep, service: ServiceDep, page: Page = 1, page_size: PageSize = 20
+    user: CurrentUserDep,
+    service: ServiceDep,
+    page: Page = 1,
+    page_size: PageSize = 20,
+    status: str | None = Query(None, description="訂位狀態篩選"),
+    from_date: str | None = Query(None, alias="from", description="開始日期 YYYY-MM-DD"),
+    to_date: str | None = Query(None, alias="to", description="結束日期 YYYY-MM-DD"),
 ):
-    return service.list_mine(user, page, page_size)
+    return service.list_mine(
+        user, page, page_size, status=status, from_date=from_date, to_date=to_date
+    )
 
 
 @router.get("/bookings/{booking_id}", response_model=BookingOut)

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/api/api_exception.dart';
 import '../data/booking.dart';
 import '../data/booking_repository.dart';
+import '../data/shop.dart';
 
 /// 訂位畫面的狀態。[message] 顯示最近一次操作的結果或錯誤。
 class BookingState {
@@ -10,25 +11,28 @@ class BookingState {
     this.loading = false,
     this.message,
     this.isError = false,
-    this.quote = const [],
+    this.quote,
     this.mine = const [],
     this.board = const [],
+    this.shops = const [],
   });
 
   final bool loading;
   final String? message;
   final bool isError;
-  final List<QuoteItem> quote;
+  final QuoteResult? quote;
   final List<Booking> mine;
   final List<Booking> board;
+  final List<Shop> shops;
 
   BookingState copyWith({
     bool? loading,
     String? message,
     bool? isError,
-    List<QuoteItem>? quote,
+    QuoteResult? quote,
     List<Booking>? mine,
     List<Booking>? board,
+    List<Shop>? shops,
   }) => BookingState(
     loading: loading ?? this.loading,
     message: message ?? this.message,
@@ -36,6 +40,7 @@ class BookingState {
     quote: quote ?? this.quote,
     mine: mine ?? this.mine,
     board: board ?? this.board,
+    shops: shops ?? this.shops,
   );
 }
 
@@ -62,37 +67,54 @@ class BookingNotifier extends Notifier<BookingState> {
     }
   }
 
-  Future<void> requestQuote(String shopId, int partySize, List<Slot> slots) =>
+  /// 載入店家下拉選單的選項。
+  Future<void> loadShops() => _run(() async {
+    final shops = await _repo.listShops();
+    return (BookingState s) => s.copyWith(shops: shops, message: '店家共 ${shops.length} 間');
+  });
+
+  Future<void> requestQuote(String shopId, int partySize, String startAt, String endAt) =>
       _run(() async {
-        final items = await _repo.quote(
+        final result = await _repo.quote(
           shopId: shopId,
           partySize: partySize,
-          slots: slots,
+          startAt: startAt,
+          endAt: endAt,
         );
-        return (BookingState s) => s.copyWith(quote: items, message: '預估完成');
+        return (BookingState s) => s.copyWith(quote: result, message: '預估完成');
       });
 
   Future<void> create(
     String shopId,
     int partySize,
-    List<Slot> slots,
+    String startAt,
+    String endAt,
     String? specialRequests,
   ) => _run(() async {
-    final items = await _repo.create(
+    await _repo.create(
       shopId: shopId,
       partySize: partySize,
-      slots: slots,
+      startAt: startAt,
+      endAt: endAt,
       specialRequests: specialRequests,
     );
     final mine = await _repo.listMine();
     return (BookingState s) => s.copyWith(
       mine: mine.items,
-      message: '已建立 ${items.length} 筆訂位',
+      message: '已建立訂位',
     );
   });
 
-  Future<void> loadMine() => _run(() async {
-    final page = await _repo.listMine();
+  Future<void> loadMine({
+    String? status,
+    String? fromDate,
+    String? toDate,
+  }) => _run(() async {
+    final page = await _repo.listMine(
+      status: status,
+      fromDate: fromDate,
+      toDate: toDate,
+    );
     return (BookingState s) => s.copyWith(
       mine: page.items,
       message: '我的訂位共 ${page.total} 筆',
@@ -119,10 +141,10 @@ class BookingNotifier extends Notifier<BookingState> {
   });
 
   /// 修改時間與人數。
-  Future<void> modify(int id, Slot slot, int partySize) => _run(() async {
+  Future<void> modify(int id, String startAt, String endAt, int partySize) => _run(() async {
     final b = await _repo.patch(id, {
-      'start_at': slot.startAt,
-      'end_at': slot.endAt,
+      'start_at': startAt,
+      'end_at': endAt,
       'party_size': partySize,
     });
     return (BookingState s) =>

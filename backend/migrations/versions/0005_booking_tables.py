@@ -104,9 +104,7 @@ def upgrade() -> None:
         ),
         _shop_fk("closing_hours"),
     )
-    op.create_index(
-        "idx_closing_hours_shop_date", "closing_hours", ["shop_id", "closing_date"]
-    )
+    op.create_index("idx_closing_hours_shop_date", "closing_hours", ["shop_id", "closing_date"])
 
     op.create_table(
         "seating_tables",
@@ -374,9 +372,7 @@ def upgrade() -> None:
         sa.UniqueConstraint("shop_id", "id", name="uq_faqs_shop_id_id"),
         _shop_fk("faqs"),
     )
-    op.create_index(
-        "idx_faqs_shop_category_active", "faqs", ["shop_id", "category", "is_active"]
-    )
+    op.create_index("idx_faqs_shop_category_active", "faqs", ["shop_id", "category", "is_active"])
     op.create_index("idx_faqs_keywords", "faqs", ["keywords"], postgresql_using="gin")
 
     op.create_table(

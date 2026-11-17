@@ -15,13 +15,12 @@ class BookingProtoPage extends ConsumerStatefulWidget {
 }
 
 class _BookingProtoPageState extends ConsumerState<BookingProtoPage> {
-  final _shop = TextEditingController();
+  String? _shopId;
   final _date = TextEditingController(text: _defaultDate());
   final _party = TextEditingController(text: '4');
   final _requests = TextEditingController();
-  final _slots = <(TextEditingController, TextEditingController)>[
-    (TextEditingController(text: '14:00'), TextEditingController(text: '16:00')),
-  ];
+  final _startCtrl = TextEditingController(text: '14:00');
+  final _endCtrl = TextEditingController(text: '16:00');
 
   static String _defaultDate() {
     final d = DateTime.now().add(const Duration(days: 7));
@@ -30,33 +29,58 @@ class _BookingProtoPageState extends ConsumerState<BookingProtoPage> {
   }
 
   @override
+  void initState() {
+    super.initState();
+    // 開頁即載入店家清單；失敗由畫面顯示訊息與「重試」。
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(bookingProvider.notifier).loadShops();
+    });
+  }
+
+  @override
   void dispose() {
-    _shop.dispose();
     _date.dispose();
     _party.dispose();
     _requests.dispose();
-    for (final (a, b) in _slots) {
-      a.dispose();
-      b.dispose();
-    }
+    _startCtrl.dispose();
+    _endCtrl.dispose();
     super.dispose();
   }
 
-  Slot _slot(TextEditingController a, TextEditingController b) => Slot(
-    startAt: '${_date.text.trim()}T${a.text.trim()}:00+08:00',
-    endAt: '${_date.text.trim()}T${b.text.trim()}:00+08:00',
-  );
+  String _startAt(TextEditingController c) =>
+      '${_date.text.trim()}T${c.text.trim()}:00+08:00';
+  String _endAt(TextEditingController c) =>
+      '${_date.text.trim()}T${c.text.trim()}:00+08:00';
 
-  List<Slot> get _slotList => [for (final (a, b) in _slots) _slot(a, b)];
+  String get _start => _startAt(_startCtrl);
+  String get _end => _endAt(_endCtrl);
   int get _partySize => int.tryParse(_party.text.trim()) ?? 1;
   BookingNotifier get _n => ref.read(bookingProvider.notifier);
+
+  /// 已選店家；未選時不送請求（後端需要合法的 shop_id）。
+  String? get _selectedShop {
+    final user = ref.read(currentDevUserProvider);
+    return _shopId ?? user?.shopId;
+  }
+
+  void _requireShop(void Function(String shopId) run) {
+    final shopId = _selectedShop;
+    if (shopId == null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('請先選擇店家')));
+      return;
+    }
+    run(shopId);
+  }
 
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(bookingProvider);
     final user = ref.watch(currentDevUserProvider);
-    if (_shop.text.isEmpty && user?.shopId != null) _shop.text = user!.shopId!;
     final isStaff = user?.role == 'shop_staff' || user?.role == 'admin';
+    // 店員預設選自己的店家；玩家維持未選，由使用者自行挑選。
+    final selectedShopId = _shopId ?? user?.shopId;
 
     return Scaffold(
       key: const Key('booking-proto-page'),
@@ -64,10 +88,28 @@ class _BookingProtoPageState extends ConsumerState<BookingProtoPage> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          TextField(
-            key: const Key('shop-id'),
-            controller: _shop,
-            decoration: const InputDecoration(labelText: '店家 shop_id'),
+          Row(
+            children: [
+              Expanded(
+                child: DropdownButtonFormField<String>(
+                  key: const Key('shop-id'),
+                  initialValue: state.shops.any((s) => s.id == selectedShopId)
+                      ? selectedShopId
+                      : null,
+                  decoration: const InputDecoration(labelText: '店家'),
+                  items: [
+                    for (final shop in state.shops)
+                      DropdownMenuItem(value: shop.id, child: Text(shop.name)),
+                  ],
+                  onChanged: (value) => setState(() => _shopId = value),
+                ),
+              ),
+              TextButton(
+                key: const Key('shop-reload'),
+                onPressed: state.loading ? null : _n.loadShops,
+                child: const Text('重新載入店家'),
+              ),
+            ],
           ),
           TextField(
             key: const Key('date'),
@@ -85,60 +127,48 @@ class _BookingProtoPageState extends ConsumerState<BookingProtoPage> {
             controller: _requests,
             decoration: const InputDecoration(labelText: '特殊需求（選填）'),
           ),
-          for (var i = 0; i < _slots.length; i++)
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    key: Key('slot-start-$i'),
-                    controller: _slots[i].$1,
-                    decoration: const InputDecoration(labelText: '開始 HH:mm'),
-                  ),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  key: const Key('slot-start'),
+                  controller: _startCtrl,
+                  decoration: const InputDecoration(labelText: '開始 HH:mm'),
                 ),
-                Expanded(
-                  child: TextField(
-                    key: Key('slot-end-$i'),
-                    controller: _slots[i].$2,
-                    decoration: const InputDecoration(labelText: '結束 HH:mm'),
-                  ),
+              ),
+              Expanded(
+                child: TextField(
+                  key: const Key('slot-end'),
+                  controller: _endCtrl,
+                  decoration: const InputDecoration(labelText: '結束 HH:mm'),
                 ),
-                if (_slots.length > 1)
-                  IconButton(
-                    key: Key('slot-remove-$i'),
-                    icon: const Icon(Icons.remove_circle_outline),
-                    onPressed: () => setState(() => _slots.removeAt(i)),
-                  ),
-              ],
-            ),
+              ),
+            ],
+          ),
           Wrap(
             spacing: 8,
             children: [
-              OutlinedButton(
-                key: const Key('slot-add'),
-                onPressed: () => setState(
-                  () => _slots.add((
-                    TextEditingController(text: '18:00'),
-                    TextEditingController(text: '19:30'),
-                  )),
-                ),
-                child: const Text('新增時段'),
-              ),
               ElevatedButton(
                 key: const Key('quote'),
                 onPressed: state.loading
                     ? null
-                    : () => _n.requestQuote(_shop.text.trim(), _partySize, _slotList),
+                    : () => _requireShop(
+                        (shopId) => _n.requestQuote(shopId, _partySize, _start, _end),
+                      ),
                 child: const Text('預估費用'),
               ),
               ElevatedButton(
                 key: const Key('create'),
                 onPressed: state.loading
                     ? null
-                    : () => _n.create(
-                        _shop.text.trim(),
-                        _partySize,
-                        _slotList,
-                        _requests.text.trim(),
+                    : () => _requireShop(
+                        (shopId) => _n.create(
+                          shopId,
+                          _partySize,
+                          _start,
+                          _end,
+                          _requests.text.trim(),
+                        ),
                       ),
                 child: const Text('建立訂位'),
               ),
@@ -151,21 +181,10 @@ class _BookingProtoPageState extends ConsumerState<BookingProtoPage> {
               key: const Key('message'),
               style: TextStyle(color: state.isError ? Colors.red : null),
             ),
-          for (final q in state.quote)
-            Text('預估 ${q.startAt} ~ ${q.endAt}：${q.fee.billableHours} 小時，${q.fee.venueFee} 元'),
-          const Divider(),
-          Row(
-            children: [
-              const Text('我的訂位'),
-              TextButton(
-                key: const Key('load-mine'),
-                onPressed: state.loading ? null : _n.loadMine,
-                child: const Text('重新整理'),
-              ),
-            ],
-          ),
-          if (state.mine.isEmpty && !state.loading) const Text('沒有訂位'),
-          for (final b in state.mine) _row(b, state.loading, staff: false),
+          if (state.quote != null)
+            Text('預估 ${state.quote!.startAt} ~ ${state.quote!.endAt}：${state.quote!.fee.billableHours} 小時，${state.quote!.fee.venueFee} 元'
+                '${state.quote!.tableCodes.isEmpty ? "" : "　桌位：${state.quote!.tableCodes.join(", ")}"}'),
+
           if (isStaff) ...[
             const Divider(),
             Row(
@@ -175,10 +194,12 @@ class _BookingProtoPageState extends ConsumerState<BookingProtoPage> {
                   key: const Key('load-board'),
                   onPressed: state.loading
                       ? null
-                      : () => _n.loadBoard(
-                          _shop.text.trim(),
-                          '${_date.text.trim()}T00:00:00+08:00',
-                          '${_date.text.trim()}T23:59:59+08:00',
+                      : () => _requireShop(
+                          (shopId) => _n.loadBoard(
+                            shopId,
+                            '${_date.text.trim()}T00:00:00+08:00',
+                            '${_date.text.trim()}T23:59:59+08:00',
+                          ),
                         ),
                   child: const Text('查詢'),
                 ),
@@ -216,17 +237,6 @@ class _BookingProtoPageState extends ConsumerState<BookingProtoPage> {
                   key: Key('$prefix-${b.id}-get'),
                   onPressed: act(() => _n.refreshOne(b.id)),
                   child: const Text('查詢'),
-                ),
-                TextButton(
-                  key: Key('$prefix-${b.id}-modify'),
-                  onPressed: act(
-                    () => _n.modify(
-                      b.id,
-                      _slot(_slots.first.$1, _slots.first.$2),
-                      _partySize,
-                    ),
-                  ),
-                  child: const Text('改成上方第一個時段與人數'),
                 ),
                 TextButton(
                   key: Key('$prefix-${b.id}-cancel'),

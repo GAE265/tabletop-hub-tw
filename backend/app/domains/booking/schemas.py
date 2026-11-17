@@ -16,10 +16,15 @@ class SlotIn(BaseModel):
 class BookingQuoteRequest(BaseModel):
     shop_id: uuid.UUID
     party_size: Annotated[int, Field(ge=1)]
-    slots: Annotated[list[SlotIn], Field(min_length=1)]
+    start_at: AwareDatetime
+    end_at: AwareDatetime
 
 
-class BookingCreate(BookingQuoteRequest):
+class BookingCreate(BaseModel):
+    shop_id: uuid.UUID
+    party_size: Annotated[int, Field(ge=1)]
+    start_at: AwareDatetime
+    end_at: AwareDatetime
     special_requests: str | None = None
     # 與自己同電話的有效訂位重疊時，帶 true 代表確認取代舊訂位
     confirm_overlap: bool = False
@@ -89,11 +94,18 @@ class BookingList(BaseModel):
     total: int
 
 
-class QuoteItem(BaseModel):
+class BookingQuote(BaseModel):
     start_at: datetime
     end_at: datetime
     fee: FeeOut
+    table_codes: list[str] = []
 
 
-class BookingQuote(BaseModel):
-    items: list[QuoteItem]
+class ShopOut(BaseModel):
+    id: uuid.UUID
+    name: str
+
+
+class ShopList(BaseModel):
+    items: list[ShopOut]
+    total: int

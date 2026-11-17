@@ -26,7 +26,7 @@ from app.domains.booking.models import (
     BookingTableLink,
 )
 from app.domains.booking.pricing import PricingRules
-from app.domains.booking.records import ReservationRecord, TableRef, UserInfo
+from app.domains.booking.records import ReservationRecord, ShopRef, TableRef, UserInfo
 from app.domains.booking.rules import BusinessHours, ClosingHours
 
 ACTIVE_STATUSES = ("confirmed", "seated")
@@ -61,6 +61,12 @@ class BookingRepository(SessionRepository):
 
     def shop_exists(self, shop_id: uuid.UUID) -> bool:
         return self.session.get(BookingShop, shop_id) is not None
+
+    def list_shops(self) -> list[ShopRef]:
+        rows = self.session.scalars(
+            select(BookingShop).where(BookingShop.is_active).order_by(BookingShop.name)
+        )
+        return [ShopRef(r.id, r.name) for r in rows]
 
     def get_business_hours(self, shop_id: uuid.UUID) -> list[BusinessHours]:
         rows = self.session.scalars(
@@ -176,9 +182,23 @@ class BookingRepository(SessionRepository):
         return None if row is None else self._record(row)
 
     def list_for_user(
-        self, user_id: uuid.UUID, page: int, page_size: int
+        self,
+        user_id: uuid.UUID,
+        page: int,
+        page_size: int,
+        *,
+        status: str | None = None,
+        from_date: date | None = None,
+        to_date: date | None = None,
     ) -> tuple[list[ReservationRecord], int]:
-        return self._page(BookingReservation.user_id == user_id, page, page_size, newest=True)
+        conds = [BookingReservation.user_id == user_id]
+        if status is not None:
+            conds.append(BookingReservation.status == status)
+        if from_date is not None:
+            conds.append(func.date(BookingReservation.start_at) >= from_date)
+        if to_date is not None:
+            conds.append(func.date(BookingReservation.start_at) <= to_date)
+        return self._page(tuple(conds), page, page_size, newest=True)
 
     def list_for_shop(
         self, shop_id: uuid.UUID, start_at: datetime, end_at: datetime, page: int, page_size: int

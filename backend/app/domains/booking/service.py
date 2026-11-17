@@ -1,17 +1,17 @@
 import uuid
 from collections.abc import Callable
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Any, TypeVar
 
 from app.core.auth import CurrentUser, require_role
 from app.core.errors import AppError, PermissionDenied
 from app.domains.booking import pricing
-from app.domains.booking.allocation import allocate, allocate_batch, is_conflict
+from app.domains.booking.allocation import allocate, is_conflict
 from app.domains.booking.errors import BookingRuleError, NoTableAvailable, TableConflict
 from app.domains.booking.records import ReservationRecord
 from app.domains.booking.repository import BookingRepository
-from app.domains.booking.rules import Slot, to_local, validate_batch, validate_slot
+from app.domains.booking.rules import Slot, to_local, validate_slot
 from app.domains.booking.schemas import (
     BookingCreate,
     BookingList,
@@ -20,7 +20,8 @@ from app.domains.booking.schemas import (
     BookingQuote,
     BookingQuoteRequest,
     FeeOut,
-    QuoteItem,
+    ShopList,
+    ShopOut,
     TableOut,
 )
 
@@ -182,23 +183,33 @@ class BookingService:
         if not self.repo.shop_exists(req.shop_id):
             raise AppError(404, "BOOKING_SHOP_NOT_FOUND", "找不到店家")
         rules = self.repo.get_pricing_rules(req.shop_id)
-        slots = [Slot(s.start_at, s.end_at) for s in req.slots]
-        validate_batch(slots, [req.party_size] * len(slots))
-        self._validate(req.shop_id, slots, rules)
+        slot = Slot(req.start_at, req.end_at)
+        self._validate(req.shop_id, [slot], rules)
+        tables = self.repo.list_tables(req.shop_id)
+        links = self.repo.list_links(req.shop_id)
+        occupancies = self.repo.list_occupancies(req.shop_id, slot.start_at, slot.end_at)
+        try:
+            chosen = allocate(
+                req.party_size,
+                tables,
+                links,
+                occupancies,
+                user_id=user.id,
+                start_at=slot.start_at,
+                end_at=slot.end_at,
+            )
+        except NoTableAvailable:
+            chosen = []
         return BookingQuote(
-            items=[
-                QuoteItem(
-                    start_at=s.start_at,
-                    end_at=s.end_at,
-                    fee=self._fee(s.start_at, s.end_at, req.party_size, rules),
-                )
-                for s in slots
-            ]
+            start_at=req.start_at,
+            end_at=req.end_at,
+            fee=self._fee(req.start_at, req.end_at, req.party_size, rules),
+            table_codes=[t.table_code for t in chosen],
         )
 
     # --- 建立（含批次） ---
 
-    def create(self, user: CurrentUser, req: BookingCreate) -> BookingList:
+    def create(self, user: CurrentUser, req: BookingCreate) -> BookingOut:
         require_role(user, "player", "admin")
         if not self.repo.shop_exists(req.shop_id):
             raise AppError(404, "BOOKING_SHOP_NOT_FOUND", "找不到店家")
@@ -209,58 +220,50 @@ class BookingService:
             raise BookingRuleError("BOOKING_PHONE_REQUIRED", "請先在個人資料填寫電話才能訂位")
 
         rules = self.repo.get_pricing_rules(req.shop_id)
-        slots = [Slot(s.start_at, s.end_at) for s in req.slots]
-        validate_batch(slots, [req.party_size] * len(slots))
-        self._validate(req.shop_id, slots, rules)
+        slot = Slot(req.start_at, req.end_at)
+        self._validate(req.shop_id, [slot], rules)
 
-        def work() -> list[ReservationRecord]:
-            overlaps: dict[int, ReservationRecord] = {}
-            for slot in slots:
-                for old in self.repo.find_overlapping_by_phone(
-                    req.shop_id, info.phone, slot.start_at, slot.end_at
-                ):
-                    overlaps[old.id] = old
+        def work() -> ReservationRecord:
+            overlaps = self.repo.find_overlapping_by_phone(
+                req.shop_id, info.phone, slot.start_at, slot.end_at
+            )
             if overlaps and not req.confirm_overlap:
                 raise AppError(
                     409,
                     "BOOKING_OVERLAP_CONFIRM_REQUIRED",
                     "與您電話下既有的訂位時間重疊，確認後會取消舊訂位",
-                    {"overlaps": [self._summary(o) for o in overlaps.values()]},
+                    {"overlaps": [self._summary(o) for o in overlaps]},
                 )
-            for old in overlaps.values():
+            for old in overlaps:
                 self._release(user, old, "cancelled", REPLACED_REASON, "cancel")
 
             tables = self.repo.list_tables(req.shop_id)
             links = self.repo.list_links(req.shop_id)
-            occupancies = self.repo.list_occupancies(
-                req.shop_id, min(s.start_at for s in slots), max(s.end_at for s in slots)
-            )
-            allocations = allocate_batch(
-                [(s.start_at, s.end_at) for s in slots],
+            occupancies = self.repo.list_occupancies(req.shop_id, slot.start_at, slot.end_at)
+            chosen = allocate(
                 req.party_size,
                 tables,
                 links,
                 occupancies,
                 user_id=user.id,
+                start_at=slot.start_at,
+                end_at=slot.end_at,
             )
-            created = []
-            for slot, chosen in zip(slots, allocations, strict=True):
-                record = self.repo.create_reservation(
-                    shop_id=req.shop_id,
-                    user_id=user.id,
-                    start_at=slot.start_at,
-                    end_at=slot.end_at,
-                    party_size=req.party_size,
-                    special_requests=req.special_requests,
-                    table_ids=[t.id for t in chosen],
-                )
-                self._log(user, record, "create", None, self._snapshot(record))
-                created.append(record)
-            return created
+            record = self.repo.create_reservation(
+                shop_id=req.shop_id,
+                user_id=user.id,
+                start_at=slot.start_at,
+                end_at=slot.end_at,
+                party_size=req.party_size,
+                special_requests=req.special_requests,
+                table_ids=[t.id for t in chosen],
+            )
+            self._log(user, record, "create", None, self._snapshot(record))
+            return record
 
-        records = self._atomic(work)
-        records = [self._load(r.id) for r in records]
-        return BookingList(items=[self._out(r, rules) for r in records], total=len(records))
+        record = self._atomic(work)
+        record = self._load(record.id)
+        return self._out(record, rules)
 
     @staticmethod
     def _summary(record: ReservationRecord) -> dict[str, Any]:
@@ -278,9 +281,22 @@ class BookingService:
         self._assert_access(user, record)
         return self._out(record, self.repo.get_pricing_rules(record.shop_id))
 
-    def list_mine(self, user: CurrentUser, page: int, page_size: int) -> BookingList:
+    def list_mine(
+        self,
+        user: CurrentUser,
+        page: int,
+        page_size: int,
+        *,
+        status: str | None = None,
+        from_date: str | None = None,
+        to_date: str | None = None,
+    ) -> BookingList:
         require_role(user, "player", "admin")
-        records, total = self.repo.list_for_user(user.id, page, page_size)
+        from_dt = date.fromisoformat(from_date) if from_date else None
+        to_dt = date.fromisoformat(to_date) if to_date else None
+        records, total = self.repo.list_for_user(
+            user.id, page, page_size, status=status, from_date=from_dt, to_date=to_dt
+        )
         return self._list(records, total)
 
     def list_for_shop(
@@ -298,6 +314,14 @@ class BookingService:
             raise AppError(404, "BOOKING_SHOP_NOT_FOUND", "找不到店家")
         records, total = self.repo.list_for_shop(shop_id, start_at, end_at, page, page_size)
         return self._list(records, total)
+
+    def list_shops(self, user: CurrentUser) -> ShopList:
+        require_role(user, "player", "shop_staff", "admin")
+        shops = self.repo.list_shops()
+        return ShopList(
+            items=[ShopOut(id=s.id, name=s.name) for s in shops],
+            total=len(shops),
+        )
 
     def _list(self, records: list[ReservationRecord], total: int) -> BookingList:
         rules_cache: dict[uuid.UUID, pricing.PricingRules] = {}
