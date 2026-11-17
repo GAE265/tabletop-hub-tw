@@ -29,9 +29,6 @@ class GameInUseError(Exception):
 class GameRepository(SessionRepository):
     """共用桌遊表 games、genres、game_genres 與 games.id 計數器的讀寫。"""
 
-    def game_exists(self, game_id: int) -> bool:
-        return bool(self.session.scalar(select(select(Game.id).where(Game.id == game_id).exists())))
-
     def count_games(self) -> int:
         return self.session.scalar(select(func.count()).select_from(Game)) or 0
 
@@ -50,19 +47,24 @@ class GameRepository(SessionRepository):
         games = self.session.execute(select(Game.__table__).order_by(Game.id)).mappings()
         return [{**game, "types": types.get(game["id"], [])} for game in games]
 
-    def search_games_by_name(self, name: str, limit: int = 20) -> list[dict[str, Any]]:
-        """用名稱模糊查詢（LIKE %name%），只回 id 與名稱，照 id 排，最多 limit 筆。
+    def search_games(self, q: str | None, offset: int, limit: int) -> tuple[list[Game], int]:
+        """依中文或英文名稱搜尋（部分相符、不分大小寫），照 name 排；回傳這一頁與總筆數。
 
-        名稱可能是中文或英文，分別比對 name 與 english_name；大小寫不在意。
+        q 為空時列出全部；q 中的 %、_ 當成一般字元。
         """
-        pattern = f"%{name}%"
-        games = self.session.execute(
-            select(Game.id, Game.name, Game.english_name)
-            .where(Game.name.ilike(pattern) | Game.english_name.ilike(pattern))
-            .order_by(Game.id)
-            .limit(limit)
-        ).mappings()
-        return [dict(game) for game in games]
+        query = select(Game)
+        if q:
+            escaped = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            pattern = f"%{escaped}%"
+            query = query.where(
+                Game.name.ilike(pattern, escape="\\")
+                | Game.english_name.ilike(pattern, escape="\\")
+            )
+        total = self.session.scalar(select(func.count()).select_from(query.subquery())) or 0
+        rows = self.session.scalars(
+            query.order_by(Game.name, Game.id).offset(offset).limit(limit)
+        ).all()
+        return list(rows), total
 
     def find_games_by_bgg_ids(self, bgg_ids: Collection[int]) -> list[dict[str, Any]]:
         """用 bgg_id 查桌遊，照 id 排。資料庫沒有的 bgg_id 不會出現在結果裡。

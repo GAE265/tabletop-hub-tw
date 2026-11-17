@@ -58,6 +58,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
     register_error_handlers(app)
     app.include_router(health_router, prefix=API_PREFIX)
+    app.include_router(games_router, prefix=API_PREFIX)
     app.include_router(booking_router, prefix=API_PREFIX)
     app.include_router(groups_router, prefix=API_PREFIX)
     app.include_router(games_advisor_router, prefix=API_PREFIX)
