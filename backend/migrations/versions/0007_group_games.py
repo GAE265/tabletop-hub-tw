@@ -4,8 +4,8 @@
 （openspec change update-groups-shop-game-pickers，design.md D1）。降級時把每個揪團順序第一
 的遊戲放回 groups.game_id。已合併的 0003 不修改。
 
-Revision ID: 0006
-Revises: 0005
+Revision ID: 0007
+Revises: 0006
 Create Date: 2026-11-17
 """
 
@@ -14,8 +14,8 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0006"
-down_revision: str | None = "0005"
+revision: str = "0007"
+down_revision: str | None = "0006"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
