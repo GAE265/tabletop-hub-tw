@@ -6,6 +6,7 @@ import '../core/config/app_config.dart';
 import '../domains/games_advisor/pages/games_advisor_page.dart';
 import '../domains/groups/pages/groups_page.dart';
 import '../domains/health/pages/health_page.dart';
+import '../prototypes/rules_qa/rules_qa_proto_page.dart';
 import 'shell.dart';
 import 'theme/theme_preview_page.dart';
 
@@ -25,6 +26,10 @@ GoRouter createRouter(AppConfig config) => GoRouter(
           builder: (context, state) => const GamesAdvisorPage(),
         ),
         if (config.showPrototypes) ...[
+          GoRoute(
+            path: '/proto/rules_qa',
+            builder: (context, state) => const RulesQaProtoPage(),
+          ),
           GoRoute(
             path: '/proto/theme',
             builder: (context, state) => const ThemePreviewPage(),
