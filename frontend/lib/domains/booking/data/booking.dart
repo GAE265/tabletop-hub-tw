@@ -35,8 +35,7 @@ class Booking {
     partySize: json['party_size'] as int,
     status: json['status'] as String,
     tableCodes: [
-      for (final t in json['tables'] as List)
-        (t as Map)['table_code'] as String,
+      for (final t in json['tables'] as List) (t as Map)['table_code'] as String,
     ],
     estimatedFee: Fee.fromJson(json['estimated_fee'] as Map<String, dynamic>),
     finalFee: json['final_fee']?.toString(),
@@ -91,3 +90,5 @@ class QuoteResult {
   final Fee fee;
   final List<String> tableCodes;
 }
+
+

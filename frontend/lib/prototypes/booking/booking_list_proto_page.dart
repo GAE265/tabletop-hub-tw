@@ -8,8 +8,7 @@ class BookingListProtoPage extends ConsumerStatefulWidget {
   const BookingListProtoPage({super.key});
 
   @override
-  ConsumerState<BookingListProtoPage> createState() =>
-      _BookingListProtoPageState();
+  ConsumerState<BookingListProtoPage> createState() => _BookingListProtoPageState();
 }
 
 class _BookingListProtoPageState extends ConsumerState<BookingListProtoPage> {
@@ -83,9 +82,7 @@ class _BookingListProtoPageState extends ConsumerState<BookingListProtoPage> {
                 child: TextField(
                   key: const Key('from-date'),
                   controller: _fromCtrl,
-                  decoration: const InputDecoration(
-                    labelText: '開始日期 YYYY-MM-DD',
-                  ),
+                  decoration: const InputDecoration(labelText: '開始日期 YYYY-MM-DD'),
                 ),
               ),
               const SizedBox(width: 8),
@@ -93,9 +90,7 @@ class _BookingListProtoPageState extends ConsumerState<BookingListProtoPage> {
                 child: TextField(
                   key: const Key('to-date'),
                   controller: _toCtrl,
-                  decoration: const InputDecoration(
-                    labelText: '結束日期 YYYY-MM-DD',
-                  ),
+                  decoration: const InputDecoration(labelText: '結束日期 YYYY-MM-DD'),
                 ),
               ),
             ],
@@ -134,9 +129,7 @@ class _BookingListProtoPageState extends ConsumerState<BookingListProtoPage> {
                       key: Key('cancel-${b.id}'),
                       onPressed: state.loading
                           ? null
-                          : () => ref
-                                .read(bookingProvider.notifier)
-                                .setStatus(b.id, 'cancelled'),
+                          : () => ref.read(bookingProvider.notifier).setStatus(b.id, 'cancelled'),
                       child: const Text('取消'),
                     ),
                   ],

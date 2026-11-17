@@ -105,14 +105,8 @@ class HttpBookingRepository implements BookingRepository {
   }) => _call(() async {
     final r = await _dio.post<Map<String, dynamic>>(
       '/api/v1/bookings',
-      data: _body(
-        shopId,
-        partySize,
-        startAt,
-        endAt,
-        specialRequests: specialRequests,
-        confirmOverlap: confirmOverlap,
-      ),
+      data: _body(shopId, partySize, startAt, endAt,
+          specialRequests: specialRequests, confirmOverlap: confirmOverlap),
     );
     return Booking.fromJson(r.data!);
   });

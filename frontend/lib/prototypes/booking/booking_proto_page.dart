@@ -153,8 +153,7 @@ class _BookingProtoPageState extends ConsumerState<BookingProtoPage> {
                 onPressed: state.loading
                     ? null
                     : () => _requireShop(
-                        (shopId) =>
-                            _n.requestQuote(shopId, _partySize, _start, _end),
+                        (shopId) => _n.requestQuote(shopId, _partySize, _start, _end),
                       ),
                 child: const Text('預估費用'),
               ),
@@ -183,10 +182,8 @@ class _BookingProtoPageState extends ConsumerState<BookingProtoPage> {
               style: TextStyle(color: state.isError ? Colors.red : null),
             ),
           if (state.quote != null)
-            Text(
-              '預估 ${state.quote!.startAt} ~ ${state.quote!.endAt}：${state.quote!.fee.billableHours} 小時，${state.quote!.fee.venueFee} 元'
-              '${state.quote!.tableCodes.isEmpty ? "" : "　桌位：${state.quote!.tableCodes.join(", ")}"}',
-            ),
+            Text('預估 ${state.quote!.startAt} ~ ${state.quote!.endAt}：${state.quote!.fee.billableHours} 小時，${state.quote!.fee.venueFee} 元'
+                '${state.quote!.tableCodes.isEmpty ? "" : "　桌位：${state.quote!.tableCodes.join(", ")}"}'),
 
           if (isStaff) ...[
             const Divider(),

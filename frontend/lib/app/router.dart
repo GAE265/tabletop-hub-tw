@@ -31,16 +31,16 @@ GoRouter createRouter(AppConfig config) => GoRouter(
             path: '/proto/theme',
             builder: (context, state) => const ThemePreviewPage(),
           ),
-          if (config.showPrototypes)
-            GoRoute(
-              path: '/proto/booking',
-              builder: (context, state) => const BookingProtoPage(),
-            ),
-          if (config.showPrototypes)
-            GoRoute(
-              path: '/proto/booking/list',
-              builder: (context, state) => const BookingListProtoPage(),
-            ),
+        if (config.showPrototypes)
+          GoRoute(
+            path: '/proto/booking',
+            builder: (context, state) => const BookingProtoPage(),
+          ),
+        if (config.showPrototypes)
+          GoRoute(
+            path: '/proto/booking/list',
+            builder: (context, state) => const BookingListProtoPage(),
+          ),
         ],
       ],
     ),
