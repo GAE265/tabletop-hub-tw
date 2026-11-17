@@ -33,7 +33,8 @@
 
 > 2026-11-17 永傑決定**先做前端**：MR 1 要等 `rules_ingest`（跟訂位一起）合併，前端照 spec 的 API 格式先做，測試用 fake repository。因此 MR 2 會比 MR 1 早發，分支 `feature/rules_qa-frontend`。AGENTS.md 7.5 規定 `lib/` 不放假資料，所以 3.6 的手動測試與 3.7 的交接說明（需要截圖）要等後端完成後再補，`needs-ui` 標籤也等那時再加。
 
-- [ ] 3.1 依 1.3 的結論，在群組徵得組內同意新增 `youtube_player_iframe`，MR 說明寫理由，驗證：結論記在本檔
+- [x] 3.1 依 1.3 的結論，在群組徵得組內同意新增 `youtube_player_iframe`，MR 說明寫理由，驗證：結論記在本檔
+  - 註記：永傑決定直接加入（`feature/rules_qa-pages`），理由寫在 MR 說明，請組員審核時確認。
 - [ ] 3.2 永傑開 Draft MR 2，AI 從 `specs/rules-qa-page` 整理情境表格，驗證：Draft MR 已存在
 - [x] 3.3 撰寫 state 測試（`test/domains/rules_qa/`，在 `test/support/fakes.dart` 新增 `FakeRulesQaRepository`，用 Riverpod override 替換）：清單載入／空／錯誤、教學頁有影片與沒有影片、看完影片開始提問、發問與頁碼出處、建議問題、追問帶 `response_id`、只有影片沒有規則書時不能提問、找不到答案、開始新對話、對話已失效、送出中不能重複送出、送出失敗保留問題、空白不能送出，驗證：測試存在且失敗
 - [x] 3.4 實作 `domains/rules_qa/data/`（freezed DTO、`RulesQaRepository`、`HttpRulesQaRepository`），執行 `dart run build_runner build --delete-conflicting-outputs`，驗證：`flutter analyze` 沒有錯誤
@@ -45,9 +46,11 @@
 
 ## 4. MR 3：正式頁面（於 MR 2 合併後從 dev 開分支）
 
-- [ ] 4.1 撰寫 widget 測試：`/rules`、`/rules/{game_id}` 路由存在、未開啟 `SHOW_PROTOTYPES` 時沒有 `/proto/rules_qa`、手機上下排列、桌機左右並排、頁碼出處顯示，驗證：測試存在且失敗
-- [ ] 4.2 實作 `domains/rules_qa/pages/`，只使用 `rules_qa/state/` 與 `app/theme/`，驗證：4.1 的測試通過；用 grep 確認 `pages/` 沒有寫死的顏色、字級、間距
-- [ ] 4.3 在 `app/router.dart` 註冊 `/rules`，在畫面框架加上入口；依 5.4 刪除 `/proto/rules_qa`，驗證：`flutter test` 全部通過
+> 2026-11-17 永傑決定直接接著做正式頁面：分支 `feature/rules_qa-pages` 從 `feature/rules_qa-frontend`（#44）開出，#44 合併後再合併 `dev`。正式頁面同時加上 `youtube_player_iframe`，教學影片在頁面內嵌播放（3.1 的套件）。
+
+- [x] 4.1 撰寫 widget 測試：`/rules`、`/rules/{game_id}` 路由存在、未開啟 `SHOW_PROTOTYPES` 時沒有 `/proto/rules_qa`、手機上下排列、桌機左右並排、頁碼出處顯示，驗證：測試存在且失敗
+- [x] 4.2 實作 `domains/rules_qa/pages/`，只使用 `rules_qa/state/` 與 `app/theme/`，驗證：4.1 的測試通過；用 grep 確認 `pages/` 沒有寫死的顏色、字級、間距
+- [x] 4.3 在 `app/router.dart` 註冊 `/rules`，在畫面框架加上入口；依 5.4 刪除 `/proto/rules_qa`，驗證：`flutter test` 全部通過
 - [ ] 4.4 自我檢查：在 `frontend/` 跑 `flutter analyze`、`flutter test`，並在 Chrome 手動檢查手機與桌機寬度，驗證：全部通過、CI 全綠，再改成 Ready for review
 
 ## Workflow follow-up
