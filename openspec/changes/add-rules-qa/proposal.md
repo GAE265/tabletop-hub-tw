@@ -36,8 +36,8 @@
 - **受影響 domain**：`rules_qa`（主責永傑，協助新善、瑋鋐）。
 - **相依的 domain**：`rules_ingest`（瑋鋐）。
   - 規則書頁面存在 `games_manual`，屬於 `rules_ingest`，不是共用表。依 AGENTS.md 4.2，`rules_qa` 只能呼叫 `rules_ingest` 的 service，不能直接用它的 model 或 repository。
-  - 目前 `ManualPagesService.list_pages()` 限店家人員與管理員，是給 API 用的；索引指令需要一個不檢查使用者的讀取方法（見 design.md D4），要請瑋鋐新增，MR 要 @ 瑋鋐。
-  - `rules_ingest` 的程式在 `feature/ocr` 分支，**尚未合併**。本 change 的 MR 1 要等它合併後才能開始。
+  - 目前 `ManualPagesService.list_pages()` 限店家人員與管理員，是給 API 用的；索引指令需要一個不檢查使用者的讀取方法（見 design.md D4）。瑋鋐回覆查詢部分無法協助，由永傑新增，MR 要 @ 瑋鋐。
+  - `rules_ingest` 的程式在 `feature/ocr` 分支，**尚未合併**；它建在訂位分支上，會跟 `booking` 一起合併。本 change 的 MR 1 要等它合併後才能開始。
 - **共用資料表**：`games`（擁有者立倫）。`rules_qa_videos.game_id`、`rules_qa_chunks.game_id` 以外鍵參照 `games.id`（bigint），依 ADR 0003 不設定 cascade；遊戲名稱透過 `core/games` 的 repository 讀取，不改結構。
 - **共用區**：
   - `backend/app/integrations/embedding/`、`integrations/llm/`（擁有者瑋鋐）：只使用既有介面，不修改。

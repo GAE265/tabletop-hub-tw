@@ -56,12 +56,12 @@
 **D3 切段方式。**
 - 每頁依 Markdown 段落（空行）切開，再把相鄰段落合併到約 600 字以內；段落不跨頁，記錄頁碼。超過 600 字的單一段落依句號切開。
 
-**D4 規則書頁面的讀取：請 `rules_ingest` 提供 service 方法。**
-依 4.2，`rules_qa` 不能用 `games_manual` 的 model 或 repository。請瑋鋐在 `ManualPagesService`（或另一個 service 函式）新增不檢查使用者的讀取方法，例如 `pages_for_game(games_id) -> list[(page, content)]`，只給後端指令與其他 domain 的 service 使用，不開放成 API。索引指令只由組員在後端執行，所以不需要使用者身分。
+**D4 規則書頁面的讀取：在 `rules_ingest` 新增 service 方法。**
+依 4.2，`rules_qa` 不能用 `games_manual` 的 model 或 repository。在 `ManualPagesService`（或另一個 service 函式）新增不檢查使用者的讀取方法（瑋鋐回覆查詢部分無法協助，由永傑新增，MR @ 瑋鋐審核），例如 `pages_for_game(games_id) -> list[(page, content)]`，只給後端指令與其他 domain 的 service 使用，不開放成 API。索引指令只由組員在後端執行，所以不需要使用者身分。
 替代方案：請瑋鋐入庫時順便切段、轉向量。被否決：增加 `rules_ingest` 的範圍，而且檢索策略（切多大、存什麼出處）是問答的需求，應由 `rules_qa` 決定。
 
 **D5 embedding 設定：`rules_qa` 自己一組。**
-比照 `games_advisor`，新增 `RULES_QA_EMBEDDING_PROVIDER`、`_ENDPOINT`、`_API_KEY`、`_MODEL`、`_DIM`，沒填時用 fake，不退回其他 domain 的設定。理由：換模型時要重建索引，各 domain 各自控制比較安全。向量欄位維度讀 `RULES_QA_EMBEDDING_DIM`。**待瑋鋐（`integrations/` 擁有者）確認**，若他希望共用全域 `EMBEDDING_*`，只改設定來源，不影響其他設計。
+比照 `games_advisor`，新增 `RULES_QA_EMBEDDING_PROVIDER`、`_ENDPOINT`、`_API_KEY`、`_MODEL`、`_DIM`，沒填時用 fake，不退回其他 domain 的設定。理由：換模型時要重建索引，各 domain 各自控制比較安全。向量欄位維度讀 `RULES_QA_EMBEDDING_DIM`。瑋鋐（`integrations/` 擁有者）對此沒有表示意見，照本決定實作；若之後希望共用全域 `EMBEDDING_*`，只改設定來源，不影響其他設計。
 
 **D6 問答流程。**
 1. 確認遊戲存在（`core/games` 的 repository），沒有段落時回 409 `RULES_QA_NOT_READY`，不呼叫 LLM。
@@ -107,7 +107,7 @@
 
 ## Risks / Trade-offs
 
-- **[依賴未合併的分支]** `games_manual` 還在 `feature/ocr`。→ MR 1 等它合併；在那之前可以先寫影片相關的部分與測試。
+- **[依賴未合併的分支]** `games_manual` 還在 `feature/ocr`，而且建在訂位分支上，會跟訂位一起合併。→ MR 1 等它合併；在那之前可以先寫影片相關的部分與測試。
 - **[只有影片、沒有規則書的遊戲]** 有影片的 3 款不一定都已入庫規則書。→ 教學頁照常播影片，問答區改顯示「規則書還沒入庫」；後端發問回 409 `RULES_QA_NOT_READY`。
 - **[「次」的檢查太嚴]** 「其次」「次序」等詞也會被擋。→ 先嚴格執行，改寫一次通常能避開；若誤擋太多，再改成只檢查「第 N 次」「一次」等計數用法。
 - **[檢索品質]** 段落大小、取幾段都是初始值。→ 寫成常數，之後依實際規則書調整；可以參考 `games_advisor` 的評估題組做法另開 change。
@@ -117,5 +117,4 @@
 ## Open Questions
 
 1. 影片放在哪裡（自己代管的 mp4，或 YouTube）？這會決定 D9 的套件。`add-rules-video-maker` 產生的影片是 mp4，存在新增的 `integrations/storage`；若組內自製的影片也放在同一處，D9 就可以確定用 `video_player`。
-2. 瑋鋐是否同意 D4（新增不檢查使用者的頁面讀取方法）與 D5（`rules_qa` 自己一組 embedding 設定）？
-3. 表名 `rules_qa_videos`、`rules_qa_chunks` 需要在群組告知（4.4）。
+2. 表名 `rules_qa_videos`、`rules_qa_chunks` 需要在群組告知（4.4）。

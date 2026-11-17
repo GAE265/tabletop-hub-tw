@@ -5,9 +5,14 @@
 ## 1. 前置確認
 
 - [ ] 1.1 在群組告知新表名 `rules_qa_videos`、`rules_qa_chunks`（4.4），驗證：沒有人提出撞名或反對
-- [ ] 1.2 與瑋鋐確認 design.md D4（`rules_ingest` 新增不檢查使用者的頁面讀取方法，由誰新增）與 D5（embedding 設定），驗證：結論記在本檔的「1.2 結論」註記
+- [x] 1.2 與瑋鋐確認 design.md D4（`rules_ingest` 新增不檢查使用者的頁面讀取方法，由誰新增）與 D5（embedding 設定），驗證：結論記在本檔的「1.2 結論」註記
+  - 1.2 結論（2026-11-17）：瑋鋐回覆 `rules_ingest` 只做匯入，查詢與 embedding 沒有做，問答的部分無法協助。因此：
+    - 切段與 embedding 由 `rules_qa` 自己做（D1、D4 不變）。
+    - 讀取規則書頁面的 service 方法由永傑新增在 `rules_ingest` 的 service，MR 說明 @ 瑋鋐審核（2.6）。
+    - embedding 設定瑋鋐沒有表示意見，照 D5 使用 `rules_qa` 自己一組 `RULES_QA_EMBEDDING_*`。
 - [ ] 1.3 確認影片放在哪裡（design.md Open Questions 1），驗證：結論記在本檔；若影片在 YouTube，先更新 design.md D9 再開始 MR 2
 - [ ] 1.4 等 `feature/ocr`（`games_manual`、`rules_ingest` service）合併到 `dev`，驗證：`dev` 上有 `backend/app/domains/rules_ingest/`
+  - 註記：瑋鋐的 `rules_ingest` 建在訂位（`booking`）分支上，會跟訂位一起發 PR，合併時間跟著訂位。
 
 ## 2. MR 1：後端 API、索引指令與 migration（@ 立倫、瑋鋐）
 
