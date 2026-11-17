@@ -7,6 +7,8 @@
 - 前端 `state/` 位置：`frontend/lib/domains/games_advisor/state/`
 - 參考畫面路由：`/proto/games_advisor`（啟動需帶 `--dart-define=SHOW_PROTOTYPES=true`）
 
+> **狀態（2026-11-17）：正式頁面已完成**，位於 `frontend/lib/domains/games_advisor/pages/`，路由 `/games-advisor`，配色依全站主題（焦糖橘），版面依第 4.1 節的設計稿。依 AGENTS.md 5.4，參考畫面 `prototypes/games_advisor/` 與 `/proto/games_advisor` 路由已刪除；本文件保留作為畫面行為的紀錄，參考畫面的檔案可在 git 歷史中找到。
+
 玩家用聊天的方式說出人數、時間和喜好，推薦 Agent 會追問條件，或推薦最多 3 款桌遊，附上推薦理由與心得片段。
 
 ## 1. 頁面清單

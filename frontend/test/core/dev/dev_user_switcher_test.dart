@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -68,6 +70,38 @@ void main() {
   testWidgets('清單為空顯示 seed 提示', (tester) async {
     await pumpSwitcher(tester, repo: FakeDevUsersRepository(users: []));
     expect(find.textContaining('請先執行 seed'), findsOneWidget);
+  });
+
+  testWidgets('清單比畫面晚到、標頭已被讀過時，不會在建立畫面時要求重畫', (tester) async {
+    // 實際啟動時：首頁先打 API（讀過一次標頭），測試帳號清單之後才回來
+    final repo = FakeDevUsersRepository()..gate = Completer<void>();
+    final container = ProviderContainer(
+      overrides: [
+        appConfigProvider.overrideWithValue(
+          const AppConfig(
+            apiBaseUrl: 'http://api.test',
+            showPrototypes: false,
+            devUserEnabled: true,
+          ),
+        ),
+        devUsersRepositoryProvider.overrideWithValue(repo),
+      ],
+    );
+    addTearDown(container.dispose);
+    container.read(devUserHeaderProvider);
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: const MaterialApp(home: Scaffold(body: DevUserSwitcher())),
+      ),
+    );
+    await tester.pump();
+
+    repo.gate!.complete();
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('測試玩家'), findsWidgets);
+    expect(container.read(devUserHeaderProvider), 'u-player:player');
   });
 
   testWidgets('正式環境不顯示切換器，也不呼叫 API', (tester) async {

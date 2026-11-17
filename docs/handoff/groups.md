@@ -7,6 +7,8 @@
 - 前端 `state/` 位置：`frontend/lib/domains/groups/state/`
 - 參考畫面路由：`/proto/groups`（啟動需帶 `--dart-define=SHOW_PROTOTYPES=true`）
 
+> **狀態（2026-11-17）：正式頁面已完成**，位於 `frontend/lib/domains/groups/pages/`，路由 `/groups`。依 AGENTS.md 5.4，參考畫面 `prototypes/groups/` 與 `/proto/groups` 路由已刪除；本文件保留作為畫面行為的紀錄，下文提到的參考畫面檔案可在 git 歷史中找到。
+
 時間一律由後端以 UTC 傳遞，`state/` 透過 `groupClockProvider` 換算成裝置時區。頁面不要自己做時區換算，一律使用 `state/` 提供的日期與 `GroupClock`。
 
 ## 1. 頁面清單

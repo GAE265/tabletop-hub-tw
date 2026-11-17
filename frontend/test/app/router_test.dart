@@ -49,37 +49,28 @@ void goTo(WidgetTester tester, String location) {
 }
 
 void main() {
-  testWidgets('SHOW_PROTOTYPES 開啟：/proto/health 顯示參考畫面', (tester) async {
+  testWidgets('health 已有正式頁面，移除 /proto/health（SHOW_PROTOTYPES 開啟也找不到）', (
+    tester,
+  ) async {
     await pumpApp(tester, showPrototypes: true);
     goTo(tester, '/proto/health');
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('health-proto-page')), findsOneWidget);
-  });
-
-  testWidgets('SHOW_PROTOTYPES 關閉：/proto/health 顯示找不到頁面', (tester) async {
-    await pumpApp(tester, showPrototypes: false);
-    goTo(tester, '/proto/health');
-    await tester.pumpAndSettle();
-    expect(find.byKey(const Key('health-proto-page')), findsNothing);
     expect(find.text('找不到頁面'), findsOneWidget);
   });
 
-  testWidgets('SHOW_PROTOTYPES 開啟：/proto/games_advisor 顯示推薦 Agent 參考畫面', (
+  testWidgets('/games-advisor 是正式推薦頁（SHOW_PROTOTYPES 關閉也能使用）', (tester) async {
+    await pumpApp(tester, showPrototypes: false);
+    goTo(tester, '/games-advisor');
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('games-advisor-page')), findsOneWidget);
+  });
+
+  testWidgets('正式頁面完成後移除 /proto/games_advisor（SHOW_PROTOTYPES 開啟也找不到）', (
     tester,
   ) async {
     await pumpApp(tester, showPrototypes: true);
     goTo(tester, '/proto/games_advisor');
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('games_advisor-proto-page')), findsOneWidget);
-  });
-
-  testWidgets('SHOW_PROTOTYPES 關閉：/proto/games_advisor 顯示找不到頁面', (
-    tester,
-  ) async {
-    await pumpApp(tester, showPrototypes: false);
-    goTo(tester, '/proto/games_advisor');
-    await tester.pumpAndSettle();
-    expect(find.byKey(const Key('games_advisor-proto-page')), findsNothing);
     expect(find.text('找不到頁面'), findsOneWidget);
   });
 
@@ -104,13 +95,6 @@ void main() {
     expect(find.textContaining('ok'), findsWidgets);
   });
 
-  testWidgets('參考畫面與正式頁面共用同一個 state（同一份資料）', (tester) async {
-    await pumpApp(tester, showPrototypes: true);
-    goTo(tester, '/proto/health');
-    await tester.pumpAndSettle();
-    expect(find.textContaining('ok'), findsWidgets);
-  });
-
   testWidgets('開發環境框架顯示身分切換器', (tester) async {
     await pumpApp(tester, showPrototypes: false, dev: true);
     expect(find.byType(DropdownButton<String>), findsOneWidget);
@@ -121,19 +105,33 @@ void main() {
     expect(find.byType(DropdownButton<String>), findsNothing);
   });
 
-  testWidgets('SHOW_PROTOTYPES 開啟：/proto/groups 顯示揪團參考畫面', (tester) async {
+  testWidgets('/groups 是正式揪團月曆（SHOW_PROTOTYPES 關閉也能使用）', (tester) async {
+    await pumpApp(tester, showPrototypes: false);
+    goTo(tester, '/groups');
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('groups-page')), findsOneWidget);
+  });
+
+  testWidgets('正式頁面完成後移除 /proto/groups（SHOW_PROTOTYPES 開啟也找不到）', (
+    tester,
+  ) async {
     await pumpApp(tester, showPrototypes: true);
     goTo(tester, '/proto/groups');
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('groups-proto-page')), findsOneWidget);
-    expect(find.text('我要開團'), findsWidgets);
+    expect(find.text('找不到頁面'), findsOneWidget);
   });
 
-  testWidgets('SHOW_PROTOTYPES 關閉：/proto/groups 顯示找不到頁面', (tester) async {
+  testWidgets('畫面框架的「揪團」入口進到 /groups', (tester) async {
     await pumpApp(tester, showPrototypes: false);
-    goTo(tester, '/proto/groups');
+    await tester.tap(find.byKey(const Key('shell-nav-groups')));
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('groups-proto-page')), findsNothing);
-    expect(find.text('找不到頁面'), findsOneWidget);
+    expect(find.byKey(const Key('groups-page')), findsOneWidget);
+  });
+
+  testWidgets('畫面框架的「推薦」入口進到 /games-advisor', (tester) async {
+    await pumpApp(tester, showPrototypes: false);
+    await tester.tap(find.byKey(const Key('shell-nav-advisor')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('games-advisor-page')), findsOneWidget);
   });
 }
