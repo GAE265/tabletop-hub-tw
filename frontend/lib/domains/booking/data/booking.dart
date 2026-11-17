@@ -70,30 +70,25 @@ class BookingPage {
   final int total;
 }
 
-class QuoteItem {
-  const QuoteItem({
+class QuoteResult {
+  const QuoteResult({
     required this.startAt,
     required this.endAt,
     required this.fee,
+    this.tableCodes = const [],
   });
 
-  factory QuoteItem.fromJson(Map<String, dynamic> json) => QuoteItem(
+  factory QuoteResult.fromJson(Map<String, dynamic> json) => QuoteResult(
     startAt: json['start_at'] as String,
     endAt: json['end_at'] as String,
     fee: Fee.fromJson(json['fee'] as Map<String, dynamic>),
+    tableCodes: (json['table_codes'] as List?)?.cast<String>() ?? [],
   );
 
   final String startAt;
   final String endAt;
   final Fee fee;
+  final List<String> tableCodes;
 }
 
-/// 一個時段，時間為 ISO 8601 字串（含時區）。
-class Slot {
-  const Slot({required this.startAt, required this.endAt});
 
-  final String startAt;
-  final String endAt;
-
-  Map<String, dynamic> toJson() => {'start_at': startAt, 'end_at': endAt};
-}

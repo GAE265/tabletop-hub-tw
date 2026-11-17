@@ -81,8 +81,8 @@ def test_too_short():
     assert code_of(slot("2026-11-18", "14:00", "14:45")) == "BOOKING_TOO_SHORT"
 
 
-def test_non_round_start_allowed():
-    check(slot("2026-11-18", "14:10", "16:40"))
+def test_non_round_start_rejected():
+    assert code_of(slot("2026-11-18", "14:10", "16:40")) == "BOOKING_TIME_GRANULARITY"
 
 
 def test_cross_day_rejected():
@@ -106,6 +106,18 @@ def test_three_calendar_month_limit():
 
 def test_add_months_clamps_month_end():
     assert add_months(date(2026, 11, 30), 3) == date(2027, 2, 28)
+
+
+def test_round_start_end_accepted():
+    check(slot("2026-11-18", "14:00", "16:00"))
+
+
+def test_half_hour_accepted():
+    check(slot("2026-11-18", "14:30", "17:00"))
+
+
+def test_end_minute_not_round_rejected():
+    assert code_of(slot("2026-11-18", "14:00", "16:15")) == "BOOKING_TIME_GRANULARITY"
 
 
 def test_batch_ok():

@@ -21,6 +21,12 @@ class TableRef:
     table_code: str
 
 
+@dataclass(frozen=True)
+class ShopRef:
+    id: uuid.UUID
+    name: str
+
+
 @dataclass
 class ReservationRecord:
     id: int

@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../core/config/app_config.dart';
 import '../domains/health/pages/health_page.dart';
+import '../prototypes/booking/booking_list_proto_page.dart';
 import '../prototypes/booking/booking_proto_page.dart';
 import '../prototypes/health/health_proto_page.dart';
 import 'shell.dart';
@@ -24,6 +25,11 @@ GoRouter createRouter(AppConfig config) => GoRouter(
           GoRoute(
             path: '/proto/booking',
             builder: (context, state) => const BookingProtoPage(),
+          ),
+        if (config.showPrototypes)
+          GoRoute(
+            path: '/proto/booking/list',
+            builder: (context, state) => const BookingListProtoPage(),
           ),
       ],
     ),

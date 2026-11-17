@@ -12,7 +12,7 @@ from itertools import combinations
 
 from app.domains.booking.errors import NoTableAvailable
 
-BUFFER_MINUTES = 5
+BUFFER_MINUTES = 0
 
 
 @dataclass(frozen=True)

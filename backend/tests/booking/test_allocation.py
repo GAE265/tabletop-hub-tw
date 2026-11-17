@@ -5,7 +5,6 @@ import pytest
 from app.domains.booking.allocation import (
     Occupancy,
     allocate,
-    allocate_batch,
     is_conflict,
 )
 from app.domains.booking.errors import NoTableAvailable
@@ -57,19 +56,12 @@ def test_not_enough_capacity():
         run(100, "ABCDEFGHI")
 
 
-def test_buffer_other_user():
+def test_no_buffer_any_user_adjacent_ok():
     busy = [Occupancy(tid("F"), OTHER, local(D, "12:00"), local(D, "14:00"))]
-    # 他人 14:00 結束，14:03 開始距離不足 5 分鐘
-    assert run(7, "FC", busy, start_at=local(D, "14:03")) == ["C"]
-    assert run(7, "FC", busy, start_at=local(D, "14:05")) == ["F"]
+    assert run(7, "F", busy, start_at=local(D, "14:00")) == ["F"]
 
 
-def test_buffer_before_next_booking():
-    busy = [Occupancy(tid("F"), OTHER, local(D, "16:03"), local(D, "18:00"))]
-    assert run(7, "FC", busy) == ["C"]  # 我方 16:00 結束，下一筆 16:03 開始
-
-
-def test_same_user_no_buffer():
+def test_no_buffer_same_user():
     busy = [Occupancy(tid("F"), USER, local(D, "12:00"), local(D, "14:00"))]
     assert run(7, "F", busy) == ["F"]
     assert not is_conflict(
@@ -89,18 +81,6 @@ def test_keep_preferred_table_when_still_free():
 
 def test_preferred_dropped_when_too_small():
     assert run(9, "AC", preferred_ids=[tid("A")]) == ["C"]
-
-
-def test_batch_counts_previous_slot_as_busy():
-    slots = [(local(D, "14:00"), local(D, "16:00")), (local(D, "15:00"), local(D, "17:00"))]
-    got = allocate_batch(slots, 7, tables("F", "C"), LINKS, [], user_id=USER)
-    assert [[t.table_code for t in g] for g in got] == [["F"], ["C"]]
-
-
-def test_batch_fails_when_any_slot_has_no_table():
-    slots = [(local(D, "14:00"), local(D, "16:00")), (local(D, "15:00"), local(D, "17:00"))]
-    with pytest.raises(NoTableAvailable):
-        allocate_batch(slots, 7, tables("F"), LINKS, [], user_id=USER)
 
 
 def test_all_fixture_tables_exist():

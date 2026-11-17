@@ -109,9 +109,26 @@ def validate_slot(
 ) -> None:
     validate_duration(slot, min_hours)
     validate_same_day(slot)
+    validate_time_granularity(slot)
     validate_lead_time(slot, now)
     validate_business_hours(slot, business_hours)
     validate_closings(slot, closings)
+
+
+def validate_time_granularity(slot: Slot) -> None:
+    """開始與結束時間的分鐘數必須為 0 或 30。"""
+    start_minute = to_local(slot.start_at).minute
+    end_minute = to_local(slot.end_at).minute
+    if start_minute not in (0, 30):
+        raise BookingRuleError(
+            "BOOKING_TIME_GRANULARITY",
+            f"開始時間的分鐘必須為 0 或 30，目前為 {start_minute}",
+        )
+    if end_minute not in (0, 30):
+        raise BookingRuleError(
+            "BOOKING_TIME_GRANULARITY",
+            f"結束時間的分鐘必須為 0 或 30，目前為 {end_minute}",
+        )
 
 
 def validate_batch(slots: Sequence[Slot], party_sizes: Sequence[int]) -> None:

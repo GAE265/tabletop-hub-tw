@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from app.core.auth import CurrentUser
 from app.core.errors import AppError
 from app.domains.booking.repository import BookingRepository
-from app.domains.booking.schemas import BookingCreate, SlotIn
+from app.domains.booking.schemas import BookingCreate
 from app.domains.booking.service import BookingService
 from tests.booking.conftest import NOW, PLAYER, PLAYER2, SHOP
 
@@ -38,17 +38,13 @@ def request() -> BookingCreate:
     return BookingCreate(
         shop_id=SHOP,
         party_size=4,
-        slots=[
-            SlotIn(
-                start_at=datetime(2026, 11, 25, 14, tzinfo=TZ),
-                end_at=datetime(2026, 11, 25, 16, tzinfo=TZ),
-            )
-        ],
+        start_at=datetime(2026, 11, 25, 14, tzinfo=TZ),
+        end_at=datetime(2026, 11, 25, 16, tzinfo=TZ),
     )
 
 
 def race(db: Engine) -> list[object]:
-    """兩個使用者同時訂同一時段，回傳各自的結果（成功是 BookingList，失敗是 AppError）。"""
+    """兩個使用者同時訂同一時段，回傳各自的結果（成功是 BookingOut，失敗是 AppError）。"""
     barrier = threading.Barrier(2)
     outcomes: dict[uuid.UUID, object] = {}
 
