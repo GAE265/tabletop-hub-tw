@@ -64,22 +64,19 @@ void main() {
     expect(find.text('找不到頁面'), findsOneWidget);
   });
 
-  testWidgets('SHOW_PROTOTYPES 開啟：/proto/games_advisor 顯示推薦 Agent 參考畫面', (
+  testWidgets('/games-advisor 是正式推薦頁（SHOW_PROTOTYPES 關閉也能使用）', (tester) async {
+    await pumpApp(tester, showPrototypes: false);
+    goTo(tester, '/games-advisor');
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('games-advisor-page')), findsOneWidget);
+  });
+
+  testWidgets('正式頁面完成後移除 /proto/games_advisor（SHOW_PROTOTYPES 開啟也找不到）', (
     tester,
   ) async {
     await pumpApp(tester, showPrototypes: true);
     goTo(tester, '/proto/games_advisor');
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('games_advisor-proto-page')), findsOneWidget);
-  });
-
-  testWidgets('SHOW_PROTOTYPES 關閉：/proto/games_advisor 顯示找不到頁面', (
-    tester,
-  ) async {
-    await pumpApp(tester, showPrototypes: false);
-    goTo(tester, '/proto/games_advisor');
-    await tester.pumpAndSettle();
-    expect(find.byKey(const Key('games_advisor-proto-page')), findsNothing);
     expect(find.text('找不到頁面'), findsOneWidget);
   });
 
