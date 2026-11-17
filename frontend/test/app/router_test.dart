@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:tabletop_hub/app/app.dart';
 import 'package:tabletop_hub/app/theme/app_fonts.dart';
 import 'package:tabletop_hub/core/config/app_config.dart';
+import 'package:tabletop_hub/core/platform/lesson_video_player.dart';
 import 'package:tabletop_hub/core/dev/data/dev_users_repository.dart';
 import 'package:tabletop_hub/domains/groups/data/groups_repository.dart';
 import 'package:tabletop_hub/domains/games_advisor/data/advisor_repository.dart';
@@ -39,6 +40,9 @@ Future<void> pumpApp(
         ),
         advisorRepositoryProvider.overrideWithValue(FakeAdvisorRepository()),
         rulesQaRepositoryProvider.overrideWithValue(FakeRulesQaRepository()),
+        lessonVideoPlayerProvider.overrideWithValue(
+          const FakeLessonVideoPlayer(),
+        ),
       ],
       child: const App(),
     ),
@@ -137,18 +141,33 @@ void main() {
     expect(find.byKey(const Key('games-advisor-page')), findsOneWidget);
   });
 
-  testWidgets('SHOW_PROTOTYPES 開啟：/proto/rules_qa 顯示規則教學參考畫面', (tester) async {
+  testWidgets('/rules 是正式規則教學頁（SHOW_PROTOTYPES 關閉也能使用）', (tester) async {
+    await pumpApp(tester, showPrototypes: false);
+    goTo(tester, '/rules');
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('rules-lessons-page')), findsOneWidget);
+  });
+
+  testWidgets('/rules/{game_id} 是某款遊戲的教學頁', (tester) async {
+    await pumpApp(tester, showPrototypes: false);
+    goTo(tester, '/rules/2');
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('rules-lesson-page')), findsOneWidget);
+  });
+
+  testWidgets('正式頁面完成後移除 /proto/rules_qa（SHOW_PROTOTYPES 開啟也找不到）', (
+    tester,
+  ) async {
     await pumpApp(tester, showPrototypes: true);
     goTo(tester, '/proto/rules_qa');
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('rules_qa-proto-page')), findsOneWidget);
+    expect(find.text('找不到頁面'), findsOneWidget);
   });
 
-  testWidgets('SHOW_PROTOTYPES 關閉：/proto/rules_qa 顯示找不到頁面', (tester) async {
+  testWidgets('畫面框架的「規則」入口進到 /rules', (tester) async {
     await pumpApp(tester, showPrototypes: false);
-    goTo(tester, '/proto/rules_qa');
+    await tester.tap(find.byKey(const Key('shell-nav-rules')));
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('rules_qa-proto-page')), findsNothing);
-    expect(find.text('找不到頁面'), findsOneWidget);
+    expect(find.byKey(const Key('rules-lessons-page')), findsOneWidget);
   });
 }
