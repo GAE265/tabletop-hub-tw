@@ -10,6 +10,7 @@ import 'package:tabletop_hub/domains/groups/data/groups_repository.dart';
 import 'package:tabletop_hub/domains/games_advisor/data/advisor_repository.dart';
 import 'package:tabletop_hub/domains/health/data/health_repository.dart';
 import 'package:tabletop_hub/domains/health/data/health_status.dart';
+import 'package:tabletop_hub/domains/rules_qa/data/rules_qa_repository.dart';
 
 import '../support/fakes.dart';
 
@@ -37,6 +38,7 @@ Future<void> pumpApp(
           ),
         ),
         advisorRepositoryProvider.overrideWithValue(FakeAdvisorRepository()),
+        rulesQaRepositoryProvider.overrideWithValue(FakeRulesQaRepository()),
       ],
       child: const App(),
     ),
@@ -133,5 +135,20 @@ void main() {
     await tester.tap(find.byKey(const Key('shell-nav-advisor')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('games-advisor-page')), findsOneWidget);
+  });
+
+  testWidgets('SHOW_PROTOTYPES 開啟：/proto/rules_qa 顯示規則教學參考畫面', (tester) async {
+    await pumpApp(tester, showPrototypes: true);
+    goTo(tester, '/proto/rules_qa');
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('rules_qa-proto-page')), findsOneWidget);
+  });
+
+  testWidgets('SHOW_PROTOTYPES 關閉：/proto/rules_qa 顯示找不到頁面', (tester) async {
+    await pumpApp(tester, showPrototypes: false);
+    goTo(tester, '/proto/rules_qa');
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('rules_qa-proto-page')), findsNothing);
+    expect(find.text('找不到頁面'), findsOneWidget);
   });
 }

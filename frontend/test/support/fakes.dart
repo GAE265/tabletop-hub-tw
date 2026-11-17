@@ -8,6 +8,8 @@ import 'package:tabletop_hub/core/api/api_exception.dart';
 import 'package:tabletop_hub/core/dev/data/dev_user.dart';
 import 'package:tabletop_hub/core/dev/data/dev_users_repository.dart';
 
+import 'package:tabletop_hub/domains/rules_qa/data/rules_qa_models.dart';
+import 'package:tabletop_hub/domains/rules_qa/data/rules_qa_repository.dart';
 import 'package:tabletop_hub/domains/groups/data/group.dart';
 import 'package:tabletop_hub/domains/groups/data/group_input.dart';
 import 'package:tabletop_hub/domains/groups/data/groups_repository.dart';
@@ -352,4 +354,57 @@ class FakeGroupsRepository implements GroupsRepository {
     final index = groups.indexWhere((g) => g.id == groupId);
     groups[index] = groups[index].copyWith(myStatus: null);
   }
+}
+
+/// 在記憶體中運作的 RulesQaRepository。發問會等到 [respond] 或 [fail] 才回應。
+class FakeRulesQaRepository implements RulesQaRepository {
+  FakeRulesQaRepository({
+    List<RulesLessonSummary>? lessons,
+    Map<int, RulesLesson>? details,
+  }) : lessons = lessons ?? [],
+       details = details ?? {};
+
+  List<RulesLessonSummary> lessons;
+  Map<int, RulesLesson> details;
+
+  /// 清單、教學內容丟出的錯誤。
+  Object? listError;
+  Object? lessonError;
+
+  final requests = <(int, RulesMessageRequest)>[];
+  final _pending = <Completer<RulesAnswer>>[];
+
+  @override
+  Future<List<RulesLessonSummary>> listLessons() async {
+    if (listError != null) throw listError!;
+    return lessons;
+  }
+
+  @override
+  Future<RulesLesson> getLesson(int gameId) async {
+    if (lessonError != null) throw lessonError!;
+    final lesson = details[gameId];
+    if (lesson == null) {
+      throw const ApiException(
+        code: 'RULES_LESSON_NOT_FOUND',
+        message: '這款遊戲還沒有教材',
+        statusCode: 404,
+      );
+    }
+    return lesson;
+  }
+
+  @override
+  Future<RulesAnswer> sendMessage(int gameId, RulesMessageRequest request) {
+    requests.add((gameId, request));
+    final completer = Completer<RulesAnswer>();
+    _pending.add(completer);
+    return completer.future;
+  }
+
+  /// 最早那個還在等的發問收到回答。
+  void respond(RulesAnswer answer) => _pending.removeAt(0).complete(answer);
+
+  /// 最早那個還在等的發問失敗。
+  void fail(Object error) => _pending.removeAt(0).completeError(error);
 }
