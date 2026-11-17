@@ -65,7 +65,7 @@ class GroupCard extends ConsumerWidget {
                     tone: PillTone.duration,
                     icon: Icons.schedule,
                   ),
-                  if (group.game case final game?)
+                  for (final game in group.games)
                     PillBadge(label: game.name, icon: Icons.casino_outlined),
                   if (fee != null) PillBadge(label: fee, tone: PillTone.accent),
                 ],

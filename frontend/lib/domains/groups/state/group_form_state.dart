@@ -18,7 +18,7 @@ class GroupFormData {
     this.endTime,
     this.capacity = '',
     this.fee = '',
-    this.gameId = '',
+    this.games = const [],
     this.description = '',
   });
 
@@ -34,7 +34,7 @@ class GroupFormData {
       endTime: Duration(hours: end.hour, minutes: end.minute),
       capacity: '${group.capacity}',
       fee: group.fee == null ? '' : '${group.fee}',
-      gameId: group.game == null ? '' : '${group.game!.id}',
+      games: group.games,
       description: group.description ?? '',
     );
   }
@@ -48,7 +48,9 @@ class GroupFormData {
   final Duration? endTime;
   final String capacity;
   final String fee;
-  final String gameId;
+
+  /// 選好的遊戲，依選擇的順序。
+  final List<GameRef> games;
   final String description;
 
   GroupFormData copyWith({
@@ -59,7 +61,7 @@ class GroupFormData {
     Duration? endTime,
     String? capacity,
     String? fee,
-    String? gameId,
+    List<GameRef>? games,
     String? description,
   }) => GroupFormData(
     shopId: shopId ?? this.shopId,
@@ -69,7 +71,7 @@ class GroupFormData {
     endTime: endTime ?? this.endTime,
     capacity: capacity ?? this.capacity,
     fee: fee ?? this.fee,
-    gameId: gameId ?? this.gameId,
+    games: games ?? this.games,
     description: description ?? this.description,
   );
 }
@@ -91,10 +93,6 @@ Map<String, String> validateGroupForm(GroupFormData data) {
   if (data.fee.trim().isNotEmpty) {
     final fee = int.tryParse(data.fee.trim());
     if (fee == null || fee < 0) errors['fee'] = '費用要是 0 以上的整數';
-  }
-  if (data.gameId.trim().isNotEmpty &&
-      int.tryParse(data.gameId.trim()) == null) {
-    errors['gameId'] = '遊戲 ID 要是整數';
   }
   return errors;
 }
@@ -136,7 +134,7 @@ class GroupFormNotifier extends Notifier<GroupFormState> {
       endAt: clock.fromLocal(day.add(data.endTime!)),
       capacity: int.parse(data.capacity.trim()),
       fee: int.tryParse(data.fee.trim()),
-      gameId: int.tryParse(data.gameId.trim()),
+      gameIds: [for (final game in data.games) game.id],
       description: data.description.trim().isEmpty
           ? null
           : data.description.trim(),

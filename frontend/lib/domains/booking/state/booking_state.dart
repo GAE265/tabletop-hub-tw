@@ -70,19 +70,24 @@ class BookingNotifier extends Notifier<BookingState> {
   /// 載入店家下拉選單的選項。
   Future<void> loadShops() => _run(() async {
     final shops = await _repo.listShops();
-    return (BookingState s) => s.copyWith(shops: shops, message: '店家共 ${shops.length} 間');
+    return (BookingState s) =>
+        s.copyWith(shops: shops, message: '店家共 ${shops.length} 間');
   });
 
-  Future<void> requestQuote(String shopId, int partySize, String startAt, String endAt) =>
-      _run(() async {
-        final result = await _repo.quote(
-          shopId: shopId,
-          partySize: partySize,
-          startAt: startAt,
-          endAt: endAt,
-        );
-        return (BookingState s) => s.copyWith(quote: result, message: '預估完成');
-      });
+  Future<void> requestQuote(
+    String shopId,
+    int partySize,
+    String startAt,
+    String endAt,
+  ) => _run(() async {
+    final result = await _repo.quote(
+      shopId: shopId,
+      partySize: partySize,
+      startAt: startAt,
+      endAt: endAt,
+    );
+    return (BookingState s) => s.copyWith(quote: result, message: '預估完成');
+  });
 
   Future<void> create(
     String shopId,
@@ -99,40 +104,27 @@ class BookingNotifier extends Notifier<BookingState> {
       specialRequests: specialRequests,
     );
     final mine = await _repo.listMine();
-    return (BookingState s) => s.copyWith(
-      mine: mine.items,
-      message: '已建立訂位',
-    );
+    return (BookingState s) => s.copyWith(mine: mine.items, message: '已建立訂位');
   });
 
-  Future<void> loadMine({
-    String? status,
-    String? fromDate,
-    String? toDate,
-  }) => _run(() async {
-    final page = await _repo.listMine(
-      status: status,
-      fromDate: fromDate,
-      toDate: toDate,
-    );
-    return (BookingState s) => s.copyWith(
-      mine: page.items,
-      message: '我的訂位共 ${page.total} 筆',
-    );
-  });
-
-  Future<void> loadBoard(String shopId, String from, String to) =>
+  Future<void> loadMine({String? status, String? fromDate, String? toDate}) =>
       _run(() async {
-        final page = await _repo.listForShop(
-          shopId: shopId,
-          from: from,
-          to: to,
+        final page = await _repo.listMine(
+          status: status,
+          fromDate: fromDate,
+          toDate: toDate,
         );
-        return (BookingState s) => s.copyWith(
-          board: page.items,
-          message: '店員看板共 ${page.total} 筆',
-        );
+        return (BookingState s) =>
+            s.copyWith(mine: page.items, message: '我的訂位共 ${page.total} 筆');
       });
+
+  Future<void> loadBoard(String shopId, String from, String to) => _run(
+    () async {
+      final page = await _repo.listForShop(shopId: shopId, from: from, to: to);
+      return (BookingState s) =>
+          s.copyWith(board: page.items, message: '店員看板共 ${page.total} 筆');
+    },
+  );
 
   Future<void> refreshOne(int id) => _run(() async {
     final b = await _repo.get(id);
@@ -141,15 +133,16 @@ class BookingNotifier extends Notifier<BookingState> {
   });
 
   /// 修改時間與人數。
-  Future<void> modify(int id, String startAt, String endAt, int partySize) => _run(() async {
-    final b = await _repo.patch(id, {
-      'start_at': startAt,
-      'end_at': endAt,
-      'party_size': partySize,
-    });
-    return (BookingState s) =>
-        _replace(s, b, '已修改${b.notice == null ? '' : '：${b.notice}'}');
-  });
+  Future<void> modify(int id, String startAt, String endAt, int partySize) =>
+      _run(() async {
+        final b = await _repo.patch(id, {
+          'start_at': startAt,
+          'end_at': endAt,
+          'party_size': partySize,
+        });
+        return (BookingState s) =>
+            _replace(s, b, '已修改${b.notice == null ? '' : '：${b.notice}'}');
+      });
 
   /// 變更狀態：`cancelled`、`seated`、`completed`。
   Future<void> setStatus(int id, String status) => _run(() async {

@@ -44,7 +44,7 @@
 - 前端不 import `booking` domain 的程式；groups 只需要 `id`、`name`，自己定義 DTO。
 
 **D5 前端：可搜尋的遊戲複選。**
-- 用 Flutter 內建的 `Autocomplete` 做搜尋輸入與結果清單，已選的遊戲用 `InputChip`（可以刪除）顯示在下方；不新增套件。
+- 搜尋輸入框下方直接列出結果（`ListTile`），點選加入；已選的遊戲用 `InputChip`（可以刪除）顯示在下方；不新增套件。原本考慮用 `Autocomplete`，但它的結果清單浮在 overlay 上，widget 測試不好穩定操作，改成直接列在輸入框下方。
 - `groups/data/` 新增 `GameOption`（`id`、`name`）與 `GroupsRepository.searchGames(q)`；`groups/state/` 的表單資料 `GroupFormData` 改成 `games: List<GameOption>`，送出時轉成 `game_ids`。
 - 搜尋在輸入停止 300 毫秒後才呼叫 API（debounce），避免每打一個字就查一次；結果排除已選的遊戲。
 - 驗證：`validateGroupForm` 移除「遊戲 ID 要是整數」；店家改為檢查有沒有選。

@@ -30,6 +30,12 @@ abstract interface class GroupsRepository {
 
   /// 退出，或由開團主移除成員。
   Future<void> removeMember(String groupId, String userId);
+
+  /// 開團表單的店家選項（`GET /api/v1/shops`，booking 的 API）。
+  Future<List<ShopRef>> listShops();
+
+  /// 依名稱搜尋遊戲（`GET /api/v1/games?q=`），最多 20 筆。
+  Future<List<GameRef>> searchGames(String query);
 }
 
 class HttpGroupsRepository implements GroupsRepository {
@@ -114,6 +120,27 @@ class HttpGroupsRepository implements GroupsRepository {
   @override
   Future<void> removeMember(String groupId, String userId) =>
       _call(() => _dio.delete<void>('$_base/$groupId/members/$userId'));
+
+  @override
+  Future<List<ShopRef>> listShops() => _call(() async {
+    final response = await _dio.get<Map<String, dynamic>>('/api/v1/shops');
+    final items = response.data!['items'] as List<dynamic>;
+    return [
+      for (final item in items) ShopRef.fromJson(item as Map<String, dynamic>),
+    ];
+  });
+
+  @override
+  Future<List<GameRef>> searchGames(String query) => _call(() async {
+    final response = await _dio.get<Map<String, dynamic>>(
+      '/api/v1/games',
+      queryParameters: {'q': query, 'page_size': 20},
+    );
+    final items = response.data!['items'] as List<dynamic>;
+    return [
+      for (final item in items) GameRef.fromJson(item as Map<String, dynamic>),
+    ];
+  });
 }
 
 final groupsRepositoryProvider = Provider<GroupsRepository>(
