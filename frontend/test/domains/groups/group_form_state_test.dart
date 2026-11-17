@@ -1,7 +1,8 @@
 // 情境對應 openspec/changes/add-groups-calendar/specs/groups-calendar-page/spec.md
-// 「開團與編輯表單」
+// 「開團與編輯表單」；遊戲改為複選見 update-groups-shop-game-pickers
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tabletop_hub/core/api/api_exception.dart';
+import 'package:tabletop_hub/domains/groups/data/group.dart';
 import 'package:tabletop_hub/domains/groups/state/group_detail_state.dart';
 import 'package:tabletop_hub/domains/groups/state/group_form_state.dart';
 import 'package:tabletop_hub/domains/groups/state/groups_calendar_state.dart';
@@ -15,7 +16,7 @@ GroupFormData validData({
   Duration? endTime = const Duration(hours: 22),
   String capacity = '4',
   String fee = '',
-  String gameId = '',
+  List<GameRef> games = const [],
 }) {
   return GroupFormData(
     shopId: 's-shop',
@@ -25,7 +26,7 @@ GroupFormData validData({
     endTime: endTime,
     capacity: capacity,
     fee: fee,
-    gameId: gameId,
+    games: games,
   );
 }
 
@@ -66,7 +67,7 @@ void main() {
       );
     });
 
-    test('人數、費用、遊戲 ID 的格式', () {
+    test('人數、費用的格式', () {
       expect(
         validateGroupForm(validData(capacity: '1'))['capacity'],
         '人數上限至少 2 人',
@@ -77,7 +78,6 @@ void main() {
       );
       expect(validateGroupForm(validData(fee: '-1'))['fee'], '費用要是 0 以上的整數');
       expect(validateGroupForm(validData(fee: '3.5'))['fee'], '費用要是 0 以上的整數');
-      expect(validateGroupForm(validData(gameId: 'x'))['gameId'], '遊戲 ID 要是整數');
     });
   });
 
@@ -100,7 +100,15 @@ void main() {
 
     final created = await container
         .read(groupFormProvider.notifier)
-        .submit(validData(fee: '300', gameId: '7'));
+        .submit(
+          validData(
+            fee: '300',
+            games: const [
+              GameRef(id: 3, name: '馬可波羅'),
+              GameRef(id: 1, name: '阿瓦隆'),
+            ],
+          ),
+        );
 
     expect(created, isNotNull);
     final input = repo.createCalls.single;
@@ -113,7 +121,7 @@ void main() {
       'end_at': '2026-11-21T14:00:00.000Z',
       'capacity': 4,
       'fee': 300,
-      'game_id': 7,
+      'game_ids': [3, 1],
       'description': null,
     });
     await calendar.loaded;

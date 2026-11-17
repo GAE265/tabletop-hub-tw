@@ -1,9 +1,19 @@
 """揪團 API 的請求與回應格式。時間一律帶時區，回應為 UTC（AGENTS.md 4.3）。"""
 
 import uuid
-from typing import Literal, Self
+from typing import Annotated, Literal, Self
 
-from pydantic import AwareDatetime, BaseModel, Field, model_validator
+from pydantic import AfterValidator, AwareDatetime, BaseModel, Field, model_validator
+
+
+def _unique_games(game_ids: list[int]) -> list[int]:
+    if len(set(game_ids)) != len(game_ids):
+        raise ValueError("同一款遊戲不能選兩次")
+    return game_ids
+
+
+# 揪團要玩的遊戲，依選擇的順序；不限數量（update-groups-shop-game-pickers）
+GameIds = Annotated[list[int], AfterValidator(_unique_games)]
 
 MemberStatus = Literal["member", "waitlisted"]
 GroupStatus = Literal["open", "cancelled", "ended"]
@@ -16,23 +26,24 @@ class GroupCreate(BaseModel):
     end_at: AwareDatetime
     capacity: int = Field(ge=2)
     fee: int | None = Field(default=None, ge=0)
-    game_id: int | None = None
+    game_ids: GameIds = Field(default_factory=list)
     description: str | None = Field(default=None, max_length=2000)
 
 
 # 這些欄位可以省略，但不能改成空值
-_REQUIRED_WHEN_SET = ("title", "start_at", "end_at", "capacity")
+_REQUIRED_WHEN_SET = ("title", "start_at", "end_at", "capacity", "game_ids")
 
 
 class GroupUpdate(BaseModel):
-    """只更新有帶的欄位。fee、game_id、description 可以帶 null 清空。"""
+    """只更新有帶的欄位。fee、description 可以帶 null 清空；game_ids 用空陣列清空。"""
 
     title: str | None = Field(default=None, min_length=1, max_length=100)
     start_at: AwareDatetime | None = None
     end_at: AwareDatetime | None = None
     capacity: int | None = Field(default=None, ge=2)
     fee: int | None = Field(default=None, ge=0)
-    game_id: int | None = None
+    # 帶了就整份取代，空陣列代表清除所有遊戲
+    game_ids: GameIds | None = None
     description: str | None = Field(default=None, max_length=2000)
     # 只能取消；其他狀態不能由使用者設定
     status: Literal["cancelled"] | None = None
@@ -73,7 +84,8 @@ class GroupResponse(BaseModel):
     status: GroupStatus
     shop: ShopRef
     organizer: UserRef
-    game: GameRef | None
+    # 依選擇的順序；沒有遊戲時為空陣列
+    games: list[GameRef]
     member_count: int
     waitlist_count: int
     remaining_slots: int

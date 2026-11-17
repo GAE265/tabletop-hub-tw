@@ -7,7 +7,7 @@ class GroupInput {
     required this.endAt,
     required this.capacity,
     this.fee,
-    this.gameId,
+    this.gameIds = const [],
     this.description,
   });
 
@@ -17,7 +17,9 @@ class GroupInput {
   final DateTime endAt;
   final int capacity;
   final int? fee;
-  final int? gameId;
+
+  /// 要玩的遊戲，依選擇的順序；空陣列代表不指定遊戲。
+  final List<int> gameIds;
   final String? description;
 
   Map<String, dynamic> toJson() => {
@@ -27,7 +29,7 @@ class GroupInput {
     'end_at': endAt.toUtc().toIso8601String(),
     'capacity': capacity,
     'fee': fee,
-    'game_id': gameId,
+    'game_ids': gameIds,
     'description': description,
   };
 

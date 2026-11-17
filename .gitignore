@@ -54,3 +54,5 @@ $RECYCLE.BIN/
 
 # AI 產出的本機資料，不提交
 docs/mr_info/
+# 手動測試腳本，不提交
+backend/manual_case_*.py

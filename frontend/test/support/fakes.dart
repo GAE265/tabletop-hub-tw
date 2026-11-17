@@ -3,6 +3,11 @@ import 'dart:convert';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:tabletop_hub/core/platform/image_picker.dart';
+import 'package:tabletop_hub/domains/rules_ingest/data/manual_page.dart';
+import 'package:tabletop_hub/domains/rules_ingest/data/game_option.dart';
+import 'package:tabletop_hub/domains/rules_ingest/data/game_search_repository.dart';
+import 'package:tabletop_hub/domains/rules_ingest/data/manual_pages_repository.dart';
 import 'package:tabletop_hub/app/theme/app_fonts.dart';
 import 'package:tabletop_hub/core/api/api_exception.dart';
 import 'package:tabletop_hub/core/dev/data/dev_user.dart';
@@ -11,13 +16,15 @@ import 'package:tabletop_hub/core/dev/data/dev_users_repository.dart';
 import 'package:tabletop_hub/core/platform/lesson_video_player.dart';
 import 'package:tabletop_hub/domains/rules_qa/data/rules_qa_models.dart';
 import 'package:tabletop_hub/domains/rules_qa/data/rules_qa_repository.dart';
+import 'package:tabletop_hub/domains/booking/data/booking.dart';
+import 'package:tabletop_hub/domains/booking/data/booking_repository.dart';
+import 'package:tabletop_hub/domains/booking/data/shop.dart';
+import 'package:tabletop_hub/domains/games_advisor/data/advisor_message.dart';
+import 'package:tabletop_hub/domains/games_advisor/data/advisor_repository.dart';
 import 'package:tabletop_hub/domains/groups/data/group.dart';
 import 'package:tabletop_hub/domains/groups/data/group_input.dart';
 import 'package:tabletop_hub/domains/groups/data/groups_repository.dart';
 import 'package:tabletop_hub/domains/groups/state/group_clock.dart';
-
-import 'package:tabletop_hub/domains/games_advisor/data/advisor_message.dart';
-import 'package:tabletop_hub/domains/games_advisor/data/advisor_repository.dart';
 
 import 'package:tabletop_hub/domains/health/data/health_repository.dart';
 import 'package:tabletop_hub/domains/health/data/health_status.dart';
@@ -147,6 +154,88 @@ class RecordingAdapter implements HttpClientAdapter {
   void close({bool force = false}) {}
 }
 
+// --- booking ---
+
+/// 手寫的 booking repository 假實作（AGENTS.md 7.5，不使用 mock 套件）。
+class FakeBookingRepository implements BookingRepository {
+  FakeBookingRepository({
+    this.shops = const [fakeShopA, fakeShopB],
+    this.shopError,
+    this.mine = const [],
+    this.board = const [],
+  });
+
+  List<Shop> shops;
+  Object? shopError;
+  List<Booking> mine;
+  List<Booking> board;
+  int shopCallCount = 0;
+
+  @override
+  Future<List<Shop>> listShops() async {
+    shopCallCount++;
+    if (shopError != null) throw shopError!;
+    return shops;
+  }
+
+  @override
+  Future<QuoteResult> quote({
+    required String shopId,
+    required int partySize,
+    required String startAt,
+    required String endAt,
+  }) async => QuoteResult(
+    startAt: startAt,
+    endAt: endAt,
+    fee: const Fee(billableHours: '2.00', venueFee: '480.00'),
+    tableCodes: ['T1'],
+  );
+
+  @override
+  Future<Booking> create({
+    required String shopId,
+    required int partySize,
+    required String startAt,
+    required String endAt,
+    String? specialRequests,
+    bool confirmOverlap = false,
+  }) async => Booking(
+    id: 1,
+    reservationCode: 'BKFAKE',
+    shopId: shopId,
+    startAt: startAt,
+    endAt: endAt,
+    partySize: partySize,
+    status: 'confirmed',
+    tableCodes: ['T1'],
+    estimatedFee: const Fee(billableHours: '2.00', venueFee: '480.00'),
+  );
+
+  @override
+  Future<Booking> get(int id) => throw UnimplementedError();
+
+  @override
+  Future<Booking> patch(int id, Map<String, dynamic> patch) =>
+      throw UnimplementedError();
+
+  @override
+  Future<BookingPage> listMine({
+    String? status,
+    String? fromDate,
+    String? toDate,
+  }) async => BookingPage(items: mine, total: mine.length);
+
+  @override
+  Future<BookingPage> listForShop({
+    required String shopId,
+    required String from,
+    required String to,
+  }) async => BookingPage(items: board, total: board.length);
+}
+
+const fakeShopA = Shop(id: 's-a', name: '甲店');
+const fakeShopB = Shop(id: 's-b', name: '乙店');
+
 // --- groups ---
 
 /// 固定時區（預設 UTC+8）的時鐘，測試結果才不受執行電腦的時區影響。
@@ -199,6 +288,7 @@ Group fakeGroup({
   String shopId = 's-shop',
   String shopName = '測試桌遊店',
   String? myStatus,
+  List<GameRef> games = const [],
 }) {
   return Group(
     id: id,
@@ -214,6 +304,7 @@ Group fakeGroup({
     waitlistCount: waitlistCount,
     remainingSlots: capacity - memberCount < 0 ? 0 : capacity - memberCount,
     myStatus: myStatus,
+    games: games,
     createdAt: DateTime.utc(2026, 11, 1),
   );
 }
@@ -230,6 +321,25 @@ class FakeGroupsRepository implements GroupsRepository {
   FakeGroupsRepository({List<Group>? groups}) : groups = groups ?? [];
 
   List<Group> groups;
+
+  /// `GET /api/v1/shops` 的店家。
+  List<ShopRef> shops = const [
+    ShopRef(id: 's-shop', name: '測試桌遊店'),
+    ShopRef(id: 's-other', name: '另一間店'),
+  ];
+
+  /// `GET /api/v1/games` 的遊戲（全部）。
+  List<GameRef> games = const [
+    GameRef(id: 1, name: '阿瓦隆'),
+    GameRef(id: 2, name: '阿不思學院'),
+    GameRef(id: 3, name: '馬可波羅'),
+  ];
+
+  /// 店家清單、遊戲清單丟出的錯誤。
+  Object? shopsError;
+  Object? gamesError;
+  int shopsCalls = 0;
+  int gamesCalls = 0;
   final members = <String, List<GroupMember>>{};
 
   /// list／get 丟出的錯誤。
@@ -277,6 +387,20 @@ class FakeGroupsRepository implements GroupsRepository {
   }
 
   @override
+  Future<List<ShopRef>> listShops() async {
+    shopsCalls++;
+    if (shopsError != null) throw shopsError!;
+    return shops;
+  }
+
+  @override
+  Future<List<GameRef>> listGames() async {
+    gamesCalls++;
+    if (gamesError != null) throw gamesError!;
+    return games;
+  }
+
+  @override
   Future<Group> get(String id) async {
     if (error != null) throw error!;
     return groups.firstWhere(
@@ -305,6 +429,9 @@ class FakeGroupsRepository implements GroupsRepository {
       fee: input.fee,
       shopId: input.shopId,
       myStatus: 'member',
+      games: [
+        for (final id in input.gameIds) games.firstWhere((g) => g.id == id),
+      ],
     );
     groups.add(group);
     return group;
@@ -420,4 +547,126 @@ class FakeLessonVideoPlayer implements LessonVideoPlayer {
     height: 180,
     child: Text('影片：${video.youtubeId ?? video.videoUrl}'),
   );
+}
+
+class FakeImagePicker implements ImagePicker {
+  List<PickedImage>? images;
+  Object? error;
+  int calls = 0;
+
+  @override
+  Future<List<PickedImage>?> pickImages() async {
+    calls++;
+    if (error != null) throw error!;
+    return images;
+  }
+}
+
+class FakeGameSearchRepository implements GameSearchRepository {
+  List<GameOption> allGames;
+  Object? error;
+
+  FakeGameSearchRepository({this.allGames = const [], this.error});
+
+  int searchCalls = 0;
+  int listAllCalls = 0;
+
+  @override
+  Future<List<GameOption>> search(String name) async {
+    searchCalls++;
+    if (error != null) throw error!;
+    return allGames;
+  }
+
+  @override
+  Future<List<GameOption>> listAll() async {
+    listAllCalls++;
+    if (error != null) throw error!;
+    return allGames;
+  }
+}
+
+class FakeManualPagesRepository implements ManualPagesRepository {
+  final imports = <({int gamesId, int page, PickedImage image})>[];
+  final rows = <int, String>{};
+  final failures = <int, Object>{};
+  final lists = <int>[];
+  String ocrProvider = 'fake';
+  Object? listError;
+  Completer<void>? importGate;
+  Completer<void>? listGate;
+  int active = 0;
+  int maxActive = 0;
+
+  @override
+  Future<ManualPage> importPage(
+    int gamesId,
+    int page,
+    PickedImage image,
+  ) async {
+    imports.add((gamesId: gamesId, page: page, image: image));
+    active++;
+    if (active > maxActive) maxActive = active;
+    try {
+      if (importGate != null) await importGate!.future;
+      if (failures[page] != null) throw failures[page]!;
+      final content = '# ${image.name}';
+      rows[page] = content;
+      return ManualPage(page: page, content: content);
+    } finally {
+      active--;
+    }
+  }
+
+  @override
+  Future<ManualPageList> list(int gamesId) async {
+    lists.add(gamesId);
+    if (listGate != null) await listGate!.future;
+    if (listError != null) throw listError!;
+    final pages = rows.keys.toList()..sort();
+    return ManualPageList(
+      items: [
+        for (final page in pages) ManualPage(page: page, content: rows[page]!),
+      ],
+      total: rows.length,
+      ocrProvider: ocrProvider,
+    );
+  }
+}
+
+class FakeManualPagesAdapter implements HttpClientAdapter {
+  final requests = <RequestOptions>[];
+  final bodies = <String>[];
+  int status = 200;
+  Map<String, dynamic> response = {
+    'games_id': 1,
+    'page': 1,
+    'content': '# title',
+  };
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<List<int>>? requestStream,
+    Future<void>? cancelFuture,
+  ) async {
+    requests.add(options);
+    if (requestStream != null) {
+      final bytes = <int>[];
+      await for (final chunk in requestStream) {
+        bytes.addAll(chunk);
+      }
+      bodies.add(latin1.decode(bytes));
+    }
+    return ResponseBody.fromString(
+      jsonEncode(response),
+      status,
+      headers: {
+        Headers.contentTypeHeader: ['application/json'],
+      },
+    );
+  }
+
+  @override
+  void close({bool force = false}) {}
 }

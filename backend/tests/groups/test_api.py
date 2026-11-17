@@ -65,7 +65,7 @@ def test_create_group(client: TestClient, as_player: CurrentUser):
     assert body["status"] == "open"
     assert (body["member_count"], body["waitlist_count"], body["remaining_slots"]) == (1, 0, 3)
     assert body["my_status"] == "member"
-    assert body["game"] is None
+    assert body["games"] == []
     assert body["fee"] is None
     assert body["description"] is None
     assert datetime.fromisoformat(body["start_at"]) == START
@@ -77,9 +77,9 @@ def test_create_group_with_optional_fields(
     client: TestClient, as_player: CurrentUser, add_game: Callable[[str], int]
 ):
     game_id = add_game("範例桌遊")
-    body = create(client, fee=300, game_id=game_id, description="新手可")
+    body = create(client, fee=300, game_ids=[game_id], description="新手可")
     assert body["fee"] == 300
-    assert body["game"] == {"id": game_id, "name": "範例桌遊"}
+    assert body["games"] == [{"id": game_id, "name": "範例桌遊"}]
     assert body["description"] == "新手可"
 
 
@@ -124,10 +124,60 @@ def test_create_shop_not_found(client: TestClient, as_player: CurrentUser, db: E
         assert conn.scalar(text("SELECT count(*) FROM groups")) == 0
 
 
-def test_create_game_not_found(client: TestClient, as_player: CurrentUser):
-    response = client.post(BASE, json=payload(game_id=999999))
+def test_create_with_several_games_in_selected_order(
+    client: TestClient, as_player: CurrentUser, add_game: Callable[[str], int]
+):
+    avalon, marco = add_game("阿瓦隆"), add_game("馬可波羅")
+    body = create(client, game_ids=[marco, avalon])
+    assert body["games"] == [{"id": marco, "name": "馬可波羅"}, {"id": avalon, "name": "阿瓦隆"}]
+    assert client.get(f"{BASE}/{body['id']}").json()["games"] == body["games"]
+
+
+def test_create_game_not_found(
+    client: TestClient, as_player: CurrentUser, add_game: Callable[[str], int], db: Engine
+):
+    game_id = add_game("阿瓦隆")
+    response = client.post(BASE, json=payload(game_ids=[game_id, 999999]))
     assert response.status_code == 404
     assert error_code(response) == "GROUP_GAME_NOT_FOUND"
+    assert response.json()["error"]["details"] == {"game_ids": [999999]}
+    with db.connect() as conn:
+        assert conn.scalar(text("SELECT count(*) FROM groups")) == 0
+
+
+def test_create_duplicate_games_is_422(
+    client: TestClient, as_player: CurrentUser, add_game: Callable[[str], int]
+):
+    game_id = add_game("阿瓦隆")
+    response = client.post(BASE, json=payload(game_ids=[game_id, game_id]))
+    assert response.status_code == 422
+
+
+def test_update_replaces_and_clears_games(
+    client: TestClient, as_player: CurrentUser, add_game: Callable[[str], int]
+):
+    avalon, catan = add_game("阿瓦隆"), add_game("卡坦島")
+    group = create(client, game_ids=[avalon])
+    url = f"{BASE}/{group['id']}"
+    replaced = client.patch(url, json={"game_ids": [catan]})
+    assert replaced.status_code == 200
+    assert [g["id"] for g in replaced.json()["games"]] == [catan]
+    assert [g["id"] for g in client.patch(url, json={"title": "新標題"}).json()["games"]] == [catan]
+    assert client.patch(url, json={"game_ids": []}).json()["games"] == []
+    assert client.patch(url, json={"game_ids": None}).status_code == 422
+
+
+def test_list_groups_with_several_games_not_duplicated(
+    client: TestClient, as_player: CurrentUser, add_game: Callable[[str], int]
+):
+    avalon, catan = add_game("阿瓦隆"), add_game("卡坦島")
+    group = create(client, game_ids=[avalon, catan])
+    create(client)
+    body = client.get(BASE).json()
+    assert body["total"] == 2
+    assert len(body["items"]) == 2
+    listed = next(item for item in body["items"] if item["id"] == group["id"])
+    assert [g["id"] for g in listed["games"]] == [avalon, catan]
 
 
 def test_unauthenticated(jwt_client: TestClient):
