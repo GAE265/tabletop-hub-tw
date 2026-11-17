@@ -32,6 +32,9 @@ class GameRepository(SessionRepository):
     def count_games(self) -> int:
         return self.session.scalar(select(func.count()).select_from(Game)) or 0
 
+    def game_exists(self, game_id: int) -> bool:
+        return bool(self.session.scalar(select(select(Game.id).where(Game.id == game_id).exists())))
+
     def list_games(self) -> list[dict[str, Any]]:
         """全部桌遊，照 id 排。每款是 id、11 個欄位，加上 types（類型代碼，照字母排）。"""
         types: dict[int, list[str]] = {}
@@ -46,6 +49,25 @@ class GameRepository(SessionRepository):
         # 讀成一般的列，不讀成 ORM 物件：同一個 session 之後用 SQL 改過資料，也不會讀到舊值
         games = self.session.execute(select(Game.__table__).order_by(Game.id)).mappings()
         return [{**game, "types": types.get(game["id"], [])} for game in games]
+
+    def search_games(self, q: str | None, offset: int, limit: int) -> tuple[list[Game], int]:
+        """依中文或英文名稱搜尋（部分相符、不分大小寫），照 name 排；回傳這一頁與總筆數。
+
+        q 為空時列出全部；q 中的 %、_ 當成一般字元。
+        """
+        query = select(Game)
+        if q:
+            escaped = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            pattern = f"%{escaped}%"
+            query = query.where(
+                Game.name.ilike(pattern, escape="\\")
+                | Game.english_name.ilike(pattern, escape="\\")
+            )
+        total = self.session.scalar(select(func.count()).select_from(query.subquery())) or 0
+        rows = self.session.scalars(
+            query.order_by(Game.name, Game.id).offset(offset).limit(limit)
+        ).all()
+        return list(rows), total
 
     def find_games_by_bgg_ids(self, bgg_ids: Collection[int]) -> list[dict[str, Any]]:
         """用 bgg_id 查桌遊，照 id 排。資料庫沒有的 bgg_id 不會出現在結果裡。

@@ -6,6 +6,11 @@ import '../core/config/app_config.dart';
 import '../domains/games_advisor/pages/games_advisor_page.dart';
 import '../domains/groups/pages/groups_page.dart';
 import '../domains/health/pages/health_page.dart';
+import '../domains/rules_qa/pages/rules_lesson_page.dart';
+import '../domains/rules_qa/pages/rules_lessons_page.dart';
+import '../prototypes/booking/booking_list_proto_page.dart';
+import '../prototypes/booking/booking_proto_page.dart';
+import '../prototypes/rules_ingest/rules_ingest_proto_page.dart';
 import 'shell.dart';
 import 'theme/theme_preview_page.dart';
 
@@ -24,10 +29,37 @@ GoRouter createRouter(AppConfig config) => GoRouter(
           path: '/games-advisor',
           builder: (context, state) => const GamesAdvisorPage(),
         ),
+        GoRoute(
+          path: '/rules',
+          builder: (context, state) => const RulesLessonsPage(),
+          routes: [
+            GoRoute(
+              path: ':gameId',
+              builder: (context, state) {
+                final gameId = int.tryParse(state.pathParameters['gameId']!);
+                return gameId == null
+                    ? const Scaffold(body: Center(child: Text('找不到頁面')))
+                    : RulesLessonPage(gameId: gameId);
+              },
+            ),
+          ],
+        ),
         if (config.showPrototypes) ...[
           GoRoute(
             path: '/proto/theme',
             builder: (context, state) => const ThemePreviewPage(),
+          ),
+          GoRoute(
+            path: '/proto/rules-ingest',
+            builder: (context, state) => const RulesIngestProtoPage(),
+          ),
+          GoRoute(
+            path: '/proto/booking',
+            builder: (context, state) => const BookingProtoPage(),
+          ),
+          GoRoute(
+            path: '/proto/booking/list',
+            builder: (context, state) => const BookingListProtoPage(),
           ),
         ],
       ],

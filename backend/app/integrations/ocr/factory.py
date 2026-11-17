@@ -1,0 +1,71 @@
+from app.core.config import Settings
+from app.integrations.ocr.azure_di import AzureDocumentIntelligenceProvider
+from app.integrations.ocr.base import OCRProvider, VisionProvider
+from app.integrations.ocr.errors import OCRNotConfigured
+from app.integrations.ocr.fake import FakeOCRProvider, FakeVisionProvider
+from app.integrations.ocr.vision import CloudVisionProvider
+
+PROVIDERS = ("fake", "cloud")
+
+
+def _check_name(name: str) -> None:
+    if name not in PROVIDERS:
+        raise ValueError(f"未知的 OCR_PROVIDER：{name}，合法值是 {'、'.join(PROVIDERS)}")
+
+
+def get_ocr_provider(name: str, settings: Settings | None = None) -> OCRProvider:
+    """依 OCR_PROVIDER 選擇版面分析實作。cloud 缺設定時立刻拋 OCRNotConfigured。
+
+    端點是 OCR_DI_ENDPOINT（cognitiveservices.azure.com），金鑰沿用 LLM_API_KEY。
+    """
+    _check_name(name)
+    if name == "fake":
+        return FakeOCRProvider()
+    if settings is None:
+        raise ValueError("OCR_PROVIDER=cloud 需要傳入 settings")
+    missing = [
+        field
+        for field, value in (
+            ("OCR_DI_ENDPOINT", settings.ocr_di_endpoint),
+            ("LLM_API_KEY", settings.llm_api_key),
+        )
+        if not value
+    ]
+    if missing:
+        raise OCRNotConfigured(missing)
+    return AzureDocumentIntelligenceProvider(
+        endpoint=settings.ocr_di_endpoint,  # type: ignore[arg-type]
+        api_key=settings.llm_api_key,  # type: ignore[arg-type]
+    )
+
+
+def get_vision_provider(name: str, settings: Settings | None = None) -> VisionProvider:
+    """依 OCR_PROVIDER 選擇視覺模型實作。
+
+    端點 OCR_VISION_ENDPOINT 沒填就用 LLM_ENDPOINT，模型 OCR_VISION_MODEL 沒填就用 LLM_MODEL，
+    金鑰沿用 LLM_API_KEY。
+    """
+    _check_name(name)
+    if name == "fake":
+        return FakeVisionProvider()
+    if settings is None:
+        raise ValueError("OCR_PROVIDER=cloud 需要傳入 settings")
+    endpoint = settings.ocr_vision_endpoint or settings.llm_endpoint
+    model = settings.ocr_vision_model or settings.llm_model
+    missing = [
+        field
+        for field, value in (
+            ("OCR_VISION_ENDPOINT（或 LLM_ENDPOINT）", endpoint),
+            ("LLM_API_KEY", settings.llm_api_key),
+            ("OCR_VISION_MODEL（或 LLM_MODEL）", model),
+        )
+        if not value
+    ]
+    if missing:
+        raise OCRNotConfigured(missing)
+    return CloudVisionProvider(
+        endpoint=endpoint,  # type: ignore[arg-type]
+        api_key=settings.llm_api_key,  # type: ignore[arg-type]
+        model=model,  # type: ignore[arg-type]
+        timeout_seconds=settings.ocr_vision_timeout_seconds,
+    )

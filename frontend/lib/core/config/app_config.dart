@@ -9,14 +9,10 @@ class AppConfig {
     required this.devUserEnabled,
   });
 
-  /// `--dart-define=API_BASE_URL=...`；未指定時使用本機後端。
-  static const defaultApiBaseUrl = 'http://localhost:8000';
-
+  /// `--dart-define=API_BASE_URL=...`；未指定時打相對路徑（同 host，port 8000 需反向代理）。
+  /// 開發時建議用 `--dart-define=API_BASE_URL=http://<host>:8000` 指定後端位址。
   factory AppConfig.fromEnvironment() {
-    const apiBaseUrl = String.fromEnvironment(
-      'API_BASE_URL',
-      defaultValue: defaultApiBaseUrl,
-    );
+    const apiBaseUrl = String.fromEnvironment('API_BASE_URL');
     const showPrototypes = bool.fromEnvironment('SHOW_PROTOTYPES');
     const devUserFlag = bool.fromEnvironment(
       'DEV_USER_ENABLED',
