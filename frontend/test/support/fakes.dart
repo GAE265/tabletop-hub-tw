@@ -319,18 +319,18 @@ class FakeGroupsRepository implements GroupsRepository {
     ShopRef(id: 's-other', name: '另一間店'),
   ];
 
-  /// `GET /api/v1/games` 的遊戲；搜尋時比對名稱是否包含關鍵字。
+  /// `GET /api/v1/games` 的遊戲（全部）。
   List<GameRef> games = const [
     GameRef(id: 1, name: '阿瓦隆'),
     GameRef(id: 2, name: '阿不思學院'),
     GameRef(id: 3, name: '馬可波羅'),
   ];
 
-  /// 店家清單、遊戲搜尋丟出的錯誤。
+  /// 店家清單、遊戲清單丟出的錯誤。
   Object? shopsError;
   Object? gamesError;
   int shopsCalls = 0;
-  final gameSearches = <String>[];
+  int gamesCalls = 0;
   final members = <String, List<GroupMember>>{};
 
   /// list／get 丟出的錯誤。
@@ -385,13 +385,10 @@ class FakeGroupsRepository implements GroupsRepository {
   }
 
   @override
-  Future<List<GameRef>> searchGames(String query) async {
-    gameSearches.add(query);
+  Future<List<GameRef>> listGames() async {
+    gamesCalls++;
     if (gamesError != null) throw gamesError!;
-    return [
-      for (final game in games)
-        if (game.name.contains(query.trim())) game,
-    ];
+    return games;
   }
 
   @override

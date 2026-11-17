@@ -157,34 +157,47 @@ void main() {
     });
   });
 
-  group('遊戲搜尋與複選', () {
+  group('遊戲下拉選單（可搜尋、可複選）', () {
+    final field = find.byKey(const Key('game-picker-field'));
     final search = find.byKey(const Key('game-search-input'));
 
-    Future<void> type(WidgetTester tester, String text) async {
-      await tester.ensureVisible(search);
-      await tester.enterText(search, text);
-      // 停止輸入 300 毫秒後才查詢
-      await tester.pump(const Duration(milliseconds: 350));
+    Future<void> open(WidgetTester tester) async {
+      await tester.ensureVisible(field);
+      await tester.tap(field);
       await tester.pumpAndSettle();
     }
 
-    Future<void> pick(WidgetTester tester, int id) async {
+    Future<void> toggle(WidgetTester tester, int id) async {
       final option = find.byKey(Key('game-option-$id'));
       await tester.ensureVisible(option);
       await tester.tap(option);
       await tester.pumpAndSettle();
     }
 
-    testWidgets('搜尋並選兩款：依選擇順序顯示標籤，送出 game_ids', (tester) async {
+    bool checked(WidgetTester tester, int id) => tester
+        .widget<CheckboxListTile>(find.byKey(Key('game-option-$id')))
+        .value!;
+
+    testWidgets('點欄位展開全部遊戲，再點一次收起', (tester) async {
+      await openForm(tester, FakeGroupsRepository(), valid());
+      expect(find.byKey(const Key('game-option-1')), findsNothing);
+      await open(tester);
+      for (final id in [1, 2, 3]) {
+        expect(find.byKey(Key('game-option-$id')), findsOneWidget);
+      }
+      await open(tester);
+      expect(find.byKey(const Key('game-option-1')), findsNothing);
+    });
+
+    testWidgets('勾選兩款：依勾選順序顯示標籤，送出 game_ids', (tester) async {
       final repo = FakeGroupsRepository();
       await openForm(tester, repo, valid());
-      await type(tester, '馬');
-      await pick(tester, 3);
-      expect(find.byKey(const Key('game-chip-3')), findsOneWidget);
-      expect(tester.widget<TextField>(search).controller!.text, isEmpty);
-
-      await type(tester, '阿瓦');
-      await pick(tester, 1);
+      await open(tester);
+      await toggle(tester, 3);
+      await toggle(tester, 1);
+      expect(checked(tester, 3), isTrue);
+      expect(checked(tester, 1), isTrue);
+      expect(checked(tester, 2), isFalse);
       expect(
         tester.getTopLeft(find.byKey(const Key('game-chip-3'))).dx,
         lessThan(tester.getTopLeft(find.byKey(const Key('game-chip-1'))).dx),
@@ -193,34 +206,58 @@ void main() {
       expect(repo.createCalls.single.gameIds, [3, 1]);
     });
 
-    testWidgets('已選的遊戲不再出現在搜尋結果中', (tester) async {
-      await openForm(tester, FakeGroupsRepository(), valid());
-      await type(tester, '阿');
-      await pick(tester, 1);
-      await type(tester, '阿');
-      expect(find.byKey(const Key('game-option-1')), findsNothing);
-      expect(find.byKey(const Key('game-option-2')), findsOneWidget);
-    });
-
-    testWidgets('移除已選的遊戲', (tester) async {
+    testWidgets('搜尋框篩選清單，不呼叫 API', (tester) async {
       final repo = FakeGroupsRepository();
       await openForm(tester, repo, valid());
-      await type(tester, '阿瓦');
-      await pick(tester, 1);
-      await tester.tap(find.byTooltip('移除阿瓦隆'));
+      await open(tester);
+      await tester.enterText(search, '阿');
       await tester.pumpAndSettle();
-      expect(find.byKey(const Key('game-chip-1')), findsNothing);
-      await submit(tester, '送出');
-      expect(repo.createCalls.single.gameIds, isEmpty);
+      expect(find.byKey(const Key('game-option-1')), findsOneWidget);
+      expect(find.byKey(const Key('game-option-2')), findsOneWidget);
+      expect(find.byKey(const Key('game-option-3')), findsNothing);
+      expect(repo.gamesCalls, 1);
     });
 
     testWidgets('沒有符合的遊戲：顯示提示', (tester) async {
       await openForm(tester, FakeGroupsRepository(), valid());
-      await type(tester, '不存在');
+      await open(tester);
+      await tester.enterText(search, '不存在');
+      await tester.pumpAndSettle();
       expect(find.text('找不到符合的遊戲'), findsOneWidget);
     });
 
-    testWidgets('編輯：帶入既有遊戲，儲存時送出 game_ids', (tester) async {
+    testWidgets('取消勾選或按標籤的 ✕：移除該遊戲', (tester) async {
+      final repo = FakeGroupsRepository();
+      await openForm(tester, repo, valid());
+      await open(tester);
+      await toggle(tester, 1);
+      await toggle(tester, 3);
+      await toggle(tester, 1);
+      expect(find.byKey(const Key('game-chip-1')), findsNothing);
+      await tester.tap(find.byTooltip('移除馬可波羅'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('game-chip-3')), findsNothing);
+      expect(checked(tester, 3), isFalse);
+      await submit(tester, '送出');
+      expect(repo.createCalls.single.gameIds, isEmpty);
+    });
+
+    testWidgets('遊戲清單載入失敗：顯示錯誤與「重試」', (tester) async {
+      final repo = FakeGroupsRepository()
+        ..gamesError = const ApiException(
+          code: 'NETWORK_ERROR',
+          message: '遊戲清單載入失敗',
+        );
+      await openForm(tester, repo, valid());
+      await open(tester);
+      expect(find.text('遊戲清單載入失敗'), findsOneWidget);
+      repo.gamesError = null;
+      await tester.tap(find.text('重試').last);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('game-option-1')), findsOneWidget);
+    });
+
+    testWidgets('編輯：帶入既有遊戲，標籤與勾選狀態正確，儲存時送出 game_ids', (tester) async {
       final repo = FakeGroupsRepository(
         groups: [fakeGroup(id: 'g-1', startAt: taipei(11, 20, 19))],
       );
@@ -237,6 +274,9 @@ void main() {
       );
       expect(find.byKey(const Key('game-chip-1')), findsOneWidget);
       expect(find.byKey(const Key('game-chip-3')), findsOneWidget);
+      await open(tester);
+      expect(checked(tester, 1), isTrue);
+      expect(checked(tester, 2), isFalse);
       await submit(tester, '儲存');
       expect(repo.updateCalls.single.$2['game_ids'], [1, 3]);
     });
