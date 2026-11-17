@@ -39,6 +39,18 @@ class Settings(BaseSettings):
     games_advisor_embedding_api_key: str | None = None
     games_advisor_embedding_model: str | None = None
     games_advisor_embedding_dim: int = 1536
+    # --- OCR 與視覺模型（integrations/ocr；規則書圖片入庫用） ---
+    # fake：測試用，沒有腳本時呼叫會回 503；cloud：Azure Document Intelligence + Azure OpenAI 視覺
+    ocr_provider: str = "fake"
+    # 金鑰全部沿用 llm_api_key；端點各自獨立設定。
+    # Document Intelligence（cognitiveservices.azure.com）的端點
+    ocr_di_endpoint: str | None = None
+    # 視覺模型的端點；沒填就用 llm_endpoint
+    ocr_vision_endpoint: str | None = None
+    # 視覺模型的部署名稱；沒填就用 llm_model
+    ocr_vision_model: str | None = None
+    # 逐頁轉錄單次約 30 秒，加上上傳大圖，所以比 llm_timeout_seconds 長
+    ocr_vision_timeout_seconds: float = 120
     # 允許跨來源呼叫 API 的前端網址，逗號分隔。預設是本機 Flutter Web 固定的 port；
     # 部署時必須改成實際的前端網址
     cors_allow_origins: str = "http://localhost:5000"

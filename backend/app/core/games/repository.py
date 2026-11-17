@@ -29,6 +29,9 @@ class GameInUseError(Exception):
 class GameRepository(SessionRepository):
     """共用桌遊表 games、genres、game_genres 與 games.id 計數器的讀寫。"""
 
+    def game_exists(self, game_id: int) -> bool:
+        return bool(self.session.scalar(select(select(Game.id).where(Game.id == game_id).exists())))
+
     def count_games(self) -> int:
         return self.session.scalar(select(func.count()).select_from(Game)) or 0
 
@@ -46,6 +49,20 @@ class GameRepository(SessionRepository):
         # 讀成一般的列，不讀成 ORM 物件：同一個 session 之後用 SQL 改過資料，也不會讀到舊值
         games = self.session.execute(select(Game.__table__).order_by(Game.id)).mappings()
         return [{**game, "types": types.get(game["id"], [])} for game in games]
+
+    def search_games_by_name(self, name: str, limit: int = 20) -> list[dict[str, Any]]:
+        """用名稱模糊查詢（LIKE %name%），只回 id 與名稱，照 id 排，最多 limit 筆。
+
+        名稱可能是中文或英文，分別比對 name 與 english_name；大小寫不在意。
+        """
+        pattern = f"%{name}%"
+        games = self.session.execute(
+            select(Game.id, Game.name, Game.english_name)
+            .where(Game.name.ilike(pattern) | Game.english_name.ilike(pattern))
+            .order_by(Game.id)
+            .limit(limit)
+        ).mappings()
+        return [dict(game) for game in games]
 
     def find_games_by_bgg_ids(self, bgg_ids: Collection[int]) -> list[dict[str, Any]]:
         """用 bgg_id 查桌遊，照 id 排。資料庫沒有的 bgg_id 不會出現在結果裡。
