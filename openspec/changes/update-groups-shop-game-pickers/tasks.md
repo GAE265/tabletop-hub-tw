@@ -13,7 +13,8 @@
 
 - [x] 2.1 撰寫 repository 與 API 測試（`tests/core/test_games_list.py`，連 `_test` 資料庫）：列出並排序、中文搜尋、英文不分大小寫、`%` 與 `_` 被當成一般字元、沒有符合、分頁、分頁參數錯誤 422、JWT 未登入 401，驗證：測試存在且失敗
 - [x] 2.2 實作 `GameRepository.search_games`、`core/games/service.py`、`core/games/schemas.py`、`core/games/router.py`，在 `main.py` 掛載，驗證：2.1 全部通過，`/docs` 出現 `GET /api/v1/games`
-- [ ] 2.3 自我檢查：`uv run ruff check .`、`uv run ruff format --check .`、`uv run pytest`，驗證：全部通過、CI 全綠
+- [x] 2.3 自我檢查：`uv run ruff check .`、`uv run ruff format --check .`、`uv run pytest`，驗證：全部通過、CI 全綠
+  - 註記：MR 1 已合併（#47）。
 
 ## 3. MR 2：揪團的店家與遊戲下拉選單（後端＋前端；@ 立倫、瑋鋐）
 
