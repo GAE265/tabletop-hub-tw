@@ -9,6 +9,7 @@ from sqlalchemy.orm import sessionmaker
 from app.core.config import Settings, get_settings
 from app.core.db import create_db_engine
 from app.core.errors import register_error_handlers
+from app.core.games.router import router as games_router
 from app.domains.booking.router import router as booking_router
 from app.domains.games_advisor.router import router as games_advisor_router
 from app.domains.groups.router import router as groups_router
@@ -54,6 +55,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
     register_error_handlers(app)
     app.include_router(health_router, prefix=API_PREFIX)
+    app.include_router(games_router, prefix=API_PREFIX)
     app.include_router(booking_router, prefix=API_PREFIX)
     app.include_router(groups_router, prefix=API_PREFIX)
     app.include_router(games_advisor_router, prefix=API_PREFIX)
