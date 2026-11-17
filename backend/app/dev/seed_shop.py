@@ -13,11 +13,8 @@ from app.core.config import get_settings
 from app.core.db import create_db_engine
 from app.domains.booking.models import (
     BookingBusinessHours,
-    BookingClosingHours,
     BookingPricingRule,
     BookingShop,
-    BookingTable,
-    BookingTableLink,
 )
 
 SHOP_ID = "550e8400-e29b-41d4-a716-446655440000"
@@ -54,9 +51,7 @@ def main() -> int:
                     open_time="13:00",
                     close_time="22:00",
                 )
-                .on_conflict_do_nothing(
-                    index_elements=["shop_id", "weekday"]
-                )
+                .on_conflict_do_nothing(index_elements=["shop_id", "weekday"])
             )
 
         # ── 公休時段 ──
@@ -71,15 +66,29 @@ def main() -> int:
                 ")"
             ),
             {
-                "sid": SHOP_ID, "d": "2026-11-18", "st": "12:00", "et": "14:00",
+                "sid": SHOP_ID,
+                "d": "2026-11-18",
+                "st": "12:00",
+                "et": "14:00",
                 "r": "take a break",
-                "sid2": SHOP_ID, "d2": "2026-11-18", "st2": "12:00", "et2": "14:00",
+                "sid2": SHOP_ID,
+                "d2": "2026-11-18",
+                "st2": "12:00",
+                "et2": "14:00",
             },
         )
 
         # ── 桌子 ──
         table_codes = {
-            "D": 10, "A": 6, "B": 6, "C": 10, "E": 10, "F": 8, "G": 10, "H": 12, "I": 12,
+            "D": 10,
+            "A": 6,
+            "B": 6,
+            "C": 10,
+            "E": 10,
+            "F": 8,
+            "G": 10,
+            "H": 12,
+            "I": 12,
         }
         for code, cap in table_codes.items():
             session.execute(
@@ -122,26 +131,61 @@ def main() -> int:
                     "  )"
                 ),
                 {
-                    "sid": SHOP_ID, "sid2": SHOP_ID, "sid3": SHOP_ID, "sid4": SHOP_ID,
-                    "ca": a, "cb": b, "comb": combinable,
+                    "sid": SHOP_ID,
+                    "sid2": SHOP_ID,
+                    "sid3": SHOP_ID,
+                    "sid4": SHOP_ID,
+                    "ca": a,
+                    "cb": b,
+                    "comb": combinable,
                 },
             )
 
         # ── 定價規則 ──
         rules = [
-            ("WEEKDAY_HOURLY_FEE", "平日場地費", "hourly", 60.00, "person_hour",
-             "適用星期一至星期五。依每位客人計費；不足一小時以一小時計算；超過 5 小時以 5 小時計算。"),
-            ("WEEKEND_HOURLY_FEE", "假日場地費", "hourly", 80.00, "person_hour",
-             "適用星期六及星期日。依每位客人計費；不足一小時以一小時計算；超過 5 小時以 5 小時計算。"),
-            ("WEEKEND_MINIMUM_DRINK_PER_PERSON", "假日每人最低飲料", "minimum_charge", 0.00,
-             "drink_per_person",
-             "僅適用星期六及星期日；星期一至五無低消。每位客人至少須消費一杯飲料。"),
-            ("BILLING_ROUNDING_UNIT_HOURS", "計費取整單位", "other", 1.00, "hour",
-             "計費時數以此單位無條件進位。"),
-            ("BILLING_MAX_HOURS", "計費時數上限", "other", 5.00, "hour",
-             "計費時數上限；超過以 5 小時計算。"),
-            ("BOOKING_MIN_HOURS", "最短訂位時數", "other", 1.00, "hour",
-             "單筆訂位最短時間。"),
+            (
+                "WEEKDAY_HOURLY_FEE",
+                "平日場地費",
+                "hourly",
+                60.00,
+                "person_hour",
+                "適用星期一至星期五。依每位客人計費；"
+                "不足一小時以一小時計算；超過 5 小時以 5 小時計算。",
+            ),
+            (
+                "WEEKEND_HOURLY_FEE",
+                "假日場地費",
+                "hourly",
+                80.00,
+                "person_hour",
+                "適用星期六及星期日。依每位客人計費；"
+                "不足一小時以一小時計算；超過 5 小時以 5 小時計算。",
+            ),
+            (
+                "WEEKEND_MINIMUM_DRINK_PER_PERSON",
+                "假日每人最低飲料",
+                "minimum_charge",
+                0.00,
+                "drink_per_person",
+                "僅適用星期六及星期日；星期一至五無低消。每位客人至少須消費一杯飲料。",
+            ),
+            (
+                "BILLING_ROUNDING_UNIT_HOURS",
+                "計費取整單位",
+                "other",
+                1.00,
+                "hour",
+                "計費時數以此單位無條件進位。",
+            ),
+            (
+                "BILLING_MAX_HOURS",
+                "計費時數上限",
+                "other",
+                5.00,
+                "hour",
+                "計費時數上限；超過以 5 小時計算。",
+            ),
+            ("BOOKING_MIN_HOURS", "最短訂位時數", "other", 1.00, "hour", "單筆訂位最短時間。"),
         ]
         for code, name, rtype, price, unit, desc in rules:
             session.execute(
@@ -161,18 +205,34 @@ def main() -> int:
 
         # ── FAQ（raw SQL，尚無 ORM model） ──
         faqs = [
-            ("場地費如何計算？",
-             "場地費依照每位客人及使用時數計算。每位客人都需要支付場地費，使用時間不足一小時時，以一小時計算。實際費率依平日或週末的收費規則為準。",
-             "pricing", "{場地費,收費,計算方式,每人,每小時}", 1),
-            ("平日與假日的場地費有什麼不同？",
-             "店家的平日與假日採用不同的場地費率。平日為星期一至星期五，假日為星期六及星期日。實際收費金額依目前設定的場地費規則為準。",
-             "pricing", "{平日,假日,週末,星期六,星期日,價格,費率}", 2),
-            ("使用時間不滿一小時也要付一小時的費用嗎？",
-             "是的。場地費以一小時為計費單位，不足一小時的部分會進位至下一個完整小時。例如使用一小時十分鐘，會以兩小時計算。",
-             "pricing", "{不足一小時,進位,計費單位,使用時間,場地費}", 3),
-            ("每個人都有最低消費嗎？",
-             "是的，每位客人都必須至少消費一個品項，可以選擇飲料或點心。這項規則是以品項數量計算，不是固定金額的最低消費。",
-             "consumption", "{最低消費,低消,每人低消,飲料,點心,消費規則}", 1),
+            (
+                "場地費如何計算？",
+                "場地費依照每位客人及使用時數計算。每位客人都需要支付場地費，使用時間不足一小時時，以一小時計算。實際費率依平日或週末的收費規則為準。",
+                "pricing",
+                "{場地費,收費,計算方式,每人,每小時}",
+                1,
+            ),
+            (
+                "平日與假日的場地費有什麼不同？",
+                "店家的平日與假日採用不同的場地費率。平日為星期一至星期五，假日為星期六及星期日。實際收費金額依目前設定的場地費規則為準。",
+                "pricing",
+                "{平日,假日,週末,星期六,星期日,價格,費率}",
+                2,
+            ),
+            (
+                "使用時間不滿一小時也要付一小時的費用嗎？",
+                "是的。場地費以一小時為計費單位，不足一小時的部分會進位至下一個完整小時。例如使用一小時十分鐘，會以兩小時計算。",
+                "pricing",
+                "{不足一小時,進位,計費單位,使用時間,場地費}",
+                3,
+            ),
+            (
+                "每個人都有最低消費嗎？",
+                "是的，每位客人都必須至少消費一個品項，可以選擇飲料或點心。這項規則是以品項數量計算，不是固定金額的最低消費。",
+                "consumption",
+                "{最低消費,低消,每人低消,飲料,點心,消費規則}",
+                1,
+            ),
         ]
         for q, a, cat, kw, so in faqs:
             session.execute(
@@ -185,8 +245,16 @@ def main() -> int:
                     "  WHERE shop_id = :sid2 AND question = :q2"
                     ")"
                 ),
-                {"sid": SHOP_ID, "q": q, "a": a, "cat": cat, "kw": kw, "so": so,
-                 "sid2": SHOP_ID, "q2": q},
+                {
+                    "sid": SHOP_ID,
+                    "q": q,
+                    "a": a,
+                    "cat": cat,
+                    "kw": kw,
+                    "so": so,
+                    "sid2": SHOP_ID,
+                    "q2": q,
+                },
             )
 
         # ── 菜單分類 ──
@@ -231,8 +299,15 @@ def main() -> int:
                     "  )"
                 ),
                 {
-                    "sid": SHOP_ID, "sid2": SHOP_ID, "sid3": SHOP_ID,
-                    "cn": cat_name, "n": name, "n2": name, "d": desc, "p": price, "so": so,
+                    "sid": SHOP_ID,
+                    "sid2": SHOP_ID,
+                    "sid3": SHOP_ID,
+                    "cn": cat_name,
+                    "n": name,
+                    "n2": name,
+                    "d": desc,
+                    "p": price,
+                    "so": so,
                 },
             )
 
