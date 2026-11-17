@@ -140,4 +140,11 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('groups-page')), findsOneWidget);
   });
+
+  testWidgets('畫面框架的「推薦」入口進到 /games-advisor', (tester) async {
+    await pumpApp(tester, showPrototypes: false);
+    await tester.tap(find.byKey(const Key('shell-nav-advisor')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('games-advisor-page')), findsOneWidget);
+  });
 }
