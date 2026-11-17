@@ -8,6 +8,7 @@ import '../prototypes/games_advisor/games_advisor_proto_page.dart';
 import '../prototypes/groups/groups_proto_page.dart';
 import '../prototypes/health/health_proto_page.dart';
 import 'shell.dart';
+import 'theme/theme_preview_page.dart';
 
 /// 路由表。`/proto/...` 只有在 `SHOW_PROTOTYPES=true` 時才註冊，正式部署看不到。
 GoRouter createRouter(AppConfig config) => GoRouter(
@@ -28,6 +29,10 @@ GoRouter createRouter(AppConfig config) => GoRouter(
           GoRoute(
             path: '/proto/games_advisor',
             builder: (context, state) => const GamesAdvisorProtoPage(),
+          ),
+          GoRoute(
+            path: '/proto/theme',
+            builder: (context, state) => const ThemePreviewPage(),
           ),
         ],
       ],
