@@ -8,6 +8,7 @@ import '../domains/groups/pages/groups_page.dart';
 import '../domains/health/pages/health_page.dart';
 import '../prototypes/booking/booking_list_proto_page.dart';
 import '../prototypes/booking/booking_proto_page.dart';
+import '../prototypes/rules_ingest/rules_ingest_proto_page.dart';
 import '../prototypes/rules_qa/rules_qa_proto_page.dart';
 import 'shell.dart';
 import 'theme/theme_preview_page.dart';
@@ -36,12 +37,14 @@ GoRouter createRouter(AppConfig config) => GoRouter(
             path: '/proto/theme',
             builder: (context, state) => const ThemePreviewPage(),
           ),
-        if (config.showPrototypes)
+          GoRoute(
+            path: '/proto/rules-ingest',
+            builder: (context, state) => const RulesIngestProtoPage(),
+          ),
           GoRoute(
             path: '/proto/booking',
             builder: (context, state) => const BookingProtoPage(),
           ),
-        if (config.showPrototypes)
           GoRoute(
             path: '/proto/booking/list',
             builder: (context, state) => const BookingListProtoPage(),

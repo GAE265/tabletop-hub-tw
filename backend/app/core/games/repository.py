@@ -32,6 +32,9 @@ class GameRepository(SessionRepository):
     def count_games(self) -> int:
         return self.session.scalar(select(func.count()).select_from(Game)) or 0
 
+    def game_exists(self, game_id: int) -> bool:
+        return bool(self.session.scalar(select(select(Game.id).where(Game.id == game_id).exists())))
+
     def list_games(self) -> list[dict[str, Any]]:
         """全部桌遊，照 id 排。每款是 id、11 個欄位，加上 types（類型代碼，照字母排）。"""
         types: dict[int, list[str]] = {}
