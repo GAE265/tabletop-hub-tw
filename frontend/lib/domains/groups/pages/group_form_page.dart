@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme/app_spacing.dart';
+import '../../../core/api/api_exception.dart';
 import '../../../core/layout/breakpoints.dart';
 import '../state/group_form_state.dart';
 import '../state/group_labels.dart';
-import '../state/groups_calendar_state.dart';
+import '../state/group_pickers_state.dart';
+import 'widgets/game_picker_field.dart';
 import 'widgets/group_widgets.dart';
 
 /// 開團／編輯表單。[groupId] 為 null 時是開團。
@@ -21,11 +23,9 @@ class GroupFormPage extends ConsumerStatefulWidget {
 
 class _GroupFormPageState extends ConsumerState<GroupFormPage> {
   late GroupFormData _data = widget.initial;
-  late final _shopId = TextEditingController(text: widget.initial.shopId);
   late final _title = TextEditingController(text: widget.initial.title);
   late final _capacity = TextEditingController(text: widget.initial.capacity);
   late final _fee = TextEditingController(text: widget.initial.fee);
-  late final _gameId = TextEditingController(text: widget.initial.gameId);
   late final _description = TextEditingController(
     text: widget.initial.description,
   );
@@ -34,18 +34,16 @@ class _GroupFormPageState extends ConsumerState<GroupFormPage> {
 
   @override
   void dispose() {
-    for (final c in [_shopId, _title, _capacity, _fee, _gameId, _description]) {
+    for (final c in [_title, _capacity, _fee, _description]) {
       c.dispose();
     }
     super.dispose();
   }
 
   GroupFormData _collect() => _data.copyWith(
-    shopId: _shopId.text,
     title: _title.text,
     capacity: _capacity.text,
     fee: _fee.text,
-    gameId: _gameId.text,
     description: _description.text,
   );
 
@@ -94,7 +92,6 @@ class _GroupFormPageState extends ConsumerState<GroupFormPage> {
   Widget build(BuildContext context) {
     final state = ref.watch(groupFormProvider);
     final errors = state.fieldErrors;
-    final shops = ref.watch(knownShopsProvider);
     final date = _data.date;
     final maxWidth =
         AppSpacing.contentMaxWidth(context.screenSize) ?? double.infinity;
@@ -111,28 +108,11 @@ class _GroupFormPageState extends ConsumerState<GroupFormPage> {
             padding: const EdgeInsets.all(AppSpacing.medium),
             children: [
               if (!_editing) ...[
-                DropdownButtonFormField<String>(
-                  initialValue: shops.any((s) => s.id == _shopId.text)
-                      ? _shopId.text
-                      : null,
-                  isExpanded: true,
-                  decoration: const InputDecoration(
-                    labelText: '店家（當月揪團出現過的店家）',
-                  ),
-                  onChanged: (id) => setState(() => _shopId.text = id ?? ''),
-                  items: [
-                    for (final shop in shops)
-                      DropdownMenuItem(value: shop.id, child: Text(shop.name)),
-                  ],
-                ),
-                gap,
-                TextField(
-                  controller: _shopId,
-                  decoration: InputDecoration(
-                    labelText: '或輸入店家 ID',
-                    helperText: '店家清單 API 完成前暫用',
-                    errorText: errors['shopId'],
-                  ),
+                _ShopField(
+                  value: _data.shopId,
+                  error: errors['shopId'],
+                  onChanged: (id) =>
+                      setState(() => _data = _data.copyWith(shopId: id)),
                 ),
                 gap,
               ],
@@ -205,13 +185,10 @@ class _GroupFormPageState extends ConsumerState<GroupFormPage> {
                 ],
               ),
               gap,
-              TextField(
-                controller: _gameId,
-                keyboardType: TextInputType.number,
-                decoration: InputDecoration(
-                  labelText: '遊戲 ID（選填）',
-                  errorText: errors['gameId'],
-                ),
+              GamePickerField(
+                selected: _data.games,
+                onChanged: (games) =>
+                    setState(() => _data = _data.copyWith(games: games)),
               ),
               gap,
               TextField(
@@ -270,6 +247,54 @@ class _PickerField extends StatelessWidget {
         ),
         isEmpty: value == null,
         child: Text(value ?? ''),
+      ),
+    );
+  }
+}
+
+/// 店家下拉選單：選項來自 `GET /api/v1/shops`。載入失敗時顯示錯誤與「重試」。
+class _ShopField extends ConsumerWidget {
+  const _ShopField({
+    required this.value,
+    required this.error,
+    required this.onChanged,
+  });
+
+  final String value;
+  final String? error;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final shops = ref.watch(shopOptionsProvider);
+    return shops.when(
+      loading: () => const InputDecorator(
+        decoration: InputDecoration(labelText: '店家'),
+        child: Text('載入店家中…'),
+      ),
+      error: (err, _) => InputDecorator(
+        decoration: InputDecoration(labelText: '店家', errorText: error),
+        child: Row(
+          children: [
+            Expanded(child: Text(err is ApiException ? err.message : '無法載入店家')),
+            TextButton(
+              onPressed: () => ref.invalidate(shopOptionsProvider),
+              child: const Text('重試'),
+            ),
+          ],
+        ),
+      ),
+      data: (items) => DropdownButtonFormField<String>(
+        key: const Key('group-shop-field'),
+        initialValue: items.any((s) => s.id == value) ? value : null,
+        isExpanded: true,
+        decoration: InputDecoration(labelText: '店家', errorText: error),
+        hint: const Text('選擇店家'),
+        onChanged: (id) => onChanged(id ?? ''),
+        items: [
+          for (final shop in items)
+            DropdownMenuItem(value: shop.id, child: Text(shop.name)),
+        ],
       ),
     );
   }

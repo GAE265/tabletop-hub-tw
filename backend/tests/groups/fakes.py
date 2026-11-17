@@ -10,7 +10,13 @@ from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import Any
 
-from app.domains.groups.repository import GroupRecord, GroupView, MemberRecord, MemberView
+from app.domains.groups.repository import (
+    GameItem,
+    GroupRecord,
+    GroupView,
+    MemberRecord,
+    MemberView,
+)
 
 
 @dataclass
@@ -24,7 +30,6 @@ class _Group:
     end_at: datetime
     capacity: int
     fee: int | None
-    game_id: int | None
     status: str
     created_at: datetime
 
@@ -36,6 +41,8 @@ class FakeGroupsRepository:
         self.users: dict[uuid.UUID, str] = {}
         self.games: dict[int, str] = {}
         self.groups: dict[uuid.UUID, _Group] = {}
+        # 揪團的遊戲，依選擇的順序
+        self.group_games: dict[uuid.UUID, list[int]] = {}
         # 依寫入順序；同一團的順序就是報名先後
         self.members: list[MemberRecord] = []
         self._member_group: list[uuid.UUID] = []
@@ -71,8 +78,11 @@ class FakeGroupsRepository:
     def shop_exists(self, shop_id: uuid.UUID) -> bool:
         return shop_id in self.shops
 
-    def game_exists(self, game_id: int) -> bool:
-        return game_id in self.games
+    def missing_games(self, game_ids: list[int]) -> list[int]:
+        return [game_id for game_id in game_ids if game_id not in self.games]
+
+    def set_group_games(self, group_id: uuid.UUID, game_ids: list[int]) -> None:
+        self.group_games[group_id] = list(game_ids)
 
     def add_group(self, **values: Any) -> uuid.UUID:
         group = _Group(id=uuid.uuid4(), status="open", created_at=self.now, **values)
@@ -155,8 +165,10 @@ class FakeGroupsRepository:
             shop_name=self.shops[group.shop_id],
             organizer_id=group.organizer_id,
             organizer_name=self.users.get(group.organizer_id, ""),
-            game_id=group.game_id,
-            game_name=self.games.get(group.game_id) if group.game_id is not None else None,
+            games=tuple(
+                GameItem(id=game_id, name=self.games[game_id])
+                for game_id in self.group_games.get(group.id, [])
+            ),
             member_count=sum(1 for m in rows if m.status == "member"),
             waitlist_count=sum(1 for m in rows if m.status == "waitlisted"),
             my_status=mine,

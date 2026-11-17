@@ -19,7 +19,7 @@
 
 #### Scenario: 遊戲不存在
 - **WHEN** `game_ids` 中有遊戲不在 `games`
-- **THEN** 回 404，`GAME_NOT_FOUND`，`details.game_ids` 列出不存在的編號；不建立揪團
+- **THEN** 回 404，`GROUP_GAME_NOT_FOUND`（沿用既有的錯誤代碼），`details.game_ids` 列出不存在的編號；不建立揪團
 
 #### Scenario: 重複的遊戲
 - **WHEN** `game_ids=[3, 3]`
