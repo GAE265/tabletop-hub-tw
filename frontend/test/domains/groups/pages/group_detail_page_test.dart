@@ -157,9 +157,9 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('確定'));
     await tester.pumpAndSettle();
-    expect(repo.updateCalls, [
-      ('g-1', {'status': 'cancelled'}),
-    ]);
+    final (id, changes) = repo.updateCalls.single;
+    expect(id, 'g-1');
+    expect(changes, {'status': 'cancelled'});
     expect(find.text('已取消'), findsOneWidget);
   });
 
