@@ -3,8 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../core/config/app_config.dart';
+import '../domains/games_advisor/pages/games_advisor_page.dart';
 import '../domains/health/pages/health_page.dart';
-import '../prototypes/games_advisor/games_advisor_proto_page.dart';
 import '../prototypes/groups/groups_proto_page.dart';
 import '../prototypes/health/health_proto_page.dart';
 import 'shell.dart';
@@ -17,6 +17,10 @@ GoRouter createRouter(AppConfig config) => GoRouter(
       builder: (context, state, child) => AppShell(child: child),
       routes: [
         GoRoute(path: '/', builder: (context, state) => const HealthPage()),
+        GoRoute(
+          path: '/games-advisor',
+          builder: (context, state) => const GamesAdvisorPage(),
+        ),
         if (config.showPrototypes) ...[
           GoRoute(
             path: '/proto/health',
@@ -25,10 +29,6 @@ GoRouter createRouter(AppConfig config) => GoRouter(
           GoRoute(
             path: '/proto/groups',
             builder: (context, state) => const GroupsProtoPage(),
-          ),
-          GoRoute(
-            path: '/proto/games_advisor',
-            builder: (context, state) => const GamesAdvisorProtoPage(),
           ),
           GoRoute(
             path: '/proto/theme',

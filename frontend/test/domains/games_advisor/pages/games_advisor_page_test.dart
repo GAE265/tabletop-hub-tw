@@ -110,6 +110,7 @@ Future<void> ask(
   AdvisorMessageResponse response,
 ) async {
   await tester.enterText(input, text);
+  await tester.pump();
   await tester.tap(sendButton);
   await tester.pump();
   repo.respond(response);
@@ -142,6 +143,7 @@ void main() {
     testWidgets('送出中：顯示「正在找桌遊…」，輸入與按鈕都停用', (tester) async {
       final repo = await pumpPage(tester);
       await tester.enterText(input, '我們 4 個人');
+      await tester.pump();
       await tester.tap(sendButton);
       await tester.pump();
       expect(find.text('正在找桌遊…'), findsOneWidget);
@@ -219,6 +221,7 @@ void main() {
       final repo = await pumpPage(tester);
       await ask(tester, repo, '我們 4 個人', textOnly);
       await tester.enterText(input, '那 2 個人呢');
+      await tester.pump();
       await tester.tap(sendButton);
       await tester.pump();
       repo.fail(
@@ -238,6 +241,7 @@ void main() {
       final repo = await pumpPage(tester);
       await ask(tester, repo, '我們 4 個人', textOnly);
       await tester.enterText(input, '那 2 個人呢');
+      await tester.pump();
       await tester.tap(sendButton);
       await tester.pump();
       repo.fail(
@@ -270,6 +274,7 @@ void main() {
     testWidgets('Enter 送出', (tester) async {
       final repo = await pumpPage(tester);
       await tester.enterText(input, '我們 4 個人');
+      await tester.pump();
       await tester.sendKeyEvent(LogicalKeyboardKey.enter);
       await tester.pump();
       expect(repo.requests.single.content, '我們 4 個人');
@@ -280,6 +285,7 @@ void main() {
     testWidgets('Shift+Enter 不送出', (tester) async {
       final repo = await pumpPage(tester);
       await tester.enterText(input, '我們 4 個人');
+      await tester.pump();
       await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
       await tester.sendKeyEvent(LogicalKeyboardKey.enter);
       await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);

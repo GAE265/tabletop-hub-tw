@@ -247,10 +247,9 @@ ThemeData buildAppTheme(AppFonts fonts) {
 TextTheme _textTheme(AppFonts fonts) {
   // black 只有顏色，englishLike 才有字級大小與行高，兩者合併才是完整的字級
   final typography = Typography.material2021();
-  final base = typography.englishLike.merge(typography.black).apply(
-    bodyColor: AppColors.ink,
-    displayColor: AppColors.ink,
-  );
+  final base = typography.englishLike
+      .merge(typography.black)
+      .apply(bodyColor: AppColors.ink, displayColor: AppColors.ink);
   TextStyle h(TextStyle? s, FontWeight w) =>
       fonts.heading(s!.copyWith(fontWeight: w));
   TextStyle b(TextStyle? s) => fonts.body(s!);
