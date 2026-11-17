@@ -421,8 +421,7 @@ scope 的寫法：
 - 寫測試前先判斷屬於 7.6 的哪一類。需要金鑰的測試只能放在 `integrations/`，並加上 `external` 標記；domain 的測試一律使用假實作。
 - **不得自行開 MR、改 MR 狀態或合併。** MR 一律由組員自己開。
 - 準備發 MR 時，依 `.github/pull_request_template.md` 的格式產出 MR 說明，存成 `docs/mr_info/<分支名稱>.md`，由使用者自行貼上。說明是給審核者看的摘要，簡短扼要，不寫實作過程；情境表格（7.4）列出本次涵蓋的所有情境，並標示每個情境對應的測試。
-- 使用者要求的統計、檢查、盤點、提案摘要等結果，寫成 md 檔存在 `docs/drafts/`，不要只回覆在對話裡。
-- `docs/mr_info/` 與 `docs/drafts/` 都列在 `.gitignore`，只留在本機，不要 commit。
+- `docs/mr_info/` 列在 `.gitignore`，只留在本機，不要 commit。
 - 做前端功能時，只做 `data/`、`state/`、`prototypes/` 與交接說明，不要碰 `pages/` 與 `app/theme/`，除非使用者是永傑或明確要求。
 - 產生的程式碼、註解、commit 訊息用繁體中文或英文，不用簡體中文。
 - 完成後列出：改了哪些檔案、跑了哪些檢查、還有哪些沒做完。
@@ -472,7 +471,7 @@ scope 的寫法：
 
 | 版本 | 日期 | 修改內容 |
 |---|---|---|
-| 1.10 | 2026-11-17 | 4.4 新增規則：每張資料表、每個欄位都要用 SQLAlchemy 的 `comment=` 寫中文說明；Enum 的每個值都要寫中文註解；第 9 節規定 AI 產出的 MR 說明存在 `docs/mr_info/`、統計與檢查結果存在 `docs/drafts/`，兩者都不 commit |
+| 1.10 | 2026-11-17 | 4.4 新增規則：每張資料表、每個欄位都要用 SQLAlchemy 的 `comment=` 寫中文說明；Enum 的每個值都要寫中文註解；第 9 節規定 AI 產出的 MR 說明存在 `docs/mr_info/`，不 commit |
 | 1.9 | 2026-11-14 | 4.3 錯誤狀態碼新增 503（外部服務暫時無法使用） |
 | 1.8 | 2026-11-13 | 4.4 表名的 domain 前綴改為依情境判斷，建表前先在群組告知；主鍵預設 UUID，固定的小型分類表可用流水號，被引用的資料要有唯一的名稱欄位；4.2 新增共用資料表例外，各 domain 的 service 可直接使用共用表的 repository；第 3 節新增「共用資料表」清單（`games`、`genres`、`game_genres`、`auth_users`、`booking_shops`）；第 9 節規定 AI 不得自行開 MR，只產出簡短的 MR 說明；`booking`（#6）改由瑋鋐負責、`groups`（#7）改由永傑負責 |
 | 1.7 | 2026-11-10 | 新增 7.6 測試分類（`external` 標記，需要金鑰的測試不在預設執行與 CI 中跑）；7.2 加上 `external` 例外；7.5 規定測試替身一律手寫 fake、不使用 mock 套件，並寫明前端測試的做法；發牌機的 mock 改稱 fake；本檔開始標示版本 |
