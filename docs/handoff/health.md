@@ -7,6 +7,8 @@
 - 前端 `state/` 位置：`frontend/lib/domains/health/state/`
 - 參考畫面路由：`/proto/health`（啟動需帶 `--dart-define=SHOW_PROTOTYPES=true`）
 
+> **狀態（2026-11-17）：** 正式頁面 `pages/health_page.dart` 早已完成，依 AGENTS.md 5.4 刪除參考畫面 `prototypes/health/` 與 `/proto/health` 路由。本文件保留作為交接說明的範例，參考畫面的檔案可在 git 歷史中找到。
+
 > health 是示範用 domain：`pages/health_page.dart` 只是展示「正式頁面怎麼接 `state/`、怎麼用主題與斷點」，永傑可直接改寫或刪除。
 
 ## 1. 頁面清單
