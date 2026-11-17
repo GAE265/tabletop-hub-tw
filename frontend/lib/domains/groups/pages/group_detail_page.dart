@@ -112,8 +112,32 @@ class _GroupInfo extends ConsumerWidget {
                 icon: Icons.hourglass_empty,
                 text: '候補 ${group.waitlistCount} 人',
               ),
-            if (group.game case final game?)
-              _InfoRow(icon: Icons.casino_outlined, text: game.name),
+            if (group.games.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  vertical: AppSpacing.xSmall,
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      Icons.casino_outlined,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                    const SizedBox(width: AppSpacing.small),
+                    Expanded(
+                      child: Wrap(
+                        spacing: AppSpacing.small,
+                        runSpacing: AppSpacing.xSmall,
+                        children: [
+                          for (final game in group.games)
+                            PillBadge(label: game.name),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             if (group.description case final description?) ...[
               const SizedBox(height: AppSpacing.small),
               Text(description, style: text.bodyMedium),

@@ -30,7 +30,8 @@ class GroupsRepositoryProtocol(Protocol):
 
     def transaction(self) -> Any: ...
     def shop_exists(self, shop_id: uuid.UUID) -> bool: ...
-    def game_exists(self, game_id: int) -> bool: ...
+    def missing_games(self, game_ids: list[int]) -> list[int]: ...
+    def set_group_games(self, group_id: uuid.UUID, game_ids: list[int]) -> None: ...
     def add_group(self, **values: Any) -> uuid.UUID: ...
     def lock_group(self, group_id: uuid.UUID) -> GroupRecord | None: ...
     def update_group(self, group_id: uuid.UUID, values: dict[str, Any]) -> None: ...
@@ -86,7 +87,7 @@ class GroupsService:
         self._check_times(data.start_at, data.end_at, now, check_start=True)
         if not self._repo.shop_exists(data.shop_id):
             raise AppError(404, "GROUP_SHOP_NOT_FOUND", "找不到這間店家")
-        self._check_game(data.game_id)
+        self._check_games(data.game_ids)
 
         with self._repo.transaction():
             group_id = self._repo.add_group(
@@ -98,8 +99,8 @@ class GroupsService:
                 end_at=data.end_at,
                 capacity=data.capacity,
                 fee=data.fee,
-                game_id=data.game_id,
             )
+            self._repo.set_group_games(group_id, data.game_ids)
             # 開團主自動成為第一位成員（AGENTS.md §10.3）
             self._repo.add_member(group_id, user.id, "member", now)
         return self.get_group(user, group_id)
@@ -162,6 +163,7 @@ class GroupsService:
         self, user: CurrentUser, group_id: uuid.UUID, data: GroupUpdate
     ) -> GroupResponse:
         fields = data.model_dump(exclude_unset=True)
+        game_ids: list[int] | None = fields.pop("game_ids", None)
         with self._repo.transaction():
             record = self._lock(group_id)
             if not _can_manage(user, record):
@@ -177,8 +179,8 @@ class GroupsService:
                     now,
                     check_start="start_at" in fields,
                 )
-            if "game_id" in fields:
-                self._check_game(fields["game_id"])
+            if game_ids is not None:
+                self._check_games(game_ids)
 
             open_slots = 0
             if "capacity" in fields:
@@ -193,6 +195,8 @@ class GroupsService:
                 open_slots = fields["capacity"] - members
 
             self._repo.update_group(group_id, fields)
+            if game_ids is not None:
+                self._repo.set_group_games(group_id, game_ids)
             # 調高人數上限時，候補依報名先後遞補
             if open_slots > 0 and fields.get("status") != "cancelled":
                 self._repo.promote_waitlisted(group_id, open_slots)
@@ -246,9 +250,10 @@ class GroupsService:
             raise _not_found()
         return record
 
-    def _check_game(self, game_id: int | None) -> None:
-        if game_id is not None and not self._repo.game_exists(game_id):
-            raise AppError(404, "GROUP_GAME_NOT_FOUND", "找不到這款遊戲")
+    def _check_games(self, game_ids: list[int]) -> None:
+        missing = self._repo.missing_games(game_ids)
+        if missing:
+            raise AppError(404, "GROUP_GAME_NOT_FOUND", "找不到這款遊戲", {"game_ids": missing})
 
     @staticmethod
     def _check_times(
@@ -267,11 +272,6 @@ class GroupsService:
             status = "ended"
         else:
             status = "open"
-        game = (
-            GameRef(id=view.game_id, name=view.game_name or "")
-            if view.game_id is not None
-            else None
-        )
         return GroupResponse(
             id=view.id,
             title=view.title,
@@ -283,7 +283,7 @@ class GroupsService:
             status=status,
             shop=ShopRef(id=view.shop_id, name=view.shop_name),
             organizer=UserRef(id=view.organizer_id, display_name=view.organizer_name),
-            game=game,
+            games=[GameRef(id=game.id, name=game.name) for game in view.games],
             member_count=view.member_count,
             waitlist_count=view.waitlist_count,
             remaining_slots=max(view.capacity - view.member_count, 0),

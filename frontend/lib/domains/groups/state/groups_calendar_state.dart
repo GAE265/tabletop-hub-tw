@@ -201,16 +201,6 @@ final organizerOptionsProvider = Provider<List<OrganizerOption>>((ref) {
   });
 });
 
-/// 當月揪團出現過的店家（不重複）。店家清單 API 完成前，開團表單用它當選項（design.md D8）。
-final knownShopsProvider = Provider<List<ShopRef>>((ref) {
-  final groups = ref.watch(groupsCalendarProvider).groups.value ?? const [];
-  final shops = <String, ShopRef>{};
-  for (final g in groups) {
-    shops.putIfAbsent(g.shop.id, () => g.shop);
-  }
-  return shops.values.toList();
-});
-
 /// 列表上的名額狀態文字。
 String groupSlotLabel(Group group) {
   if (group.status == 'cancelled') return '已取消';

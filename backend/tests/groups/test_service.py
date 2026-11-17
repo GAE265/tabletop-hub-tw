@@ -108,16 +108,27 @@ def test_create_group_organizer_becomes_first_member(service, shop_id):
     assert group.waitlist_count == 0
     assert group.remaining_slots == 3
     assert group.my_status == "member"
-    assert group.game is None
+    assert group.games == []
 
 
 def test_create_group_with_optional_fields(service, repo, shop_id):
     repo.add_game_row(7, "範例桌遊")
-    group = make_group(service, shop_id, fee=300, game_id=7, description="新手可")
+    group = make_group(service, shop_id, fee=300, game_ids=[7], description="新手可")
     assert group.fee == 300
-    assert group.game is not None
-    assert (group.game.id, group.game.name) == (7, "範例桌遊")
+    assert [(g.id, g.name) for g in group.games] == [(7, "範例桌遊")]
     assert group.description == "新手可"
+
+
+def test_create_group_with_games_in_selected_order(service, repo, shop_id):
+    repo.add_game_row(1, "阿瓦隆")
+    repo.add_game_row(3, "馬可波羅")
+    group = make_group(service, shop_id, game_ids=[3, 1])
+    assert [g.id for g in group.games] == [3, 1]
+    assert [g.name for g in group.games] == ["馬可波羅", "阿瓦隆"]
+
+
+def test_create_group_without_games(service, shop_id):
+    assert make_group(service, shop_id, game_ids=[]).games == []
 
 
 def test_create_group_shop_not_found(service, repo):
@@ -128,10 +139,21 @@ def test_create_group_shop_not_found(service, repo):
 
 
 def test_create_group_game_not_found(service, repo, shop_id):
+    repo.add_game_row(1, "阿瓦隆")
     with pytest.raises(AppError) as exc_info:
-        make_group(service, shop_id, game_id=999)
+        make_group(service, shop_id, game_ids=[1, 999, 998])
     assert_app_error(exc_info, 404, "GROUP_GAME_NOT_FOUND")
+    assert exc_info.value.details == {"game_ids": [999, 998]}
     assert repo.groups == {}
+
+
+def test_duplicate_game_ids_are_rejected(shop_id):
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        create_input(shop_id, game_ids=[3, 3])
+    with pytest.raises(ValidationError):
+        update_input(game_ids=[3, 3])
 
 
 @pytest.mark.parametrize(
@@ -375,11 +397,33 @@ def test_organizer_updates_title(service, shop_id):
 
 def test_update_can_clear_optional_fields(service, repo, shop_id):
     repo.add_game_row(7, "範例桌遊")
-    group = make_group(service, shop_id, fee=200, game_id=7, description="說明")
+    group = make_group(service, shop_id, fee=200, game_ids=[7], description="說明")
     updated = service.update_group(
-        ORGANIZER, group.id, update_input(fee=None, game_id=None, description=None)
+        ORGANIZER, group.id, update_input(fee=None, game_ids=[], description=None)
     )
-    assert (updated.fee, updated.game, updated.description) == (None, None, None)
+    assert (updated.fee, updated.games, updated.description) == (None, [], None)
+
+
+def test_update_replaces_games(service, repo, shop_id):
+    repo.add_game_row(1, "阿瓦隆")
+    repo.add_game_row(2, "卡坦島")
+    group = make_group(service, shop_id, game_ids=[1])
+    updated = service.update_group(ORGANIZER, group.id, update_input(game_ids=[2, 1]))
+    assert [g.id for g in updated.games] == [2, 1]
+
+
+def test_update_other_fields_keeps_games(service, repo, shop_id):
+    repo.add_game_row(1, "阿瓦隆")
+    group = make_group(service, shop_id, game_ids=[1])
+    updated = service.update_group(ORGANIZER, group.id, update_input(title="新標題"))
+    assert [g.id for g in updated.games] == [1]
+
+
+def test_update_games_cannot_be_null():
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        update_input(game_ids=None)
 
 
 @pytest.mark.parametrize("user", [ORGANIZER, ADMIN])
@@ -460,8 +504,9 @@ def test_update_invalid_time(service, shop_id, values):
 def test_update_game_not_found(service, shop_id):
     group = make_group(service, shop_id)
     with pytest.raises(AppError) as exc_info:
-        service.update_group(ORGANIZER, group.id, update_input(game_id=999))
+        service.update_group(ORGANIZER, group.id, update_input(game_ids=[999]))
     assert_app_error(exc_info, 404, "GROUP_GAME_NOT_FOUND")
+    assert exc_info.value.details == {"game_ids": [999]}
 
 
 def test_update_group_not_found(service):

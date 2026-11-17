@@ -2,6 +2,7 @@
 
 import uuid
 from collections.abc import Callable
+from itertools import count
 
 import pytest
 from fastapi import FastAPI
@@ -59,16 +60,18 @@ def act_as(app: FastAPI) -> Callable[[CurrentUser], CurrentUser]:
 
 @pytest.fixture
 def add_game(db: Engine) -> Callable[[str], int]:
+    bgg_ids = count(900001)
+
     def _add_game(name: str = "範例桌遊") -> int:
         with db.begin() as conn:
             return conn.scalar(
                 text(
                     "INSERT INTO games (bgg_id, name, english_name, min_players, max_players, "
                     "min_playtime, max_playtime, min_age, weight, categories, mechanics) "
-                    "VALUES (900001, :name, 'Example Game', 2, 4, 30, 45, 10, 2.0, "
+                    "VALUES (:bgg, :name, 'Example Game', 2, 4, 30, 45, 10, 2.0, "
                     "ARRAY['Card Game'], ARRAY['Hand Management']) RETURNING id"
                 ),
-                {"name": name},
+                {"bgg": next(bgg_ids), "name": name},
             )
 
     return _add_game

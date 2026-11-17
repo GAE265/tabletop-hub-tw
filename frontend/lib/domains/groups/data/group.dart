@@ -23,7 +23,9 @@ abstract class Group with _$Group {
     required String status,
     required ShopRef shop,
     required UserRef organizer,
-    GameRef? game,
+
+    /// 要玩的遊戲，依開團主選擇的順序；沒有遊戲時是空陣列。
+    @Default(<GameRef>[]) List<GameRef> games,
     required int memberCount,
     required int waitlistCount,
     required int remainingSlots,
