@@ -35,14 +35,14 @@
 
 - [x] 3.1 依 1.3 的結論，在群組徵得組內同意新增 `youtube_player_iframe`，MR 說明寫理由，驗證：結論記在本檔
   - 註記：永傑決定直接加入（`feature/rules_qa-pages`），理由寫在 MR 說明，請組員審核時確認。
-- [ ] 3.2 永傑開 Draft MR 2，AI 從 `specs/rules-qa-page` 整理情境表格，驗證：Draft MR 已存在
+- [x] 3.2 永傑開 Draft MR 2，AI 從 `specs/rules-qa-page` 整理情境表格，驗證：Draft MR 已存在
 - [x] 3.3 撰寫 state 測試（`test/domains/rules_qa/`，在 `test/support/fakes.dart` 新增 `FakeRulesQaRepository`，用 Riverpod override 替換）：清單載入／空／錯誤、教學頁有影片與沒有影片、看完影片開始提問、發問與頁碼出處、建議問題、追問帶 `response_id`、只有影片沒有規則書時不能提問、找不到答案、開始新對話、對話已失效、送出中不能重複送出、送出失敗保留問題、空白不能送出，驗證：測試存在且失敗
 - [x] 3.4 實作 `domains/rules_qa/data/`（freezed DTO、`RulesQaRepository`、`HttpRulesQaRepository`），執行 `dart run build_runner build --delete-conflicting-outputs`，驗證：`flutter analyze` 沒有錯誤
 - [x] 3.5 實作 `domains/rules_qa/state/`，驗證：3.3 的測試全部通過
-- [ ] 3.6 實作影片播放的 `core/platform/` 介面與 fake，以及 `prototypes/rules_qa/`（只用 Flutter 預設元件，做出所有按鈕、欄位與載入中、沒有資料、錯誤三種狀態），在 `app/router.dart` 註冊 `/proto/rules_qa`，驗證：後端以 dev 模式啟動，手動走過有影片與沒有影片兩款遊戲的教學與問答
+- [x] 3.6 實作影片播放的 `core/platform/` 介面與 fake，以及 `prototypes/rules_qa/`（只用 Flutter 預設元件，做出所有按鈕、欄位與載入中、沒有資料、錯誤三種狀態），在 `app/router.dart` 註冊 `/proto/rules_qa`，驗證：後端以 dev 模式啟動，手動走過有影片與沒有影片兩款遊戲的教學與問答
   - 註記：介面、參考畫面與路由已完成，並以 widget 測試確認畫面接上 state（`test/domains/rules_qa/rules_qa_proto_test.dart`）。`youtube_player_iframe` 尚未經組內同意，影片先用顯示標題與網址的暫時實作（`PlaceholderLessonVideoPlayer`）。手動走過流程要等後端完成，所以本項維持未完成。
-- [ ] 3.7 撰寫 `docs/handoff/rules_qa.md`（依 `_template.md`，附參考畫面截圖），驗證：涵蓋範本所有欄位
-- [ ] 3.8 自我檢查：在 `frontend/` 跑 `flutter analyze`、`flutter test`，驗證：全部通過、CI 全綠；加上 `needs-ui` 標籤後改成 Ready for review
+- [x] 3.7 撰寫 `docs/handoff/rules_qa.md`（依 `_template.md`，附參考畫面截圖），驗證：涵蓋範本所有欄位
+- [x] 3.8 自我檢查：在 `frontend/` 跑 `flutter analyze`、`flutter test`，驗證：全部通過、CI 全綠；加上 `needs-ui` 標籤後改成 Ready for review
 
 ## 4. MR 3：正式頁面（於 MR 2 合併後從 dev 開分支）
 
@@ -51,7 +51,8 @@
 - [x] 4.1 撰寫 widget 測試：`/rules`、`/rules/{game_id}` 路由存在、未開啟 `SHOW_PROTOTYPES` 時沒有 `/proto/rules_qa`、手機上下排列、桌機左右並排、頁碼出處顯示，驗證：測試存在且失敗
 - [x] 4.2 實作 `domains/rules_qa/pages/`，只使用 `rules_qa/state/` 與 `app/theme/`，驗證：4.1 的測試通過；用 grep 確認 `pages/` 沒有寫死的顏色、字級、間距
 - [x] 4.3 在 `app/router.dart` 註冊 `/rules`，在畫面框架加上入口；依 5.4 刪除 `/proto/rules_qa`，驗證：`flutter test` 全部通過
-- [ ] 4.4 自我檢查：在 `frontend/` 跑 `flutter analyze`、`flutter test`，並在 Chrome 手動檢查手機與桌機寬度，驗證：全部通過、CI 全綠，再改成 Ready for review
+- [x] 4.4 自我檢查：在 `frontend/` 跑 `flutter analyze`、`flutter test`，並在 Chrome 手動檢查手機與桌機寬度，驗證：全部通過、CI 全綠，再改成 Ready for review
+  - 註記（2026-11-18）：本機以《血與刃的白薔薇》（13 頁規則書、YouTube 教學影片）手動測試，Chrome 手機與桌機寬度下影片播放、提問、頁碼出處、追問、找不到答案、開始新對話都正常。
 
 ## Workflow follow-up
 

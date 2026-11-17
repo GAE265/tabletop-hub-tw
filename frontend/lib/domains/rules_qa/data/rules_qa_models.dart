@@ -7,7 +7,7 @@ part 'rules_qa_models.freezed.dart';
 part 'rules_qa_models.g.dart';
 
 // ⚠️ 必須和後端 rules_qa 的 schemas 同步
-// （規格：openspec/changes/add-rules-qa/specs/rules-qa/spec.md）。
+// （規格：openspec/specs/rules-qa/spec.md）。
 
 /// `GET /api/v1/rules-lessons` 的一筆：有教材的遊戲。
 @freezed

@@ -1,7 +1,7 @@
 """rules_qa service 的單元測試：FakeRulesQaRepository、FakeEmbeddingProvider、FakeLLMProvider，
 不連資料庫、不需要金鑰（AGENTS.md 7.5、7.6）。
 
-情境對應 openspec/changes/add-rules-qa/specs/rules-qa/spec.md。
+情境對應 openspec/specs/rules-qa/spec.md。
 """
 
 import uuid

@@ -1,6 +1,6 @@
 """rules_qa API：打端點、連 `_test` 資料庫，LLM 與 embedding 用 fake。
 
-情境對應 openspec/changes/add-rules-qa/specs/rules-qa/spec.md。
+情境對應 openspec/specs/rules-qa/spec.md。
 """
 
 from collections.abc import Callable
