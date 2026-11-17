@@ -79,6 +79,26 @@ uv run uvicorn app.main:create_app --factory --reload # http://localhost:8000/do
 
 測試帳號只存在於後端的 `app/dev/`，前端身分切換器會從 `GET /api/v1/dev/users` 讀取。
 
+#### 同步共用桌遊資料
+
+`uv run alembic upgrade head` 會建好所有資料表，但 `games` 是空的。共用桌遊資料不放在 repo（[ADR 0003](docs/adr/0003-shared-games-table.md)），要另外同步，每個人的桌遊與編號才會相同（1–4 號是 4 款 Demo 遊戲）：
+
+1. 從團隊共用雲端資料夾 GAE265G5 下載最新的 `games-export.json`，放在 repo 以外的位置（例如「下載」資料夾）。**不要放進 repo，也不要提交。**
+2. 在 `backend/` 執行。後端正在執行的話，另開一個終端機：
+
+   ```bash
+   uv run python -m app.domains.games_advisor.commands sync-games <games-export.json 的路徑>
+   # 例如 Mac：~/Downloads/games-export.json；Windows（PowerShell）：$HOME\Downloads\games-export.json
+   ```
+
+3. 印出「同步完成：新增 … 款、更新 … 款、刪除 … 款，next_id 是 …」就完成了。
+
+注意：
+
+- **先升級、再同步。** 資料表比匯出檔舊時（例如還沒有 `result_type` 欄位），同步會出現「欄位不存在」的錯誤，資料不會被改；跑完 `uv run alembic upgrade head` 再同步一次即可。
+- 同步後，資料庫的桌遊和匯出檔完全一樣，可以重複執行。自己在本機新增的桌遊會被刪掉；測試請用寫在測試程式裡的假資料。
+- 指令拒絕執行時不會寫入任何資料，請照印出的訊息處理，或找立倫。
+
 ### 4. 前端
 
 另開終端機；需先完成上面的後端步驟。
@@ -124,6 +144,7 @@ flutter run -d chrome --web-port 5000 --dart-define=API_BASE_URL=http://localhos
 如果顯示 `Exited` 或沒有出現，先確認 Docker Desktop 已經打開，再執行 `docker compose logs` 查看錯誤訊息。
 - 後端套件有變動（`pyproject.toml`／`uv.lock` 被改）：`uv sync`（在 `backend/`）。有新的 migration 時也要跑 `uv run alembic upgrade head`。
 - 測試帳號有變動：`uv run python -m app.dev.seed`（在 `backend/`，可重複執行）。
+- 共用桌遊資料有更新（立倫會在群組通知）：從 GAE265G5 重新下載 `games-export.json`，在 `backend/` 先跑 `uv run alembic upgrade head`，再跑 `sync-games`（見「本機啟動」第 3 步的「同步共用桌遊資料」）。
 
 ## 結束時怎麼關
 
