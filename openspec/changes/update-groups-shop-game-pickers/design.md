@@ -27,7 +27,7 @@
 - 只有一個 migration：建立 `group_games` → 搬移 `game_id` 不為空的資料（position=1）→ 移除 `groups.game_id`。降級反向，取 position 最小的遊戲放回。
 
 **D2 API 契約：`game_ids`／`games`，不相容變更。**
-- 請求：`game_ids: list[int]`，預設空陣列；有重複回 422；有不存在的遊戲回 404 `GAME_NOT_FOUND`，`details.game_ids` 列出不存在的編號，整筆不寫入。
+- 請求：`game_ids: list[int]`，預設空陣列；有重複回 422；有不存在的遊戲回 404 `GROUP_GAME_NOT_FOUND`（沿用既有的錯誤代碼），`details.game_ids` 列出不存在的編號，整筆不寫入。
 - 回應：`games: [{id, name}]`，依 `position` 排序。
 - `PATCH`：帶 `game_ids` 時整份取代（先刪後加，同一個交易）；不帶時不動。
 - 列表查詢：先查出一頁揪團，再用一次查詢取得這些揪團的遊戲（`WHERE group_id IN (...)`），避免 JOIN 造成分頁筆數錯誤或 N+1。
