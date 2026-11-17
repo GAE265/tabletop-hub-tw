@@ -41,6 +41,12 @@ abstract final class AppSizes {
 
   /// 底部導覽列高度。
   static const double navigationBarHeight = 72;
+
+  /// 空畫面的大圖示（之後有插圖時換成圖片，尺寸沿用）。
+  static const double emptyStateIcon = 96;
+
+  /// 頭像（例如推薦 Agent 的圖示）。
+  static const double avatar = 40;
 }
 
 /// 暖色柔和懸浮陰影。

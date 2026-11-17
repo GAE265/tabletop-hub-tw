@@ -3,9 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../core/config/app_config.dart';
+import '../domains/games_advisor/pages/games_advisor_page.dart';
 import '../domains/groups/pages/groups_page.dart';
 import '../domains/health/pages/health_page.dart';
-import '../prototypes/games_advisor/games_advisor_proto_page.dart';
 import 'shell.dart';
 import 'theme/theme_preview_page.dart';
 
@@ -20,11 +20,11 @@ GoRouter createRouter(AppConfig config) => GoRouter(
           path: '/groups',
           builder: (context, state) => const GroupsPage(),
         ),
+        GoRoute(
+          path: '/games-advisor',
+          builder: (context, state) => const GamesAdvisorPage(),
+        ),
         if (config.showPrototypes) ...[
-          GoRoute(
-            path: '/proto/games_advisor',
-            builder: (context, state) => const GamesAdvisorProtoPage(),
-          ),
           GoRoute(
             path: '/proto/theme',
             builder: (context, state) => const ThemePreviewPage(),
