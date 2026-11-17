@@ -75,16 +75,6 @@ class _ShopBoardPageState extends ConsumerState<ShopBoardPage> {
     if (ok && mounted) await _n.setStatus(b.id, 'cancelled');
   }
 
-  /// 客人沒來：標記未到店並釋放桌位；標錯時可以再按「客人到店」改回。
-  Future<void> _noShow(Booking b) async {
-    final ok = await confirmBookingAction(
-      context,
-      title: '確定要標記為未到店嗎？',
-      confirmLabel: '標記未到店',
-    );
-    if (ok && mounted) await _n.setStatus(b.id, 'no_show');
-  }
-
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(bookingProvider);
@@ -205,19 +195,12 @@ class _ShopBoardPageState extends ConsumerState<ShopBoardPage> {
                       onPressed: act(() => _cancel(b)),
                       child: const Text('取消'),
                     ),
-                    OutlinedButton(
-                      key: Key('board-noshow-${b.id}'),
-                      onPressed: act(() => _noShow(b)),
-                      child: const Text('未到店'),
-                    ),
-                  ],
-                  // 未到店標錯時，可以改回客人到店
-                  if (b.status == 'confirmed' || b.status == 'no_show')
                     FilledButton(
                       key: Key('board-seated-${b.id}'),
                       onPressed: act(() => _n.setStatus(b.id, 'seated')),
                       child: const Text('客人到店'),
                     ),
+                  ],
                   if (b.status == 'seated')
                     FilledButton(
                       key: Key('board-complete-${b.id}'),

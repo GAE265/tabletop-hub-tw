@@ -23,7 +23,7 @@ const _statusFilters = [
   ('seated', '已入座'),
   ('completed', '已完成'),
   ('cancelled', '已取消'),
-  ('no_show', '未到店'),
+  ('no_show', '未出席'),
 ];
 
 class _MyBookingsPageState extends ConsumerState<MyBookingsPage> {

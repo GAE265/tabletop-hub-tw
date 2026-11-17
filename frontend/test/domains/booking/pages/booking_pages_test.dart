@@ -391,35 +391,6 @@ void main() {
       );
     });
 
-    testWidgets('未到店：先確認，標記後可以改回客人到店', (tester) async {
-      final repo = FakeBookingRepository()..board = [sampleBooking()];
-      await pumpAt(tester, '/booking/board', repo: repo, user: staff);
-      final card = find.byKey(const Key('board-card-7'));
-
-      await tapKey(tester, 'board-noshow-7');
-      expect(find.text('確定要標記為未到店嗎？'), findsOneWidget);
-      await tapKey(tester, 'booking-cancel-dismiss');
-      expect(repo.patchCalls, isEmpty);
-
-      await tapKey(tester, 'board-noshow-7');
-      await tapKey(tester, 'booking-cancel-confirm');
-      expect(repo.patchCalls.single.patch, {'status': 'no_show'});
-      expect(
-        find.descendant(of: card, matching: find.text('未到店')),
-        findsOneWidget,
-      );
-      expect(find.byKey(const Key('board-noshow-7')), findsNothing);
-      expect(find.byKey(const Key('board-cancel-7')), findsNothing);
-
-      // 標錯時改回客人到店
-      await tapKey(tester, 'board-seated-7');
-      expect(repo.patchCalls.last.patch, {'status': 'seated'});
-      expect(
-        find.descendant(of: card, matching: find.text('已入座')),
-        findsOneWidget,
-      );
-    });
-
     testWidgets('沒有訂位：顯示提示', (tester) async {
       await pumpAt(tester, '/booking/board', user: staff);
       expect(find.text('這天沒有訂位'), findsOneWidget);
