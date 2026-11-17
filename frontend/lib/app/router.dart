@@ -3,6 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../core/config/app_config.dart';
+import '../domains/booking/pages/new_booking_page.dart';
+import '../domains/booking/pages/my_bookings_page.dart';
+import '../domains/booking/pages/shop_board_page.dart';
 import '../domains/games_advisor/pages/games_advisor_page.dart';
 import '../domains/groups/pages/groups_page.dart';
 import '../domains/health/pages/health_page.dart';
@@ -28,6 +31,20 @@ GoRouter createRouter(AppConfig config) => GoRouter(
         GoRoute(
           path: '/games-advisor',
           builder: (context, state) => const GamesAdvisorPage(),
+        ),
+        GoRoute(
+          path: '/booking',
+          builder: (context, state) => const NewBookingPage(),
+          routes: [
+            GoRoute(
+              path: 'mine',
+              builder: (context, state) => const MyBookingsPage(),
+            ),
+            GoRoute(
+              path: 'board',
+              builder: (context, state) => const ShopBoardPage(),
+            ),
+          ],
         ),
         GoRoute(
           path: '/rules',
