@@ -5,6 +5,7 @@ GameRepository 讀寫 games、genres、game_genres 與 games.id 的計數器。�
 """
 
 from collections.abc import Collection, Mapping
+from dataclasses import dataclass
 from typing import Any
 
 from psycopg.errors import ForeignKeyViolation
@@ -26,8 +27,25 @@ class GameInUseError(Exception):
         self.table = table
 
 
+@dataclass(frozen=True)
+class GameInfo:
+    """其他 domain 查單一款桌遊時用到的欄位。result_type 為空代表尚未設定。"""
+
+    id: int
+    name: str
+    bgg_id: int
+    result_type: str | None
+
+
 class GameRepository(SessionRepository):
     """共用桌遊表 games、genres、game_genres 與 games.id 計數器的讀寫。"""
+
+    def get_game(self, game_id: int) -> GameInfo | None:
+        """依 id 讀一款桌遊（只讀，給其他 domain 使用）；不存在回 None。"""
+        row = self.session.execute(
+            select(Game.id, Game.name, Game.bgg_id, Game.result_type).where(Game.id == game_id)
+        ).one_or_none()
+        return None if row is None else GameInfo(**row._mapping)
 
     def count_games(self) -> int:
         return self.session.scalar(select(func.count()).select_from(Game)) or 0

@@ -1,7 +1,7 @@
 """matches 的 migration：matches、match_participants、match_turns 三張表。
 
 情境對應 openspec/changes/add-matches-record/specs/matches-record/spec.md
-「資料表與欄位說明」。migration 為 0006，接在 booking 的 0005 之後。
+「資料表與欄位說明」。migration 為 0008，接在 dev 最新的 0007（group_games）之後。
 """
 
 import json
@@ -400,7 +400,7 @@ def test_downgrade_removes_only_the_three_tables_and_upgrade_restores_them():
     try:
         with engine.begin() as conn:
             insert_game(conn)
-        migrate(url, "downgrade", "0005")
+        migrate(url, "downgrade", "0007")
         remaining = table_names(engine)
         assert not (NEW_TABLES & remaining)
         assert {"groups", "group_members", "games", "auth_users", "booking_shops"} <= remaining
@@ -412,7 +412,7 @@ def test_downgrade_removes_only_the_three_tables_and_upgrade_restores_them():
         engine.dispose()
 
 
-def test_migration_chain_has_single_head_after_0005():
+def test_migration_chain_has_single_head_after_0007():
     from alembic.config import Config
     from alembic.script import ScriptDirectory
 
@@ -423,4 +423,4 @@ def test_migration_chain_has_single_head_after_0005():
     script = ScriptDirectory.from_config(config_)
     assert len(script.get_heads()) == 1
     head = script.get_revision(script.get_heads()[0])
-    assert head.down_revision == "0005"
+    assert head.down_revision == "0007"
