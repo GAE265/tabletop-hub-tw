@@ -7,7 +7,8 @@ import 'current_user.dart';
 import 'groups_calendar_state.dart';
 
 /// 揪團詳細畫面上可以出現的操作按鈕。
-enum GroupAction { join, joinWaitlist, leave, edit, cancel }
+/// 揪團詳細頁的操作；`book` 是開團主替揪團訂位（跳到帶好揪團資料的訂位頁）。
+enum GroupAction { join, joinWaitlist, leave, edit, book, cancel }
 
 class GroupDetailState {
   const GroupDetailState({
@@ -49,7 +50,7 @@ class GroupDetailState {
     final g = group.value;
     if (g == null || g.status != 'open') return const [];
     if (userId != null && g.organizer.id == userId) {
-      return const [GroupAction.edit, GroupAction.cancel];
+      return const [GroupAction.edit, GroupAction.book, GroupAction.cancel];
     }
     if (g.myStatus != null) return const [GroupAction.leave];
     return g.remainingSlots > 0
