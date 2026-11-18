@@ -7,8 +7,9 @@ import 'current_user.dart';
 import 'groups_calendar_state.dart';
 
 /// 揪團詳細畫面上可以出現的操作按鈕。
-/// 揪團詳細頁的操作；`book` 是開團主替揪團訂位（跳到帶好揪團資料的訂位頁）。
-enum GroupAction { join, joinWaitlist, leave, edit, book, cancel }
+/// 揪團詳細頁的操作；`book` 是開團主替揪團訂位（跳到帶好揪團資料的訂位頁），
+/// `recordMatch` 是開團主與成員填入戰績（跳到帶好揪團資料的戰績頁）。
+enum GroupAction { join, joinWaitlist, leave, edit, book, recordMatch, cancel }
 
 class GroupDetailState {
   const GroupDetailState({
@@ -48,9 +49,23 @@ class GroupDetailState {
   /// 依揪團狀態與目前使用者決定要顯示哪些按鈕。
   List<GroupAction> actionsFor(String? userId) {
     final g = group.value;
-    if (g == null || g.status != 'open') return const [];
-    if (userId != null && g.organizer.id == userId) {
-      return const [GroupAction.edit, GroupAction.book, GroupAction.cancel];
+    if (g == null || g.status == 'cancelled') return const [];
+    final isOrganizer = userId != null && g.organizer.id == userId;
+    // 開團主與成員可以填入戰績（候補不行）；揪團結束後只剩這個按鈕
+    final canRecord = isOrganizer || g.myStatus == 'member';
+    if (g.status != 'open') {
+      return canRecord ? const [GroupAction.recordMatch] : const [];
+    }
+    if (isOrganizer) {
+      return const [
+        GroupAction.edit,
+        GroupAction.book,
+        GroupAction.recordMatch,
+        GroupAction.cancel,
+      ];
+    }
+    if (g.myStatus == 'member') {
+      return const [GroupAction.leave, GroupAction.recordMatch];
     }
     if (g.myStatus != null) return const [GroupAction.leave];
     return g.remainingSlots > 0

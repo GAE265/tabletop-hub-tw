@@ -43,7 +43,8 @@ GoRouter createRouter(AppConfig config) => GoRouter(
         ),
         GoRoute(
           path: '/matches',
-          builder: (context, state) => const MatchesPage(),
+          builder: (context, state) =>
+              MatchesPage.fromQuery(state.uri.queryParameters),
           routes: [
             GoRoute(
               path: ':id',

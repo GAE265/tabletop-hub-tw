@@ -13,6 +13,7 @@ class MatchFormState {
     this.locationType = 'home',
     this.shopId = '',
     this.seatNumber,
+    this.groupId,
     this.busy = false,
     this.errors = const {},
     this.error,
@@ -28,6 +29,9 @@ class MatchFormState {
 
   /// 自己的座位；沒填時後端給最小的空位。
   final int? seatNumber;
+
+  /// 從揪團開局時的揪團 id（開局時帶 `group_id`，這一局連到該揪團）；不是從揪團來的為 null。
+  final String? groupId;
   final bool busy;
 
   /// 欄位的錯誤：鍵是欄位名（gameId、playedOn、shopId），值是要顯示的訊息。
@@ -45,6 +49,7 @@ class MatchFormState {
     String? locationType,
     String? shopId,
     int? Function()? seatNumber,
+    String? Function()? groupId,
     bool? busy,
     Map<String, String>? errors,
     ApiException? Function()? error,
@@ -55,6 +60,7 @@ class MatchFormState {
     locationType: locationType ?? this.locationType,
     shopId: shopId ?? this.shopId,
     seatNumber: seatNumber == null ? this.seatNumber : seatNumber(),
+    groupId: groupId == null ? this.groupId : groupId(),
     busy: busy ?? this.busy,
     errors: errors ?? this.errors,
     error: error == null ? this.error : error(),
@@ -83,6 +89,10 @@ class MatchFormNotifier extends Notifier<MatchFormState> {
   void setSeatNumber(int? value) =>
       state = state.copyWith(seatNumber: () => value);
 
+  /// 從揪團的「填入戰績」進來時設定，開局時帶 `group_id`。
+  void setGroupId(String? value) =>
+      state = state.copyWith(groupId: () => value);
+
   Map<String, String> _validate() => {
     if (state.gameId == null) 'gameId': '請選擇遊戲',
     if (state.playedOn == null) 'playedOn': '請選擇日期',
@@ -106,6 +116,7 @@ class MatchFormNotifier extends Notifier<MatchFormState> {
           locationType: state.locationType,
           shopId: state.locationType == 'shop' ? state.shopId.trim() : null,
           seatNumber: state.seatNumber,
+          groupId: state.groupId,
         ),
       );
       if (!ref.mounted) return;

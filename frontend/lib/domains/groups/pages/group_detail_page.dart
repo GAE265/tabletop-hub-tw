@@ -8,6 +8,7 @@ import '../../../core/widgets/pill_badge.dart';
 import '../data/group.dart';
 import '../state/current_user.dart';
 import '../state/group_booking_link.dart';
+import '../state/group_match_link.dart';
 import '../state/group_clock.dart';
 import '../state/group_detail_state.dart';
 import '../state/group_form_state.dart';
@@ -15,7 +16,7 @@ import '../state/group_labels.dart';
 import 'group_form_page.dart';
 import 'widgets/group_widgets.dart';
 
-/// 揪團詳細資料：資訊、操作按鈕（報名／候補／退出／編輯／訂位／取消）與名單。
+/// 揪團詳細資料：資訊、操作按鈕（報名／候補／退出／編輯／訂位／填入戰績／取消）與名單。
 class GroupDetailPage extends ConsumerWidget {
   const GroupDetailPage({required this.groupId, super.key});
 
@@ -256,6 +257,18 @@ class _Actions extends ConsumerWidget {
               ),
               icon: const Icon(Icons.event_seat_outlined),
               label: const Text('訂位'),
+            ),
+            GroupAction.recordMatch => OutlinedButton.icon(
+              onPressed: enabled(
+                () => context.go(
+                  groupMatchLink(
+                    ref.read(groupClockProvider),
+                    state.group.value!,
+                  ).toString(),
+                ),
+              ),
+              icon: const Icon(Icons.emoji_events_outlined),
+              label: const Text('填入戰績'),
             ),
             GroupAction.cancel => TextButton(
               onPressed: enabled(
