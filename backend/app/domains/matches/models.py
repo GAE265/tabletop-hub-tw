@@ -176,7 +176,7 @@ class MatchTurn(Base):
     __table_args__ = (
         UniqueConstraint("match_id", "turn_number", name="uq_match_turns_match_turn"),
         CheckConstraint("turn_number >= 1", name="ck_match_turns_turn"),
-        {"comment": "一局的回合紀錄（選填）：第幾個回合、由誰主導、這款遊戲特有的內容"},
+        {"comment": "一局的回合紀錄（選填）：第幾個回合、本回合首家、這款遊戲特有的內容"},
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -190,8 +190,8 @@ class MatchTurn(Base):
         Uuid, ForeignKey("matches.id", ondelete="CASCADE"), index=True, comment="屬於哪一局"
     )
     turn_number: Mapped[int] = mapped_column(Integer, comment="第幾個回合，從 1 開始，同一局不重複")
-    seat_number: Mapped[int] = mapped_column(
-        Integer, comment="這個回合由哪個座位的玩家主導（出牌）"
+    seat_number: Mapped[int | None] = mapped_column(
+        Integer, nullable=True, comment="本回合首家的座位；遊戲沒有這個概念或未填時為空"
     )
     game_data: Mapped[dict[str, Any]] = mapped_column(
         JSONB, comment="這款遊戲特有的內容，格式由程式裡該遊戲的定義決定"

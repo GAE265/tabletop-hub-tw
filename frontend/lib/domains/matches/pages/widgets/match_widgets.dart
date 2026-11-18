@@ -29,9 +29,11 @@ String matchErrorText(Object error) {
   ].join();
 }
 
-/// 回合清單一列的標題，例如「第 1 回合・主導座位 1」。
-String turnTitle(MatchTurn turn) =>
-    '第 ${turn.turnNumber} 回合・主導座位 ${turn.seatNumber}';
+/// 回合清單一列的標題，例如「第 1 回合・首家座位 1」；沒有首家時只有「第 1 回合」。
+String turnTitle(MatchTurn turn) => [
+  '第 ${turn.turnNumber} 回合',
+  if (turn.seatNumber case final seat?) '首家座位 $seat',
+].join('・');
 
 /// 回合清單一列的內容（白薔薇）：出牌座位、四種數量、有沒有白薔薇。
 String turnDetail(Map<String, dynamic> data) {

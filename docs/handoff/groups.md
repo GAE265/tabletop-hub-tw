@@ -50,6 +50,7 @@
 | 加入候補 | 按鈕 | 同上（額滿時顯示），成功提示「已加入候補，目前第 N 位」 | `join()` | 同上（回 201，`status=waitlisted`） |
 | 退出 | 按鈕 | **先跳確認對話框**，確定後退出，提示「已退出揪團」；成員退出時後端自動讓候補遞補 | `leave()` | `DELETE /api/v1/groups/{id}/members/{自己的 id}` |
 | 編輯 | 按鈕 | 開啟表單並帶入現有的值 | `GroupFormData.fromGroup(group, clock)` | — |
+| 填入戰績 | 按鈕（開團主與正式成員；候補沒有） | 導向 `/matches?group_id=<揪團 id>`，只帶揪團 id；戰績頁自己讀揪團帶入名稱、店家與遊戲（見 matches 交接說明） | `groupMatchLink(group)` | — |
 | 取消揪團 | 按鈕 | **先跳確認對話框**，確定後取消，提示「已取消揪團」 | `cancel()` | `PATCH /api/v1/groups/{id}`，`{"status": "cancelled"}` |
 | 成功提示 | 文字 | 上一個操作成功的訊息 | `GroupDetailState.message` | — |
 | 錯誤提示 | 文字 | 上一個操作失敗時，顯示後端的 `message` | `GroupDetailState.error` | — |

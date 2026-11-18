@@ -199,6 +199,21 @@ void main() {
       },
     );
 
+    test('沒有本回合首家：seat_number 送 null，回應的 seat_number 為 null 也能解析', () async {
+      const noFirst = TurnInput(
+        turnNumber: 1,
+        gameData: {
+          'played_seat_numbers': [1, 2],
+        },
+      );
+      final (repo, adapter) = make(
+        (_) => json({...turnJson, 'seat_number': null}, 201),
+      );
+      final saved = await repo.recordTurn('m-1', noFirst);
+      expect(adapter.requests.single.data['seat_number'], isNull);
+      expect(saved.turn.seatNumber, isNull);
+    });
+
     test('新增：POST /turns，201 代表新增', () async {
       final (repo, adapter) = make((_) => json(turnJson, 201));
       final saved = await repo.recordTurn('m-1', input);

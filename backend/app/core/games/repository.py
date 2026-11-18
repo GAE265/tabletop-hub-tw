@@ -69,7 +69,7 @@ class GameRepository(SessionRepository):
         return [{**game, "types": types.get(game["id"], [])} for game in games]
 
     def search_games(self, q: str | None, offset: int, limit: int) -> tuple[list[Game], int]:
-        """依中文或英文名稱搜尋（部分相符、不分大小寫），照 name 排；回傳這一頁與總筆數。
+        """依中文或英文名稱搜尋（部分相符、不分大小寫），照 id 由小到大排；回傳這一頁與總筆數。
 
         q 為空時列出全部；q 中的 %、_ 當成一般字元。
         """
@@ -82,9 +82,7 @@ class GameRepository(SessionRepository):
                 | Game.english_name.ilike(pattern, escape="\\")
             )
         total = self.session.scalar(select(func.count()).select_from(query.subquery())) or 0
-        rows = self.session.scalars(
-            query.order_by(Game.name, Game.id).offset(offset).limit(limit)
-        ).all()
+        rows = self.session.scalars(query.order_by(Game.id).offset(offset).limit(limit)).all()
         return list(rows), total
 
     def find_games_by_bgg_ids(self, bgg_ids: Collection[int]) -> list[dict[str, Any]]:

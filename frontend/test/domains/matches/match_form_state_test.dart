@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tabletop_hub/core/api/api_exception.dart';
 import 'package:tabletop_hub/domains/booking/data/shop.dart';
+import 'package:tabletop_hub/domains/groups/data/group.dart';
 import 'package:tabletop_hub/domains/matches/state/match_form_state.dart';
 import 'package:tabletop_hub/domains/matches/state/match_shops.dart';
 
@@ -139,6 +140,109 @@ void main() {
     await form.submit();
     expect(repo.createCalls.single.groupId, 'g-1');
     expect(repo.createCalls.single.toJson()['group_id'], 'g-1');
+  });
+
+  group('loadGroup：從揪團帶入', () {
+    final start = DateTime.utc(2026, 11, 21, 16, 30); // 台灣 11/22 00:30
+
+    Group groupWith(List<GameRef> games) => fakeGroup(
+      id: 'g-7',
+      title: '週末輕策略',
+      startAt: start,
+      shopId: 's-b',
+      games: games,
+    );
+
+    test('揪團只選一款遊戲：帶入揪團、桌遊店、店家、遊戲與台灣日期', () async {
+      final groups = FakeGroupsRepository(
+        groups: [
+          groupWith(const [GameRef(id: 2, name: '阿不思學院')]),
+        ],
+      );
+      final repo = FakeMatchesRepository();
+      final container = makeContainer(repo, groups: groups);
+      final form = open(container);
+      await form.loadGroup('g-7');
+      final state = container.read(matchFormProvider);
+      expect(state.group?.title, '週末輕策略');
+      expect(state.groupId, 'g-7');
+      expect(state.locationType, 'shop');
+      expect(state.shopId, 's-b');
+      expect(state.gameId, 2);
+      expect(state.playedOn, DateTime(2026, 11, 22));
+      expect(state.groupError, isNull);
+
+      await form.submit();
+      final json = repo.createCalls.single.toJson();
+      expect(json['group_id'], 'g-7');
+      expect(json['shop_id'], 's-b');
+      expect(json['location_type'], 'shop');
+      expect(json['game_id'], 2);
+    });
+
+    test('揪團選了兩款以上遊戲：不自動選遊戲', () async {
+      final groups = FakeGroupsRepository(
+        groups: [
+          groupWith(const [
+            GameRef(id: 2, name: '阿不思學院'),
+            GameRef(id: 3, name: '馬可波羅'),
+          ]),
+        ],
+      );
+      final container = makeContainer(FakeMatchesRepository(), groups: groups);
+      final form = open(container);
+      await form.loadGroup('g-7');
+      final state = container.read(matchFormProvider);
+      expect(state.gameId, isNull);
+      expect(state.groupId, 'g-7');
+      expect(state.shopId, 's-b');
+    });
+
+    test('揪團沒選遊戲：不自動選遊戲', () async {
+      final groups = FakeGroupsRepository(groups: [groupWith(const [])]);
+      final container = makeContainer(FakeMatchesRepository(), groups: groups);
+      final form = open(container);
+      await form.loadGroup('g-7');
+      expect(container.read(matchFormProvider).gameId, isNull);
+    });
+
+    test('讀取揪團失敗：記下錯誤，不帶 group_id，表單仍可使用', () async {
+      final container = makeContainer(
+        FakeMatchesRepository(),
+        groups: FakeGroupsRepository(),
+      );
+      final form = open(container);
+      await form.loadGroup('g-missing');
+      var state = container.read(matchFormProvider);
+      expect(state.groupError?.code, 'GROUP_NOT_FOUND');
+      expect(state.group, isNull);
+      expect(state.groupId, isNull);
+
+      final repo = FakeMatchesRepository();
+      final other = makeContainer(repo, groups: FakeGroupsRepository());
+      final form2 = open(other)
+        ..setGameId(1)
+        ..setPlayedOn(DateTime(2026, 11, 21));
+      await form2.loadGroup('g-missing');
+      await form2.submit();
+      expect(repo.createCalls.single.groupId, isNull);
+      state = other.read(matchFormProvider);
+      expect(state.created, isNotNull);
+    });
+
+    test('重試讀取成功後清掉錯誤', () async {
+      final groups = FakeGroupsRepository(groups: [groupWith(const [])])
+        ..error = const ApiException(code: 'NETWORK_ERROR', message: '無法連線');
+      final container = makeContainer(FakeMatchesRepository(), groups: groups);
+      final form = open(container);
+      await form.loadGroup('g-7');
+      expect(container.read(matchFormProvider).groupError, isNotNull);
+      groups.error = null;
+      await form.loadGroup('g-7');
+      final state = container.read(matchFormProvider);
+      expect(state.groupError, isNull);
+      expect(state.groupId, 'g-7');
+    });
   });
 
   test('沒有設定揪團：不帶 group_id', () async {

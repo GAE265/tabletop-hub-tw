@@ -779,7 +779,7 @@ MatchParticipant fakeMatchParticipant({
 
 MatchTurn fakeMatchTurn({
   int turnNumber = 1,
-  int seatNumber = 1,
+  int? seatNumber = 1,
   Map<String, dynamic>? gameData,
   String recordedBy = 'u-player',
 }) => MatchTurn(
@@ -876,6 +876,9 @@ class FakeMatchesRepository implements MatchesRepository {
 
   final getCalls = <String>[];
   final createCalls = <MatchInput>[];
+
+  /// 每次 `list` 帶的 `group_id`（沒帶是 null）。
+  final listGroupIds = <String?>[];
   final addCalls = <ParticipantInput>[];
   final confirmCalls = <String>[];
   final removeCalls = <String>[];
@@ -895,6 +898,7 @@ class FakeMatchesRepository implements MatchesRepository {
     int page = 1,
     int pageSize = 20,
   }) async {
+    listGroupIds.add(groupId);
     if (error != null) throw error!;
     final items = listItems ?? [match];
     return MatchPage(items: items, total: items.length);

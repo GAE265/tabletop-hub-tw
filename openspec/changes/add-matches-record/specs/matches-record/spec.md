@@ -7,7 +7,7 @@
 ## ADDED Requirements
 
 ### Requirement: 開局
-`POST /api/v1/matches` SHALL 建立一局並回 201 與該局資料。必填：`game_id`、`played_on`（日期）、`location_type`（`shop` 或 `home`）；`location_type=shop` 時 `shop_id` 必填，`home`（自家）時 MUST NOT 帶 `shop_id`；選填：`group_id`、`progress`、`seat_number`（開局者自己的座位，>= 1，沒帶時為最小空位）。目前使用者成為開局者（`created_by`）並自動成為參加者（帶 `user_id`），座位由他自己選，不強制 1 號；此時還沒有結果，所以尚未確認（`is_confirmed=false`）。`group_id` MUST 是存在的揪團（透過 `groups` 的 service 檢查），但 MUST NOT 要求開局者是該揪團的成員。新建立的一局 `status=in_progress`、`result` 為空。所有角色都可以開局。一局不一定屬於揪團。
+`POST /api/v1/matches` SHALL 建立一局並回 201 與該局資料。必填：`game_id`、`played_on`（日期）、`location_type`（`shop` 或 `home`）；`location_type=shop` 時 `shop_id` 必填，`home`（自家）時 MUST NOT 帶 `shop_id`；選填：`group_id`、`progress`、`seat_number`（開局者自己的座位，>= 1，沒帶時為最小空位）。目前使用者成為開局者（`created_by`）並自動成為參加者（帶 `user_id`），座位由他自己選，不強制 1 號；此時還沒有結果，所以尚未確認（`is_confirmed=false`）。帶 `group_id` 時，`group_id` MUST 是存在的揪團（透過 `groups` 的 service 讀取），只有該揪團的開團主、正式成員或 admin 可以開局，其他人（含候補）MUST 回 403；開局時 MUST 把該揪團的正式成員（不含候補）自動加為參加者：開局者用自己選的座位（沒選為 1），其他成員依加入揪團的順序各取最小的空位，開局者本人不重複加入。新建立的一局 `status=in_progress`、`result` 為空。所有角色都可以開局。一局不一定屬於揪團。
 
 #### Scenario: 在店家開局
 - **WHEN** 玩家以存在的 `game_id`、`played_on`、`location_type=shop` 與存在的 `shop_id` 呼叫 `POST /api/v1/matches`
@@ -29,9 +29,37 @@
 - **WHEN** 帶存在的 `group_id`
 - **THEN** 回 201，回應的 `group_id` 與輸入一致
 
-#### Scenario: 開局者不是該揪團成員
-- **WHEN** 帶存在的 `group_id`，但開局者不是該揪團的成員
-- **THEN** 回 201（不檢查成員）
+#### Scenario: 帶揪團開局自動加入成員
+- **WHEN** 揪團有開團主 A、成員 B、C，A 帶該 `group_id` 開局、沒選座位
+- **THEN** 回 201，參加者依序為 A（座位 1）、B（座位 2）、C（座位 3），人數等於成員數
+
+#### Scenario: 候補不加入
+- **WHEN** 揪團另有候補 D
+- **THEN** D 不在參加者裡
+
+#### Scenario: 座位依加入順序
+- **WHEN** 揪團成員 C 比 B 早加入
+- **THEN** C 的座位小於 B
+
+#### Scenario: 開局者選座位
+- **WHEN** 開局者帶 `seat_number=2`
+- **THEN** 開局者座位 2，其他成員依加入順序取最小空位（1、3…）
+
+#### Scenario: 成員（非開團主）開局
+- **WHEN** 揪團的正式成員 B 帶該 `group_id` 開局
+- **THEN** 回 201，B 只出現一次，其他成員一併加入
+
+#### Scenario: admin 不是成員也可以開局
+- **WHEN** admin 帶該 `group_id` 開局
+- **THEN** 回 201，admin 與所有正式成員都是參加者
+
+#### Scenario: 不是成員不能帶揪團開局
+- **WHEN** 不是該揪團開團主、正式成員或 admin 的人帶 `group_id` 開局（含候補、`shop_staff`）
+- **THEN** 回 403，不建立這一局
+
+#### Scenario: 不帶揪團時行為不變
+- **WHEN** 開局時不帶 `group_id`
+- **THEN** 參加者只有開局者
 
 #### Scenario: 缺少必填欄位
 - **WHEN** 不帶 `game_id`、`played_on` 或 `location_type` 任一
@@ -124,9 +152,9 @@
 - **THEN** 回 409，`error.code=MATCH_FINISHED`
 
 ### Requirement: 記錄回合
-`POST /api/v1/matches/{match_id}/turns` SHALL 記錄一個回合並回 201。必填：`turn_number`（>= 1）、`seat_number`（這回合由誰主導，MUST 是這局已有的座位）、`game_data`（該遊戲特有的內容，格式由該遊戲的定義決定，存為 JSONB）。只有這局有帳號的參加者與 admin 可以記錄。同一局同一 `turn_number` 已有紀錄時 MUST 回 409，且不改動舊紀錄；帶 `overwrite=true` 時覆蓋舊紀錄並回 200。回合紀錄是選填的，沒有任何回合紀錄的局依然成立。遊戲沒有回合格式定義時 MUST 回 422。
+`POST /api/v1/matches/{match_id}/turns` SHALL 記錄一個回合並回 201。必填：`turn_number`（>= 1）、`game_data`（該遊戲特有的內容，格式由該遊戲的定義決定，存為 JSONB）。只有這局有帳號的參加者與 admin 可以記錄。同一局同一 `turn_number` 已有紀錄時 MUST 回 409，且不改動舊紀錄；帶 `overwrite=true` 時覆蓋舊紀錄並回 200。回合紀錄是選填的，沒有任何回合紀錄的局依然成立。遊戲沒有回合格式定義時 MUST 回 422。選填 `seat_number`（本回合首家的座位，>= 1；遊戲沒有這個概念或沒填時省略或為 null，回應也是 null），有值時 MUST 是這局已有的座位。
 
-《血與刃的白薔薇》的 `game_data`：`played_seat_numbers`（這回合出牌的座位編號清單，至少一個、不可重複、每個都 MUST 是這局存在的座位）、`double_blade_count`（雙刃）、`dark_blade_count`（暗刃）、`giant_blade_count`（巨刃）、`faithful_count`（信者）皆為 >= 0 的整數，`has_white_rose`（有沒有白薔薇）為布林；六個欄位都必填、不接受其他欄位。幽魂不記。`seat_number`（主導者）不要求出現在 `played_seat_numbers` 裡。
+《血與刃的白薔薇》的 `game_data`：`played_seat_numbers`（這回合出牌的座位編號清單，至少一個、不可重複、每個都 MUST 是這局存在的座位）、`double_blade_count`（雙刃）、`dark_blade_count`（暗刃）、`giant_blade_count`（巨刃）、`faithful_count`（信者）皆為 >= 0 的整數，`has_white_rose`（有沒有白薔薇）為布林；六個欄位都必填、不接受其他欄位。幽魂不記。`seat_number`（本回合首家）不要求出現在 `played_seat_numbers` 裡。
 
 #### Scenario: 正常記錄回合
 - **WHEN** 有帳號的參加者送出 `turn_number=1`、存在的 `seat_number`、完整合法的 `game_data`
@@ -325,7 +353,7 @@
 - **WHEN** 這局 `status=finished`，有人呼叫移除
 - **THEN** 回 409，`error.code=MATCH_FINISHED`，參加者不變
 
-#### Scenario: 座位是回合的主導者
+#### Scenario: 座位是回合的本回合首家
 - **WHEN** 座位 2 出現在某回合的 `seat_number`，移除座位 2 的參加者
 - **THEN** 回 409，`error.code=MATCH_PARTICIPANT_HAS_TURNS`，`error.details` 列出相關的 `turn_number`，參加者不變
 

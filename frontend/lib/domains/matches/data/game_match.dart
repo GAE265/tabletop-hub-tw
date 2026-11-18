@@ -91,13 +91,14 @@ abstract class MatchParticipant with _$MatchParticipant {
 }
 
 /// 一個回合的紀錄。[gameData] 的格式依遊戲而定（白薔薇見 `WhiteRoseTurnData`）。
+/// [seatNumber] 是本回合首家的座位，選填；沒有這個概念或沒填時為 null。
 @freezed
 abstract class MatchTurn with _$MatchTurn {
   @JsonSerializable(fieldRename: FieldRename.snake)
   const factory MatchTurn({
     required String id,
     required int turnNumber,
-    required int seatNumber,
+    int? seatNumber,
     required Map<String, dynamic> gameData,
     required String recordedBy,
     required DateTime updatedAt,

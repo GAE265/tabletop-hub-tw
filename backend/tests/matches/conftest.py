@@ -1,7 +1,7 @@
 """matches API 測試共用的 fixture：app 改連 `_test` 資料庫，並準備店家、使用者、遊戲與揪團。"""
 
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from typing import Any
 
 import pytest
@@ -127,12 +127,18 @@ def started(api, white_rose_id: int) -> str:
 
 
 @pytest.fixture
-def add_group(db: Engine, app: FastAPI) -> Callable[[], uuid.UUID]:
-    """直接寫入一個揪團（開團主是測試玩家），回傳它的 id。"""
+def add_group(db: Engine, app: FastAPI) -> Callable[..., uuid.UUID]:
+    """直接寫入一個揪團（開團主是測試玩家），回傳它的 id。
 
-    def _add() -> uuid.UUID:
+    開團主自動是第一位正式成員（AGENTS.md 10.3）。members 是之後加入的正式成員、
+    waitlisted 是候補，都依列出的順序加入。
+    """
+
+    def _add(
+        members: Sequence[CurrentUser] = (), waitlisted: Sequence[CurrentUser] = ()
+    ) -> uuid.UUID:
         with db.begin() as conn:
-            return conn.scalar(
+            group_id = conn.scalar(
                 text(
                     "INSERT INTO groups (shop_id, organizer_id, title, start_at, end_at, capacity) "
                     "VALUES (:shop, :org, '週末輕策略', '2030-01-01 11:00+00', "
@@ -140,5 +146,17 @@ def add_group(db: Engine, app: FastAPI) -> Callable[[], uuid.UUID]:
                 ),
                 {"shop": TEST_SHOP_ID, "org": TEST_PLAYER.id},
             )
+            rows = [(TEST_PLAYER, "member"), *[(u, "member") for u in members]]
+            rows += [(u, "waitlisted") for u in waitlisted]
+            for minute, (user, status) in enumerate(rows):
+                conn.execute(
+                    text(
+                        "INSERT INTO group_members (group_id, user_id, status, joined_at) "
+                        "VALUES (:g, :u, :s, TIMESTAMPTZ '2029-12-01 10:00+00' "
+                        "+ :m * INTERVAL '1 minute')"
+                    ),
+                    {"g": group_id, "u": user.id, "s": status, "m": minute},
+                )
+            return group_id
 
     return _add

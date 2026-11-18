@@ -52,7 +52,7 @@ class TurnRecord:
     id: uuid.UUID
     match_id: uuid.UUID
     turn_number: int
-    seat_number: int
+    seat_number: int | None
     game_data: dict[str, Any]
     recorded_by: uuid.UUID
     created_at: datetime
@@ -213,7 +213,7 @@ class MatchesRepository(SessionRepository):
         self,
         match_id: uuid.UUID,
         turn_number: int,
-        seat_number: int,
+        seat_number: int | None,
         game_data: dict[str, Any],
         recorded_by: uuid.UUID,
     ) -> TurnRecord:
@@ -249,7 +249,7 @@ class MatchesRepository(SessionRepository):
     def update_turn(
         self,
         turn_id: uuid.UUID,
-        seat_number: int,
+        seat_number: int | None,
         game_data: dict[str, Any],
         recorded_by: uuid.UUID,
     ) -> TurnRecord:

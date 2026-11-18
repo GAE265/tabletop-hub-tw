@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tabletop_hub/core/api/api_exception.dart';
+import 'package:tabletop_hub/domains/groups/data/group.dart';
 import 'package:tabletop_hub/domains/matches/pages/match_detail_page.dart';
 
 import '../../../support/fakes.dart';
@@ -102,29 +103,48 @@ void main() {
   });
 
   group('從揪團帶入', () {
-    testWidgets('遊戲、日期、桌遊店與店家都已填好；開局帶 group_id', (tester) async {
+    final start = DateTime.utc(2026, 11, 21, 8); // 台灣 11/21 16:00
+
+    FakeGroupsRepository groupsWith(List<GameRef> games) =>
+        FakeGroupsRepository(
+          groups: [
+            fakeGroup(
+              id: 'g-1',
+              title: '週末輕策略',
+              startAt: start,
+              shopId: 's-b',
+              games: games,
+            ),
+          ],
+        );
+
+    testWidgets('上方顯示揪團名稱；店家、桌遊店與唯一的遊戲都已填好；開局帶 group_id', (tester) async {
       final repo = await pumpMatches(
         tester,
-        '/matches?game_id=2&date=2026-11-21&shop_id=s-b&group_id=g-1',
+        '/matches?group_id=g-1',
+        groups: groupsWith(const [GameRef(id: 2, name: '阿不思學院')]),
       );
+      expect(inKey('match-group-title', find.text('週末輕策略')), findsOneWidget);
       expect(find.text('阿不思學院'), findsOneWidget);
       expect(find.text('乙店'), findsOneWidget);
-      expect(find.text('日期：2026/11/21（六）'), findsOneWidget);
       await tapKey(tester, 'match-create');
 
       final input = repo.createCalls.single;
       expect(input.gameId, 2);
-      expect(input.playedOn, DateTime(2026, 11, 21));
       expect(input.locationType, 'shop');
       expect(input.shopId, 's-b');
       expect(input.groupId, 'g-1');
       expect(find.byType(MatchDetailPage), findsOneWidget);
     });
 
-    testWidgets('沒有遊戲：遊戲留空，其他照樣帶入', (tester) async {
+    testWidgets('揪團有兩款以上遊戲：遊戲留空，要自己選', (tester) async {
       final repo = await pumpMatches(
         tester,
-        '/matches?date=2026-11-21&shop_id=s-b&group_id=g-1',
+        '/matches?group_id=g-1',
+        groups: groupsWith(const [
+          GameRef(id: 2, name: '阿不思學院'),
+          GameRef(id: 3, name: '馬可波羅'),
+        ]),
       );
       await tapKey(tester, 'match-create');
       expect(find.text('請選擇遊戲'), findsOneWidget);
@@ -132,8 +152,46 @@ void main() {
       expect(find.text('乙店'), findsOneWidget);
     });
 
-    testWidgets('直接打開戰績頁：不帶 group_id', (tester) async {
+    testWidgets('最近的局只列這個揪團的局（帶 group_id 查詢），點進去可以繼續記錄', (tester) async {
+      final repo = await pumpMatches(
+        tester,
+        '/matches?group_id=g-1',
+        groups: groupsWith(const []),
+      );
+      expect(repo.listGroupIds, contains('g-1'));
+      expect(repo.listGroupIds, isNot(contains(null)));
+      await tapKey(tester, 'match-item-m-1');
+      expect(find.byType(MatchDetailPage), findsOneWidget);
+    });
+
+    testWidgets('讀取揪團失敗：顯示錯誤與「重試」，不帶 group_id；重試後恢復', (tester) async {
+      final groups = groupsWith(
+        const [],
+      )..error = const ApiException(code: 'NETWORK_ERROR', message: '無法連線到伺服器');
+      final repo = await pumpMatches(
+        tester,
+        '/matches?group_id=g-1',
+        groups: groups,
+      );
+      expect(
+        inKey('match-group-error', find.textContaining('揪團載入失敗')),
+        findsOneWidget,
+      );
+      expect(find.byKey(const Key('match-group-title')), findsNothing);
+
+      groups.error = null;
+      await tapKey(tester, 'match-group-retry');
+      expect(find.byKey(const Key('match-group-error')), findsNothing);
+      expect(inKey('match-group-title', find.text('週末輕策略')), findsOneWidget);
+      await choose(tester, 'match-game', '阿瓦隆');
+      await tapKey(tester, 'match-create');
+      expect(repo.createCalls.single.groupId, 'g-1');
+    });
+
+    testWidgets('直接打開戰績頁：不顯示揪團名稱、不帶 group_id、最近的局不篩選', (tester) async {
       final repo = await pumpMatches(tester, '/matches');
+      expect(find.byKey(const Key('match-group-title')), findsNothing);
+      expect(repo.listGroupIds, [null]);
       await choose(tester, 'match-game', '阿瓦隆');
       await tapKey(tester, 'match-create');
       expect(repo.createCalls.single.groupId, isNull);

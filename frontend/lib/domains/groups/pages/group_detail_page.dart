@@ -260,12 +260,7 @@ class _Actions extends ConsumerWidget {
             ),
             GroupAction.recordMatch => OutlinedButton.icon(
               onPressed: enabled(
-                () => context.go(
-                  groupMatchLink(
-                    ref.read(groupClockProvider),
-                    state.group.value!,
-                  ).toString(),
-                ),
+                () => context.go(groupMatchLink(state.group.value!).toString()),
               ),
               icon: const Icon(Icons.emoji_events_outlined),
               label: const Text('填入戰績'),

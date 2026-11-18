@@ -182,7 +182,7 @@ void main() {
       expect(find.text('還沒有回合紀錄（回合紀錄是選填的，只記結果也可以）'), findsOneWidget);
     });
 
-    testWidgets('回合清單：第幾回合、主導座位、出牌座位與數量', (tester) async {
+    testWidgets('回合清單：第幾回合、首家座位、出牌座位與數量', (tester) async {
       await pumpMatches(
         tester,
         detail,
@@ -190,13 +190,44 @@ void main() {
           match: fakeMatch(turns: [fakeMatchTurn(turnNumber: 1)]),
         ),
       );
-      expect(inKey('turn-1', find.text('第 1 回合・主導座位 1')), findsOneWidget);
+      expect(inKey('turn-1', find.text('第 1 回合・首家座位 1')), findsOneWidget);
       expect(inKey('turn-1', find.textContaining('出牌座位 1、2')), findsOneWidget);
     });
 
-    testWidgets('記錄回合：選主導、出牌座位與數量後送出，清單多一筆', (tester) async {
+    testWidgets('回合沒有首家：標題只有第幾回合', (tester) async {
+      await pumpMatches(
+        tester,
+        detail,
+        repo: FakeMatchesRepository(
+          match: fakeMatch(
+            turns: [fakeMatchTurn(turnNumber: 2, seatNumber: null)],
+          ),
+        ),
+      );
+      expect(inKey('turn-2', find.text('第 2 回合')), findsOneWidget);
+      expect(inKey('turn-2', find.textContaining('首家')), findsNothing);
+    });
+
+    testWidgets('回合表單：標籤是「本回合首家（選填）」，畫面不再出現「主導」', (tester) async {
+      await pumpMatches(tester, detail);
+      await tester.ensureVisible(find.byKey(const Key('turn-first-seat')));
+      expect(find.text('本回合首家（選填）'), findsOneWidget);
+      expect(find.textContaining('主導'), findsNothing);
+    });
+
+    testWidgets('沒選首家只選出牌座位：可以送出，seat_number 為 null', (tester) async {
       final repo = await pumpMatches(tester, detail);
-      await choose(tester, 'turn-leader', '座位 2・玩家乙');
+      await tapKey(tester, 'turn-seat-1');
+      await tapKey(tester, 'turn-submit');
+      expect(find.text('請選擇主導的座位'), findsNothing);
+      expect(repo.turnCalls.single.input.seatNumber, isNull);
+      expect(find.byKey(const Key('turn-1')), findsOneWidget);
+      expect(inKey('turn-1', find.text('第 1 回合')), findsOneWidget);
+    });
+
+    testWidgets('記錄回合：選首家、出牌座位與數量後送出，清單多一筆', (tester) async {
+      final repo = await pumpMatches(tester, detail);
+      await choose(tester, 'turn-first-seat', '座位 2・玩家乙');
       await tapKey(tester, 'turn-seat-1');
       await tapKey(tester, 'turn-seat-2');
       await tapKey(tester, 'turn-doubleBlade-inc');
@@ -214,10 +245,9 @@ void main() {
       expect(find.byKey(const Key('turn-1')), findsOneWidget);
     });
 
-    testWidgets('沒選主導與出牌座位：顯示欄位錯誤，不送出', (tester) async {
+    testWidgets('沒選出牌座位：顯示欄位錯誤，不送出', (tester) async {
       final repo = await pumpMatches(tester, detail);
       await tapKey(tester, 'turn-submit');
-      expect(find.text('請選擇主導的座位'), findsOneWidget);
       expect(find.text('請至少選一個出牌的座位'), findsOneWidget);
       expect(repo.turnCalls, isEmpty);
     });
@@ -229,7 +259,7 @@ void main() {
       await pumpMatches(tester, detail, repo: repo);
       // 別人已經記了第 1 回合，我這邊的表單還停在第 1 回合（模擬兩個人同時記錄）
       await tester.enterText(find.byKey(const Key('turn-number')), '1');
-      await choose(tester, 'turn-leader', '座位 1・測試玩家');
+      await choose(tester, 'turn-first-seat', '座位 1・測試玩家');
       await tapKey(tester, 'turn-seat-1');
       await tapKey(tester, 'turn-submit');
 
