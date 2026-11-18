@@ -31,7 +31,7 @@
 - [x] 4.1 在 `frontend/` 跑 `flutter analyze`、`flutter test`（Flutter 3.41.4），驗證：全部通過
   - 註記：analyze 沒有問題，338 個測試全部通過。
 - [ ] 4.2 本機手動走過：手機與桌機寬度、player／shop_staff／admin 三種身分、有行程與沒有行程、關掉後端看錯誤與重試，驗證：符合設計稿
-- [ ] 4.3 產出 MR 說明 `docs/mr_info/feature/home-page.md`（含情境表格與對應測試、修改既有測試的理由），驗證：檔案存在、未 commit
+- [x] 4.3 產出 MR 說明 `docs/mr_info/feature/home-page.md`（含情境表格與對應測試、修改既有測試的理由），驗證：檔案存在、未 commit
 - [x] 4.4 更新 `docs/handoff/home.md` 第 4、6 節（資料來源與程式位置的結論），驗證：內容與 design.md 一致
 
 ## Workflow follow-up
