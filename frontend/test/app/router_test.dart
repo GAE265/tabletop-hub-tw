@@ -7,6 +7,7 @@ import 'package:tabletop_hub/app/theme/app_fonts.dart';
 import 'package:tabletop_hub/core/config/app_config.dart';
 import 'package:tabletop_hub/core/platform/lesson_video_player.dart';
 import 'package:tabletop_hub/core/dev/data/dev_users_repository.dart';
+import 'package:tabletop_hub/domains/booking/data/booking_repository.dart';
 import 'package:tabletop_hub/domains/groups/data/groups_repository.dart';
 import 'package:tabletop_hub/domains/games_advisor/data/advisor_repository.dart';
 import 'package:tabletop_hub/domains/health/data/health_repository.dart';
@@ -33,6 +34,7 @@ Future<void> pumpApp(
         appFontsProvider.overrideWithValue(const FakeAppFonts()),
         devUsersRepositoryProvider.overrideWithValue(FakeDevUsersRepository()),
         groupsRepositoryProvider.overrideWithValue(FakeGroupsRepository()),
+        bookingRepositoryProvider.overrideWithValue(FakeBookingRepository()),
         healthRepositoryProvider.overrideWithValue(
           FakeHealthRepository(
             result: const HealthStatus(status: 'ok', database: 'up'),
@@ -95,8 +97,17 @@ void main() {
     expect(find.text('找不到頁面'), findsOneWidget);
   });
 
-  testWidgets('首頁是套主題的正式 health 頁面', (tester) async {
-    await pumpApp(tester, showPrototypes: true);
+  // add-home-page：`/` 從 health 頁面改成首頁，health 頁面移到 `/health`。
+  testWidgets('/ 是首頁', (tester) async {
+    await pumpApp(tester, showPrototypes: false);
+    expect(find.byKey(const Key('home-page')), findsOneWidget);
+    expect(find.byKey(const Key('health-page')), findsNothing);
+  });
+
+  testWidgets('/health 是套主題的正式 health 頁面', (tester) async {
+    await pumpApp(tester, showPrototypes: false);
+    goTo(tester, '/health');
+    await tester.pumpAndSettle();
     expect(find.byKey(const Key('health-page')), findsOneWidget);
     expect(find.textContaining('ok'), findsWidgets);
   });
