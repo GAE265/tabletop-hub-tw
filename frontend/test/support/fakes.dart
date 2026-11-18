@@ -28,6 +28,9 @@ import 'package:tabletop_hub/domains/groups/state/group_clock.dart';
 
 import 'package:tabletop_hub/domains/health/data/health_repository.dart';
 import 'package:tabletop_hub/domains/health/data/health_status.dart';
+import 'package:tabletop_hub/domains/matches/data/game_match.dart';
+import 'package:tabletop_hub/domains/matches/data/match_input.dart';
+import 'package:tabletop_hub/domains/matches/data/matches_repository.dart';
 
 /// 測試用字型：只換字型名稱，不連網路下載。
 class FakeAppFonts implements AppFonts {
@@ -731,4 +734,319 @@ class FakeManualPagesAdapter implements HttpClientAdapter {
 
   @override
   void close({bool force = false}) {}
+}
+
+// --- matches ---
+
+const fakeMatchId = 'm-1';
+
+MatchParticipant fakeMatchParticipant({
+  String id = 'p-1',
+  int seatNumber = 1,
+  String? userId = 'u-player',
+  String displayName = '測試玩家',
+  String? faction,
+  bool? isWinner,
+  bool isConfirmed = false,
+}) => MatchParticipant(
+  id: id,
+  seatNumber: seatNumber,
+  userId: userId,
+  displayName: displayName,
+  faction: faction,
+  isWinner: isWinner,
+  isConfirmed: isConfirmed,
+);
+
+MatchTurn fakeMatchTurn({
+  int turnNumber = 1,
+  int seatNumber = 1,
+  Map<String, dynamic>? gameData,
+  String recordedBy = 'u-player',
+}) => MatchTurn(
+  id: 't-$turnNumber',
+  turnNumber: turnNumber,
+  seatNumber: seatNumber,
+  gameData:
+      gameData ?? const WhiteRoseTurnData(playedSeatNumbers: [1, 2]).toJson(),
+  recordedBy: recordedBy,
+  updatedAt: DateTime.utc(2026, 11, 20, 12),
+);
+
+/// 預設是《血與刃的白薔薇》進行中的一局：座位 1 測試玩家（開局者）、
+/// 2 玩家乙（有帳號）、3 Amy（沒有帳號）。
+GameMatch fakeMatch({
+  String id = fakeMatchId,
+  String status = 'in_progress',
+  List<MatchParticipant>? participants,
+  List<MatchTurn> turns = const [],
+  Map<String, dynamic>? result,
+}) {
+  final people =
+      participants ??
+      [
+        fakeMatchParticipant(),
+        fakeMatchParticipant(
+          id: 'p-2',
+          seatNumber: 2,
+          userId: 'u-b',
+          displayName: '玩家乙',
+        ),
+        fakeMatchParticipant(
+          id: 'p-3',
+          seatNumber: 3,
+          userId: null,
+          displayName: 'Amy',
+        ),
+      ];
+  return _recount(
+    GameMatch(
+      id: id,
+      game: const MatchGameRef(id: 1, name: '血與刃的白薔薇'),
+      playedOn: DateTime.utc(2026, 11, 20),
+      locationType: 'home',
+      createdBy: const MatchUserRef(id: 'u-player', displayName: '測試玩家'),
+      status: status,
+      result: result,
+      participants: people,
+      turns: turns,
+      participantCount: 0,
+      accountCount: 0,
+      confirmedCount: 0,
+      isValid: false,
+      createdAt: DateTime.utc(2026, 11, 20, 12),
+      updatedAt: DateTime.utc(2026, 11, 20, 12),
+    ),
+  );
+}
+
+/// 重新計算「幾人參加、幾人有帳號、幾人已確認」與是否有效（後端也是這樣算）。
+GameMatch _recount(GameMatch match) {
+  final accounts = match.participants.where((p) => p.userId != null).toList();
+  final confirmed = accounts.where((p) => p.isConfirmed).length;
+  return match.copyWith(
+    participantCount: match.participants.length,
+    accountCount: accounts.length,
+    confirmedCount: confirmed,
+    isValid: match.status == 'finished' && confirmed == accounts.length,
+  );
+}
+
+/// 在記憶體中模擬後端的規則：同一回合／同一結果已有紀錄時回 409，帶 overwrite 才覆蓋；
+/// 記錄結果的人自動確認；覆蓋結果清除其他人的確認。
+class FakeMatchesRepository implements MatchesRepository {
+  FakeMatchesRepository({GameMatch? match, this.currentUserId = 'u-player'})
+    : match = match ?? fakeMatch();
+
+  GameMatch match;
+
+  /// 模擬後端認得的「目前使用者」（自己加入、記錄結果的人自動確認用）。
+  String currentUserId;
+
+  /// get／list 丟出的錯誤。
+  Object? error;
+
+  /// 所有寫入操作丟出的錯誤。
+  Object? actionError;
+
+  /// 設定後，寫入操作會等到它完成才回應（用來測試「操作進行中」）。
+  Completer<void>? actionGate;
+
+  final getCalls = <String>[];
+  final createCalls = <MatchInput>[];
+  final addCalls = <ParticipantInput>[];
+  final confirmCalls = <String>[];
+  final removeCalls = <String>[];
+  final turnCalls = <({TurnInput input, bool overwrite})>[];
+  final resultCalls = <({ResultInput input, bool overwrite})>[];
+
+  Future<void> _write() async {
+    if (actionGate != null) await actionGate!.future;
+    if (actionError != null) throw actionError!;
+  }
+
+  @override
+  Future<MatchPage> list({
+    int? gameId,
+    String? groupId,
+    String? userId,
+    int page = 1,
+    int pageSize = 20,
+  }) async {
+    if (error != null) throw error!;
+    return MatchPage(items: [match], total: 1);
+  }
+
+  @override
+  Future<GameMatch> get(String id) async {
+    getCalls.add(id);
+    if (error != null) throw error!;
+    return match;
+  }
+
+  @override
+  Future<GameMatch> create(MatchInput input) async {
+    createCalls.add(input);
+    await _write();
+    final creator = fakeMatchParticipant(
+      seatNumber: input.seatNumber ?? 1,
+      userId: currentUserId,
+      isConfirmed: false,
+    );
+    match = fakeMatch(
+      participants: [creator],
+    ).copyWith(locationType: input.locationType);
+    return match;
+  }
+
+  @override
+  Future<MatchParticipant> addParticipant(
+    String matchId,
+    ParticipantInput input,
+  ) async {
+    addCalls.add(input);
+    await _write();
+    final taken = match.participants.map((p) => p.seatNumber).toSet();
+    var seat = input.seatNumber ?? 1;
+    if (input.seatNumber == null) {
+      while (taken.contains(seat)) {
+        seat++;
+      }
+    }
+    final named = input.displayName != null;
+    final participant = fakeMatchParticipant(
+      id: 'p-new-${match.participants.length + 1}',
+      seatNumber: seat,
+      userId: named ? null : currentUserId,
+      displayName: input.displayName ?? '測試玩家',
+    );
+    match = _recount(
+      match.copyWith(participants: [...match.participants, participant]),
+    );
+    return participant;
+  }
+
+  @override
+  Future<MatchParticipant> confirm(String matchId, String participantId) async {
+    confirmCalls.add(participantId);
+    await _write();
+    final updated = [
+      for (final p in match.participants)
+        p.id == participantId ? p.copyWith(isConfirmed: true) : p,
+    ];
+    match = _recount(match.copyWith(participants: updated));
+    return match.participants.firstWhere((p) => p.id == participantId);
+  }
+
+  @override
+  Future<void> removeParticipant(String matchId, String participantId) async {
+    removeCalls.add(participantId);
+    await _write();
+    final target = match.participants.firstWhere((p) => p.id == participantId);
+    final used = match.turns.where(
+      (t) =>
+          t.seatNumber == target.seatNumber ||
+          (t.gameData['played_seat_numbers'] as List).contains(
+            target.seatNumber,
+          ),
+    );
+    if (used.isNotEmpty) {
+      throw ApiException(
+        code: 'MATCH_PARTICIPANT_HAS_TURNS',
+        message: '座位 ${target.seatNumber} 已出現在回合，不能移除',
+        statusCode: 409,
+        details: {
+          'seat_number': target.seatNumber,
+          'turn_numbers': [for (final t in used) t.turnNumber],
+        },
+      );
+    }
+    match = _recount(
+      match.copyWith(
+        participants: [
+          for (final p in match.participants)
+            if (p.id != participantId) p,
+        ],
+      ),
+    );
+  }
+
+  @override
+  Future<({MatchTurn turn, bool created})> recordTurn(
+    String matchId,
+    TurnInput input, {
+    bool overwrite = false,
+  }) async {
+    turnCalls.add((input: input, overwrite: overwrite));
+    await _write();
+    final index = match.turns.indexWhere(
+      (t) => t.turnNumber == input.turnNumber,
+    );
+    if (index >= 0 && !overwrite) {
+      final existing = match.turns[index];
+      throw ApiException(
+        code: 'MATCH_TURN_ALREADY_RECORDED',
+        message: '第 ${input.turnNumber} 回合已經有紀錄',
+        statusCode: 409,
+        details: {
+          'existing': {
+            'turn_number': existing.turnNumber,
+            'seat_number': existing.seatNumber,
+            'game_data': existing.gameData,
+            'recorded_by': existing.recordedBy,
+          },
+        },
+      );
+    }
+    final turn = fakeMatchTurn(
+      turnNumber: input.turnNumber,
+      seatNumber: input.seatNumber,
+      gameData: input.gameData,
+      recordedBy: currentUserId,
+    );
+    final turns = [...match.turns];
+    if (index >= 0) {
+      turns[index] = turn;
+    } else {
+      turns.add(turn);
+      turns.sort((a, b) => a.turnNumber.compareTo(b.turnNumber));
+    }
+    match = match.copyWith(turns: turns);
+    return (turn: turn, created: index < 0);
+  }
+
+  @override
+  Future<GameMatch> recordResult(
+    String matchId,
+    ResultInput input, {
+    bool overwrite = false,
+  }) async {
+    resultCalls.add((input: input, overwrite: overwrite));
+    await _write();
+    if (match.result != null && !overwrite) {
+      throw ApiException(
+        code: 'MATCH_RESULT_ALREADY_RECORDED',
+        message: '這一局已經有結果',
+        statusCode: 409,
+        details: {'result': match.result},
+      );
+    }
+    final people = [
+      for (final p in match.participants)
+        p.copyWith(
+          faction: input.factions[p.seatNumber],
+          isWinner: input.factions[p.seatNumber] == input.winningFaction,
+          // 記錄結果的人自動確認，其他人的確認清除
+          isConfirmed: p.userId == currentUserId,
+        ),
+    ];
+    match = _recount(
+      match.copyWith(
+        status: 'finished',
+        result: {'type': 'faction', 'winning_faction': input.winningFaction},
+        participants: people,
+      ),
+    );
+    return match;
+  }
 }

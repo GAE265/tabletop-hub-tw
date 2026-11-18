@@ -28,16 +28,16 @@
 
 ## 4. 前端（後端完成並經使用者確認後才做）
 
-- [ ] 4.1 寫 `frontend/test/support/fakes.dart` 的 `FakeMatchesRepository` 與 `matches` state 測試（對應 matches-record-prototype 的 scenario）。驗證：測試存在且目前失敗。
-- [ ] 4.2 新增 `domains/matches/data/`（freezed DTO、`MatchesRepository`、`HttpMatchesRepository`，`snake_case` 對應）。驗證：`flutter analyze` 無問題。
-- [ ] 4.3 新增 `domains/matches/state/`（載入、重新整理、各操作含移除參加者、「待確認覆蓋」與取消）。驗證：4.1 的測試通過。
-- [ ] 4.4 新增 `prototypes/matches/` 參考畫面（開局含選座位、加入參加者、移除參加者、記錄回合含出牌座位、記錄結果、確認、覆蓋提示、載入中／沒有資料／錯誤），`app/router.dart` 加 `/proto/matches`（永傑的共用區）。驗證：以 `--dart-define=SHOW_PROTOTYPES=true` 手動跑一遍所有操作；沒有該參數時路由不存在。
-- [ ] 4.5 撰寫 `docs/handoff/matches.md`（依 `_template.md`，含截圖）。驗證：每個操作都標明 `state/` 方法與後端 API。
+- [x] 4.1 寫 `frontend/test/support/fakes.dart` 的 `FakeMatchesRepository` 與 `matches` state 測試（對應 matches-record-prototype 的 scenario）。驗證：測試存在且目前失敗。
+- [x] 4.2 新增 `domains/matches/data/`（freezed DTO、`MatchesRepository`、`HttpMatchesRepository`，`snake_case` 對應）。驗證：`flutter analyze` 無問題。
+- [x] 4.3 新增 `domains/matches/state/`（載入、重新整理、各操作含移除參加者、「待確認覆蓋」與取消）。驗證：4.1 的測試通過。
+- [x] 4.4 新增 `prototypes/matches/` 參考畫面（開局含選座位、加入參加者、移除參加者、記錄回合含出牌座位、記錄結果、確認、覆蓋提示、載入中／沒有資料／錯誤），`app/router.dart` 加 `/proto/matches`（永傑的共用區）。驗證：以 `--dart-define=SHOW_PROTOTYPES=true` 手動跑一遍所有操作；沒有該參數時路由不存在。
+- [x] 4.5 撰寫 `docs/handoff/matches.md`（依 `_template.md`，含截圖）。驗證：每個操作都標明 `state/` 方法與後端 API。
 
 ## 5. 發 MR 前
 
-- [ ] 5.1 前端在 `frontend/` 跑 `flutter analyze`、`flutter test`；後端再跑一次 3.7 的檢查。驗證：全部通過。
-- [ ] 5.2 更新 `docs/mr_info/feature-matches-record.md`（@ 立倫：契約、共用區、`games`／`auth_users` 讀取方法；@ 瑋鋐：migration、`booking_shops` 讀取方法；@ 永傑：`router.dart`、`needs-ui` 標籤），由使用者自行貼上。驗證：表格每一行都有對應測試。
+- [x] 5.1 前端在 `frontend/` 跑 `flutter analyze`、`flutter test`；後端再跑一次 3.7 的檢查。驗證：全部通過。
+- [x] 5.2 更新 `docs/mr_info/feature-matches-record.md`（@ 立倫：契約、共用區、`games`／`auth_users` 讀取方法；@ 瑋鋐：migration、`booking_shops` 讀取方法；@ 永傑：`router.dart`、`needs-ui` 標籤），由使用者自行貼上。驗證：表格每一行都有對應測試。
 
 ## Workflow follow-up
 
