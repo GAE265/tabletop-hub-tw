@@ -35,6 +35,7 @@ def main() -> int:
                     id=account.id,
                     display_name=account.display_name,
                     role=account.role,
+                    phone="0934567890",
                     shop_id=account.shop_id,
                 )
                 .on_conflict_do_nothing(index_elements=["id"])

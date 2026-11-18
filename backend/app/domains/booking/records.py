@@ -50,3 +50,34 @@ class ReservationRecord:
     @property
     def table_ids(self) -> list[int]:
         return [t.id for t in self.tables]
+
+
+@dataclass(frozen=True)
+class TableStatus:
+    """桌位狀態記錄：桌子資訊 + 佔用狀態 + 可選的訂位摘要（權限控制）。"""
+
+    id: int
+    table_code: str
+    name: str | None
+    max_capacity: int
+    floor: int
+    x: int
+    y: int
+    width: int
+    height: int
+    shape: str
+    status: str  # "available" | "unavailable"
+    booking: "BookingSummary | None" = None
+
+
+@dataclass(frozen=True)
+class BookingSummary:
+    """訂位摘要（tables/status 回傳時附在桌位資訊上）。"""
+
+    id: int
+    reservation_code: str
+    user_id: uuid.UUID
+    start_at: datetime
+    end_at: datetime
+    party_size: int
+    status: str

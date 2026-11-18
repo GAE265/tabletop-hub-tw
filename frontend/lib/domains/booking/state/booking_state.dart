@@ -15,6 +15,8 @@ class BookingState {
     this.mine = const [],
     this.board = const [],
     this.shops = const [],
+    this.seatingPlan = const [],
+    this.selectedTable,
   });
 
   final bool loading;
@@ -24,6 +26,8 @@ class BookingState {
   final List<Booking> mine;
   final List<Booking> board;
   final List<Shop> shops;
+  final List<SeatingPlan> seatingPlan;
+  final TableInfo? selectedTable;
 
   BookingState copyWith({
     bool? loading,
@@ -33,6 +37,9 @@ class BookingState {
     List<Booking>? mine,
     List<Booking>? board,
     List<Shop>? shops,
+    List<SeatingPlan>? seatingPlan,
+    TableInfo? selectedTable,
+    bool clearSelected = false,
   }) => BookingState(
     loading: loading ?? this.loading,
     message: message ?? this.message,
@@ -41,6 +48,8 @@ class BookingState {
     mine: mine ?? this.mine,
     board: board ?? this.board,
     shops: shops ?? this.shops,
+    seatingPlan: seatingPlan ?? this.seatingPlan,
+    selectedTable: clearSelected ? null : (selectedTable ?? this.selectedTable),
   );
 }
 
@@ -160,6 +169,28 @@ class BookingNotifier extends Notifier<BookingState> {
       '狀態已改為 ${b.status}${b.finalFee == null ? '' : '，結算 ${b.finalFee}'}',
     );
   });
+
+  Future<void> loadSeatingPlan(
+    String shopId, {
+    String? from,
+    String? to,
+    int? floor,
+  }) => _run(() async {
+    final plans = await _repo.getTablesStatus(
+      shopId: shopId,
+      from: from,
+      to: to,
+      floor: floor,
+    );
+    return (BookingState s) => s.copyWith(
+      seatingPlan: plans,
+      message: '座位圖已載入',
+    );
+  });
+
+  void selectTable(TableInfo table) {
+    state = state.copyWith(selectedTable: table, message: table.tableCode);
+  }
 
   BookingState _replace(BookingState s, Booking b, String message) {
     List<Booking> swap(List<Booking> list) => [
