@@ -178,7 +178,15 @@ class FakeBookingRepository implements BookingRepository {
 
   /// 正式頁面測試用：送出的請求。
   final createCalls =
-      <({String shopId, int partySize, String startAt, String endAt})>[];
+      <
+        ({
+          String shopId,
+          int partySize,
+          String startAt,
+          String endAt,
+          String? specialRequests,
+        })
+      >[];
   final patchCalls = <({int id, Map<String, dynamic> patch})>[];
   final boardQueries = <({String shopId, String from, String to})>[];
 
@@ -220,6 +228,7 @@ class FakeBookingRepository implements BookingRepository {
       partySize: partySize,
       startAt: startAt,
       endAt: endAt,
+      specialRequests: specialRequests,
     ));
     return Booking(
       id: 1,
