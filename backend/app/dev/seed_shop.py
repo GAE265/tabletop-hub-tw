@@ -82,15 +82,15 @@ def main() -> int:
         # Excel 格線規格，每格 40px
         # 格式：(code, max_capacity, floor, x, y, width, height, shape)
         table_defs: list[tuple[str, int, int, int, int, int, int, str]] = [
-            ("A", 6,  1,   0,   0,  80,  80, "rectangle"),  # A1:B2
-            ("B", 6,  1, 120,   0,  80,  40, "rectangle"),  # D1:E1
-            ("C", 10, 1, 120,  40,  80,  40, "rectangle"),  # D2:E2
-            ("D", 10, 1, 120,  80,  80,  80, "rectangle"),  # D3:E4
-            ("E", 10, 1,   0,  80,  80,  80, "rectangle"),  # A3:B4
-            ("F", 8,  1,   0, 200,  80,  40, "rectangle"),  # A6:B6
+            ("A", 6, 1, 0, 0, 80, 80, "rectangle"),  # A1:B2
+            ("B", 6, 1, 120, 0, 80, 40, "rectangle"),  # D1:E1
+            ("C", 10, 1, 120, 40, 80, 40, "rectangle"),  # D2:E2
+            ("D", 10, 1, 120, 80, 80, 80, "rectangle"),  # D3:E4
+            ("E", 10, 1, 0, 80, 80, 80, "rectangle"),  # A3:B4
+            ("F", 8, 1, 0, 200, 80, 40, "rectangle"),  # A6:B6
             ("G", 10, 1, 120, 240, 120, 120, "rectangle"),  # D7:F9
-            ("H", 12, -1,   0,   0, 120,  80, "rectangle"),  # B1 A1:C2
-            ("I", 12, -1,  40, 160, 160, 160, "rectangle"),  # B1 B5:E8
+            ("H", 12, -1, 0, 0, 120, 80, "rectangle"),  # B1 A1:C2
+            ("I", 12, -1, 40, 160, 160, 160, "rectangle"),  # B1 B5:E8
         ]
         for code, cap, floor, x, y, w, h, shape in table_defs:
             session.execute(

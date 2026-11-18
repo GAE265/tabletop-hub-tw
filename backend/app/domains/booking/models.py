@@ -119,19 +119,34 @@ class BookingTable(Base):
         SmallInteger, nullable=False, server_default=text("1"), comment="樓層：1=1F，-1=B1"
     )
     x: Mapped[int] = mapped_column(
-        Integer, nullable=False, server_default=text("0"), comment="桌子在座位圖畫布上的 X 座標（像素）"
+        Integer,
+        nullable=False,
+        server_default=text("0"),
+        comment="桌子在座位圖畫布上的 X 座標（像素）",
     )
     y: Mapped[int] = mapped_column(
-        Integer, nullable=False, server_default=text("0"), comment="桌子在座位圖畫布上的 Y 座標（像素）"
+        Integer,
+        nullable=False,
+        server_default=text("0"),
+        comment="桌子在座位圖畫布上的 Y 座標（像素）",
     )
     width: Mapped[int] = mapped_column(
-        Integer, nullable=False, server_default=text("100"), comment="桌子在座位圖上的寬度（像素）"
+        Integer,
+        nullable=False,
+        server_default=text("100"),
+        comment="桌子在座位圖上的寬度（像素）",
     )
     height: Mapped[int] = mapped_column(
-        Integer, nullable=False, server_default=text("100"), comment="桌子在座位圖上的高度（像素）"
+        Integer,
+        nullable=False,
+        server_default=text("100"),
+        comment="桌子在座位圖上的高度（像素）",
     )
     shape: Mapped[str] = mapped_column(
-        String(30), nullable=False, server_default=text("'rectangle'"), comment="桌子形狀，目前固定為 rectangle"
+        String(30),
+        nullable=False,
+        server_default=text("'rectangle'"),
+        comment="桌子形狀，目前固定為 rectangle",
     )
     created_at: Mapped[datetime] = _created_at()
 

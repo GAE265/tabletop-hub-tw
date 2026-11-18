@@ -12,7 +12,9 @@ class Base(DeclarativeBase):
 
 def create_db_engine(database_url: str) -> Engine:
     engine = create_engine(
-        database_url, pool_pre_ping=True, connect_args={"connect_timeout": 3},
+        database_url,
+        pool_pre_ping=True,
+        connect_args={"connect_timeout": 3},
     )
 
     @event.listens_for(engine, "connect")

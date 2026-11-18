@@ -26,7 +26,14 @@ from app.domains.booking.models import (
     BookingTableLink,
 )
 from app.domains.booking.pricing import PricingRules
-from app.domains.booking.records import ReservationRecord, ShopRef, TableRef, UserInfo
+from app.domains.booking.records import (
+    BookingSummary,
+    ReservationRecord,
+    ShopRef,
+    TableRef,
+    TableStatus,
+    UserInfo,
+)
 from app.domains.booking.rules import BusinessHours, ClosingHours
 
 ACTIVE_STATUSES = ("confirmed", "seated")
@@ -68,9 +75,7 @@ class BookingRepository(SessionRepository):
         return None if row is None else ShopRef(row.id, row.name)
 
     def get_shop_name(self, shop_id: uuid.UUID) -> str:
-        name = self.session.scalar(
-            select(BookingShop.name).where(BookingShop.id == shop_id)
-        )
+        name = self.session.scalar(select(BookingShop.name).where(BookingShop.id == shop_id))
         return name or ""
 
     def list_shops(self) -> list[ShopRef]:
@@ -408,7 +413,6 @@ class BookingRepository(SessionRepository):
         回傳所有啟用中的桌子（可選過濾樓層），
         並附上該時段內 confirmed/seated 訂位的摘要（含 user_id 供權限過濾）。
         """
-        from app.domains.booking.records import BookingSummary, TableStatus
 
         # 子查詢：時間範圍內有效佔用的 reservation_tables
         occupied_sub = (
@@ -429,7 +433,7 @@ class BookingRepository(SessionRepository):
             )
             .where(
                 BookingReservationTable.shop_id == shop_id,
-                BookingReservationTable.is_active == True,
+                BookingReservationTable.is_active,
                 BookingReservationTable.start_at < end_at,
                 BookingReservationTable.end_at > start_at,
                 BookingReservation.status.in_(ACTIVE_STATUSES),
@@ -438,30 +442,34 @@ class BookingRepository(SessionRepository):
         )
 
         # 主查詢：所有啟用中的桌子 LEFT JOIN 佔用資訊
-        base_query = select(
-            BookingTable.id,
-            BookingTable.table_code,
-            BookingTable.name,
-            BookingTable.max_capacity,
-            BookingTable.floor,
-            BookingTable.x,
-            BookingTable.y,
-            BookingTable.width,
-            BookingTable.height,
-            BookingTable.shape,
-            occupied_sub.c.id,
-            occupied_sub.c.reservation_code,
-            occupied_sub.c.user_id,
-            occupied_sub.c.start_at,
-            occupied_sub.c.end_at,
-            occupied_sub.c.party_size,
-            occupied_sub.c.status,
-        ).outerjoin(
-            occupied_sub,
-            BookingTable.id == occupied_sub.c.table_id,
-        ).where(
-            BookingTable.shop_id == shop_id,
-            BookingTable.is_active == True,
+        base_query = (
+            select(
+                BookingTable.id,
+                BookingTable.table_code,
+                BookingTable.name,
+                BookingTable.max_capacity,
+                BookingTable.floor,
+                BookingTable.x,
+                BookingTable.y,
+                BookingTable.width,
+                BookingTable.height,
+                BookingTable.shape,
+                occupied_sub.c.id,
+                occupied_sub.c.reservation_code,
+                occupied_sub.c.user_id,
+                occupied_sub.c.start_at,
+                occupied_sub.c.end_at,
+                occupied_sub.c.party_size,
+                occupied_sub.c.status,
+            )
+            .outerjoin(
+                occupied_sub,
+                BookingTable.id == occupied_sub.c.table_id,
+            )
+            .where(
+                BookingTable.shop_id == shop_id,
+                BookingTable.is_active,
+            )
         )
 
         if floor is not None:

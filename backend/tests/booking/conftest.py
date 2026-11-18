@@ -107,8 +107,19 @@ def seeded(db: Engine) -> dict[str, dict[str, int]]:
                     "floor, x, y, width, height, shape) "
                     "VALUES (:s, :c, 1, :m, :floor, :x, :y, :w, :h, :shape) RETURNING id"
                 ),
-                {"s": SHOP, "c": code, "m": cap, "floor": floor, "x": x, "y": y, "w": w, "h": h, "shape": shape},
+                {
+                    "s": SHOP,
+                    "c": code,
+                    "m": cap,
+                    "floor": floor,
+                    "x": x,
+                    "y": y,
+                    "w": w,
+                    "h": h,
+                    "shape": shape,
+                },
             ).scalar_one()
+
         for a, b, combinable in LINK_SPECS:
             conn.execute(
                 text(

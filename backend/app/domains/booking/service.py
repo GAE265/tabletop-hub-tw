@@ -34,6 +34,7 @@ def _to_dt(value: str | None) -> datetime | None:
         return None
     return datetime.fromisoformat(value.replace(" ", "+"))
 
+
 REPLACED_REASON = "被新訂位取代"
 MERGED_REASON = "與其他訂位合併"
 MODIFIED_NOTICE = "訂位已修改，請確認新的時間與桌位。"
@@ -116,8 +117,11 @@ class BookingService:
         )
 
     def _out(
-        self, record: ReservationRecord, rules: pricing.PricingRules,
-        notice: str | None = None, shop_name: str = "",
+        self,
+        record: ReservationRecord,
+        rules: pricing.PricingRules,
+        notice: str | None = None,
+        shop_name: str = "",
     ) -> BookingOut:
         return BookingOut(
             id=record.id,
@@ -343,7 +347,8 @@ class BookingService:
                 name_cache[record.shop_id] = self.repo.get_shop_name(record.shop_id)
             items.append(
                 self._out(
-                    record, rules_cache[record.shop_id],
+                    record,
+                    rules_cache[record.shop_id],
                     shop_name=name_cache[record.shop_id],
                 )
             )

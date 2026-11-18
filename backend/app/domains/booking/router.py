@@ -121,7 +121,8 @@ def get_tables_status(
 
     # 依 floor 分組
     from collections import defaultdict
-    from app.domains.booking.schemas import TableStatusOut, BookingSummaryOut
+
+    from app.domains.booking.schemas import BookingSummaryOut, TableStatusOut
 
     by_floor: dict[int, list[TableStatusOut]] = defaultdict(list)
     for s in statuses:
@@ -153,6 +154,5 @@ def get_tables_status(
         )
 
     return [
-        SeatingPlanOut(floor=floor, tables=tables)
-        for floor, tables in sorted(by_floor.items())
+        SeatingPlanOut(floor=floor, tables=tables) for floor, tables in sorted(by_floor.items())
     ]
