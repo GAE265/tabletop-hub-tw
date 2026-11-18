@@ -32,6 +32,9 @@ abstract final class AppRadius {
 
   /// 膠囊標籤：夠大就會變成兩端全圓。
   static const double pill = 999;
+
+  /// 座位圖上的桌子與圖例色塊。
+  static const double seatTable = 6;
 }
 
 /// 尺寸。
@@ -62,6 +65,18 @@ abstract final class AppSizes {
 
   /// 戰績「記錄回合」的回合編號欄位寬度。
   static const double turnNumberFieldWidth = 120;
+
+  /// 座位圖的最大高度：桌子配置依寬度放大，但不會超過這個高度。
+  static const double seatingPlanHeight = 420;
+
+  /// 座位圖相鄰桌子之間的空隙（每張桌四周各留這麼多，以座標的像素計）。
+  static const double seatGap = 3;
+
+  /// 座位圖桌子的外框粗細。
+  static const double seatTableBorder = 2;
+
+  /// 座位圖圖例的色塊。
+  static const double legendSwatch = 16;
 }
 
 /// 暖色柔和懸浮陰影。

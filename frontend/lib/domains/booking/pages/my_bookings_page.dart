@@ -2,12 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_spacing.dart';
 import '../../../core/dev/state/dev_user_state.dart';
 import '../../../core/layout/breakpoints.dart';
 import '../data/booking.dart';
 import '../state/booking_state.dart';
 import 'widgets/booking_widgets.dart';
+import 'widgets/seating_plan.dart';
 
 /// 我的訂位正式頁面：依狀態篩選，可以取消（`/booking/mine`）。
 class MyBookingsPage extends ConsumerStatefulWidget {
@@ -54,6 +56,24 @@ class _MyBookingsPageState extends ConsumerState<MyBookingsPage> {
     await _n.setStatus(b.id, 'cancelled');
     if (!mounted || ref.read(bookingProvider).isError) return;
     messenger.showSnackBar(const SnackBar(content: Text('已取消訂位')));
+  }
+
+  /// 打開這筆訂位的店家在訂位時段的座位圖，自己的桌另外標示。
+  Future<void> _showSeats(Booking b, String? shopName) {
+    Future<void> load() =>
+        _n.loadSeatingPlan(b.shopId, from: b.startAt, to: b.endAt);
+    load();
+    return showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) => _SeatsSheet(
+        key: const Key('booking-seats-sheet'),
+        title: '${shopName ?? '店家'}的座位',
+        range: formatBookingRange(b.startAt, b.endAt),
+        onRetry: load,
+      ),
+    );
   }
 
   @override
@@ -108,6 +128,13 @@ class _MyBookingsPageState extends ConsumerState<MyBookingsPage> {
                 booking: b,
                 shopName: shopNames[b.shopId],
                 actions: [
+                  if (b.status == 'confirmed' || b.status == 'seated')
+                    TextButton.icon(
+                      key: Key('booking-seats-${b.id}'),
+                      onPressed: () => _showSeats(b, shopNames[b.shopId]),
+                      icon: const Icon(Icons.table_restaurant_outlined),
+                      label: const Text('看座位'),
+                    ),
                   if (b.status == 'confirmed')
                     TextButton.icon(
                       key: Key('booking-cancel-${b.id}'),
@@ -152,6 +179,69 @@ class _Empty extends StatelessWidget {
             child: const Text('去訂位'),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// 「看座位」的下方面板：載入中、錯誤與重試、沒有座位圖、座位圖。
+class _SeatsSheet extends ConsumerWidget {
+  const _SeatsSheet({
+    required this.title,
+    required this.range,
+    required this.onRetry,
+    super.key,
+  });
+
+  final String title;
+  final String range;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final state = ref.watch(bookingProvider);
+    final text = Theme.of(context).textTheme;
+    final Widget content;
+    if (state.loading) {
+      content = const Padding(
+        padding: EdgeInsets.all(AppSpacing.large),
+        child: Center(child: CircularProgressIndicator()),
+      );
+    } else if (state.isError && state.message != null) {
+      content = BookingErrorBanner(
+        message: state.message!,
+        onRetry: onRetry,
+        retryKey: const Key('seating-retry'),
+      );
+    } else if (state.seatingPlan.isEmpty) {
+      content = const Padding(
+        padding: EdgeInsets.all(AppSpacing.large),
+        child: Center(child: Text('這間店還沒有座位圖')),
+      );
+    } else {
+      content = SeatingPlanView(plans: state.seatingPlan, staffView: false);
+    }
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(
+          AppSpacing.large,
+          0,
+          AppSpacing.large,
+          AppSpacing.large,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(title, style: text.titleLarge),
+            Text(
+              range,
+              style: text.bodyMedium!.copyWith(color: AppColors.inkMuted),
+            ),
+            const SizedBox(height: AppSpacing.medium),
+            content,
+          ],
+        ),
       ),
     );
   }

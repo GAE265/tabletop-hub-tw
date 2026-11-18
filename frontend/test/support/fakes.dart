@@ -179,6 +179,10 @@ class FakeBookingRepository implements BookingRepository {
   int shopCallCount = 0;
   int seatingCallCount = 0;
 
+  /// 座位圖正式頁面測試用：送出的查詢條件。
+  final seatingCalls =
+      <({String shopId, String? from, String? to, int? floor})>[];
+
   /// 首頁測試用：我的訂位丟出的錯誤、等待完成才回應的開關、送出的查詢條件。
   Object? mineError;
   Completer<void>? mineGate;
@@ -312,6 +316,7 @@ class FakeBookingRepository implements BookingRepository {
     int? floor,
   }) async {
     seatingCallCount++;
+    seatingCalls.add((shopId: shopId, from: from, to: to, floor: floor));
     if (seatingError != null) throw seatingError!;
     return seatingPlans;
   }
