@@ -10,8 +10,44 @@ import '../state/booking_state.dart';
 import 'widgets/booking_widgets.dart';
 
 /// 訂位正式頁面：選店家、日期、時段、人數，預估費用後送出（`/booking`）。
+///
+/// 可以用網址參數預先帶入表單（例如開團主從揪團按「訂位」）：
+/// `shop_id`、`date`（YYYY-MM-DD）、`start`／`end`（HH:MM，需為半點）、`party_size`、`requests`。
+/// 不合法的值改用預設值；人數限制在 1–30。
 class NewBookingPage extends ConsumerStatefulWidget {
-  const NewBookingPage({super.key});
+  const NewBookingPage({
+    super.key,
+    this.initialShopId,
+    this.initialDate,
+    this.initialStart,
+    this.initialEnd,
+    this.initialPartySize,
+    this.initialRequests,
+  });
+
+  /// 從網址參數建立（見類別說明）。
+  factory NewBookingPage.fromQuery(Map<String, String> query, {Key? key}) {
+    final date = DateTime.tryParse(query['date'] ?? '');
+    final party = int.tryParse(query['party_size'] ?? '');
+    return NewBookingPage(
+      key: key,
+      initialShopId: query['shop_id'],
+      initialDate: date == null
+          ? null
+          : DateTime(date.year, date.month, date.day),
+      initialStart: query['start'],
+      initialEnd: query['end'],
+      initialPartySize: party,
+      initialRequests: query['requests'],
+    );
+  }
+
+  final String? initialShopId;
+  final DateTime? initialDate;
+  final String? initialStart;
+  final String? initialEnd;
+  final int? initialPartySize;
+  final String? initialRequests;
 
   @override
   ConsumerState<NewBookingPage> createState() => _NewBookingPageState();
@@ -49,6 +85,15 @@ class _NewBookingPageState extends ConsumerState<NewBookingPage> {
       today.month,
       today.day,
     ).add(const Duration(days: 7));
+    final w = widget;
+    _shopId = w.initialShopId;
+    if (w.initialDate case final date?) _date = date;
+    if (_timeSlots.contains(w.initialStart)) _start = w.initialStart!;
+    if (_timeSlots.contains(w.initialEnd)) _end = w.initialEnd!;
+    if (w.initialPartySize case final party?) {
+      _party = party.clamp(_minParty, _maxParty);
+    }
+    if (w.initialRequests case final requests?) _requests.text = requests;
     WidgetsBinding.instance.addPostFrameCallback((_) => _n.loadShops());
   }
 
@@ -97,15 +142,20 @@ class _NewBookingPageState extends ConsumerState<NewBookingPage> {
   Future<void> _pickDate() async {
     final today = taipeiNow();
     final first = DateTime(today.year, today.month, today.day);
+    final last = DateTime(
+      first.year,
+      first.month + _maxAdvanceMonths,
+      first.day,
+    );
+    // 從網址帶入的日期可能超出可選範圍，日曆的初始日期要落在範圍內
+    final initial = _date.isBefore(first)
+        ? first
+        : (_date.isAfter(last) ? last : _date);
     final picked = await showDatePicker(
       context: context,
-      initialDate: _date,
+      initialDate: initial,
       firstDate: first,
-      lastDate: DateTime(
-        first.year,
-        first.month + _maxAdvanceMonths,
-        first.day,
-      ),
+      lastDate: last,
     );
     if (picked != null) setState(() => _date = picked);
   }

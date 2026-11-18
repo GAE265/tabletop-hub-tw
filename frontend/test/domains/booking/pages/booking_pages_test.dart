@@ -65,7 +65,8 @@ Future<FakeBookingRepository> pumpAt(
     routes: [
       GoRoute(
         path: '/booking',
-        builder: (context, state) => const NewBookingPage(),
+        builder: (context, state) =>
+            NewBookingPage.fromQuery(state.uri.queryParameters),
         routes: [
           GoRoute(
             path: 'mine',
@@ -221,6 +222,50 @@ void main() {
       expect(call.endAt, endsWith('T16:00:00+08:00'));
       expect(find.byType(MyBookingsPage), findsOneWidget);
       expect(find.text('訂位成功'), findsOneWidget);
+    });
+
+    testWidgets('從揪團帶入：店家、日期、時間、人數、特殊需求都已填好', (tester) async {
+      final repo = FakeBookingRepository();
+      repo.mine = [sampleBooking()];
+      await pumpAt(
+        tester,
+        '/booking?shop_id=s-b&date=2026-11-21&start=19:00&end=23:00'
+        '&party_size=2&requests=%E6%8F%AA%E5%9C%98%EF%BC%9A123',
+        repo: repo,
+      );
+      expect(find.text('乙店'), findsOneWidget);
+      expect(find.text('揪團：123'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('booking-party-size')),
+          matching: find.text('2'),
+        ),
+        findsOneWidget,
+      );
+      await tapKey(tester, 'booking-submit');
+
+      final call = repo.createCalls.single;
+      expect(call.shopId, 's-b');
+      expect(call.partySize, 2);
+      expect(call.startAt, '2026-11-21T19:00:00+08:00');
+      expect(call.endAt, '2026-11-21T23:00:00+08:00');
+      expect(call.specialRequests, '揪團：123');
+    });
+
+    testWidgets('帶入的值不合法：改用預設值', (tester) async {
+      final repo = FakeBookingRepository();
+      repo.mine = [sampleBooking()];
+      await pumpAt(
+        tester,
+        '/booking?shop_id=s-a&date=abc&start=19:10&end=xx&party_size=99',
+        repo: repo,
+      );
+      await tapKey(tester, 'booking-submit');
+
+      final call = repo.createCalls.single;
+      expect(call.partySize, 30);
+      expect(call.startAt, endsWith('T14:00:00+08:00'));
+      expect(call.endAt, endsWith('T16:00:00+08:00'));
     });
 
     testWidgets('訂位失敗：顯示中文錯誤（不含錯誤代碼），留在原頁', (tester) async {

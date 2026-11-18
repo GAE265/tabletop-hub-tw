@@ -34,7 +34,8 @@ GoRouter createRouter(AppConfig config) => GoRouter(
         ),
         GoRoute(
           path: '/booking',
-          builder: (context, state) => const NewBookingPage(),
+          builder: (context, state) =>
+              NewBookingPage.fromQuery(state.uri.queryParameters),
           routes: [
             GoRoute(
               path: 'mine',

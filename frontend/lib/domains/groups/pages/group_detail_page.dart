@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../app/theme/app_spacing.dart';
 import '../../../core/layout/breakpoints.dart';
 import '../../../core/widgets/pill_badge.dart';
 import '../data/group.dart';
 import '../state/current_user.dart';
+import '../state/group_booking_link.dart';
 import '../state/group_clock.dart';
 import '../state/group_detail_state.dart';
 import '../state/group_form_state.dart';
@@ -13,7 +15,7 @@ import '../state/group_labels.dart';
 import 'group_form_page.dart';
 import 'widgets/group_widgets.dart';
 
-/// 揪團詳細資料：資訊、操作按鈕（報名／候補／退出／編輯／取消）與名單。
+/// 揪團詳細資料：資訊、操作按鈕（報名／候補／退出／編輯／訂位／取消）與名單。
 class GroupDetailPage extends ConsumerWidget {
   const GroupDetailPage({required this.groupId, super.key});
 
@@ -242,6 +244,18 @@ class _Actions extends ConsumerWidget {
               onPressed: enabled(edit),
               icon: const Icon(Icons.edit_outlined),
               label: const Text('編輯'),
+            ),
+            GroupAction.book => FilledButton.icon(
+              onPressed: enabled(
+                () => context.go(
+                  groupBookingLink(
+                    ref.read(groupClockProvider),
+                    state.group.value!,
+                  ).toString(),
+                ),
+              ),
+              icon: const Icon(Icons.event_seat_outlined),
+              label: const Text('訂位'),
             ),
             GroupAction.cancel => TextButton(
               onPressed: enabled(
