@@ -59,6 +59,9 @@ abstract final class AppSizes {
 
   /// 首頁行程列的日期徽章。
   static const double dateBadge = 52;
+
+  /// 戰績「記錄回合」的回合編號欄位寬度。
+  static const double turnNumberFieldWidth = 120;
 }
 
 /// 暖色柔和懸浮陰影。
