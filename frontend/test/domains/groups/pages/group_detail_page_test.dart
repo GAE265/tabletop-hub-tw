@@ -2,10 +2,16 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
+import 'package:tabletop_hub/app/theme/app_theme.dart';
 import 'package:tabletop_hub/core/api/api_exception.dart';
 import 'package:tabletop_hub/domains/groups/data/group.dart';
+import 'package:tabletop_hub/domains/groups/data/groups_repository.dart';
 import 'package:tabletop_hub/domains/groups/pages/group_detail_page.dart';
+import 'package:tabletop_hub/domains/groups/state/current_user.dart';
+import 'package:tabletop_hub/domains/groups/state/group_clock.dart';
 
 import '../../../support/fakes.dart';
 import '../support.dart';
@@ -203,5 +209,93 @@ void main() {
     );
     expect(find.text('阿瓦隆'), findsOneWidget);
     expect(find.text('馬可波羅'), findsOneWidget);
+  });
+
+  testWidgets('開團主看到「訂位」', (tester) async {
+    await pumpGroupsWidget(
+      tester,
+      const GroupDetailPage(groupId: 'g-1'),
+      repo: repoWith(myStatus: 'member'),
+      userId: 'u-org',
+    );
+    expect(find.text('訂位'), findsOneWidget);
+  });
+
+  testWidgets('一般成員看不到「訂位」', (tester) async {
+    await pumpGroupsWidget(
+      tester,
+      const GroupDetailPage(groupId: 'g-1'),
+      repo: repoWith(myStatus: 'member'),
+    );
+    expect(find.text('訂位'), findsNothing);
+  });
+
+  testWidgets('未報名的玩家看不到「訂位」', (tester) async {
+    await pumpGroupsWidget(
+      tester,
+      const GroupDetailPage(groupId: 'g-1'),
+      repo: repoWith(),
+    );
+    expect(find.text('訂位'), findsNothing);
+  });
+
+  testWidgets('已取消的揪團：開團主看不到「訂位」', (tester) async {
+    await pumpGroupsWidget(
+      tester,
+      const GroupDetailPage(groupId: 'g-1'),
+      repo: repoWith(status: 'cancelled', myStatus: 'member'),
+      userId: 'u-org',
+    );
+    expect(find.text('訂位'), findsNothing);
+  });
+
+  testWidgets('開團主按「訂位」：跳到帶好揪團資料的訂位頁', (tester) async {
+    Uri? opened;
+    setScreenSize(tester, const Size(400, 900));
+    final router = GoRouter(
+      routes: [
+        GoRoute(
+          path: '/',
+          builder: (context, state) => const GroupDetailPage(groupId: 'g-1'),
+        ),
+        GoRoute(
+          path: '/booking',
+          builder: (context, state) {
+            opened = state.uri;
+            return const Text('訂位頁');
+          },
+        ),
+      ],
+    );
+    addTearDown(router.dispose);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          groupsRepositoryProvider.overrideWithValue(
+            repoWith(myStatus: 'member'),
+          ),
+          groupClockProvider.overrideWithValue(FixedOffsetClock(nowUtc)),
+          currentUserIdProvider.overrideWithValue('u-org'),
+        ],
+        child: MaterialApp.router(
+          theme: buildAppTheme(const FakeAppFonts()),
+          routerConfig: router,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('訂位'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('訂位頁'), findsOneWidget);
+    expect(opened!.queryParameters, {
+      'shop_id': 's-shop',
+      'date': '2026-11-14',
+      'start': '19:00',
+      'end': '21:00',
+      'party_size': '4',
+      'requests': '揪團：週末輕策略',
+    });
   });
 }

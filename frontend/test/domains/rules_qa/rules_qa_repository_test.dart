@@ -1,4 +1,4 @@
-// rules_qa 的 HTTP repository（spec：openspec/changes/add-rules-qa/specs/rules-qa）。
+// rules_qa 的 HTTP repository（spec：openspec/specs/rules-qa）。
 import 'dart:convert';
 
 import 'package:dio/dio.dart';

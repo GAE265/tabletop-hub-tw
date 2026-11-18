@@ -82,7 +82,7 @@ void main() {
       ]);
     });
 
-    test('開團主：編輯、取消揪團', () async {
+    test('開團主：編輯、訂位、取消揪團', () async {
       expect(
         await actions(
           fakeGroup(
@@ -91,7 +91,7 @@ void main() {
             myStatus: 'member',
           ),
         ),
-        [GroupAction.edit, GroupAction.cancel],
+        [GroupAction.edit, GroupAction.book, GroupAction.cancel],
       );
     });
 

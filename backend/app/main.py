@@ -16,6 +16,7 @@ from app.domains.groups.router import router as groups_router
 from app.domains.health.router import router as health_router
 from app.domains.matches.router import router as matches_router
 from app.domains.rules_ingest.router import router as rules_ingest_router
+from app.domains.rules_qa.router import router as rules_qa_router
 from app.integrations.embedding import EmbeddingConfig, get_embedding_provider
 from app.integrations.llm import get_llm_provider
 from app.integrations.ocr.factory import get_vision_provider
@@ -48,6 +49,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.games_advisor_embedding = get_embedding_provider(
         app.state.games_advisor_embedding_config
     )
+    rules_qa_embedding_config = EmbeddingConfig(
+        provider=settings.rules_qa_embedding_provider,
+        dim=settings.rules_qa_embedding_dim,
+        endpoint=settings.rules_qa_embedding_endpoint,
+        api_key=settings.rules_qa_embedding_api_key,
+        model=settings.rules_qa_embedding_model,
+    )
+    app.state.rules_qa_embedding = get_embedding_provider(rules_qa_embedding_config)
+    # 問答時只檢索同一個模型建立的段落；與索引指令記錄的名稱一致（rules_qa/commands.py）
+    app.state.rules_qa_embedding_model = (
+        "fake"
+        if rules_qa_embedding_config.provider == "fake" or rules_qa_embedding_config.model is None
+        else rules_qa_embedding_config.model
+    )
 
     if settings.cors_origins:
         app.add_middleware(
@@ -65,6 +80,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(games_advisor_router, prefix=API_PREFIX)
     app.include_router(rules_ingest_router, prefix=API_PREFIX)
     app.include_router(matches_router, prefix=API_PREFIX)
+    app.include_router(rules_qa_router, prefix=API_PREFIX)
 
     if settings.auth_mode == "dev":
         # app/dev 任何地方都不得 import（AGENTS.md 4.2），所以只在 dev 模式動態載入

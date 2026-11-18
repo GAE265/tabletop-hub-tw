@@ -52,6 +52,18 @@ class _TemporaryNav extends StatelessWidget {
             icon: const Icon(Icons.casino_outlined),
             label: const Text('推薦'),
           ),
+          TextButton.icon(
+            key: const Key('shell-nav-rules'),
+            onPressed: () => context.go('/rules'),
+            icon: const Icon(Icons.menu_book_outlined),
+            label: const Text('規則'),
+          ),
+          TextButton.icon(
+            key: const Key('shell-nav-booking'),
+            onPressed: () => context.go('/booking'),
+            icon: const Icon(Icons.event_seat_outlined),
+            label: const Text('訂位'),
+          ),
         ],
       ),
     );
