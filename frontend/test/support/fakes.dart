@@ -47,21 +47,6 @@ class FakeAppFonts implements AppFonts {
   TextStyle body(TextStyle style) => style.copyWith(fontFamily: bodyFamily);
 }
 
-/// 測試用字型：只換字型名稱，不連網路下載。
-class FakeAppFonts implements AppFonts {
-  const FakeAppFonts();
-
-  static const headingFamily = 'FakeHeading';
-  static const bodyFamily = 'FakeBody';
-
-  @override
-  TextStyle heading(TextStyle style) =>
-      style.copyWith(fontFamily: headingFamily);
-
-  @override
-  TextStyle body(TextStyle style) => style.copyWith(fontFamily: bodyFamily);
-}
-
 const fakePlayer = DevUser(id: 'u-player', displayName: '測試玩家', role: 'player');
 const fakeStaff = DevUser(
   id: 'u-staff',
@@ -259,6 +244,7 @@ class FakeBookingRepository implements BookingRepository {
       specialRequests: specialRequests,
     ));
     return Booking(
+      shopName: '測試店',
       id: 1,
       reservationCode: 'BKFAKE',
       shopId: shopId,
@@ -281,6 +267,7 @@ class FakeBookingRepository implements BookingRepository {
     if (patchError != null) throw patchError!;
     final b = [...mine, ...board].firstWhere((x) => x.id == id);
     return Booking(
+      shopName: '測試店',
       id: b.id,
       reservationCode: b.reservationCode,
       shopId: b.shopId,
@@ -315,7 +302,7 @@ class FakeBookingRepository implements BookingRepository {
   }) async {
     boardQueries.add((shopId: shopId, from: from, to: to));
     return BookingPage(items: board, total: board.length);
-  }) async => BookingPage(items: board, total: board.length);
+  }
 
   @override
   Future<List<SeatingPlan>> getTablesStatus({

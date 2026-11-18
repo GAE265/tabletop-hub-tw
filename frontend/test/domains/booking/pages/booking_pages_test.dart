@@ -34,6 +34,7 @@ Booking sampleBooking({
   id: id,
   reservationCode: 'BK$id',
   shopId: 's-a',
+  shopName: '',
   startAt: '2026-11-25T06:00:00Z',
   endAt: '2026-11-25T08:00:00Z',
   partySize: 4,
