@@ -166,8 +166,10 @@ void main() {
       );
       final container = makeContainer(repo, userId: 'u-staff');
       final notifier = await open(container, 'g-1');
+      // 成員也有「填入戰績」
       expect(container.read(groupDetailProvider('g-1')).actionsFor('u-staff'), [
         GroupAction.leave,
+        GroupAction.recordMatch,
       ]);
 
       repo.groups = [fakeGroup(startAt: start, capacity: 2, memberCount: 2)];
@@ -196,7 +198,11 @@ void main() {
     expect(state.message, '報名成功');
     expect(state.error, isNull);
     expect(state.group.value?.remainingSlots, 2);
-    expect(state.actionsFor('u-player'), [GroupAction.leave]);
+    // 報名成為成員後也可以填入戰績
+    expect(state.actionsFor('u-player'), [
+      GroupAction.leave,
+      GroupAction.recordMatch,
+    ]);
     await calendar.loaded;
     expect(repo.listCalls.length, greaterThan(listCallsBefore));
   });
