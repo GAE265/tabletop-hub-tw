@@ -4,10 +4,9 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy.orm import sessionmaker
 
 from app.core.config import Settings, get_settings
-from app.core.db import create_db_engine
+from app.core.db import create_db_engine, create_session_factory
 from app.core.errors import register_error_handlers
 from app.core.games.router import router as games_router
 from app.domains.booking.router import router as booking_router
@@ -35,7 +34,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app = FastAPI(title="遊任有娛 tabletop-hub-tw", lifespan=lifespan)
     app.state.settings = settings
-    app.state.session_factory = sessionmaker(engine)
+    app.state.session_factory = create_session_factory(engine)
     # LLM_PROVIDER、GAMES_ADVISOR_EMBEDDING_* 設錯時在啟動就明確報錯
     app.state.llm = get_llm_provider(settings.llm_provider, settings)
     app.state.vision = get_vision_provider(settings.ocr_provider, settings)

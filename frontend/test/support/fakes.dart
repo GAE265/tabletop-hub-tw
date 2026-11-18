@@ -47,6 +47,21 @@ class FakeAppFonts implements AppFonts {
   TextStyle body(TextStyle style) => style.copyWith(fontFamily: bodyFamily);
 }
 
+/// 測試用字型：只換字型名稱，不連網路下載。
+class FakeAppFonts implements AppFonts {
+  const FakeAppFonts();
+
+  static const headingFamily = 'FakeHeading';
+  static const bodyFamily = 'FakeBody';
+
+  @override
+  TextStyle heading(TextStyle style) =>
+      style.copyWith(fontFamily: headingFamily);
+
+  @override
+  TextStyle body(TextStyle style) => style.copyWith(fontFamily: bodyFamily);
+}
+
 const fakePlayer = DevUser(id: 'u-player', displayName: '測試玩家', role: 'player');
 const fakeStaff = DevUser(
   id: 'u-staff',
@@ -166,13 +181,18 @@ class FakeBookingRepository implements BookingRepository {
     this.shopError,
     this.mine = const [],
     this.board = const [],
+    this.seatingPlans = const [],
+    this.seatingError,
   });
 
   List<Shop> shops;
   Object? shopError;
   List<Booking> mine;
   List<Booking> board;
+  List<SeatingPlan> seatingPlans;
+  Object? seatingError;
   int shopCallCount = 0;
+  int seatingCallCount = 0;
 
   /// 首頁測試用：我的訂位丟出的錯誤、等待完成才回應的開關、送出的查詢條件。
   Object? mineError;
@@ -295,6 +315,18 @@ class FakeBookingRepository implements BookingRepository {
   }) async {
     boardQueries.add((shopId: shopId, from: from, to: to));
     return BookingPage(items: board, total: board.length);
+  }) async => BookingPage(items: board, total: board.length);
+
+  @override
+  Future<List<SeatingPlan>> getTablesStatus({
+    required String shopId,
+    String? from,
+    String? to,
+    int? floor,
+  }) async {
+    seatingCallCount++;
+    if (seatingError != null) throw seatingError!;
+    return seatingPlans;
   }
 }
 

@@ -67,6 +67,12 @@ class BookingRepository(SessionRepository):
         row = self.session.get(BookingShop, shop_id)
         return None if row is None else ShopRef(row.id, row.name)
 
+    def get_shop_name(self, shop_id: uuid.UUID) -> str:
+        name = self.session.scalar(
+            select(BookingShop.name).where(BookingShop.id == shop_id)
+        )
+        return name or ""
+
     def list_shops(self) -> list[ShopRef]:
         rows = self.session.scalars(
             select(BookingShop).where(BookingShop.is_active).order_by(BookingShop.name)
@@ -193,16 +199,16 @@ class BookingRepository(SessionRepository):
         page_size: int,
         *,
         status: str | None = None,
-        from_date: date | None = None,
-        to_date: date | None = None,
+        from_date: datetime | None = None,
+        to_date: datetime | None = None,
     ) -> tuple[list[ReservationRecord], int]:
         conds = [BookingReservation.user_id == user_id]
         if status is not None:
             conds.append(BookingReservation.status == status)
         if from_date is not None:
-            conds.append(func.date(BookingReservation.start_at) >= from_date)
+            conds.append(BookingReservation.end_at > from_date)
         if to_date is not None:
-            conds.append(func.date(BookingReservation.start_at) <= to_date)
+            conds.append(BookingReservation.start_at < to_date)
         return self._page(tuple(conds), page, page_size, newest=True)
 
     def list_for_shop(
@@ -387,3 +393,118 @@ class BookingRepository(SessionRepository):
             created_at=row.created_at,
             tables=[TableRef(*t) for t in tables],
         )
+
+    # --- 座位圖 ---
+
+    def get_tables_with_status(
+        self,
+        shop_id: uuid.UUID,
+        start_at: datetime,
+        end_at: datetime,
+        floor: int | None = None,
+    ) -> list["TableStatus"]:
+        """查詢指定店家的桌子及其在時間範圍內的佔用狀態。
+
+        回傳所有啟用中的桌子（可選過濾樓層），
+        並附上該時段內 confirmed/seated 訂位的摘要（含 user_id 供權限過濾）。
+        """
+        from app.domains.booking.records import BookingSummary, TableStatus
+
+        # 子查詢：時間範圍內有效佔用的 reservation_tables
+        occupied_sub = (
+            select(
+                BookingReservationTable.table_id,
+                BookingReservation.id,
+                BookingReservation.reservation_code,
+                BookingReservation.user_id,
+                BookingReservation.start_at,
+                BookingReservation.end_at,
+                BookingReservation.party_size,
+                BookingReservation.status,
+            )
+            .join(
+                BookingReservation,
+                (BookingReservation.shop_id == BookingReservationTable.shop_id)
+                & (BookingReservation.id == BookingReservationTable.reservation_id),
+            )
+            .where(
+                BookingReservationTable.shop_id == shop_id,
+                BookingReservationTable.is_active == True,
+                BookingReservationTable.start_at < end_at,
+                BookingReservationTable.end_at > start_at,
+                BookingReservation.status.in_(ACTIVE_STATUSES),
+            )
+            .subquery()
+        )
+
+        # 主查詢：所有啟用中的桌子 LEFT JOIN 佔用資訊
+        base_query = select(
+            BookingTable.id,
+            BookingTable.table_code,
+            BookingTable.name,
+            BookingTable.max_capacity,
+            BookingTable.floor,
+            BookingTable.x,
+            BookingTable.y,
+            BookingTable.width,
+            BookingTable.height,
+            BookingTable.shape,
+            occupied_sub.c.id,
+            occupied_sub.c.reservation_code,
+            occupied_sub.c.user_id,
+            occupied_sub.c.start_at,
+            occupied_sub.c.end_at,
+            occupied_sub.c.party_size,
+            occupied_sub.c.status,
+        ).outerjoin(
+            occupied_sub,
+            BookingTable.id == occupied_sub.c.table_id,
+        ).where(
+            BookingTable.shop_id == shop_id,
+            BookingTable.is_active == True,
+        )
+
+        if floor is not None:
+            base_query = base_query.where(BookingTable.floor == floor)
+
+        base_query = base_query.order_by(BookingTable.floor, BookingTable.table_code)
+
+        rows = self.session.execute(base_query).all()
+
+        # 一個桌子可能關聯多筆訂位（LEFT JOIN），只取第一筆
+        results: list[TableStatus] = []
+        seen: set[int] = set()
+        for row in rows:
+            tid = row[0]
+            if tid in seen:
+                continue
+            seen.add(tid)
+            booking = None
+            if row[10] is not None:
+                booking = BookingSummary(
+                    id=row[10],
+                    reservation_code=row[11],
+                    user_id=row[12],
+                    start_at=row[13],
+                    end_at=row[14],
+                    party_size=row[15],
+                    status=row[16],
+                )
+            results.append(
+                TableStatus(
+                    id=tid,
+                    table_code=row[1],
+                    name=row[2],
+                    max_capacity=row[3],
+                    floor=row[4],
+                    x=row[5],
+                    y=row[6],
+                    width=row[7],
+                    height=row[8],
+                    shape=row[9],
+                    status="unavailable" if booking else "available",
+                    booking=booking,
+                )
+            )
+
+        return results

@@ -1,6 +1,6 @@
 import uuid
 from collections.abc import Callable
-from datetime import UTC, date, datetime
+from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any, TypeVar
 
@@ -9,7 +9,7 @@ from app.core.errors import AppError, PermissionDenied
 from app.domains.booking import pricing
 from app.domains.booking.allocation import allocate, is_conflict
 from app.domains.booking.errors import BookingRuleError, NoTableAvailable, TableConflict
-from app.domains.booking.records import ReservationRecord
+from app.domains.booking.records import ReservationRecord, TableStatus
 from app.domains.booking.repository import BookingRepository
 from app.domains.booking.rules import Slot, to_local, validate_slot
 from app.domains.booking.schemas import (
@@ -26,6 +26,13 @@ from app.domains.booking.schemas import (
 )
 
 T = TypeVar("T")
+
+
+def _to_dt(value: str | None) -> datetime | None:
+    """將 ISO 日期或 datetime 字串轉成 datetime。含時區資訊時保留完整 datetime。"""
+    if not value:
+        return None
+    return datetime.fromisoformat(value.replace(" ", "+"))
 
 REPLACED_REASON = "被新訂位取代"
 MERGED_REASON = "與其他訂位合併"
@@ -109,12 +116,14 @@ class BookingService:
         )
 
     def _out(
-        self, record: ReservationRecord, rules: pricing.PricingRules, notice: str | None = None
+        self, record: ReservationRecord, rules: pricing.PricingRules,
+        notice: str | None = None, shop_name: str = "",
     ) -> BookingOut:
         return BookingOut(
             id=record.id,
             reservation_code=record.reservation_code,
             shop_id=record.shop_id,
+            shop_name=shop_name,
             user_id=record.user_id,
             start_at=record.start_at,
             end_at=record.end_at,
@@ -291,9 +300,9 @@ class BookingService:
         from_date: str | None = None,
         to_date: str | None = None,
     ) -> BookingList:
-        require_role(user, "player", "admin")
-        from_dt = date.fromisoformat(from_date) if from_date else None
-        to_dt = date.fromisoformat(to_date) if to_date else None
+        require_role(user, "player", "shop_staff", "admin")
+        from_dt = _to_dt(from_date)
+        to_dt = _to_dt(to_date)
         records, total = self.repo.list_for_user(
             user.id, page, page_size, status=status, from_date=from_dt, to_date=to_dt
         )
@@ -325,11 +334,19 @@ class BookingService:
 
     def _list(self, records: list[ReservationRecord], total: int) -> BookingList:
         rules_cache: dict[uuid.UUID, pricing.PricingRules] = {}
+        name_cache: dict[uuid.UUID, str] = {}
         items = []
         for record in records:
             if record.shop_id not in rules_cache:
                 rules_cache[record.shop_id] = self.repo.get_pricing_rules(record.shop_id)
-            items.append(self._out(record, rules_cache[record.shop_id]))
+            if record.shop_id not in name_cache:
+                name_cache[record.shop_id] = self.repo.get_shop_name(record.shop_id)
+            items.append(
+                self._out(
+                    record, rules_cache[record.shop_id],
+                    shop_name=name_cache[record.shop_id],
+                )
+            )
         return BookingList(items=items, total=total)
 
     # --- 修改與合併 ---
@@ -550,3 +567,50 @@ class BookingService:
         except NoTableAvailable:
             raise AppError(409, "BOOKING_TABLE_TAKEN", "該桌位在此時段已被訂走") from None
         return self._out(result, rules)
+
+    # ── 座位圖 ──
+
+    def get_tables_status(
+        self,
+        user: "CurrentUser",
+        shop_id: uuid.UUID,
+        start_at: datetime,
+        end_at: datetime,
+        floor: int | None = None,
+    ) -> list["TableStatus"]:
+        """查詢桌位狀態。
+
+        店家人員與管理員可以看到所有訂位的 booking 摘要；
+        玩家只能看到自己訂位的 booking 摘要（他人的訂位只顯示 unavailable）。
+        """
+        if not self.repo.shop_exists(shop_id):
+            raise AppError(404, "BOOKING_SHOP_NOT_FOUND", "店家不存在")
+
+        statuses = self.repo.get_tables_with_status(shop_id, start_at, end_at, floor)
+
+        # 玩家權限過濾：只看得到自己的 booking
+        if user.role == "player":
+            filtered: list[TableStatus] = []
+            for s in statuses:
+                if s.booking is not None and s.booking.user_id != user.id:
+                    filtered.append(
+                        TableStatus(
+                            id=s.id,
+                            table_code=s.table_code,
+                            name=s.name,
+                            max_capacity=s.max_capacity,
+                            floor=s.floor,
+                            x=s.x,
+                            y=s.y,
+                            width=s.width,
+                            height=s.height,
+                            shape=s.shape,
+                            status="unavailable",
+                            booking=None,
+                        )
+                    )
+                else:
+                    filtered.append(s)
+            return filtered
+
+        return statuses

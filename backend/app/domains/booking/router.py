@@ -15,6 +15,7 @@ from app.domains.booking.schemas import (
     BookingPatch,
     BookingQuote,
     BookingQuoteRequest,
+    SeatingPlanOut,
     ShopList,
     TablesPut,
 )
@@ -92,3 +93,66 @@ def list_shop_bookings(
     page_size: PageSize = 20,
 ):
     return service.list_for_shop(user, shop_id, start_at, end_at, page, page_size)
+
+
+@router.get("/shops/{shop_id}/tables/status", response_model=list[SeatingPlanOut])
+def get_tables_status(
+    shop_id: uuid.UUID,
+    user: CurrentUserDep,
+    service: ServiceDep,
+    start_at: Annotated[datetime | None, Query(alias="from")] = None,
+    end_at: Annotated[datetime | None, Query(alias="to")] = None,
+    floor: int | None = None,
+):
+    """查詢桌子狀態（座位圖）。
+
+    未帶 from/to 時預設查詢當天 Asia/Taipei 的 00:00–23:59:59。
+    回傳各樓層的座位圖（依 floor 分組）。
+    """
+    from zoneinfo import ZoneInfo
+
+    now = datetime.now(ZoneInfo("Asia/Taipei"))
+    if start_at is None:
+        start_at = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    if end_at is None:
+        end_at = now.replace(hour=23, minute=59, second=59, microsecond=0)
+
+    statuses = service.get_tables_status(user, shop_id, start_at, end_at, floor)
+
+    # 依 floor 分組
+    from collections import defaultdict
+    from app.domains.booking.schemas import TableStatusOut, BookingSummaryOut
+
+    by_floor: dict[int, list[TableStatusOut]] = defaultdict(list)
+    for s in statuses:
+        booking_out = None
+        if s.booking:
+            booking_out = BookingSummaryOut(
+                id=s.booking.id,
+                reservation_code=s.booking.reservation_code,
+                user_id=s.booking.user_id,
+                start_at=s.booking.start_at,
+                end_at=s.booking.end_at,
+                party_size=s.booking.party_size,
+                status=s.booking.status,
+            )
+        by_floor[s.floor].append(
+            TableStatusOut(
+                id=s.id,
+                table_code=s.table_code,
+                name=s.name,
+                max_capacity=s.max_capacity,
+                x=s.x,
+                y=s.y,
+                width=s.width,
+                height=s.height,
+                shape=s.shape,
+                status=s.status,
+                booking=booking_out,
+            )
+        )
+
+    return [
+        SeatingPlanOut(floor=floor, tables=tables)
+        for floor, tables in sorted(by_floor.items())
+    ]
