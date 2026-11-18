@@ -153,6 +153,21 @@ void main() {
       expect(find.byKey(const Key('seat-table-1')), findsNothing);
     });
 
+    testWidgets('後端先回 B1：仍預設顯示 1F，樓層依 1F、B1 排列', (tester) async {
+      final repo = FakeBookingRepository()
+        ..seatingPlans = staffPlans.reversed.toList();
+      await pumpAt(tester, '/booking/board', repo: repo, user: staff);
+      expect(find.byKey(const Key('seat-table-1')), findsOneWidget);
+      expect(find.byKey(const Key('seat-table-8')), findsNothing);
+      final first = tester.getTopLeft(
+        find.byKey(const Key('seating-floor-1F')),
+      );
+      final second = tester.getTopLeft(
+        find.byKey(const Key('seating-floor-B1')),
+      );
+      expect(first.dx, lessThan(second.dx));
+    });
+
     testWidgets('只有一個樓層：不顯示樓層切換', (tester) async {
       final repo = FakeBookingRepository()..seatingPlans = [staffPlans.first];
       await pumpAt(tester, '/booking/board', repo: repo, user: staff);
