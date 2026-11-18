@@ -22,6 +22,12 @@ OLD_TABLES = {
         "max_capacity",
         "location",
         "is_active",
+        "floor",
+        "x",
+        "y",
+        "width",
+        "height",
+        "shape",
         "created_at",
     },
     "seating_tables_rel": {

@@ -16,6 +16,7 @@ class Booking {
     required this.id,
     required this.reservationCode,
     required this.shopId,
+    required this.shopName,
     required this.startAt,
     required this.endAt,
     required this.partySize,
@@ -30,6 +31,7 @@ class Booking {
     id: json['id'] as int,
     reservationCode: json['reservation_code'] as String,
     shopId: json['shop_id'] as String,
+    shopName: json['shop_name'] as String? ?? '',
     startAt: json['start_at'] as String,
     endAt: json['end_at'] as String,
     partySize: json['party_size'] as int,
@@ -45,6 +47,7 @@ class Booking {
   final int id;
   final String reservationCode;
   final String shopId;
+  final String shopName;
   final String startAt;
   final String endAt;
   final int partySize;
@@ -92,3 +95,98 @@ class QuoteResult {
 }
 
 
+
+/// 桌位資訊（座位圖上的單張桌子）。
+class TableInfo {
+  const TableInfo({
+    required this.id,
+    required this.tableCode,
+    this.name,
+    required this.maxCapacity,
+    required this.x,
+    required this.y,
+    required this.width,
+    required this.height,
+    required this.shape,
+    required this.status,
+    this.booking,
+  });
+
+  factory TableInfo.fromJson(Map<String, dynamic> json) => TableInfo(
+    id: json['id'] as int,
+    tableCode: json['table_code'] as String,
+    name: json['name'] as String?,
+    maxCapacity: json['max_capacity'] as int,
+    x: json['x'] as int,
+    y: json['y'] as int,
+    width: json['width'] as int,
+    height: json['height'] as int,
+    shape: json['shape'] as String,
+    status: json['status'] as String,
+    booking: json['booking'] != null
+        ? BookingSummary.fromJson(json['booking'] as Map<String, dynamic>)
+        : null,
+  );
+
+  final int id;
+  final String tableCode;
+  final String? name;
+  final int maxCapacity;
+  final int x;
+  final int y;
+  final int width;
+  final int height;
+  final String shape;
+  final String status; // "available" | "unavailable"
+  final BookingSummary? booking;
+
+  /// 是否被自己佔用（玩家自己的訂位）。
+  bool get isMine => booking != null;
+}
+
+/// 訂位摘要（附在桌位狀態上）。
+class BookingSummary {
+  const BookingSummary({
+    required this.id,
+    required this.reservationCode,
+    required this.userId,
+    required this.startAt,
+    required this.endAt,
+    required this.partySize,
+    required this.status,
+  });
+
+  factory BookingSummary.fromJson(Map<String, dynamic> json) => BookingSummary(
+    id: json['id'] as int,
+    reservationCode: json['reservation_code'] as String,
+    userId: json['user_id'] as String,
+    startAt: json['start_at'] as String,
+    endAt: json['end_at'] as String,
+    partySize: json['party_size'] as int,
+    status: json['status'] as String,
+  );
+
+  final int id;
+  final String reservationCode;
+  final String userId;
+  final String startAt;
+  final String endAt;
+  final int partySize;
+  final String status;
+}
+
+/// 一個樓層的座位圖。
+class SeatingPlan {
+  const SeatingPlan({required this.floor, required this.tables});
+
+  factory SeatingPlan.fromJson(Map<String, dynamic> json) => SeatingPlan(
+    floor: json['floor'] as int,
+    tables: [
+      for (final t in json['tables'] as List)
+        TableInfo.fromJson(t as Map<String, dynamic>),
+    ],
+  );
+
+  final int floor;
+  final List<TableInfo> tables;
+}

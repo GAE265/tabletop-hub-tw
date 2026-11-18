@@ -48,6 +48,7 @@ Booking homeBooking({
   id: id,
   reservationCode: 'BK$id',
   shopId: shopId,
+  shopName: '',
   startAt: startAt.toUtc().toIso8601String(),
   endAt: startAt.add(const Duration(hours: 2)).toUtc().toIso8601String(),
   partySize: partySize,

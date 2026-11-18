@@ -2,7 +2,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 
 from fastapi import Request
-from sqlalchemy import Engine, create_engine
+from sqlalchemy import Engine, create_engine, event
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 
@@ -11,7 +11,31 @@ class Base(DeclarativeBase):
 
 
 def create_db_engine(database_url: str) -> Engine:
-    return create_engine(database_url, pool_pre_ping=True, connect_args={"connect_timeout": 3})
+    engine = create_engine(
+        database_url,
+        pool_pre_ping=True,
+        connect_args={"connect_timeout": 3},
+    )
+
+    @event.listens_for(engine, "connect")
+    def _set_timezone(dbapi_connection, _connection_record):
+        cursor = dbapi_connection.cursor()
+        cursor.execute("SET timezone TO 'Asia/Taipei'")
+        cursor.close()
+
+    return engine
+
+
+def create_session_factory(engine: Engine) -> sessionmaker[Session]:
+    """建立 session factory，每個連線自動設 Asia/Taipei timezone。"""
+
+    @event.listens_for(engine, "checkout")
+    def _on_checkout(dbapi_connection, _connection_record, _connection_proxy):
+        cursor = dbapi_connection.cursor()
+        cursor.execute("SET timezone TO 'Asia/Taipei'")
+        cursor.close()
+
+    return sessionmaker(engine)
 
 
 def get_session(request: Request) -> Iterator[Session]:

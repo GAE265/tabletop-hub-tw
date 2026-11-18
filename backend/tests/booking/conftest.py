@@ -87,15 +87,39 @@ def seeded(db: Engine) -> dict[str, dict[str, int]]:
             ),
             {"s": SHOP},
         )
+        TABLE_COORDS = {
+            "A": (1, 50, 50, 160, 100, "rectangle"),
+            "B": (1, 250, 50, 160, 100, "rectangle"),
+            "C": (1, 450, 50, 200, 120, "rectangle"),
+            "D": (1, 50, 200, 140, 100, "rectangle"),
+            "E": (1, 250, 200, 200, 120, "rectangle"),
+            "F": (1, 500, 200, 140, 100, "rectangle"),
+            "G": (1, 700, 200, 100, 100, "rectangle"),
+            "H": (-1, 50, 50, 200, 120, "rectangle"),
+            "I": (-1, 350, 50, 200, 120, "rectangle"),
+        }
         for code, cap in CAPACITY.items():
+            floor, x, y, w, h, shape = TABLE_COORDS[code]
             tables[code] = conn.execute(
                 text(
                     "INSERT INTO seating_tables "
-                    "(shop_id, table_code, min_capacity, max_capacity) "
-                    "VALUES (:s, :c, 1, :m) RETURNING id"
+                    "(shop_id, table_code, min_capacity, max_capacity, "
+                    "floor, x, y, width, height, shape) "
+                    "VALUES (:s, :c, 1, :m, :floor, :x, :y, :w, :h, :shape) RETURNING id"
                 ),
-                {"s": SHOP, "c": code, "m": cap},
+                {
+                    "s": SHOP,
+                    "c": code,
+                    "m": cap,
+                    "floor": floor,
+                    "x": x,
+                    "y": y,
+                    "w": w,
+                    "h": h,
+                    "shape": shape,
+                },
             ).scalar_one()
+
         for a, b, combinable in LINK_SPECS:
             conn.execute(
                 text(

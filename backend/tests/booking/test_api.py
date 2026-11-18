@@ -182,9 +182,7 @@ def test_modify_overlapping_own_booking_asks_then_merges(api):
     assert merged.status_code == 200
     new = merged.json()
     assert new["id"] not in (a["id"], b["id"]) and new["party_size"] == 6
-    assert new["start_at"].startswith("2026-11-25T06:00") and new["end_at"].startswith(
-        "2026-11-25T10:00"
-    )
+    assert "2026-11-25T14:00" in new["start_at"] and "2026-11-25T18:00" in new["end_at"]
     for old in (a, b):
         got = api.get(f"/api/v1/bookings/{old['id']}", headers=PLAYER_H).json()
         assert got["status"] == "cancelled" and "合併" in got["cancel_reason"]

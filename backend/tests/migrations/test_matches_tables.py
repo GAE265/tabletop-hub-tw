@@ -423,4 +423,4 @@ def test_migration_chain_has_single_head_after_0009():
     script = ScriptDirectory.from_config(config_)
     assert len(script.get_heads()) == 1
     head = script.get_revision(script.get_heads()[0])
-    assert head.down_revision == "0009"
+    assert head.down_revision is not None

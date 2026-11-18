@@ -21,6 +21,7 @@ class _BookingProtoPageState extends ConsumerState<BookingProtoPage> {
   final _requests = TextEditingController();
   final _startCtrl = TextEditingController(text: '14:00');
   final _endCtrl = TextEditingController(text: '16:00');
+  int? _seatingFloor;
 
   static String _defaultDate() {
     final d = DateTime.now().add(const Duration(days: 7));
@@ -31,11 +32,15 @@ class _BookingProtoPageState extends ConsumerState<BookingProtoPage> {
   @override
   void initState() {
     super.initState();
-    // 開頁即載入店家清單；失敗由畫面顯示訊息與「重試」。
+    for (final ctrl in [_date, _startCtrl, _endCtrl]) {
+      ctrl.addListener(_onDateTimeChanged);
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(bookingProvider.notifier).loadShops();
+      ref.read(bookingProvider.notifier).loadShops().then((_) => _loadSeating());
     });
   }
+
+  void _onDateTimeChanged() => _loadSeating();
 
   @override
   void dispose() {
@@ -57,7 +62,6 @@ class _BookingProtoPageState extends ConsumerState<BookingProtoPage> {
   int get _partySize => int.tryParse(_party.text.trim()) ?? 1;
   BookingNotifier get _n => ref.read(bookingProvider.notifier);
 
-  /// 已選店家；未選時不送請求（後端需要合法的 shop_id）。
   String? get _selectedShop {
     final user = ref.read(currentDevUserProvider);
     return _shopId ?? user?.shopId;
@@ -66,12 +70,18 @@ class _BookingProtoPageState extends ConsumerState<BookingProtoPage> {
   void _requireShop(void Function(String shopId) run) {
     final shopId = _selectedShop;
     if (shopId == null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('請先選擇店家')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('請先選擇店家')),
+      );
       return;
     }
     run(shopId);
+  }
+
+  void _loadSeating() {
+    final shopId = _selectedShop;
+    if (shopId == null) return;
+    _n.loadSeatingPlan(shopId, from: _start, to: _end, floor: _seatingFloor);
   }
 
   @override
@@ -79,7 +89,6 @@ class _BookingProtoPageState extends ConsumerState<BookingProtoPage> {
     final state = ref.watch(bookingProvider);
     final user = ref.watch(currentDevUserProvider);
     final isStaff = user?.role == 'shop_staff' || user?.role == 'admin';
-    // 店員預設選自己的店家；玩家維持未選，由使用者自行挑選。
     final selectedShopId = _shopId ?? user?.shopId;
 
     return Scaffold(
@@ -101,7 +110,10 @@ class _BookingProtoPageState extends ConsumerState<BookingProtoPage> {
                     for (final shop in state.shops)
                       DropdownMenuItem(value: shop.id, child: Text(shop.name)),
                   ],
-                  onChanged: (value) => setState(() => _shopId = value),
+                  onChanged: (value) {
+                    setState(() => _shopId = value);
+                    _loadSeating();
+                  },
                 ),
               ),
               TextButton(
@@ -208,7 +220,109 @@ class _BookingProtoPageState extends ConsumerState<BookingProtoPage> {
             if (state.board.isEmpty && !state.loading) const Text('沒有訂位'),
             for (final b in state.board) _row(b, state.loading, staff: true),
           ],
+
+          // ── 座位圖 ──
+          const Divider(),
+          Row(
+            children: [
+              const Text('座位圖'),
+              const SizedBox(width: 8),
+              DropdownButton<int?>(
+                key: const Key('seating-floor'),
+                value: _seatingFloor,
+                hint: const Text('全部樓層'),
+                items: const [
+                  DropdownMenuItem(value: null, child: Text('全部樓層')),
+                  DropdownMenuItem(value: 1, child: Text('1F')),
+                  DropdownMenuItem(value: -1, child: Text('B1')),
+                ],
+                onChanged: (v) {
+                  setState(() => _seatingFloor = v);
+                  _loadSeating();
+                },
+              ),
+            ],
+          ),
+          if (state.seatingPlan.isEmpty && !state.loading) const Text('尚未載入座位圖'),
+          for (final plan in state.seatingPlan) ...[
+            Text('${plan.floor}F　${plan.tables.length} 張桌子'),
+            SizedBox(
+              height: _planHeight(plan.tables),
+              width: double.infinity,
+              child: Stack(
+                children: [
+                  for (final table in plan.tables)
+                    Positioned(
+                      left: table.x.toDouble(),
+                      top: table.y.toDouble(),
+                      child: GestureDetector(
+                        onTap: () => _n.selectTable(table),
+                        child: Container(
+                          key: Key('table-${table.id}'),
+                          width: table.width.toDouble(),
+                          height: table.height.toDouble(),
+                          decoration: BoxDecoration(
+                            border: Border.all(
+                              color: table.isMine
+                                  ? Colors.blue
+                                  : table.status == 'available'
+                                      ? Colors.grey
+                                      : Colors.red,
+                              width: 2,
+                            ),
+                            color: table.id == state.selectedTable?.id
+                                ? Colors.blue.shade50
+                                : null,
+                          ),
+                          alignment: Alignment.center,
+                          child: Text(
+                            table.tableCode,
+                            style: const TextStyle(fontSize: 11),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
+          if (state.selectedTable != null) ...[
+            const SizedBox(height: 8),
+            _tableDetail(state.selectedTable!),
+          ],
         ],
+      ),
+    );
+  }
+
+  double _planHeight(List<TableInfo> tables) {
+    if (tables.isEmpty) return 200;
+    double maxY = 0;
+    for (final t in tables) {
+      final bottom = t.y + t.height;
+      if (bottom > maxY) maxY = bottom.toDouble();
+    }
+    return maxY + 20;
+  }
+
+  Widget _tableDetail(TableInfo table) {
+    return Card(
+      key: const Key('table-detail'),
+      child: Padding(
+        padding: const EdgeInsets.all(8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('${table.tableCode}（${table.maxCapacity} 人）　${table.status}'),
+            Text('座標 (${table.x}, ${table.y})　${table.width}x${table.height}'),
+            if (table.name != null) Text('名稱：${table.name}'),
+            if (table.booking != null)
+              Text(
+                '訂位：#${table.booking!.id} ${table.booking!.reservationCode}　'
+                '${table.booking!.partySize} 人　${table.booking!.status}',
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -223,7 +337,7 @@ class _BookingProtoPageState extends ConsumerState<BookingProtoPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('#${b.id} ${b.reservationCode}　狀態：${b.status}'),
+            Text('${b.shopName.isNotEmpty ? "${b.shopName}　" : ""}#${b.id} ${b.reservationCode}　狀態：${b.status}'),
             Text('${b.startAt} ~ ${b.endAt}　${b.partySize} 人'),
             Text(
               '桌位：${b.tableCodes.join(', ')}　預估 ${b.estimatedFee.venueFee} 元'

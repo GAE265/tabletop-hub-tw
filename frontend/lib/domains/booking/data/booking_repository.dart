@@ -42,6 +42,13 @@ abstract interface class BookingRepository {
     required String from,
     required String to,
   });
+
+  Future<List<SeatingPlan>> getTablesStatus({
+    required String shopId,
+    String? from,
+    String? to,
+    int? floor,
+  });
 }
 
 class HttpBookingRepository implements BookingRepository {
@@ -154,6 +161,27 @@ class HttpBookingRepository implements BookingRepository {
       queryParameters: {'from': from, 'to': to, 'page': 1, 'page_size': 100},
     );
     return BookingPage.fromJson(r.data!);
+  });
+
+  @override
+  Future<List<SeatingPlan>> getTablesStatus({
+    required String shopId,
+    String? from,
+    String? to,
+    int? floor,
+  }) => _call(() async {
+    final params = <String, dynamic>{};
+    if (from != null && from.isNotEmpty) params['from'] = from;
+    if (to != null && to.isNotEmpty) params['to'] = to;
+    if (floor != null) params['floor'] = floor;
+    final r = await _dio.get<List>(
+      '/api/v1/shops/$shopId/tables/status',
+      queryParameters: params,
+    );
+    return [
+      for (final item in r.data!)
+        SeatingPlan.fromJson(item as Map<String, dynamic>),
+    ];
   });
 }
 

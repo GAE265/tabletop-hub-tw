@@ -166,13 +166,18 @@ class FakeBookingRepository implements BookingRepository {
     this.shopError,
     this.mine = const [],
     this.board = const [],
+    this.seatingPlans = const [],
+    this.seatingError,
   });
 
   List<Shop> shops;
   Object? shopError;
   List<Booking> mine;
   List<Booking> board;
+  List<SeatingPlan> seatingPlans;
+  Object? seatingError;
   int shopCallCount = 0;
+  int seatingCallCount = 0;
 
   /// 首頁測試用：我的訂位丟出的錯誤、等待完成才回應的開關、送出的查詢條件。
   Object? mineError;
@@ -239,6 +244,7 @@ class FakeBookingRepository implements BookingRepository {
       specialRequests: specialRequests,
     ));
     return Booking(
+      shopName: '測試店',
       id: 1,
       reservationCode: 'BKFAKE',
       shopId: shopId,
@@ -261,6 +267,7 @@ class FakeBookingRepository implements BookingRepository {
     if (patchError != null) throw patchError!;
     final b = [...mine, ...board].firstWhere((x) => x.id == id);
     return Booking(
+      shopName: '測試店',
       id: b.id,
       reservationCode: b.reservationCode,
       shopId: b.shopId,
@@ -295,6 +302,18 @@ class FakeBookingRepository implements BookingRepository {
   }) async {
     boardQueries.add((shopId: shopId, from: from, to: to));
     return BookingPage(items: board, total: board.length);
+  }
+
+  @override
+  Future<List<SeatingPlan>> getTablesStatus({
+    required String shopId,
+    String? from,
+    String? to,
+    int? floor,
+  }) async {
+    seatingCallCount++;
+    if (seatingError != null) throw seatingError!;
+    return seatingPlans;
   }
 }
 

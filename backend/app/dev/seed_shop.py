@@ -17,8 +17,8 @@ from app.domains.booking.models import (
     BookingShop,
 )
 
-SHOP_ID = "550e8400-e29b-41d4-a716-446655440000"
-SHOP_NAME = "靠過來桌遊咖啡廳"
+SHOP_ID = "44444444-4444-4444-8444-444444444444"
+SHOP_NAME = "測試桌遊店"
 
 
 def main() -> int:
@@ -78,36 +78,51 @@ def main() -> int:
             },
         )
 
-        # ── 桌子 ──
-        table_codes = {
-            "D": 10,
-            "A": 6,
-            "B": 6,
-            "C": 10,
-            "E": 10,
-            "F": 8,
-            "G": 10,
-            "H": 12,
-            "I": 12,
-        }
-        for code, cap in table_codes.items():
+        # ── 桌子（含座位圖座標） ──
+        # Excel 格線規格，每格 40px
+        # 格式：(code, max_capacity, floor, x, y, width, height, shape)
+        table_defs: list[tuple[str, int, int, int, int, int, int, str]] = [
+            ("A", 6, 1, 0, 0, 80, 80, "rectangle"),  # A1:B2
+            ("B", 6, 1, 120, 0, 80, 40, "rectangle"),  # D1:E1
+            ("C", 10, 1, 120, 40, 80, 40, "rectangle"),  # D2:E2
+            ("D", 10, 1, 120, 80, 80, 80, "rectangle"),  # D3:E4
+            ("E", 10, 1, 0, 80, 80, 80, "rectangle"),  # A3:B4
+            ("F", 8, 1, 0, 200, 80, 40, "rectangle"),  # A6:B6
+            ("G", 10, 1, 120, 240, 120, 120, "rectangle"),  # D7:F9
+            ("H", 12, -1, 0, 0, 120, 80, "rectangle"),  # B1 A1:C2
+            ("I", 12, -1, 40, 160, 160, 160, "rectangle"),  # B1 B5:E8
+        ]
+        for code, cap, floor, x, y, w, h, shape in table_defs:
             session.execute(
                 text(
                     "INSERT INTO seating_tables "
-                    "(shop_id, table_code, min_capacity, max_capacity, is_active) "
-                    "SELECT :sid, :c, 1, :m, true "
+                    "(shop_id, table_code, min_capacity, max_capacity, is_active, "
+                    "floor, x, y, width, height, shape) "
+                    "SELECT :sid, :c, 1, :m, true, :floor, :x, :y, :w, :h, :shape "
                     "WHERE NOT EXISTS ("
                     "  SELECT 1 FROM seating_tables "
                     "  WHERE shop_id = :sid2 AND table_code = :c2"
                     ")"
                 ),
-                {"sid": SHOP_ID, "c": code, "m": cap, "sid2": SHOP_ID, "c2": code},
+                {
+                    "sid": SHOP_ID,
+                    "c": code,
+                    "m": cap,
+                    "floor": floor,
+                    "x": x,
+                    "y": y,
+                    "w": w,
+                    "h": h,
+                    "shape": shape,
+                    "sid2": SHOP_ID,
+                    "c2": code,
+                },
             )
 
         # ── 桌子關係 ──
         links = [
             ("B", "C", True),
-            ("C", "E", True),
+            ("C", "D", True),
             ("D", "E", True),
             ("H", "I", True),
             ("A", "B", False),

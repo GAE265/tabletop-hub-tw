@@ -72,6 +72,7 @@ class BookingOut(BaseModel):
     id: int
     reservation_code: str
     shop_id: uuid.UUID
+    shop_name: str
     user_id: uuid.UUID
     start_at: datetime
     end_at: datetime
@@ -109,3 +110,41 @@ class ShopOut(BaseModel):
 class ShopList(BaseModel):
     items: list[ShopOut]
     total: int
+
+
+# ── 座位圖 ──
+
+
+class BookingSummaryOut(BaseModel):
+    """訂位摘要（附在桌位狀態上）。"""
+
+    id: int
+    reservation_code: str
+    user_id: uuid.UUID
+    start_at: datetime
+    end_at: datetime
+    party_size: int
+    status: str
+
+
+class TableStatusOut(BaseModel):
+    """單張桌子的狀態（含座標、佔用狀態、可選的訂位摘要）。"""
+
+    id: int
+    table_code: str
+    name: str | None
+    max_capacity: int
+    x: int
+    y: int
+    width: int
+    height: int
+    shape: str
+    status: str  # "available" | "unavailable"
+    booking: BookingSummaryOut | None = None
+
+
+class SeatingPlanOut(BaseModel):
+    """一個樓層的座位圖。"""
+
+    floor: int
+    tables: list[TableStatusOut]
