@@ -1,0 +1,272 @@
+// 首頁「接下來的行程」（spec：home-page 的「接下來的行程」）。
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:tabletop_hub/app/home/state/upcoming_state.dart';
+import 'package:tabletop_hub/core/api/api_exception.dart';
+import 'package:tabletop_hub/core/dev/data/dev_user.dart';
+import 'package:tabletop_hub/core/dev/state/dev_user_state.dart';
+import 'package:tabletop_hub/domains/booking/data/booking_repository.dart';
+import 'package:tabletop_hub/domains/groups/data/groups_repository.dart';
+import 'package:tabletop_hub/domains/groups/state/group_clock.dart';
+
+import '../../domains/groups/support.dart';
+import '../../support/fakes.dart';
+import 'support.dart';
+
+class TestUser extends Notifier<DevUser?> {
+  TestUser(this.initial);
+
+  final DevUser? initial;
+
+  @override
+  DevUser? build() => initial;
+
+  void set(DevUser? user) => state = user;
+}
+
+final testUserProvider = NotifierProvider<TestUser, DevUser?>(
+  () => TestUser(null),
+);
+
+ProviderContainer makeContainer({
+  FakeBookingRepository? bookings,
+  FakeGroupsRepository? groups,
+  DevUser? user = homePlayer,
+}) {
+  final container = ProviderContainer(
+    overrides: [
+      bookingRepositoryProvider.overrideWithValue(
+        bookings ?? FakeBookingRepository(),
+      ),
+      groupsRepositoryProvider.overrideWithValue(
+        groups ?? FakeGroupsRepository(),
+      ),
+      groupClockProvider.overrideWithValue(FixedOffsetClock(nowUtc)),
+      testUserProvider.overrideWith(() => TestUser(user)),
+      currentDevUserProvider.overrideWith((ref) => ref.watch(testUserProvider)),
+    ],
+  );
+  addTearDown(container.dispose);
+  return container;
+}
+
+Future<List<UpcomingItem>> load(ProviderContainer container) {
+  container.listen(upcomingProvider, (_, _) {});
+  return container.read(upcomingProvider.future);
+}
+
+String describe(UpcomingItem item) => switch (item) {
+  UpcomingBooking(:final booking) => 'booking ${booking.id}',
+  UpcomingGroup(:final group) => 'group ${group.id}',
+};
+
+void main() {
+  final clock = FixedOffsetClock(nowUtc);
+
+  test('訂位與揪團合併，依開始時間由近到遠排序', () async {
+    final bookings = FakeBookingRepository(
+      mine: [
+        homeBooking(id: 1, startAt: taipei(11, 23, 14)),
+        homeBooking(id: 2, startAt: taipei(11, 21, 19)),
+      ],
+    );
+    final groups = FakeGroupsRepository(
+      groups: [
+        fakeGroup(id: 'g-1', startAt: taipei(11, 22, 19), myStatus: 'member'),
+      ],
+    );
+    final items = await load(makeContainer(bookings: bookings, groups: groups));
+    expect(items.map(describe), ['booking 2', 'group g-1', 'booking 1']);
+  });
+
+  test('只列即將到來的：已取消、已完成、已開始的訂位，與沒報名、已開始的揪團都不列', () async {
+    final bookings = FakeBookingRepository(
+      mine: [
+        homeBooking(id: 1, startAt: taipei(11, 21), status: 'cancelled'),
+        homeBooking(id: 2, startAt: taipei(11, 21), status: 'completed'),
+        homeBooking(id: 3, startAt: taipei(11, 14, 10)),
+        homeBooking(id: 4, startAt: taipei(11, 21)),
+      ],
+    );
+    final groups = FakeGroupsRepository(
+      groups: [
+        fakeGroup(id: 'g-none', startAt: taipei(11, 22)),
+        fakeGroup(
+          id: 'g-cancelled',
+          startAt: taipei(11, 22),
+          status: 'cancelled',
+          myStatus: 'member',
+        ),
+        fakeGroup(id: 'g-past', startAt: taipei(11, 14, 9), myStatus: 'member'),
+        fakeGroup(
+          id: 'g-wait',
+          startAt: taipei(11, 23),
+          myStatus: 'waitlisted',
+        ),
+      ],
+    );
+    final items = await load(makeContainer(bookings: bookings, groups: groups));
+    expect(items.map(describe), ['booking 4', 'group g-wait']);
+  });
+
+  test('查詢條件：訂位只查已確認、從台灣今天開始；揪團從現在開始、一次取 100 筆', () async {
+    final bookings = FakeBookingRepository();
+    final groups = FakeGroupsRepository();
+    await load(makeContainer(bookings: bookings, groups: groups));
+    expect(bookings.mineCalls.single.status, 'confirmed');
+    expect(bookings.mineCalls.single.fromDate, '2026-11-14');
+    expect(groups.listCalls.single.startFrom, nowUtc);
+    expect(groups.listCalls.single.pageSize, 100);
+  });
+
+  test('最多 5 筆，取時間最近的', () async {
+    final bookings = FakeBookingRepository(
+      mine: [
+        for (var day = 15; day <= 18; day++)
+          homeBooking(id: day, startAt: taipei(11, day)),
+      ],
+    );
+    final groups = FakeGroupsRepository(
+      groups: [
+        for (var day = 19; day <= 21; day++)
+          fakeGroup(id: 'g-$day', startAt: taipei(11, day), myStatus: 'member'),
+      ],
+    );
+    final items = await load(makeContainer(bookings: bookings, groups: groups));
+    expect(items.map(describe), [
+      'booking 15',
+      'booking 16',
+      'booking 17',
+      'booking 18',
+      'group g-19',
+    ]);
+  });
+
+  test('訂位顯示店家名稱；對不到店家時沒有名稱', () async {
+    final bookings = FakeBookingRepository(
+      mine: [
+        homeBooking(id: 1, startAt: taipei(11, 21), shopId: 's-b'),
+        homeBooking(id: 2, startAt: taipei(11, 22), shopId: 's-unknown'),
+      ],
+    );
+    final items = await load(makeContainer(bookings: bookings));
+    expect((items[0] as UpcomingBooking).shopName, '乙店');
+    expect((items[1] as UpcomingBooking).shopName, isNull);
+  });
+
+  test('店家人員查我的訂位回 403：不算錯誤，只列揪團', () async {
+    final bookings = FakeBookingRepository(
+      mine: [homeBooking(id: 1, startAt: taipei(11, 21))],
+    )..mineError = forbidden;
+    final groups = FakeGroupsRepository(
+      groups: [
+        fakeGroup(id: 'g-1', startAt: taipei(11, 22), myStatus: 'member'),
+      ],
+    );
+    final items = await load(
+      makeContainer(bookings: bookings, groups: groups, user: homeStaff),
+    );
+    expect(items.map(describe), ['group g-1']);
+  });
+
+  test('其他錯誤：進入錯誤狀態；重新載入成功後顯示行程', () async {
+    final bookings = FakeBookingRepository(
+      mine: [homeBooking(id: 1, startAt: taipei(11, 21))],
+    )..mineError = networkError;
+    final container = makeContainer(bookings: bookings);
+    container.listen(upcomingProvider, (_, _) {});
+    await expectLater(
+      container.read(upcomingProvider.future),
+      throwsA(isA<ApiException>()),
+    );
+    expect(container.read(upcomingProvider).hasError, isTrue);
+
+    bookings.mineError = null;
+    container.invalidate(upcomingProvider);
+    final items = await container.read(upcomingProvider.future);
+    expect(items.map(describe), ['booking 1']);
+  });
+
+  test('揪團 API 失敗也進入錯誤狀態', () async {
+    final groups = FakeGroupsRepository()..error = networkError;
+    final container = makeContainer(groups: groups);
+    container.listen(upcomingProvider, (_, _) {});
+    await expectLater(
+      container.read(upcomingProvider.future),
+      throwsA(isA<ApiException>()),
+    );
+  });
+
+  test('切換身分：重新載入', () async {
+    final bookings = FakeBookingRepository();
+    final container = makeContainer(bookings: bookings);
+    await load(container);
+    expect(bookings.mineCalls, hasLength(1));
+
+    container.read(testUserProvider.notifier).set(homeAdmin);
+    await container.read(upcomingProvider.future);
+    expect(bookings.mineCalls, hasLength(2));
+  });
+
+  group('每一列的文字', () {
+    test('訂位：「訂位・時間・人數」、店家與桌號、已確認', () {
+      final item = UpcomingBooking(
+        homeBooking(id: 1, startAt: taipei(11, 21, 19), partySize: 4),
+        shopName: '乙店',
+      );
+      expect(upcomingTitle(clock, item), '訂位・19:00・4 人');
+      expect(upcomingSubtitle(item), '乙店・桌號 T1、T2');
+      expect(upcomingStatus(item), UpcomingStatus.confirmed);
+      expect(upcomingStatus(item).label, '已確認');
+      expect(upcomingRoute(item), '/booking/mine');
+    });
+
+    test('訂位：沒有店家名稱或桌號時省略', () {
+      final item = UpcomingBooking(
+        homeBooking(id: 1, startAt: taipei(11, 21), tableCodes: const []),
+      );
+      expect(upcomingSubtitle(item), '');
+    });
+
+    test('揪團：「揪團・名稱」、已報名人數', () {
+      final item = UpcomingGroup(
+        fakeGroup(
+          title: '阿瓦隆之夜',
+          startAt: taipei(11, 22),
+          capacity: 7,
+          memberCount: 5,
+          myStatus: 'member',
+        ),
+      );
+      expect(upcomingTitle(clock, item), '揪團・阿瓦隆之夜');
+      expect(upcomingSubtitle(item), '已報名 5 / 7 人');
+      expect(upcomingRoute(item), '/groups');
+    });
+
+    test('揪團狀態：有名額是招募中、額滿是已額滿、我是候補是候補中', () {
+      UpcomingStatus status({required int members, String my = 'member'}) =>
+          upcomingStatus(
+            UpcomingGroup(
+              fakeGroup(
+                startAt: taipei(11, 22),
+                capacity: 4,
+                memberCount: members,
+                myStatus: my,
+              ),
+            ),
+          );
+      expect(status(members: 3).label, '招募中');
+      expect(status(members: 4).label, '已額滿');
+      expect(status(members: 4, my: 'waitlisted').label, '候補中');
+    });
+
+    test('日期徽章：台灣時間的月與日', () {
+      final item = UpcomingGroup(
+        // 台灣 11/22 00:30＝UTC 11/21 16:30
+        fakeGroup(startAt: taipei(11, 22, 0, 30), myStatus: 'member'),
+      );
+      expect(upcomingMonthLabel(clock, item), '11月');
+      expect(upcomingDayLabel(clock, item), '22');
+    });
+  });
+}

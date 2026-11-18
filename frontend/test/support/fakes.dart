@@ -171,6 +171,11 @@ class FakeBookingRepository implements BookingRepository {
   List<Booking> board;
   int shopCallCount = 0;
 
+  /// 首頁測試用：我的訂位丟出的錯誤、等待完成才回應的開關、送出的查詢條件。
+  Object? mineError;
+  Completer<void>? mineGate;
+  final mineCalls = <({String? status, String? fromDate, String? toDate})>[];
+
   /// 正式頁面測試用：有值時對應的 API 拋出這個錯誤。
   Object? quoteError;
   Object? createError;
@@ -272,7 +277,12 @@ class FakeBookingRepository implements BookingRepository {
     String? status,
     String? fromDate,
     String? toDate,
-  }) async => BookingPage(items: mine, total: mine.length);
+  }) async {
+    mineCalls.add((status: status, fromDate: fromDate, toDate: toDate));
+    if (mineGate case final gate?) await gate.future;
+    if (mineError != null) throw mineError!;
+    return BookingPage(items: mine, total: mine.length);
+  }
 
   @override
   Future<BookingPage> listForShop({
