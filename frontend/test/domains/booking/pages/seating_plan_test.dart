@@ -2,6 +2,7 @@
 // 查詢與狀態已由 booking_state_test 涵蓋，這裡確認畫面、顏色分類、權限與 RWD。
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:tabletop_hub/app/theme/app_spacing.dart';
 import 'package:tabletop_hub/core/api/api_exception.dart';
 import 'package:tabletop_hub/domains/booking/data/booking.dart';
 import 'package:tabletop_hub/domains/booking/pages/widgets/seating_plan.dart';
@@ -130,9 +131,13 @@ void main() {
       expect(find.byKey(const Key('seat-table-2')), findsOneWidget);
       expect(toneOf(tester, 1), SeatTone.available);
       expect(toneOf(tester, 2), SeatTone.occupied);
-      final a = tester.getTopLeft(find.byKey(const Key('seat-table-1')));
-      final b = tester.getTopLeft(find.byKey(const Key('seat-table-2')));
-      expect(b.dx - a.dx, 120);
+      // 座位圖依可用寬度等比例放大：位置與大小用同一個比例
+      final a = tester.getRect(find.byKey(const Key('seat-table-1')));
+      final b = tester.getRect(find.byKey(const Key('seat-table-2')));
+      final scale = (b.left - a.left) / 120;
+      expect(scale, greaterThan(1));
+      expect(a.width, closeTo((80 - AppSizes.seatGap * 2) * scale, 0.01));
+      expect(a.top, closeTo(b.top, 0.01));
 
       final legend = find.byKey(const Key('seating-legend'));
       expect(find.descendant(of: legend, matching: find.text('空桌')), findsOne);
