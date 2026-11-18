@@ -298,4 +298,90 @@ void main() {
       'requests': '揪團：週末輕策略',
     });
   });
+
+  testWidgets('開團主看到「填入戰績」', (tester) async {
+    await pumpGroupsWidget(
+      tester,
+      const GroupDetailPage(groupId: 'g-1'),
+      repo: repoWith(myStatus: 'member'),
+      userId: 'u-org',
+    );
+    expect(find.text('填入戰績'), findsOneWidget);
+  });
+
+  testWidgets('成員看到「填入戰績」', (tester) async {
+    await pumpGroupsWidget(
+      tester,
+      const GroupDetailPage(groupId: 'g-1'),
+      repo: repoWith(myStatus: 'member'),
+    );
+    expect(find.text('填入戰績'), findsOneWidget);
+    expect(find.text('退出'), findsOneWidget);
+  });
+
+  testWidgets('候補看不到「填入戰績」', (tester) async {
+    await pumpGroupsWidget(
+      tester,
+      const GroupDetailPage(groupId: 'g-1'),
+      repo: repoWith(myStatus: 'waitlisted'),
+    );
+    expect(find.text('填入戰績'), findsNothing);
+  });
+
+  testWidgets('已結束：成員只看到「填入戰績」', (tester) async {
+    await pumpGroupsWidget(
+      tester,
+      const GroupDetailPage(groupId: 'g-1'),
+      repo: repoWith(status: 'ended', myStatus: 'member'),
+    );
+    expect(find.text('填入戰績'), findsOneWidget);
+    expect(find.text('退出'), findsNothing);
+  });
+
+  testWidgets('按「填入戰績」：跳到帶好揪團資料的戰績頁', (tester) async {
+    Uri? opened;
+    setScreenSize(tester, const Size(400, 900));
+    final router = GoRouter(
+      routes: [
+        GoRoute(
+          path: '/',
+          builder: (context, state) => const GroupDetailPage(groupId: 'g-1'),
+        ),
+        GoRoute(
+          path: '/matches',
+          builder: (context, state) {
+            opened = state.uri;
+            return const Text('戰績頁');
+          },
+        ),
+      ],
+    );
+    addTearDown(router.dispose);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          groupsRepositoryProvider.overrideWithValue(
+            repoWith(myStatus: 'member'),
+          ),
+          groupClockProvider.overrideWithValue(FixedOffsetClock(nowUtc)),
+          currentUserIdProvider.overrideWithValue('u-player'),
+        ],
+        child: MaterialApp.router(
+          theme: buildAppTheme(const FakeAppFonts()),
+          routerConfig: router,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('填入戰績'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('戰績頁'), findsOneWidget);
+    expect(opened!.queryParameters, {
+      'date': '2026-11-14',
+      'shop_id': 's-shop',
+      'group_id': 'g-1',
+    });
+  });
 }

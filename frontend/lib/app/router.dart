@@ -9,12 +9,12 @@ import '../domains/booking/pages/shop_board_page.dart';
 import '../domains/games_advisor/pages/games_advisor_page.dart';
 import '../domains/groups/pages/groups_page.dart';
 import '../domains/health/pages/health_page.dart';
+import '../domains/matches/pages/match_detail_page.dart';
+import '../domains/matches/pages/matches_page.dart';
 import '../domains/rules_qa/pages/rules_lesson_page.dart';
 import '../domains/rules_qa/pages/rules_lessons_page.dart';
 import '../prototypes/booking/booking_list_proto_page.dart';
 import '../prototypes/booking/booking_proto_page.dart';
-import '../prototypes/matches/match_detail_proto_page.dart';
-import '../prototypes/matches/matches_proto_page.dart';
 import '../prototypes/rules_ingest/rules_ingest_proto_page.dart';
 import 'home/pages/home_page.dart';
 import 'shell.dart';
@@ -40,6 +40,18 @@ GoRouter createRouter(AppConfig config) => GoRouter(
         GoRoute(
           path: '/games-advisor',
           builder: (context, state) => const GamesAdvisorPage(),
+        ),
+        GoRoute(
+          path: '/matches',
+          builder: (context, state) =>
+              MatchesPage.fromQuery(state.uri.queryParameters),
+          routes: [
+            GoRoute(
+              path: ':id',
+              builder: (context, state) =>
+                  MatchDetailPage(matchId: state.pathParameters['id']!),
+            ),
+          ],
         ),
         GoRoute(
           path: '/booking',
@@ -87,15 +99,6 @@ GoRouter createRouter(AppConfig config) => GoRouter(
           GoRoute(
             path: '/proto/booking/list',
             builder: (context, state) => const BookingListProtoPage(),
-          ),
-          GoRoute(
-            path: '/proto/matches',
-            builder: (context, state) => const MatchesProtoPage(),
-          ),
-          GoRoute(
-            path: '/proto/matches/:id',
-            builder: (context, state) =>
-                MatchDetailProtoPage(matchId: state.pathParameters['id']!),
           ),
         ],
       ],

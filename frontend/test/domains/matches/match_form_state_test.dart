@@ -128,4 +128,27 @@ void main() {
     final shops = await container.read(matchShopsProvider.future);
     expect(shops.map((Shop s) => s.id), [fakeShopA.id, fakeShopB.id]);
   });
+
+  test('從揪團開局：setGroupId 後送出帶 group_id', () async {
+    final repo = FakeMatchesRepository();
+    final container = makeContainer(repo);
+    final form = open(container)
+      ..setGameId(1)
+      ..setPlayedOn(DateTime(2026, 11, 21))
+      ..setGroupId('g-1');
+    await form.submit();
+    expect(repo.createCalls.single.groupId, 'g-1');
+    expect(repo.createCalls.single.toJson()['group_id'], 'g-1');
+  });
+
+  test('沒有設定揪團：不帶 group_id', () async {
+    final repo = FakeMatchesRepository();
+    final container = makeContainer(repo);
+    final form = open(container)
+      ..setGameId(1)
+      ..setPlayedOn(DateTime(2026, 11, 21));
+    await form.submit();
+    expect(repo.createCalls.single.groupId, isNull);
+    expect(repo.createCalls.single.toJson().containsKey('group_id'), isFalse);
+  });
 }

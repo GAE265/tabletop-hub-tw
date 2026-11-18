@@ -846,6 +846,9 @@ class FakeMatchesRepository implements MatchesRepository {
   /// get／list 丟出的錯誤。
   Object? error;
 
+  /// 正式頁面測試用：「最近的局」回傳的清單；null 時回傳 [match] 一筆。
+  List<GameMatch>? listItems;
+
   /// 所有寫入操作丟出的錯誤。
   Object? actionError;
 
@@ -874,7 +877,8 @@ class FakeMatchesRepository implements MatchesRepository {
     int pageSize = 20,
   }) async {
     if (error != null) throw error!;
-    return MatchPage(items: [match], total: 1);
+    final items = listItems ?? [match];
+    return MatchPage(items: items, total: items.length);
   }
 
   @override

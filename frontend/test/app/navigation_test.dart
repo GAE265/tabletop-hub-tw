@@ -16,6 +16,7 @@ const navKeys = [
   'shell-nav-advisor',
   'shell-nav-rules',
   'shell-nav-booking',
+  'shell-nav-matches',
 ];
 
 /// 以框架包住只顯示路徑的假頁面，從 [location] 開始。
@@ -38,6 +39,8 @@ Future<GoRouter> pumpShell(
         routes: [
           for (final path in [
             '/',
+            '/matches',
+            '/matches/m-1',
             '/groups',
             '/games-advisor',
             '/rules',
@@ -89,6 +92,7 @@ void main() {
       expect(selectedNavPath('/booking/mine'), '/booking');
       expect(selectedNavPath('/booking/board'), '/booking');
       expect(selectedNavPath('/rules/1'), '/rules');
+      expect(selectedNavPath('/matches/m-1'), '/matches');
     });
 
     test('不屬於任何項目：沒有選取', () {
@@ -97,13 +101,14 @@ void main() {
       expect(selectedNavPath('/bookings'), isNull);
     });
 
-    test('項目依序為首頁、揪團、推薦、規則、訂位', () {
+    test('項目依序為首頁、揪團、推薦、規則、訂位、戰績', () {
       expect(navItems.map((item) => item.label), [
         '首頁',
         '揪團',
         '推薦',
         '規則',
         '訂位',
+        '戰績',
       ]);
       expect(navItems.map((item) => item.path), [
         '/',
@@ -111,11 +116,12 @@ void main() {
         '/games-advisor',
         '/rules',
         '/booking',
+        '/matches',
       ]);
     });
   });
 
-  testWidgets('手機：導覽列在畫面底部，五個項目都有圖示與文字', (tester) async {
+  testWidgets('手機：導覽列在畫面底部，六個項目都有圖示與文字', (tester) async {
     await pumpShell(tester, size: const Size(400, 900));
     for (final key in navKeys) {
       final item = find.byKey(Key(key));
@@ -180,5 +186,11 @@ void main() {
         expect(find.byKey(Key(key)), findsOneWidget, reason: '$key $size');
       }
     }
+  });
+
+  testWidgets('在 /matches/m-1：「戰績」為選取狀態', (tester) async {
+    await pumpShell(tester, location: '/matches/m-1');
+    expect(isSelected(tester, 'shell-nav-matches'), isTrue);
+    expect(isSelected(tester, 'shell-nav-home'), isFalse);
   });
 }

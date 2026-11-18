@@ -21,7 +21,7 @@ class NavItem {
   final String keyName;
 }
 
-/// 依序為首頁、揪團、推薦、規則、訂位。
+/// 依序為首頁、揪團、推薦、規則、訂位、戰績。
 const navItems = [
   NavItem(
     path: '/',
@@ -57,6 +57,13 @@ const navItems = [
     icon: Icons.event_seat_outlined,
     selectedIcon: Icons.event_seat,
     keyName: 'shell-nav-booking',
+  ),
+  NavItem(
+    path: '/matches',
+    label: '戰績',
+    icon: Icons.emoji_events_outlined,
+    selectedIcon: Icons.emoji_events,
+    keyName: 'shell-nav-matches',
   ),
 ];
 
