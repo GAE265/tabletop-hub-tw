@@ -10,6 +10,7 @@ import 'package:tabletop_hub/core/dev/data/dev_users_repository.dart';
 import 'package:tabletop_hub/domains/booking/data/booking_repository.dart';
 import 'package:tabletop_hub/domains/groups/data/groups_repository.dart';
 import 'package:tabletop_hub/domains/games_advisor/data/advisor_repository.dart';
+import 'package:tabletop_hub/domains/matches/data/matches_repository.dart';
 import 'package:tabletop_hub/domains/health/data/health_repository.dart';
 import 'package:tabletop_hub/domains/health/data/health_status.dart';
 import 'package:tabletop_hub/domains/rules_qa/data/rules_qa_repository.dart';
@@ -35,6 +36,7 @@ Future<void> pumpApp(
         devUsersRepositoryProvider.overrideWithValue(FakeDevUsersRepository()),
         groupsRepositoryProvider.overrideWithValue(FakeGroupsRepository()),
         bookingRepositoryProvider.overrideWithValue(FakeBookingRepository()),
+        matchesRepositoryProvider.overrideWithValue(FakeMatchesRepository()),
         healthRepositoryProvider.overrideWithValue(
           FakeHealthRepository(
             result: const HealthStatus(status: 'ok', database: 'up'),
@@ -180,5 +182,31 @@ void main() {
     await tester.tap(find.byKey(const Key('shell-nav-rules')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('rules-lessons-page')), findsOneWidget);
+  });
+
+  testWidgets('/matches 是正式戰績頁，/matches/{id} 是一局', (tester) async {
+    await pumpApp(tester, showPrototypes: false);
+    goTo(tester, '/matches');
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('matches-page')), findsOneWidget);
+    goTo(tester, '/matches/m-1');
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('match-detail-page')), findsOneWidget);
+  });
+
+  testWidgets('正式頁面完成後移除 /proto/matches（SHOW_PROTOTYPES 開啟也找不到）', (
+    tester,
+  ) async {
+    await pumpApp(tester, showPrototypes: true);
+    goTo(tester, '/proto/matches');
+    await tester.pumpAndSettle();
+    expect(find.text('找不到頁面'), findsOneWidget);
+  });
+
+  testWidgets('畫面框架的「戰績」入口進到 /matches', (tester) async {
+    await pumpApp(tester, showPrototypes: false);
+    await tester.tap(find.byKey(const Key('shell-nav-matches')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('matches-page')), findsOneWidget);
   });
 }
