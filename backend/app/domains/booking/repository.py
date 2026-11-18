@@ -62,6 +62,11 @@ class BookingRepository(SessionRepository):
     def shop_exists(self, shop_id: uuid.UUID) -> bool:
         return self.session.get(BookingShop, shop_id) is not None
 
+    def get_shop(self, shop_id: uuid.UUID) -> ShopRef | None:
+        """依 id 讀一間店家的名稱（只讀，給其他 domain 使用）；不存在回 None。"""
+        row = self.session.get(BookingShop, shop_id)
+        return None if row is None else ShopRef(row.id, row.name)
+
     def list_shops(self) -> list[ShopRef]:
         rows = self.session.scalars(
             select(BookingShop).where(BookingShop.is_active).order_by(BookingShop.name)

@@ -14,6 +14,7 @@ from app.domains.booking.router import router as booking_router
 from app.domains.games_advisor.router import router as games_advisor_router
 from app.domains.groups.router import router as groups_router
 from app.domains.health.router import router as health_router
+from app.domains.matches.router import router as matches_router
 from app.domains.rules_ingest.router import router as rules_ingest_router
 from app.domains.rules_qa.router import router as rules_qa_router
 from app.integrations.embedding import EmbeddingConfig, get_embedding_provider
@@ -79,6 +80,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(games_advisor_router, prefix=API_PREFIX)
     app.include_router(rules_ingest_router, prefix=API_PREFIX)
     app.include_router(rules_qa_router, prefix=API_PREFIX)
+    app.include_router(matches_router, prefix=API_PREFIX)
 
     if settings.auth_mode == "dev":
         # app/dev 任何地方都不得 import（AGENTS.md 4.2），所以只在 dev 模式動態載入
