@@ -68,6 +68,14 @@ Future<FakeMatchesRepository> pumpMatches(
 
 Future<void> tapKey(WidgetTester tester, String key) async {
   final target = find.byKey(Key(key));
+  // 列表是延遲建立的：還沒建立的元件要先捲過去
+  if (target.evaluate().isEmpty) {
+    await tester.scrollUntilVisible(
+      target,
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+  }
   await tester.ensureVisible(target);
   await tester.pumpAndSettle();
   await tester.tap(target);

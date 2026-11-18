@@ -262,6 +262,12 @@ void main() {
       final call = repo.resultCalls.single;
       expect(call.input.winningFaction, 'rose');
       expect(call.input.factions, {1: 'rose', 2: 'blood_blade', 3: 'rose'});
+      // 結果表單在頁面下方，捲回最上面看這一局的資料
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('match-info')),
+        -300,
+        scrollable: find.byType(Scrollable).first,
+      );
       expect(inKey('match-info', find.text('結果：薔薇陣營獲勝')), findsOneWidget);
       expect(inKey('match-info', find.text('已結束')), findsOneWidget);
     });
