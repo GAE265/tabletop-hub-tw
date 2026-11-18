@@ -121,9 +121,10 @@ class _SeatingPlanViewState extends State<SeatingPlanView> {
 
   @override
   Widget build(BuildContext context) {
-    final plans = widget.plans;
+    // 樓層由高到低（2F、1F、B1）；沒選過時預設 1F，沒有 1F 就用最高的樓層
+    final plans = [...widget.plans]..sort((a, b) => b.floor.compareTo(a.floor));
     final plan = plans.firstWhere(
-      (p) => p.floor == _floor,
+      (p) => p.floor == (_floor ?? 1),
       orElse: () => plans.first,
     );
     final seats = groupSeats(plan.tables);
