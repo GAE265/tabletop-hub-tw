@@ -66,14 +66,17 @@ abstract final class AppSizes {
   /// 戰績「記錄回合」的回合編號欄位寬度。
   static const double turnNumberFieldWidth = 120;
 
-  /// 座位圖可視範圍的最大高度；桌子配置比這矮時用配置的高度，超過可以拖曳。
-  static const double seatingPlanHeight = 360;
+  /// 座位圖的最大高度：桌子配置依寬度放大，但不會超過這個高度。
+  static const double seatingPlanHeight = 420;
+
+  /// 座位圖相鄰桌子之間的空隙（每張桌四周各留這麼多，以座標的像素計）。
+  static const double seatGap = 3;
 
   /// 座位圖桌子的外框粗細。
   static const double seatTableBorder = 2;
 
   /// 座位圖圖例的色塊。
-  static const double legendSwatch = 14;
+  static const double legendSwatch = 16;
 }
 
 /// 暖色柔和懸浮陰影。

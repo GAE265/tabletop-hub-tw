@@ -75,20 +75,23 @@ String floorLabel(int floor) => floor < 0 ? 'B${-floor}' : '${floor}F';
 
 ({Color background, Color border, Color text}) _colorsFor(SeatTone tone) =>
     switch (tone) {
+      // 空桌：白底綠框，最醒目的是「可以坐」
       SeatTone.available => (
-        background: AppColors.sageTint,
+        background: AppColors.surface,
         border: AppColors.sage,
         text: AppColors.sage,
       ),
+      // 已訂：灰色實心，退到背景
       SeatTone.occupied => (
-        background: AppColors.neutralTint,
-        border: AppColors.inkMuted,
+        background: AppColors.border,
+        border: AppColors.border,
         text: AppColors.inkMuted,
       ),
+      // 你的訂位：主色實心
       SeatTone.mine => (
-        background: AppColors.primaryTint,
+        background: AppColors.primary,
         border: AppColors.primary,
-        text: AppColors.primaryText,
+        text: AppColors.surface,
       ),
     };
 
@@ -98,7 +101,11 @@ String _toneLabel(SeatTone tone) => switch (tone) {
   SeatTone.mine => '你的訂位',
 };
 
-/// 座位圖：樓層切換、圖例，以及可縮放、拖曳的桌子配置。點桌子會從下方滑出詳情。
+/// 依可用寬度放大座位圖的上限：桌子很少時不會被放得太誇張。
+const _maxFitScale = 2.0;
+
+/// 座位圖：樓層切換、圖例，以及依寬度等比例縮放、置中的桌子配置。
+/// 點桌子會從下方滑出詳情；可以再用手勢放大、拖曳。
 ///
 /// [staffView] 為 true 時是店員看板（所有訂位都是「已訂」，點桌子看訂位內容）；
 /// false 時是玩家（自己的桌另外標示，別人的訂位不顯示內容）。
@@ -128,85 +135,113 @@ class _SeatingPlanViewState extends State<SeatingPlanView> {
       orElse: () => plans.first,
     );
     final seats = groupSeats(plan.tables);
-    var width = 0.0;
-    var height = 0.0;
-    for (final s in seats) {
-      final t = s.table;
-      if (t.x + t.width > width) width = (t.x + t.width).toDouble();
-      if (t.y + t.height > height) height = (t.y + t.height).toDouble();
-    }
-    final canvasWidth = width + AppSpacing.medium * 2;
-    final canvasHeight = height + AppSpacing.medium * 2;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (plans.length > 1) ...[
-          SegmentedButton<int>(
-            showSelectedIcon: false,
-            segments: [
-              for (final p in plans)
-                ButtonSegment(
-                  value: p.floor,
-                  label: Text(
-                    floorLabel(p.floor),
-                    key: Key('seating-floor-${floorLabel(p.floor)}'),
-                  ),
-                ),
-            ],
-            selected: {plan.floor},
-            onSelectionChanged: (v) => setState(() => _floor = v.first),
+        Wrap(
+          spacing: AppSpacing.medium,
+          runSpacing: AppSpacing.small,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            if (plans.length > 1)
+              SegmentedButton<int>(
+                showSelectedIcon: false,
+                segments: [
+                  for (final p in plans)
+                    ButtonSegment(
+                      value: p.floor,
+                      label: Text(
+                        floorLabel(p.floor),
+                        key: Key('seating-floor-${floorLabel(p.floor)}'),
+                      ),
+                    ),
+                ],
+                selected: {plan.floor},
+                onSelectionChanged: (v) => setState(() => _floor = v.first),
+              ),
+            _Legend(showMine: !widget.staffView),
+          ],
+        ),
+        const SizedBox(height: AppSpacing.medium),
+        DecoratedBox(
+          // 外框：放在面板裡時底色相近，靠框線看出座位圖的範圍
+          position: DecorationPosition.foreground,
+          decoration: BoxDecoration(
+            border: Border.all(color: AppColors.border),
+            borderRadius: BorderRadius.circular(AppRadius.button),
           ),
-          const SizedBox(height: AppSpacing.small),
-        ],
-        _Legend(showMine: !widget.staffView),
-        const SizedBox(height: AppSpacing.small),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(AppRadius.button),
-          child: ColoredBox(
-            color: AppColors.backgroundAlt,
-            child: SizedBox(
-              width: double.infinity,
-              height: canvasHeight < AppSizes.seatingPlanHeight
-                  ? canvasHeight
-                  : AppSizes.seatingPlanHeight,
-              child: InteractiveViewer(
-                key: ValueKey(plan.floor),
-                constrained: false,
-                minScale: 0.25,
-                maxScale: 2,
-                boundaryMargin: const EdgeInsets.all(AppSpacing.xLarge),
-                child: SizedBox(
-                  width: canvasWidth,
-                  height: canvasHeight,
-                  child: Stack(
-                    children: [
-                      for (final s in seats)
-                        Positioned(
-                          left: s.table.x + AppSpacing.medium,
-                          top: s.table.y + AppSpacing.medium,
-                          child: SeatTable(
-                            key: Key('seat-table-${s.table.id}'),
-                            seat: s,
-                            tone: seatTone(s, staffView: widget.staffView),
-                            onTap: () => _showDetail(context, s),
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(AppRadius.button),
+            child: ColoredBox(
+              color: AppColors.backgroundAlt,
+              child: LayoutBuilder(
+                builder: (context, constraints) =>
+                    _canvas(context, seats, plan.floor, constraints.maxWidth),
               ),
             ),
           ),
         ),
         const SizedBox(height: AppSpacing.xSmall),
         Text(
-          '點桌子看詳情，可以縮放與拖曳',
+          '點桌子看詳情，雙指可以放大',
           style: Theme.of(
             context,
           ).textTheme.bodySmall!.copyWith(color: AppColors.inkMuted),
         ),
       ],
+    );
+  }
+
+  /// 依可用寬度與最大高度算出比例，讓整層桌子剛好放進畫面並置中。
+  Widget _canvas(
+    BuildContext context,
+    List<SeatGroup> seats,
+    int floor,
+    double availableWidth,
+  ) {
+    const pad = AppSpacing.medium;
+    var width = 1.0;
+    var height = 1.0;
+    for (final s in seats) {
+      final t = s.table;
+      if (t.x + t.width > width) width = (t.x + t.width).toDouble();
+      if (t.y + t.height > height) height = (t.y + t.height).toDouble();
+    }
+    final byWidth = (availableWidth - pad * 2) / width;
+    final byHeight = (AppSizes.seatingPlanHeight - pad * 2) / height;
+    final scale = [
+      byWidth,
+      byHeight,
+      _maxFitScale,
+    ].reduce((a, b) => a < b ? a : b);
+    final left = (availableWidth - width * scale) / 2;
+    const gap = AppSizes.seatGap;
+
+    return SizedBox(
+      width: availableWidth,
+      height: height * scale + pad * 2,
+      child: InteractiveViewer(
+        key: ValueKey(floor),
+        maxScale: 3,
+        child: Stack(
+          children: [
+            for (final s in seats)
+              Positioned(
+                left: left + (s.table.x + gap) * scale,
+                top: pad + (s.table.y + gap) * scale,
+                width: (s.table.width - gap * 2) * scale,
+                height: (s.table.height - gap * 2) * scale,
+                child: SeatTable(
+                  key: Key('seat-table-${s.table.id}'),
+                  seat: s,
+                  tone: seatTone(s, staffView: widget.staffView),
+                  onTap: () => _showDetail(context, s),
+                ),
+              ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -223,7 +258,7 @@ class _SeatingPlanViewState extends State<SeatingPlanView> {
   }
 }
 
-/// 座位圖上的一張桌子。
+/// 座位圖上的一張桌子：桌號與人數上限，字級固定，桌子太小時才縮小。
 class SeatTable extends StatelessWidget {
   const SeatTable({
     required this.seat,
@@ -240,35 +275,44 @@ class SeatTable extends StatelessWidget {
   Widget build(BuildContext context) {
     final t = seat.table;
     final colors = _colorsFor(tone);
+    final text = Theme.of(context).textTheme;
+    final shape = RoundedRectangleBorder(
+      side: BorderSide(color: colors.border, width: AppSizes.seatTableBorder),
+      borderRadius: BorderRadius.circular(AppRadius.seatTable),
+    );
     return Semantics(
       button: true,
       label: '${t.tableCode} 桌，${_toneLabel(tone)}',
       child: Material(
         color: colors.background,
-        shape: RoundedRectangleBorder(
-          side: BorderSide(
-            color: colors.border,
-            width: AppSizes.seatTableBorder,
-          ),
-          borderRadius: BorderRadius.circular(AppRadius.seatTable),
-        ),
+        shape: shape,
         child: InkWell(
           onTap: onTap,
-          customBorder: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(AppRadius.seatTable),
-          ),
-          child: SizedBox(
-            width: t.width.toDouble(),
-            height: t.height.toDouble(),
-            child: Padding(
-              padding: const EdgeInsets.all(AppSpacing.xSmall),
+          customBorder: shape,
+          child: Padding(
+            padding: const EdgeInsets.all(AppSpacing.xSmall),
+            child: Center(
               child: FittedBox(
-                child: Text(
-                  t.tableCode,
-                  style: Theme.of(context).textTheme.titleMedium!.copyWith(
-                    color: colors.text,
-                    fontWeight: FontWeight.w600,
-                  ),
+                fit: BoxFit.scaleDown,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      t.tableCode,
+                      style: text.titleMedium!.copyWith(
+                        color: colors.text,
+                        fontWeight: FontWeight.w700,
+                        height: 1.1,
+                      ),
+                    ),
+                    Text(
+                      '${t.maxCapacity} 人',
+                      style: text.labelSmall!.copyWith(
+                        color: colors.text,
+                        height: 1.1,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
