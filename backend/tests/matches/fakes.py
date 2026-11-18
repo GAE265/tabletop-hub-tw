@@ -3,7 +3,7 @@
 這個檔案同時寫下 service 對 repository 與共用表讀取方法的期待（正式實作要照這個介面寫）：
 
 repository（MatchesRepository）：
-    transaction()、add_match(**values)、lock_match(id)、update_match(id, values)、
+    transaction()、add_match(**values)、get_match(id)、lock_match(id)、update_match(id, values)、
     list_matches(...)、add_participant(...)、find_participant(...)、list_participants(id)、
     update_participant(id, values)、clear_confirmations(...)、delete_participant(id)、
     add_turn(...)、find_turn(...)、list_turns(id)、update_turn(...)、turns_using_seat(...)
@@ -158,6 +158,10 @@ class FakeMatchesRepository:
         )
         self.matches[match.id] = match
         return match.id
+
+    def get_match(self, match_id: uuid.UUID) -> MatchRecord | None:
+        """讀取用，不上鎖（正式實作的 lock_match 是 SELECT ... FOR UPDATE）。"""
+        return self.matches.get(match_id)
 
     def lock_match(self, match_id: uuid.UUID) -> MatchRecord | None:
         return self.matches.get(match_id)
