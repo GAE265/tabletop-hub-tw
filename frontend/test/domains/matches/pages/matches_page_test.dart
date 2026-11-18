@@ -101,6 +101,46 @@ void main() {
     });
   });
 
+  group('從揪團帶入', () {
+    testWidgets('遊戲、日期、桌遊店與店家都已填好；開局帶 group_id', (tester) async {
+      final repo = await pumpMatches(
+        tester,
+        '/matches?game_id=2&date=2026-11-21&shop_id=s-b&group_id=g-1',
+      );
+      expect(find.text('阿不思學院'), findsOneWidget);
+      expect(find.text('乙店'), findsOneWidget);
+      expect(find.text('日期：2026/11/21（六）'), findsOneWidget);
+      await tapKey(tester, 'match-create');
+
+      final input = repo.createCalls.single;
+      expect(input.gameId, 2);
+      expect(input.playedOn, DateTime(2026, 11, 21));
+      expect(input.locationType, 'shop');
+      expect(input.shopId, 's-b');
+      expect(input.groupId, 'g-1');
+      expect(find.byType(MatchDetailPage), findsOneWidget);
+    });
+
+    testWidgets('沒有遊戲：遊戲留空，其他照樣帶入', (tester) async {
+      final repo = await pumpMatches(
+        tester,
+        '/matches?date=2026-11-21&shop_id=s-b&group_id=g-1',
+      );
+      await tapKey(tester, 'match-create');
+      expect(find.text('請選擇遊戲'), findsOneWidget);
+      expect(repo.createCalls, isEmpty);
+      expect(find.text('乙店'), findsOneWidget);
+    });
+
+    testWidgets('直接打開戰績頁：不帶 group_id', (tester) async {
+      final repo = await pumpMatches(tester, '/matches');
+      await choose(tester, 'match-game', '阿瓦隆');
+      await tapKey(tester, 'match-create');
+      expect(repo.createCalls.single.groupId, isNull);
+      expect(repo.createCalls.single.locationType, 'home');
+    });
+  });
+
   group('最近的局', () {
     testWidgets('列出遊戲、日期、狀態、地點與人數；點一筆打開那一局', (tester) async {
       await pumpMatches(tester, '/matches');

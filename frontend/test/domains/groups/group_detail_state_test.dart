@@ -73,16 +73,17 @@ void main() {
       );
     });
 
-    test('已是成員或候補：退出', () async {
+    test('已是成員：退出、填入戰績；候補：只有退出', () async {
       expect(await actions(fakeGroup(startAt: start, myStatus: 'member')), [
         GroupAction.leave,
+        GroupAction.recordMatch,
       ]);
       expect(await actions(fakeGroup(startAt: start, myStatus: 'waitlisted')), [
         GroupAction.leave,
       ]);
     });
 
-    test('開團主：編輯、訂位、取消揪團', () async {
+    test('開團主：編輯、訂位、填入戰績、取消揪團', () async {
       expect(
         await actions(
           fakeGroup(
@@ -91,7 +92,12 @@ void main() {
             myStatus: 'member',
           ),
         ),
-        [GroupAction.edit, GroupAction.book, GroupAction.cancel],
+        [
+          GroupAction.edit,
+          GroupAction.book,
+          GroupAction.recordMatch,
+          GroupAction.cancel,
+        ],
       );
     });
 
@@ -102,6 +108,46 @@ void main() {
       );
       expect(
         await actions(fakeGroup(startAt: start, status: 'ended')),
+        isEmpty,
+      );
+    });
+
+    test('已結束：開團主與成員只有填入戰績，候補沒有按鈕', () async {
+      expect(
+        await actions(
+          fakeGroup(
+            startAt: start,
+            status: 'ended',
+            organizerId: 'u-player',
+            myStatus: 'member',
+          ),
+        ),
+        [GroupAction.recordMatch],
+      );
+      expect(
+        await actions(
+          fakeGroup(startAt: start, status: 'ended', myStatus: 'member'),
+        ),
+        [GroupAction.recordMatch],
+      );
+      expect(
+        await actions(
+          fakeGroup(startAt: start, status: 'ended', myStatus: 'waitlisted'),
+        ),
+        isEmpty,
+      );
+    });
+
+    test('已取消：開團主與成員都沒有按鈕', () async {
+      expect(
+        await actions(
+          fakeGroup(
+            startAt: start,
+            status: 'cancelled',
+            organizerId: 'u-player',
+            myStatus: 'member',
+          ),
+        ),
         isEmpty,
       );
     });
