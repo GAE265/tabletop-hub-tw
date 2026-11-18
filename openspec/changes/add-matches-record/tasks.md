@@ -6,7 +6,7 @@
 
 - [ ] 1.1 從匯入的 `games.json` 查出《血與刃的白薔薇》的 `bgg_id`，記在 `game_definitions.py` 的註解。驗證：`bgg_id` 在 `games` 表中唯一對到該遊戲。
 - [ ] 1.2 在群組告知三個表名 `matches`、`match_participants`、`match_turns`（4.4）。驗證：群組訊息已發出。
-- [x] 1.3 確認 `uv run alembic heads` 只有一個 head（`0007`），新 migration `0008` 接在它後面。驗證：指令輸出。
+- [x] 1.3 確認 `uv run alembic heads` 只有一個 head（`0009`），新 migration `0010` 接在它後面。驗證：指令輸出。
 
 ## 2. 後端測試案例與測試程式（先於功能，7.2）
 
@@ -19,7 +19,7 @@
 ## 3. 後端實作
 
 - [x] 3.1 新增共用表讀取方法（只讀不寫）：`GameRepository.get_game`、`BookingRepository.get_shop`（既有類別加方法）、新檔 `domains/auth/repository.py` 的 `AuthUserRepository.get_user`。驗證：2.3 的測試通過；MR 說明 @ 立倫、瑋鋐。
-- [x] 3.2 新增 `domains/matches/models.py`（含 Enum 中文註解、表與欄位 comment）與 migration `0008`。驗證：2.2 的測試通過。
+- [x] 3.2 新增 `domains/matches/models.py`（含 Enum 中文註解、表與欄位 comment）與 migration `0010`。驗證：2.2 的測試通過。
 - [x] 3.3 新增 `game_definitions.py`（白薔薇的 `game_data` 模型、陣營 Enum）。驗證：`game_data` 缺欄位、負數、多餘欄位、型別錯誤、`played_seat_numbers` 為空／重複的測試通過。
 - [x] 3.4 新增 `repository.py`、`schemas.py`、`service.py`（開局、加入、移除、記錄回合、覆蓋、記錄結果、確認、查詢與人數統計）。驗證：2.4 的 service 單元測試通過。
 - [x] 3.5 新增 `router.py`，在 `main.py` 掛載（立倫的共用區；`tests/conftest.py` 的 TRUNCATE 用 CASCADE，不用改）。驗證：2.5 的 API 測試通過，`/docs` 看得到所有端點與錯誤格式。

@@ -32,7 +32,7 @@
 ## Impact
 
 - **受影響 domain**：`matches`（主責新善，協助永傑、立倫）。
-- **相依**：讀取 `games.result_type`，已合併進 `dev`（migration `0004`）。本分支已包含它、groups 的 `0003` 與 booking 的 `0005`，migration 為 `0008`，接在 dev 最新的 `0007` 後面。
+- **相依**：讀取 `games.result_type`，已合併進 `dev`（migration `0004`）。本分支已包含它、groups 的 `0003` 與 booking 的 `0005`，migration 為 `0010`，接在 dev 最新的 `0009` 後面。
 - **共用資料表**（第 3 節），只讀取、不改結構：`games`（立倫）、`booking_shops`（瑋鋐）、`auth_users`（立倫）。目前這三張表沒有可供其他 domain 使用的 repository 讀取方法，由本 change 代為新增「讀取」方法，不加寫入（design.md D8），MR @ 立倫、瑋鋐。
 - **其他 domain**：`groups` 的揪團（`group_id` 選填，外鍵 `groups.id`、`ondelete=SET NULL`）。透過 `groups` 的 service 確認揪團存在，不直接用其 repository。
 - **共用區改動**（第 2 節規則 3，MR 要 @ 擁有者）：`backend/app/main.py` 掛載 router（立倫）；`frontend/lib/app/router.dart` 加 `/proto/matches` 路由（永傑）。

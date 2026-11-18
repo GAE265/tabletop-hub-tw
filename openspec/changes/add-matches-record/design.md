@@ -3,7 +3,7 @@
 ## Context
 
 - 目前沒有 `matches` domain。`groups`（已有 models／repository／service／router）是最近的分層範例。
-- 共用表 `games` 的主鍵是 `bigint`（4.4 例外），`booking_shops`、`auth_users` 是 UUID。`games.result_type`（`faction`／`score`／`cooperative`，可為空）已合併進 `dev`（migration `0004`）。`groups` 資料表（`0003`）與 booking 的資料表（`0005_booking_tables`）也已在 `dev`。**本分支已包含它們（dev 之後又新增了 `0006_games_manual`、`0007_group_games`），migration 為 `0008`，接在 `0007` 後面**，`alembic heads` 只有一個 head。
+- 共用表 `games` 的主鍵是 `bigint`（4.4 例外），`booking_shops`、`auth_users` 是 UUID。`games.result_type`（`faction`／`score`／`cooperative`，可為空）已合併進 `dev`（migration `0004`）。`groups` 資料表（`0003`）與 booking 的資料表（`0005_booking_tables`）也已在 `dev`。**本分支已包含它們（dev 之後又新增了 `0006_games_manual`、`0007_group_games`、`0008_rules_qa_tables`、`0009_groups_table_comments`），migration 為 `0010`，接在 `0009` 後面**，`alembic heads` 只有一個 head。
 - `games.bgg_id` 有 unique 限制，`english_name` 沒有；`GameRepository.delete_games_except` 遇到外鍵會拋 `GameInUseError`，新增 `matches.game_id` 外鍵後同步刪除遊戲會被擋下（符合預期）。
 - 開發期間不需要登入：`AUTH_MODE=dev` 時 `get_current_user` 沒帶標頭就是預設測試玩家，所以「未登入 401」不在本 change 的情境表（jwt 模式還沒做）。
 - AGENTS.md 4.4（1.10 版）要求每張表、每個欄位都用 `comment=` 寫中文說明，Enum 每個值要有中文註解。
@@ -208,8 +208,8 @@
 
 ## Migration Plan
 
-1. 本分支已包含 `0003`（groups）、`0004`（games.result_type）、`0005`（booking），`0008` 的 `down_revision = "0007"`。
-2. 新增 migration `0008_matches_tables`（`down_revision = "0007"`）：建立三張表（含表與欄位 comment、CHECK、UNIQUE）；`downgrade` 依序刪除 `match_turns`、`match_participants`、`matches`。
+1. 本分支已包含 `0003`（groups）、`0004`（games.result_type）、`0005`（booking），`0010` 的 `down_revision = "0009"`。
+2. 新增 migration `0010_matches_tables`（`down_revision = "0009"`）：建立三張表（含表與欄位 comment、CHECK、UNIQUE）；`downgrade` 依序刪除 `match_turns`、`match_participants`、`matches`。
 3. 欄位 comment 在 migration 與 model 兩處一致；測試檢查非空且為中文。
 4. 一個 MR 只含一個 migration（4.4），由瑋鋐審核；建表前先在群組告知三個表名。
 5. 回滾：`alembic downgrade -1`，沒有資料搬移，風險低。
