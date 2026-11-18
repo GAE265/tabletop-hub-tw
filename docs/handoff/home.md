@@ -37,12 +37,16 @@
 | 沒有資料（行程區） | 空狀態，引導去「找人一起玩」或「訂個位子」，不要留白 |
 | 錯誤（行程區） | 錯誤訊息與重試，不影響入口卡片 |
 
-## 4. 資料來源（待確認）
+## 4. 資料來源（2026-11-18 確認，見 `openspec/changes/add-home-page/design.md`）
 
-「接下來的行程」要同時取得訂位與揪團資料。依 AGENTS.md 4.2，domain 之間只能呼叫對方的 `service`。
+「接下來的行程」只用現有 API，不修改後端；首頁的 state 直接讀 `booking`、`groups` 的 `data/` repository（唯讀）。
 
-- 需先確認現有 API 是否足夠：我的訂位（現有 `/booking/mine` 頁面用的資料）、我已加入的揪團。
-- 若不夠，先回報，不要自行修改後端。
+- 訂位：`GET /api/v1/bookings?status=confirmed&from=<台灣今天>`，在前端排序並過濾已經開始的；店家名稱用 `GET /api/v1/shops` 對應。店家人員呼叫會得到 403，首頁視為「沒有訂位」。
+- 揪團：`GET /api/v1/groups?start_from=<現在>&page_size=100`，用每筆的 `my_status`（`member`、`waitlisted`）在前端過濾。
+- 兩者合併後依開始時間排序，最多 5 筆。
+- 已知缺口（資料量變大後需要後端補強，由主責決定是否處理）：
+  - `groups`：沒有「我已加入」的篩選，即將開始的揪團超過 100 個時會漏掉。
+  - `booking`：我的訂位由新到舊排序、前端一次只取 50 筆；店家人員不能查自己的訂位。
 
 ## 5. 不放的內容
 
@@ -52,7 +56,7 @@
 
 ## 6. 待討論
 
-- 首頁的程式放哪裡（`frontend/lib/app/`、`frontend/lib/domains/home/`，或其他）？
+- ~~首頁的程式放哪裡~~：放在 `frontend/lib/app/home/`（`state/`、`pages/`），導覽列在 `frontend/lib/app/navigation.dart`（2026-11-18 決定）。
 - 顏色、字級、間距一律用 `app/theme/`，頁面不寫死數值。
 - 設計稿是示意：店家名稱 `[店家名稱]`、《阿瓦隆》、日期與人數都是示範資料，不是真實資料。
-- 底部／頂部導覽列完成後，刪除 `shell.dart` 的 `_TemporaryNav`。
+- ~~底部／頂部導覽列完成後，刪除 `shell.dart` 的 `_TemporaryNav`~~：已刪除（add-home-page）。健康檢查頁移到 `/health`，不放進導覽列。

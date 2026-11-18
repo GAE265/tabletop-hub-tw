@@ -19,18 +19,20 @@
 
 ## 3. 實作
 
-- [ ] 3.1 `app/home/state/upcoming_state.dart`，驗證：2.1 全部通過
-- [ ] 3.2 `app/navigation.dart`、修改 `app/shell.dart`（刪除 `_TemporaryNav`），驗證：2.3 全部通過
-- [ ] 3.3 `app/home/pages/home_page.dart`、`app/home/pages/widgets/home_widgets.dart`；若需要新的主題 token（例如入口卡片的圖示底色），加在 `app/theme/`，驗證：2.2 全部通過
-- [ ] 3.4 修改 `app/router.dart`（`/` → `HomePage`、`/health` → `HealthPage`），驗證：2.4 與既有 `router_test.dart` 全部通過
-- [ ] 3.5 grep 確認 `app/home/` 與 `navigation.dart` 沒有寫死的顏色、字級、間距，驗證：沒有結果
+- [x] 3.1 `app/home/state/upcoming_state.dart`，驗證：2.1 全部通過
+- [x] 3.2 `app/navigation.dart`、修改 `app/shell.dart`（刪除 `_TemporaryNav`），驗證：2.3 全部通過
+- [x] 3.3 `app/home/pages/home_page.dart`、`app/home/pages/widgets/home_widgets.dart`；若需要新的主題 token（例如入口卡片的圖示底色），加在 `app/theme/`，驗證：2.2 全部通過
+  - 註記：`AppSizes` 新增 `brandMark`、`entryIconBox`、`entryCardMinWidth`、`dateBadge`；顏色沿用既有的 `AppColors`。
+- [x] 3.4 修改 `app/router.dart`（`/` → `HomePage`、`/health` → `HealthPage`），驗證：2.4 與既有 `router_test.dart` 全部通過
+- [x] 3.5 grep 確認 `app/home/` 與 `navigation.dart` 沒有寫死的顏色、字級、間距，驗證：沒有結果
 
 ## 4. 自我檢查與 MR
 
-- [ ] 4.1 在 `frontend/` 跑 `flutter analyze`、`flutter test`（Flutter 3.41.4），驗證：全部通過
+- [x] 4.1 在 `frontend/` 跑 `flutter analyze`、`flutter test`（Flutter 3.41.4），驗證：全部通過
+  - 註記：analyze 沒有問題，338 個測試全部通過。
 - [ ] 4.2 本機手動走過：手機與桌機寬度、player／shop_staff／admin 三種身分、有行程與沒有行程、關掉後端看錯誤與重試，驗證：符合設計稿
 - [ ] 4.3 產出 MR 說明 `docs/mr_info/feature/home-page.md`（含情境表格與對應測試、修改既有測試的理由），驗證：檔案存在、未 commit
-- [ ] 4.4 更新 `docs/handoff/home.md` 第 4、6 節（資料來源與程式位置的結論），驗證：內容與 design.md 一致
+- [x] 4.4 更新 `docs/handoff/home.md` 第 4、6 節（資料來源與程式位置的結論），驗證：內容與 design.md 一致
 
 ## Workflow follow-up
 

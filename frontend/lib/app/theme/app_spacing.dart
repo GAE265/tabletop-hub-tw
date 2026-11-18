@@ -47,6 +47,18 @@ abstract final class AppSizes {
 
   /// 頭像（例如推薦 Agent 的圖示）。
   static const double avatar = 40;
+
+  /// 品牌標誌的方塊（導覽列與首頁頂部）。
+  static const double brandMark = 36;
+
+  /// 首頁入口卡片的圖示方塊。
+  static const double entryIconBox = 48;
+
+  /// 首頁入口卡片的最小寬度：放不下四張時改成兩欄。
+  static const double entryCardMinWidth = 220;
+
+  /// 首頁行程列的日期徽章。
+  static const double dateBadge = 52;
 }
 
 /// 暖色柔和懸浮陰影。

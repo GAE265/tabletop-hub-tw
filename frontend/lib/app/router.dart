@@ -14,6 +14,7 @@ import '../domains/rules_qa/pages/rules_lessons_page.dart';
 import '../prototypes/booking/booking_list_proto_page.dart';
 import '../prototypes/booking/booking_proto_page.dart';
 import '../prototypes/rules_ingest/rules_ingest_proto_page.dart';
+import 'home/pages/home_page.dart';
 import 'shell.dart';
 import 'theme/theme_preview_page.dart';
 
@@ -21,9 +22,15 @@ import 'theme/theme_preview_page.dart';
 GoRouter createRouter(AppConfig config) => GoRouter(
   routes: [
     ShellRoute(
-      builder: (context, state, child) => AppShell(child: child),
+      builder: (context, state, child) =>
+          AppShell(location: state.uri.path, child: child),
       routes: [
-        GoRoute(path: '/', builder: (context, state) => const HealthPage()),
+        GoRoute(path: '/', builder: (context, state) => const HomePage()),
+        // 健康檢查只供開發使用，不放進導覽列
+        GoRoute(
+          path: '/health',
+          builder: (context, state) => const HealthPage(),
+        ),
         GoRoute(
           path: '/groups',
           builder: (context, state) => const GroupsPage(),
