@@ -48,7 +48,7 @@
 - [x] 3.5 `app/`：導覽列與手機頂部列放鈴鐺，`router.dart` 加上 `/groups/notifications`
 - [x] 3.6 更新 `docs/handoff/groups.md`
 - [x] 3.7 自我檢查：在 `frontend/` 跑 `flutter analyze`、`flutter test`
-- [ ] 3.8 更新 `docs/mr_info/<分支>.md`，加上前端的情境
+- [x] 3.8 更新 `docs/mr_info/<分支>.md`，加上前端的情境
 
 ## Workflow follow-up
 
