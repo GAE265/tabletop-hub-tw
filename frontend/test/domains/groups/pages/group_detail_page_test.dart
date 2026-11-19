@@ -438,9 +438,8 @@ void main() {
       expect(find.textContaining('通知所有成員'), findsOneWidget);
       await tester.tap(find.text('確定'));
       await tester.pumpAndSettle();
-      expect(repo.updateCalls, [
-        ('g-1', {'confirmed': true}),
-      ]);
+      expect(repo.updateCalls.single.$1, 'g-1');
+      expect(repo.updateCalls.single.$2, {'confirmed': true});
       expect(find.byKey(const Key('group-confirm')), findsNothing);
       expect(find.text('已成團'), findsOneWidget);
     });

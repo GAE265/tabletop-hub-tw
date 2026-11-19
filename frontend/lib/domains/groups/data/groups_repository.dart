@@ -5,6 +5,7 @@ import '../../../core/api/api_client.dart';
 import '../../../core/api/api_exception.dart';
 import 'group.dart';
 import 'group_input.dart';
+import 'group_notification.dart';
 
 /// 揪團 API。所有錯誤都轉成 [ApiException]。
 abstract interface class GroupsRepository {
@@ -22,7 +23,8 @@ abstract interface class GroupsRepository {
 
   Future<Group> create(GroupInput input);
 
-  /// `PATCH /api/v1/groups/{id}`；取消揪團是 `{"status": "cancelled"}`。
+  /// `PATCH /api/v1/groups/{id}`；取消揪團是 `{"status": "cancelled"}`，
+  /// 確定成團是 `{"confirmed": true}`。
   Future<Group> update(String id, Map<String, dynamic> changes);
 
   /// 報名；額滿時加入候補。
@@ -36,6 +38,15 @@ abstract interface class GroupsRepository {
 
   /// 全部遊戲（`GET /api/v1/games`，依名稱排序；超過一頁時自動補齊）。
   Future<List<GameRef>> listGames();
+
+  /// `GET /api/v1/group-notifications`：自己的通知，新的在前，附全部未讀數。
+  Future<GroupNotificationPage> listNotifications({
+    int page = 1,
+    int pageSize = 20,
+  });
+
+  /// `PATCH /api/v1/group-notifications/{id}`：標成已讀。
+  Future<GroupNotification> markNotificationRead(String id);
 }
 
 class HttpGroupsRepository implements GroupsRepository {
@@ -147,6 +158,29 @@ class HttpGroupsRepository implements GroupsRepository {
       final total = response.data!['total'] as int;
       if (items.isEmpty || games.length >= total) return games;
     }
+  });
+
+  static const _notifications = '/api/v1/group-notifications';
+
+  @override
+  Future<GroupNotificationPage> listNotifications({
+    int page = 1,
+    int pageSize = 20,
+  }) => _call(() async {
+    final response = await _dio.get<Map<String, dynamic>>(
+      _notifications,
+      queryParameters: {'page': page, 'page_size': pageSize},
+    );
+    return GroupNotificationPage.fromJson(response.data!);
+  });
+
+  @override
+  Future<GroupNotification> markNotificationRead(String id) => _call(() async {
+    final response = await _dio.patch<Map<String, dynamic>>(
+      '$_notifications/$id',
+      data: {'read': true},
+    );
+    return GroupNotification.fromJson(response.data!);
   });
 }
 

@@ -34,20 +34,20 @@
 
 ## 3. 前端（同一個分支與 MR，見 design.md D6）
 
-- [ ] 3.1 寫測試，先提交（此時失敗）：
+- [x] 3.1 寫測試，先提交（此時失敗）：
   - `test/domains/groups/group_notifications_state_test.dart`：列表、分頁、未讀數、標成已讀（成功與失敗）、60 秒更新
   - `test/domains/groups/pages/`：鈴鐺數字（0、3、99+、失敗）、通知頁的三種文字、點擊後已讀並跳頁、載入中、空、錯誤與重試；「確定成團」的顯示條件、對話框、成功與失敗；「已成團」標示
   - `test/support/fakes.dart`：`FakeGroupsRepository` 加上通知相關方法
-- [ ] 3.2 `data/`：`GroupNotification` DTO，`Group.confirmedAt`，repository 新增 `listNotifications`、`markNotificationRead`、`confirmGroup`
-- [ ] 3.3 `state/`：`groupNotificationsProvider`（輪詢時間間隔可注入）；`group_detail_state` 新增 `confirm()` 與顯示條件
-- [ ] 3.4 `pages/`：
+- [x] 3.2 `data/`：`GroupNotification` DTO，`Group.confirmedAt`，repository 新增 `listNotifications`、`markNotificationRead`、`confirmGroup`
+- [x] 3.3 `state/`：`groupNotificationsProvider`（輪詢時間間隔可注入）；`group_detail_state` 新增 `confirm()` 與顯示條件
+- [x] 3.4 `pages/`：
   - `widgets/notification_bell.dart`
   - `group_notifications_page.dart`
   - 詳細頁的「確定成團」與「已成團」
   - 卡片的「已成團」
-- [ ] 3.5 `app/`：導覽列與手機頂部列放鈴鐺，`router.dart` 加上 `/groups/notifications`
-- [ ] 3.6 更新 `docs/handoff/groups.md`
-- [ ] 3.7 自我檢查：在 `frontend/` 跑 `flutter analyze`、`flutter test`
+- [x] 3.5 `app/`：導覽列與手機頂部列放鈴鐺，`router.dart` 加上 `/groups/notifications`
+- [x] 3.6 更新 `docs/handoff/groups.md`
+- [x] 3.7 自我檢查：在 `frontend/` 跑 `flutter analyze`、`flutter test`
 - [ ] 3.8 更新 `docs/mr_info/<分支>.md`，加上前端的情境
 
 ## Workflow follow-up

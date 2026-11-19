@@ -6,6 +6,7 @@ import 'navigation.dart';
 
 /// 畫面框架：開發環境在最上方掛身分切換器（正式環境切換器自己不顯示），
 /// 主要導覽列在手機時放在底部，平板與桌機時放在頂部。
+/// 通知鈴鐺在平板與桌機放在頂部導覽列，手機放在頂部的窄列。
 class AppShell extends StatelessWidget {
   const AppShell({required this.location, required this.child, super.key});
 
@@ -21,6 +22,7 @@ class AppShell extends StatelessWidget {
         children: [
           const DevUserSwitcher(),
           if (!mobile) TopNavigation(location: location),
+          if (mobile) const MobileTopBar(),
           Expanded(child: child),
           if (mobile) BottomNavigation(location: location),
         ],

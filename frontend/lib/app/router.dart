@@ -7,6 +7,7 @@ import '../domains/booking/pages/new_booking_page.dart';
 import '../domains/booking/pages/my_bookings_page.dart';
 import '../domains/booking/pages/shop_board_page.dart';
 import '../domains/games_advisor/pages/games_advisor_page.dart';
+import '../domains/groups/pages/group_notifications_page.dart';
 import '../domains/groups/pages/groups_page.dart';
 import '../domains/health/pages/health_page.dart';
 import '../domains/matches/pages/match_detail_page.dart';
@@ -36,6 +37,12 @@ GoRouter createRouter(AppConfig config) => GoRouter(
         GoRoute(
           path: '/groups',
           builder: (context, state) => const GroupsPage(),
+          routes: [
+            GoRoute(
+              path: 'notifications',
+              builder: (context, state) => const GroupNotificationsPage(),
+            ),
+          ],
         ),
         GoRoute(
           path: '/games-advisor',

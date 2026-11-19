@@ -127,7 +127,7 @@ void main() {
             id: 'n-3',
             type: 'waitlist_promoted',
             groupTitle: '阿瓦隆夜',
-            groupStartAt: taipei(11, 21, 19),
+            groupStartAt: taipei(11, 22, 20),
             createdAt: taipei(11, 14, 11, 5),
           ),
           fakeNotification(
@@ -147,7 +147,7 @@ void main() {
         tester.getTopLeft(find.text(texts[0])).dy,
         lessThan(tester.getTopLeft(find.text(texts[1])).dy),
       );
-      expect(find.textContaining('揪團時間 2026/11/21（六） 19:00'), findsOneWidget);
+      expect(find.textContaining('揪團時間 2026/11/22（日） 20:00'), findsOneWidget);
       expect(find.textContaining('通知時間 11/14 11:05'), findsOneWidget);
     });
 
