@@ -13,7 +13,7 @@
 
 - 正本：立倫的本機資料庫（容器 `games_advisor-tables-postgres-1` 的 `tabletop-hub-tw`）。
 - 匯出日期：2026-11-19。匯出時正本的資料表版本是 0009；已在版本 0012 的空資料庫驗證，seed 寫入後 7 張表和正本逐表比對相同。
-- `games-export.json` 是 `export-games` 指令的輸出，格式和 `sync-games` 讀的匯出檔相同（[ADR 0003](../../../../docs/adr/0003-shared-games-table.md)）。
+- `games-export.json` 是 `export-games` 指令的輸出，格式和 `sync-games` 讀的匯出檔相同（[ADR 0003](../../../../docs/adr/0003-shared-games-table.md)）。PR #66 曾把同一份檔案放在 `backend/app/dev/games-export.json`，已收進這個資料夾，舊位置不再使用。
 - `games_advisor_data.sql` 是 `pg_dump --data-only --column-inserts`（16.15）的輸出，去掉連線設定與 psql 專用的指令，只留 INSERT。
 - 向量用 text-embedding-3-large 產生，1536 維。`GAMES_ADVISOR_EMBEDDING_DIM` 不是 1536 的資料庫寫不進去。
 

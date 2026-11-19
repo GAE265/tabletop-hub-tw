@@ -8,6 +8,8 @@ status: accepted
 
 所以共用桌遊的匯出檔（`games-export.json`）與推薦 Agent 4 張表的資料（`games_advisor_data.sql`）放在 `backend/app/dev/seed_data/`，開發用 seed 多一個桌遊步驟把它們寫進資料庫。跑一次 seed，下面 7 張表就和立倫的本機資料庫相同：`games`（16 款）、`game_genres`、`genres`（migration 寫入）、`games_advisor_tags`、`games_advisor_game_tags`、`games_advisor_review_summaries`、`games_advisor_review_excerpts`。
 
+同一天稍早，PR #66 已先把同一份匯出檔放進 `backend/app/dev/games-export.json`，並在 README 加上手動執行 `sync-games` 的步驟。這個決定把它收進 `seed_data/`、改由 seed 讀取：`backend/app/dev/games-export.json` 刪除（兩份內容相同），README 不再需要 `sync-games` 那一步；PR #66 加的 `seed_shop` 步驟保留。
+
 這推翻了 [ADR 0003](0003-shared-games-table.md) 的這幾句，其餘照舊：
 
 - 「`games.json` 與匯出檔都不進 repo」「GAE265G5 的匯出檔是唯一的備份」「GAE265G5 只放最新的一份匯出檔，每次覆蓋」：匯出檔改放 repo，repo 就是備份，GAE265G5 不再放匯出檔。`games.json`（Codex 整理的臨時資料）仍然不進 repo。
