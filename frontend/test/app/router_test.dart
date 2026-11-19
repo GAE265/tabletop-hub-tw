@@ -131,6 +131,19 @@ void main() {
     expect(find.byKey(const Key('groups-page')), findsOneWidget);
   });
 
+  testWidgets('/groups/{id} 是揪團詳細頁，/groups/notifications 是通知列表', (
+    tester,
+  ) async {
+    await pumpApp(tester, showPrototypes: false);
+    goTo(tester, '/groups/g-1');
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('group-detail-page')), findsOneWidget);
+    goTo(tester, '/groups/notifications');
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('group-notifications-page')), findsOneWidget);
+    expect(find.byKey(const Key('group-detail-page')), findsNothing);
+  });
+
   testWidgets('正式頁面完成後移除 /proto/groups（SHOW_PROTOTYPES 開啟也找不到）', (
     tester,
   ) async {

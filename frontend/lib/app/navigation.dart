@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../domains/groups/pages/widgets/notification_bell.dart';
 import 'theme/app_colors.dart';
 import 'theme/app_spacing.dart';
 
@@ -164,10 +165,39 @@ class TopNavigation extends StatelessWidget {
                         ),
                     ],
                   ),
-                  const LoginButton(key: Key('shell-login')),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      NotificationBell(key: Key('shell-notification-bell')),
+                      SizedBox(width: AppSpacing.small),
+                      LoginButton(key: Key('shell-login')),
+                    ],
+                  ),
                 ],
               ),
             ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 手機：畫面頂部只放通知鈴鐺的窄列（底部導覽已經有六個項目）。
+class MobileTopBar extends StatelessWidget {
+  const MobileTopBar({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const Material(
+      color: AppColors.surface,
+      child: SafeArea(
+        bottom: false,
+        child: Align(
+          alignment: Alignment.centerRight,
+          child: Padding(
+            padding: EdgeInsets.symmetric(horizontal: AppSpacing.small),
+            child: NotificationBell(key: Key('shell-notification-bell')),
           ),
         ),
       ),

@@ -30,6 +30,9 @@ abstract class Group with _$Group {
     required int waitlistCount,
     required int remainingSlots,
     String? myStatus,
+
+    /// 開團主確定成團的時間；null 代表還沒確定成團。
+    DateTime? confirmedAt,
     required DateTime createdAt,
   }) = _Group;
 

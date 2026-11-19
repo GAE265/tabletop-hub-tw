@@ -9,7 +9,19 @@ import 'groups_calendar_state.dart';
 /// 揪團詳細畫面上可以出現的操作按鈕。
 /// 揪團詳細頁的操作；`book` 是開團主替揪團訂位（跳到帶好揪團資料的訂位頁），
 /// `recordMatch` 是開團主與成員填入戰績（跳到帶好揪團資料的戰績頁）。
-enum GroupAction { join, joinWaitlist, leave, edit, book, recordMatch, cancel }
+/// `confirm` 是開團主確定成團；`confirmed` 是已成團時停用的「已成團」按鈕，
+/// 所有人都看得到（add-groups-notifications）。
+enum GroupAction {
+  join,
+  joinWaitlist,
+  leave,
+  edit,
+  book,
+  recordMatch,
+  confirm,
+  confirmed,
+  cancel,
+}
 
 class GroupDetailState {
   const GroupDetailState({
@@ -56,21 +68,28 @@ class GroupDetailState {
     if (g.status != 'open') {
       return canRecord ? const [GroupAction.recordMatch] : const [];
     }
+    final confirmed = g.confirmedAt != null;
     if (isOrganizer) {
-      return const [
+      return [
         GroupAction.edit,
         GroupAction.book,
         GroupAction.recordMatch,
+        // 成團後不能取消成團，按鈕變成停用的「已成團」
+        confirmed ? GroupAction.confirmed : GroupAction.confirm,
         GroupAction.cancel,
       ];
     }
+    final List<GroupAction> own;
     if (g.myStatus == 'member') {
-      return const [GroupAction.leave, GroupAction.recordMatch];
+      own = const [GroupAction.leave, GroupAction.recordMatch];
+    } else if (g.myStatus != null) {
+      own = const [GroupAction.leave];
+    } else {
+      own = g.remainingSlots > 0
+          ? const [GroupAction.join]
+          : const [GroupAction.joinWaitlist];
     }
-    if (g.myStatus != null) return const [GroupAction.leave];
-    return g.remainingSlots > 0
-        ? const [GroupAction.join]
-        : const [GroupAction.joinWaitlist];
+    return [...own, if (confirmed) GroupAction.confirmed];
   }
 }
 
@@ -126,6 +145,12 @@ class GroupDetailNotifier extends Notifier<GroupDetailState> {
     }
     await _repo.removeMember(groupId, userId);
     return '已退出揪團';
+  });
+
+  /// 開團主確定成團，後端會通知所有成員。畫面要先跳確認對話框。
+  Future<void> confirm() => _run(() async {
+    await _repo.update(groupId, {'confirmed': true});
+    return '已確定成團，已通知所有成員';
   });
 
   /// 開團主取消揪團。畫面要先跳確認對話框。

@@ -77,6 +77,12 @@ abstract final class AppSizes {
 
   /// 座位圖圖例的色塊。
   static const double legendSwatch = 16;
+
+  /// 通知列表中，未讀通知右側的圓點。
+  static const double unreadDot = 10;
+
+  /// 列表捲到距離底部這麼近時，載入下一頁。
+  static const double loadMoreThreshold = 200;
 }
 
 /// 暖色柔和懸浮陰影。

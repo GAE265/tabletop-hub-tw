@@ -23,6 +23,7 @@ import 'package:tabletop_hub/domains/games_advisor/data/advisor_message.dart';
 import 'package:tabletop_hub/domains/games_advisor/data/advisor_repository.dart';
 import 'package:tabletop_hub/domains/groups/data/group.dart';
 import 'package:tabletop_hub/domains/groups/data/group_input.dart';
+import 'package:tabletop_hub/domains/groups/data/group_notification.dart';
 import 'package:tabletop_hub/domains/groups/data/groups_repository.dart';
 import 'package:tabletop_hub/domains/groups/state/group_clock.dart';
 
@@ -378,6 +379,7 @@ Group fakeGroup({
   String shopName = '測試桌遊店',
   String? myStatus,
   List<GameRef> games = const [],
+  DateTime? confirmedAt,
 }) {
   return Group(
     id: id,
@@ -394,9 +396,31 @@ Group fakeGroup({
     remainingSlots: capacity - memberCount < 0 ? 0 : capacity - memberCount,
     myStatus: myStatus,
     games: games,
+    confirmedAt: confirmedAt,
     createdAt: DateTime.utc(2026, 11, 1),
   );
 }
+
+/// 一則揪團通知；[readAt] 為 null 代表未讀。
+GroupNotification fakeNotification({
+  String id = 'n-1',
+  String type = 'group_confirmed',
+  String groupId = 'g-1',
+  String groupTitle = '週末輕策略',
+  DateTime? groupStartAt,
+  DateTime? readAt,
+  DateTime? createdAt,
+}) => GroupNotification(
+  id: id,
+  type: type,
+  group: NotificationGroupRef(
+    id: groupId,
+    title: groupTitle,
+    startAt: groupStartAt ?? DateTime.utc(2026, 11, 21, 11),
+  ),
+  readAt: readAt,
+  createdAt: createdAt ?? DateTime.utc(2026, 11, 14, 3),
+);
 
 typedef ListCall = ({
   DateTime? startFrom,
@@ -446,6 +470,44 @@ class FakeGroupsRepository implements GroupsRepository {
   final updateCalls = <(String, Map<String, dynamic>)>[];
   final joinCalls = <String>[];
   final removeCalls = <(String, String)>[];
+
+  /// 目前使用者的通知，新的在前。
+  List<GroupNotification> notifications = [];
+
+  /// 查詢通知、標成已讀丟出的錯誤。
+  Object? notificationsError;
+  Object? markReadError;
+
+  /// 標成已讀時寫入的時間。
+  DateTime readAt = DateTime.utc(2026, 11, 14, 4, 30);
+  final notificationCalls = <({int page, int pageSize})>[];
+  final markReadCalls = <String>[];
+
+  @override
+  Future<GroupNotificationPage> listNotifications({
+    int page = 1,
+    int pageSize = 20,
+  }) async {
+    notificationCalls.add((page: page, pageSize: pageSize));
+    if (notificationsError != null) throw notificationsError!;
+    return GroupNotificationPage(
+      items: notifications.skip((page - 1) * pageSize).take(pageSize).toList(),
+      total: notifications.length,
+      unreadCount: notifications.where((n) => n.readAt == null).length,
+    );
+  }
+
+  @override
+  Future<GroupNotification> markNotificationRead(String id) async {
+    markReadCalls.add(id);
+    if (markReadError != null) throw markReadError!;
+    final index = notifications.indexWhere((n) => n.id == id);
+    final read = notifications[index].readAt == null
+        ? notifications[index].copyWith(readAt: readAt)
+        : notifications[index];
+    notifications[index] = read;
+    return read;
+  }
 
   @override
   Future<GroupPage> list({
@@ -537,6 +599,9 @@ class FakeGroupsRepository implements GroupsRepository {
     }
     if (changes['title'] is String) {
       group = group.copyWith(title: changes['title'] as String);
+    }
+    if (changes['confirmed'] == true) {
+      group = group.copyWith(confirmedAt: DateTime.utc(2026, 11, 14, 4));
     }
     groups[index] = group;
     return group;
