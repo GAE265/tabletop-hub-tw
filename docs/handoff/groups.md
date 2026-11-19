@@ -16,7 +16,7 @@
 | 頁面 | 參考畫面 | 用途 |
 |---|---|---|
 | 揪團月曆 | `prototypes/groups/groups_proto_page.dart`（路由 `/proto/groups`） | 月曆每天顯示團數，點日期列出當天揪團；依開團主篩選；入口「我要開團」 |
-| 揪團詳細 | `prototypes/groups/group_detail_proto_page.dart`（從月曆列表點進去） | 揪團資訊、成員與候補名單、報名／候補／退出／編輯／取消 |
+| 揪團詳細 | `prototypes/groups/group_detail_proto_page.dart`（從月曆列表點進去；也可以直接開網址 `/groups/<揪團 id>`，首頁行程的揪團列連到這裡） | 揪團資訊、成員與候補名單、報名／候補／退出／編輯／取消 |
 | 開團／編輯表單 | `prototypes/groups/group_form_proto_page.dart`（從月曆或詳細頁進入） | 建立或修改揪團 |
 | 通知列表 | 無（直接做正式頁面 `pages/group_notifications_page.dart`，路由 `/groups/notifications`） | 成團、解散、候補正取的站內通知（add-groups-notifications） |
 | 通知鈴鐺 | 無（`pages/widgets/notification_bell.dart`，放在導覽列） | 顯示未讀數，點下前往通知列表 |

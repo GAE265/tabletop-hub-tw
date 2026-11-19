@@ -7,6 +7,7 @@ import '../domains/booking/pages/new_booking_page.dart';
 import '../domains/booking/pages/my_bookings_page.dart';
 import '../domains/booking/pages/shop_board_page.dart';
 import '../domains/games_advisor/pages/games_advisor_page.dart';
+import '../domains/groups/pages/group_detail_page.dart';
 import '../domains/groups/pages/group_notifications_page.dart';
 import '../domains/groups/pages/groups_page.dart';
 import '../domains/health/pages/health_page.dart';
@@ -38,9 +39,15 @@ GoRouter createRouter(AppConfig config) => GoRouter(
           path: '/groups',
           builder: (context, state) => const GroupsPage(),
           routes: [
+            // 放在 :id 前面，notifications 才不會被當成揪團 id
             GoRoute(
               path: 'notifications',
               builder: (context, state) => const GroupNotificationsPage(),
+            ),
+            GoRoute(
+              path: ':id',
+              builder: (context, state) =>
+                  GroupDetailPage(groupId: state.pathParameters['id']!),
             ),
           ],
         ),
