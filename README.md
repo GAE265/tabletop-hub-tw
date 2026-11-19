@@ -73,7 +73,9 @@ docker compose up -d
 cd backend
 uv sync
 uv run alembic upgrade head
+uv run python -m app.domains.games_advisor.commands sync-games ./app/dev/games-export.json
 uv run python -m app.dev.seed        # 建立開發用測試帳號（player / shop_staff / admin）
+uv run python -m app.dev.seed_shop
 uv run uvicorn app.main:create_app --factory --reload # http://localhost:8000/docs
 ```
 
