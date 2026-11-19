@@ -549,3 +549,242 @@ def test_list_groups_filters_and_pages(service, repo, shop_id):
 def test_list_groups_empty(service):
     result = service.list_groups(ORGANIZER)
     assert (result.items, result.total) == ([], 0)
+
+
+# --- 確定成團與通知（openspec/changes/add-groups-notifications/specs/groups-notifications）---
+
+
+def notices(service, user: CurrentUser) -> list[tuple[str, uuid.UUID]]:
+    """目前使用者的通知，新的在前，只取 (type, group_id)。"""
+    return [(n.type, n.group.id) for n in service.list_notifications(user).items]
+
+
+@pytest.mark.parametrize("user", [ORGANIZER, ADMIN])
+def test_confirm_group(service, clock, shop_id, user):
+    group = make_group(service, shop_id)
+    assert group.confirmed_at is None
+    updated = service.update_group(user, group.id, update_input(confirmed=True))
+    assert updated.confirmed_at == clock.now
+    assert updated.status == "open"
+
+
+def test_confirmed_group_still_accepts_joins(service, shop_id):
+    group = make_group(service, shop_id)
+    service.update_group(ORGANIZER, group.id, update_input(confirmed=True))
+    assert service.join_group(PLAYER_B, group.id).status == "member"
+
+
+def test_non_organizer_cannot_confirm(service, shop_id):
+    group = make_group(service, shop_id)
+    service.join_group(PLAYER_B, group.id)
+    with pytest.raises(PermissionDenied):
+        service.update_group(PLAYER_B, group.id, update_input(confirmed=True))
+    assert service.get_group(ORGANIZER, group.id).confirmed_at is None
+    assert notices(service, ORGANIZER) == []
+
+
+def test_confirm_twice(service, clock, shop_id):
+    group = make_group(service, shop_id)
+    service.join_group(PLAYER_B, group.id)
+    first = service.update_group(ORGANIZER, group.id, update_input(confirmed=True))
+    clock.now += timedelta(minutes=5)
+    with pytest.raises(AppError) as exc_info:
+        service.update_group(ORGANIZER, group.id, update_input(confirmed=True))
+    assert_app_error(exc_info, 409, "GROUP_ALREADY_CONFIRMED")
+    assert service.get_group(ORGANIZER, group.id).confirmed_at == first.confirmed_at
+    assert len(notices(service, PLAYER_B)) == 1
+
+
+def test_confirm_cancelled_group(service, shop_id):
+    group = make_group(service, shop_id)
+    service.update_group(ORGANIZER, group.id, update_input(status="cancelled"))
+    with pytest.raises(AppError) as exc_info:
+        service.update_group(ORGANIZER, group.id, update_input(confirmed=True))
+    assert_app_error(exc_info, 409, "GROUP_CLOSED")
+
+
+def test_confirm_ended_group(service, clock, shop_id):
+    group = make_group(service, shop_id)
+    clock.now = END + timedelta(minutes=1)
+    with pytest.raises(AppError) as exc_info:
+        service.update_group(ORGANIZER, group.id, update_input(confirmed=True))
+    assert_app_error(exc_info, 409, "GROUP_CLOSED")
+
+
+@pytest.mark.parametrize("value", [False, None])
+def test_confirmed_only_accepts_true(value):
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        update_input(confirmed=value)
+
+
+def test_confirm_group_not_found(service):
+    with pytest.raises(AppError) as exc_info:
+        service.update_group(ORGANIZER, uuid.uuid4(), update_input(confirmed=True))
+    assert_app_error(exc_info, 404, "GROUP_NOT_FOUND")
+
+
+def test_confirm_notifies_members_except_actor_and_waitlist(service, shop_id):
+    group = make_group(service, shop_id, capacity=3)
+    service.join_group(PLAYER_B, group.id)
+    service.join_group(PLAYER_C, group.id)
+    service.join_group(PLAYER_D, group.id)  # 候補
+    service.update_group(ORGANIZER, group.id, update_input(confirmed=True))
+    assert notices(service, PLAYER_B) == [("group_confirmed", group.id)]
+    assert notices(service, PLAYER_C) == [("group_confirmed", group.id)]
+    assert notices(service, ORGANIZER) == []
+    assert notices(service, PLAYER_D) == []
+
+
+def test_admin_confirm_notifies_organizer_too(service, shop_id):
+    group = make_group(service, shop_id)
+    service.join_group(PLAYER_B, group.id)
+    service.update_group(ADMIN, group.id, update_input(confirmed=True))
+    assert notices(service, ORGANIZER) == [("group_confirmed", group.id)]
+    assert notices(service, PLAYER_B) == [("group_confirmed", group.id)]
+    assert notices(service, ADMIN) == []
+
+
+def test_cancel_notifies_members_and_waitlist_except_actor(service, shop_id):
+    group = full_group_with_waitlist(service, shop_id)
+    service.update_group(ORGANIZER, group.id, update_input(status="cancelled"))
+    assert notices(service, PLAYER_B) == [("group_cancelled", group.id)]
+    assert notices(service, PLAYER_C) == [("group_cancelled", group.id)]
+    assert notices(service, ORGANIZER) == []
+
+
+def test_cancel_after_confirm_notifies_again(service, clock, shop_id):
+    group = make_group(service, shop_id)
+    service.join_group(PLAYER_B, group.id)
+    service.update_group(ORGANIZER, group.id, update_input(confirmed=True))
+    clock.now += timedelta(minutes=1)
+    service.update_group(ORGANIZER, group.id, update_input(status="cancelled"))
+    assert notices(service, PLAYER_B) == [
+        ("group_cancelled", group.id),
+        ("group_confirmed", group.id),
+    ]
+
+
+def test_failed_cancel_does_not_notify(service, shop_id):
+    group = make_group(service, shop_id)
+    service.join_group(PLAYER_B, group.id)
+    with pytest.raises(PermissionDenied):
+        service.update_group(PLAYER_B, group.id, update_input(status="cancelled"))
+    assert notices(service, ORGANIZER) == []
+    assert notices(service, PLAYER_B) == []
+
+
+def test_member_leaves_notifies_first_waitlisted(service, shop_id):
+    group = full_group_with_waitlist(service, shop_id, waitlisted=(PLAYER_C, PLAYER_D))
+    service.remove_member(PLAYER_B, group.id, PLAYER_B.id)
+    assert notices(service, PLAYER_C) == [("waitlist_promoted", group.id)]
+    assert notices(service, PLAYER_D) == []
+
+
+def test_member_removed_by_organizer_notifies_promoted(service, shop_id):
+    group = full_group_with_waitlist(service, shop_id)
+    service.remove_member(ORGANIZER, group.id, PLAYER_B.id)
+    assert notices(service, PLAYER_C) == [("waitlist_promoted", group.id)]
+    assert notices(service, PLAYER_B) == []
+
+
+def test_raising_capacity_notifies_each_promoted(service, repo, shop_id):
+    extra = CurrentUser(id=uuid.uuid4(), role="player")
+    repo.add_user(extra.id, "玩家戊")
+    group = full_group_with_waitlist(service, shop_id, waitlisted=(PLAYER_C, PLAYER_D, extra))
+    service.update_group(ORGANIZER, group.id, update_input(capacity=4))
+    assert notices(service, PLAYER_C) == [("waitlist_promoted", group.id)]
+    assert notices(service, PLAYER_D) == [("waitlist_promoted", group.id)]
+    assert notices(service, extra) == []
+
+
+def test_waitlisted_leaves_does_not_notify(service, shop_id):
+    group = full_group_with_waitlist(service, shop_id, waitlisted=(PLAYER_C, PLAYER_D))
+    service.remove_member(PLAYER_C, group.id, PLAYER_C.id)
+    assert notices(service, PLAYER_D) == []
+
+
+def test_member_leaves_without_waitlist_does_not_notify(service, shop_id):
+    group = make_group(service, shop_id)
+    service.join_group(PLAYER_B, group.id)
+    service.remove_member(PLAYER_B, group.id, PLAYER_B.id)
+    for user in (ORGANIZER, PLAYER_B):
+        assert notices(service, user) == []
+
+
+# --- 查詢通知與標成已讀 ---
+
+
+def test_list_notifications_only_own_newest_first_and_paged(service, clock, shop_id):
+    groups = []
+    for title in ("第一團", "第二團", "第三團"):
+        group = make_group(service, shop_id, title=title)
+        service.join_group(PLAYER_B, group.id)
+        service.update_group(ORGANIZER, group.id, update_input(confirmed=True))
+        groups.append(group)
+        clock.now += timedelta(minutes=1)
+    page = service.list_notifications(PLAYER_B, page=1, page_size=2)
+    assert (page.total, page.unread_count) == (3, 3)
+    assert [n.group.title for n in page.items] == ["第三團", "第二團"]
+    first = page.items[0]
+    assert first.type == "group_confirmed"
+    assert first.group.id == groups[2].id
+    assert first.group.start_at == START
+    assert first.read_at is None
+    assert first.created_at == NOW + timedelta(minutes=2)
+    second = service.list_notifications(PLAYER_B, page=2, page_size=2)
+    assert [n.group.title for n in second.items] == ["第一團"]
+    assert second.unread_count == 3
+    assert service.list_notifications(PLAYER_C).total == 0
+
+
+def test_list_notifications_empty(service):
+    result = service.list_notifications(PLAYER_D)
+    assert (result.items, result.total, result.unread_count) == ([], 0, 0)
+
+
+def test_notification_shows_current_group_title(service, shop_id):
+    group = make_group(service, shop_id)
+    service.join_group(PLAYER_B, group.id)
+    service.update_group(ORGANIZER, group.id, update_input(confirmed=True))
+    service.update_group(ORGANIZER, group.id, update_input(title="改名後"))
+    assert service.list_notifications(PLAYER_B).items[0].group.title == "改名後"
+
+
+def confirmed_notice(service, shop_id):
+    group = make_group(service, shop_id)
+    service.join_group(PLAYER_B, group.id)
+    service.update_group(ORGANIZER, group.id, update_input(confirmed=True))
+    return service.list_notifications(PLAYER_B).items[0]
+
+
+def test_mark_notification_read(service, clock, shop_id):
+    notice = confirmed_notice(service, shop_id)
+    clock.now += timedelta(minutes=3)
+    read = service.mark_notification_read(PLAYER_B, notice.id)
+    assert read.id == notice.id
+    assert read.read_at == clock.now
+    assert service.list_notifications(PLAYER_B).unread_count == 0
+
+
+def test_mark_read_twice_keeps_first_time(service, clock, shop_id):
+    notice = confirmed_notice(service, shop_id)
+    first = service.mark_notification_read(PLAYER_B, notice.id)
+    clock.now += timedelta(minutes=3)
+    again = service.mark_notification_read(PLAYER_B, notice.id)
+    assert again.read_at == first.read_at
+
+
+def test_cannot_mark_others_notification(service, shop_id):
+    notice = confirmed_notice(service, shop_id)
+    with pytest.raises(AppError) as exc_info:
+        service.mark_notification_read(PLAYER_C, notice.id)
+    assert_app_error(exc_info, 404, "GROUP_NOTIFICATION_NOT_FOUND")
+    assert service.list_notifications(PLAYER_B).unread_count == 1
+
+
+def test_mark_read_not_found(service):
+    with pytest.raises(AppError) as exc_info:
+        service.mark_notification_read(PLAYER_B, uuid.uuid4())
+    assert_app_error(exc_info, 404, "GROUP_NOTIFICATION_NOT_FOUND")

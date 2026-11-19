@@ -615,3 +615,241 @@ def test_leave_group_not_found(client: TestClient, as_player: CurrentUser):
     response = client.delete(f"{BASE}/{uuid.uuid4()}/members/{TEST_PLAYER.id}")
     assert response.status_code == 404
     assert error_code(response) == "GROUP_NOT_FOUND"
+
+
+# --- 確定成團與通知（openspec/changes/add-groups-notifications/specs/groups-notifications）---
+
+NOTICES = "/api/v1/group-notifications"
+
+
+def my_notices(client: TestClient, **params: Any) -> dict[str, Any]:
+    response = client.get(NOTICES, params=params)
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def test_confirm_group(client: TestClient, act_as: ActAs):
+    group_id = full_group(client, act_as)
+    act_as(TEST_PLAYER)
+    assert client.get(f"{BASE}/{group_id}").json()["confirmed_at"] is None
+    response = client.patch(f"{BASE}/{group_id}", json={"confirmed": True})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["confirmed_at"] is not None
+    assert body["confirmed_at"].endswith("Z")
+    assert body["status"] == "open"
+
+
+def test_admin_confirms(client: TestClient, act_as: ActAs):
+    act_as(TEST_PLAYER)
+    group = create(client)
+    act_as(TEST_ADMIN)
+    response = client.patch(f"{BASE}/{group['id']}", json={"confirmed": True})
+    assert response.status_code == 200
+    assert response.json()["confirmed_at"] is not None
+
+
+def test_member_cannot_confirm(client: TestClient, act_as: ActAs):
+    group_id = full_group(client, act_as)
+    act_as(PLAYER_B)
+    response = client.patch(f"{BASE}/{group_id}", json={"confirmed": True})
+    assert response.status_code == 403
+    assert client.get(f"{BASE}/{group_id}").json()["confirmed_at"] is None
+    act_as(TEST_PLAYER)
+    assert my_notices(client)["total"] == 0
+
+
+def test_confirm_twice(client: TestClient, act_as: ActAs):
+    group_id = full_group(client, act_as)
+    act_as(TEST_PLAYER)
+    first = client.patch(f"{BASE}/{group_id}", json={"confirmed": True}).json()["confirmed_at"]
+    response = client.patch(f"{BASE}/{group_id}", json={"confirmed": True})
+    assert response.status_code == 409
+    assert error_code(response) == "GROUP_ALREADY_CONFIRMED"
+    assert client.get(f"{BASE}/{group_id}").json()["confirmed_at"] == first
+    act_as(PLAYER_B)
+    assert my_notices(client)["total"] == 1
+
+
+def test_confirm_cancelled_group(client: TestClient, as_player: CurrentUser):
+    group = create(client)
+    client.patch(f"{BASE}/{group['id']}", json={"status": "cancelled"})
+    response = client.patch(f"{BASE}/{group['id']}", json={"confirmed": True})
+    assert response.status_code == 409
+    assert error_code(response) == "GROUP_CLOSED"
+
+
+def test_confirm_ended_group(client: TestClient, as_player: CurrentUser, db: Engine):
+    group = create(client)
+    with db.begin() as conn:
+        conn.execute(
+            text(
+                "UPDATE groups SET start_at = now() - interval '3 hours', "
+                "end_at = now() - interval '1 hour' WHERE id = :id"
+            ),
+            {"id": group["id"]},
+        )
+    response = client.patch(f"{BASE}/{group['id']}", json={"confirmed": True})
+    assert response.status_code == 409
+    assert error_code(response) == "GROUP_CLOSED"
+
+
+@pytest.mark.parametrize("value", [False, None])
+def test_confirmed_only_accepts_true(client: TestClient, as_player: CurrentUser, value):
+    group = create(client)
+    response = client.patch(f"{BASE}/{group['id']}", json={"confirmed": value})
+    assert response.status_code == 422
+
+
+def test_confirm_not_found(client: TestClient, as_player: CurrentUser):
+    response = client.patch(f"{BASE}/{uuid.uuid4()}", json={"confirmed": True})
+    assert response.status_code == 404
+    assert error_code(response) == "GROUP_NOT_FOUND"
+
+
+def test_confirm_notifies_members_only(client: TestClient, act_as: ActAs):
+    group_id = full_group(client, act_as)  # 成員 B、候補 C
+    act_as(TEST_PLAYER)
+    client.patch(f"{BASE}/{group_id}", json={"confirmed": True})
+    assert my_notices(client)["total"] == 0
+    act_as(PLAYER_C)
+    assert my_notices(client)["total"] == 0
+    act_as(PLAYER_B)
+    body = my_notices(client)
+    assert (body["total"], body["unread_count"]) == (1, 1)
+    item = body["items"][0]
+    uuid.UUID(item["id"])
+    assert item["type"] == "group_confirmed"
+    assert item["group"]["id"] == group_id
+    assert item["group"]["title"] == "週末輕策略"
+    assert datetime.fromisoformat(item["group"]["start_at"]) == START
+    assert item["read_at"] is None
+    assert item["created_at"].endswith("Z")
+
+
+def test_cancel_notifies_members_and_waitlist(client: TestClient, act_as: ActAs):
+    group_id = full_group(client, act_as)
+    act_as(TEST_PLAYER)
+    client.patch(f"{BASE}/{group_id}", json={"status": "cancelled"})
+    assert my_notices(client)["total"] == 0
+    for user in (PLAYER_B, PLAYER_C):
+        act_as(user)
+        assert [n["type"] for n in my_notices(client)["items"]] == ["group_cancelled"]
+
+
+def test_failed_cancel_does_not_notify(client: TestClient, act_as: ActAs):
+    group_id = full_group(client, act_as)
+    act_as(PLAYER_B)
+    assert client.patch(f"{BASE}/{group_id}", json={"status": "cancelled"}).status_code == 403
+    for user in (TEST_PLAYER, PLAYER_B, PLAYER_C):
+        act_as(user)
+        assert my_notices(client)["total"] == 0
+
+
+def test_leave_notifies_promoted(client: TestClient, act_as: ActAs):
+    group_id = full_group(client, act_as)
+    act_as(TEST_ADMIN)
+    client.post(f"{BASE}/{group_id}/members")  # 候補第 2 位
+    act_as(PLAYER_B)
+    client.delete(f"{BASE}/{group_id}/members/{PLAYER_B.id}")
+    act_as(PLAYER_C)
+    assert [n["type"] for n in my_notices(client)["items"]] == ["waitlist_promoted"]
+    act_as(TEST_ADMIN)
+    assert my_notices(client)["total"] == 0
+
+
+def test_raising_capacity_notifies_promoted(client: TestClient, act_as: ActAs):
+    group_id = full_group(client, act_as)
+    act_as(TEST_PLAYER)
+    client.patch(f"{BASE}/{group_id}", json={"capacity": 3})
+    act_as(PLAYER_C)
+    assert [n["type"] for n in my_notices(client)["items"]] == ["waitlist_promoted"]
+
+
+def test_waitlisted_leaves_does_not_notify(client: TestClient, act_as: ActAs):
+    group_id = full_group(client, act_as)
+    act_as(TEST_ADMIN)
+    client.post(f"{BASE}/{group_id}/members")
+    act_as(PLAYER_C)
+    client.delete(f"{BASE}/{group_id}/members/{PLAYER_C.id}")
+    act_as(TEST_ADMIN)
+    assert my_notices(client)["total"] == 0
+
+
+def test_list_notifications_newest_first_and_paged(client: TestClient, act_as: ActAs):
+    titles = ["第一團", "第二團", "第三團"]
+    for title in titles:
+        act_as(TEST_PLAYER)
+        group = create(client, title=title)
+        act_as(PLAYER_B)
+        client.post(f"{BASE}/{group['id']}/members")
+        act_as(TEST_PLAYER)
+        client.patch(f"{BASE}/{group['id']}", json={"confirmed": True})
+    act_as(PLAYER_B)
+    body = my_notices(client, page=1, page_size=2)
+    assert (body["total"], body["unread_count"]) == (3, 3)
+    assert [n["group"]["title"] for n in body["items"]] == ["第三團", "第二團"]
+    body = my_notices(client, page=2, page_size=2)
+    assert [n["group"]["title"] for n in body["items"]] == ["第一團"]
+    act_as(PLAYER_C)
+    assert my_notices(client) == {"items": [], "total": 0, "unread_count": 0}
+
+
+@pytest.mark.parametrize("params", [{"page": 0}, {"page_size": 101}])
+def test_list_notifications_invalid_paging(
+    client: TestClient, as_player: CurrentUser, params: dict[str, int]
+):
+    assert client.get(NOTICES, params=params).status_code == 422
+
+
+def confirmed_notice_id(client: TestClient, act_as: ActAs) -> str:
+    group_id = full_group(client, act_as)
+    act_as(TEST_PLAYER)
+    client.patch(f"{BASE}/{group_id}", json={"confirmed": True})
+    act_as(PLAYER_B)
+    return my_notices(client)["items"][0]["id"]
+
+
+def test_mark_read(client: TestClient, act_as: ActAs):
+    notice_id = confirmed_notice_id(client, act_as)
+    response = client.patch(f"{NOTICES}/{notice_id}", json={"read": True})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["id"] == notice_id
+    assert body["read_at"] is not None
+    assert my_notices(client)["unread_count"] == 0
+
+
+def test_mark_read_twice_keeps_first_time(client: TestClient, act_as: ActAs):
+    notice_id = confirmed_notice_id(client, act_as)
+    first = client.patch(f"{NOTICES}/{notice_id}", json={"read": True}).json()["read_at"]
+    again = client.patch(f"{NOTICES}/{notice_id}", json={"read": True})
+    assert again.status_code == 200
+    assert again.json()["read_at"] == first
+
+
+def test_cannot_mark_others_notification(client: TestClient, act_as: ActAs):
+    notice_id = confirmed_notice_id(client, act_as)
+    act_as(PLAYER_C)
+    response = client.patch(f"{NOTICES}/{notice_id}", json={"read": True})
+    assert response.status_code == 404
+    assert error_code(response) == "GROUP_NOTIFICATION_NOT_FOUND"
+    act_as(PLAYER_B)
+    assert my_notices(client)["unread_count"] == 1
+
+
+def test_mark_read_not_found(client: TestClient, as_player: CurrentUser):
+    response = client.patch(f"{NOTICES}/{uuid.uuid4()}", json={"read": True})
+    assert response.status_code == 404
+    assert error_code(response) == "GROUP_NOTIFICATION_NOT_FOUND"
+
+
+@pytest.mark.parametrize("body", [{"read": False}, {}])
+def test_mark_read_invalid_body(client: TestClient, act_as: ActAs, body: dict[str, Any]):
+    notice_id = confirmed_notice_id(client, act_as)
+    assert client.patch(f"{NOTICES}/{notice_id}", json=body).status_code == 422
+
+
+def test_notifications_unauthenticated(jwt_client: TestClient):
+    assert jwt_client.get(NOTICES).status_code == 401
+    assert jwt_client.patch(f"{NOTICES}/{uuid.uuid4()}", json={"read": True}).status_code == 401
