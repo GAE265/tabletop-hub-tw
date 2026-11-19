@@ -16,6 +16,7 @@
 - 附件（repo 外）：
   - 選型查核報告：`/Users/user/Desktop/團隊專題/02_選題研究/AI語音主持選型查核報告.html`。**它是輸入，不是定案**：沒做桌邊實測與中文盲聽，報告自己也寫只供選型討論。引用它的數字前要回查一手來源。
   - mattpocock 流程指南：`/Users/user/Desktop/團隊專題/99_其他/mattpocock-skills_開發指南.md`（§0、§1 是立倫的專案做法）。
+- wayfinder 的流程（下一張做哪張、怎麼開每張 ticket 的 session、什麼時候 commit）在持有地圖的對話由立倫直接決定，不經總管，也不向總管回報進度（2026-11-19 立倫決定）。到達 Destination（`spec.md` 寫好、實作 ticket 拆好）才交給總管派實作 worker 與驗收。要改可改路徑以外的檔案、牽涉別的分支或 worktree，或立倫明說要通知時，才找總管。
 - 和 wayfinder 原版不同的做法：
   - `research` ticket 不需要立倫在場。由持有地圖的 wayfinder session 自己用 Orca 派 research worker（`orca orchestration worker-start`），worker 回報給它，不回報給總管（2026-11-19 立倫決定）。它驗收後更新地圖：把結論寫進 Decisions so far，把變清楚的問題開成新 ticket。全部結案後，向總管回報一次摘要。不開 `research/<name>` 分支、不開 subagent、不 push。research worker 不得再往下派工。
   - 派 research 的規定：
@@ -45,6 +46,11 @@
   - AGENTS.md §3：`integrations/llm/` 由瑋鋐擁有，`integrations/tts/` 由永傑擁有（2026-11-19 時還不存在）。改共用區要 @ 擁有者。
   - AGENTS.md §5.3：前端不放任何秘密；只能在網頁上用的程式碼要包在 `core/platform/` 的介面後面。
   - AGENTS.md §7.5：domain 的測試一律用手寫 fake，不連真正的外部服務。
+- 牽涉其他 domain、不在這張地圖裡解的事（2026-11-19 由「《血與刃的白薔薇》一局的流程」查出）。這張地圖只記下來、問到答案、決定主持人這邊怎麼應對；要不要改由該 domain 的主責決定：
+  - `matches`（新善主責）：整桌都不出牌的回合記不進去，因為 `played_seat_numbers` 至少要 1 個座位，規則卻允許沒人出牌。
+  - `matches`（新善主責）：司教沒有欄位，`faithful_count` 含不含司教不明；回合的 `seat_number`（首家）是「放水晶的人」還是「第一個決定出牌的人」不明。
+  - `rules_ingest`（瑋鋐主責）、`rules_qa`（永傑主責）：本機的白薔薇規則全文有 OCR 雜訊與錯字，圖片上的字（獲勝門檻、魔法之書清單、睜眼標記）讀不到。主持人答規則要靠 `rules_qa` 的檢索，這會影響答案品質。
+  - 去問的動作在「向新善、永傑、瑋鋐確認戰績欄位與規則全文的問題」。
 - 固定偏好：
   - 不問時程問題，推薦答案也不附日期或天數。
   - commit、PR、文件都不加 AI 署名。
@@ -56,20 +62,26 @@
 
 <!-- the index: one line per closed ticket, enough to judge relevance, then zoom the link for the detail the ticket holds -->
 
-（還沒有結案的 ticket）
+- [Qwen 即時語音模型的官方規格](issues/01-qwen-realtime-facts.md)：Flash 與 Plus 都能用 WebSocket、WebRTC、AOQ，新加坡與北京可用；官方有不把長效金鑰交給瀏覽器的接法（後端交換 SDP、短效金鑰）；可按住說話、可呼叫工具，停播要應用程式自己清空待播內容；「300 秒」是歷史音訊容量（最多 50 輪），不是連線上限，固定的最長連線時間查不到；Flash 對 Plus 沒有官方比較數字，只有價格差（Plus 約 3.5 到 12.8 倍）；平台預設保留推論資料最多 30 天，零保留清單沒有這個模型
+- [難題轉交後端思考模型的做法](issues/02-delegate-to-thinking-model.md)：做得到，官方有範例，語音模型用工具呼叫把問題交給後端再唸出答案；後端可用 Qwen 文字模型或專案現有的 Azure 文字介面（實際部署哪個模型要問立倫）；查不到 Plus 有可控制的「先想再答」；等待語講得快不代表裁決快，還要處理逾時、中斷、過期的舊答案；本遊戲要等幾秒查不到，只能實測
+- [三個 Agent 框架怎麼接 Qwen、怎麼展示](issues/03-agent-frameworks-fit.md)：LangChain 1.5.2、LangGraph 1.2.22、Microsoft Agent Framework 1.26.0 都接得上 Qwen 文字模型，都查不到能直接接 Qwen 即時語音的官方轉接器，所以框架只能放在後端處理工具請求那一段；三個都能在本機畫流程圖、看每一步，不必另外付費；都沒試跑過；沒有替立倫選
+- [《血與刃的白薔薇》一局的流程](issues/04-white-rose-match-flow.md)：5 至 10 人；開局準備、夜晚階段（只在開局）、若干回合，每個回合三個階段（傳金幣放水晶、依序決定出牌、翻牌結算）；規則書裡沒有主持人，開局口令是玩家自己喊；`matches` 的回合欄位要到階段 2、3 才知道；獲勝門檻的數字印在圖上讀不到，共 11 條要問立倫或其他 domain 的主責
+- [Flutter Web 怎麼收音與即時播音](issues/05-flutter-web-audio.md)：能即時收音與邊收邊播，WebSocket 與 WebRTC 都可用；插話時的停播、清空待播內容、拒收舊回覆要前端自己做；手機要 HTTPS，並由玩家點一下才能出聲；鎖屏後持續雙向語音沒有保證；`record` 7.x 與 `web` 1.1.2 會提高 Flutter SDK 的門檻；網頁專用的部分要包在 `core/platform/`
 
 ## Not yet specified
 
 <!-- in-scope fog you can't ticket yet; graduates as the frontier advances -->
 
 - 主持人的人設與說話風格：開場、宣布結果、緊張時刻各用什麼語氣，寫成給模型的指令。等「用真的聲音試聽 Qwen 主持人」與「主持人在一局裡怎麼帶流程」有結果才問得清楚。
-- 整合層介面與 fake：即時語音與框架的程式放在 `integrations/` 的哪個資料夾、由誰擁有、fake 長什麼樣。用 Qwen 與框架偏離 §4.2「LLM 一律透過 `integrations/llm` 的介面」時，要不要寫 ADR 並請組員同意。等模型、框架、連線方式三張決策 ticket 結案。
+- 整合層介面與 fake：即時語音與框架的程式放在 `integrations/` 的哪個資料夾、由誰擁有、fake 長什麼樣。用 Qwen 與框架偏離 §4.2「LLM 一律透過 `integrations/llm` 的介面」時，要不要寫 ADR 並請組員同意。已知現有的 `respond()` 是同步、單次呼叫，不能直接當即時語音的介面，需要另一個管連線生命週期的介面。等模型、框架、連線方式三張決策 ticket 結案。
+- 前端用哪些音訊套件（`record`、`flutter_sound`、`flutter_webrtc`，或直接用瀏覽器的 API）：等連線方式定案。`record` 7.x 與 `web` 1.1.2 會提高 Flutter SDK 的門檻，動到前端共用區要和永傑談。
+- 選定框架後，要不要先做一個小試跑（把 Qwen 的工具請求接進框架），再寫進 spec。三個框架都只查過文件，沒有執行過。
+- 手機實測怎麼提供 HTTPS：手機瀏覽器要 HTTPS 才能用麥克風，連電腦的區網位址不算。等試聽與連線方式有結果再問。
 - 主持要不要存資料：要不要有自己的資料表（例如每場主持的紀錄），對話內容存不存、存多久。
-- 一局超過模型連線上限時怎麼接續（選型報告寫 Qwen 只保留 300 秒歷史音訊，待查核）。
+- 主持人怎麼記得前面發生的事、斷線後怎麼接續：Qwen 只保留最近 50 輪、累計 300 秒的歷史音訊，更早的會被丟掉（這不是連線時間上限；固定的最長連線時間查不到，要靠試聽實測）。可以用文字把前情放進新連線，但摘要怎麼產生、由誰保管還沒問清楚。等「主持人在一局裡怎麼帶流程」與「選哪個 Agent 框架、它負責什麼」。
 - API 契約、參考畫面與交接說明：路徑、請求與回應、錯誤狀態碼、畫面上的按鈕與狀態。
-- 怎麼驗收：pytest 用 fake 驗什麼；真的模型要量什麼（首音時間、停播時間、誤停率、中文語氣盲聽）、門檻多少、算不算合併條件。
-- 費用上限：一局大約花多少、額度快用完時怎麼辦。
-- 聲音送到新加坡這件事，要不要告知組員、寫進哪份文件。
+- 怎麼驗收：pytest 用 fake 驗什麼；真的模型要量什麼（首音時間、停播時間、誤停率、中文語氣盲聽）、門檻多少、算不算合併條件。已知要分開量「等待語的第一個聲音」與「有依據的答案的第一個聲音」；公開數字都是廠商自己測的，而且沒有分 Flash 與 Plus。
+- 費用上限：一局大約花多少、額度快用完時怎麼辦。已知每一輪都會把先前的對話重新算一次輸入費用，不能只用錄音秒數估；選型報告的「一局約 0.12 美元」只是估算。新加坡區的免費額度有條件，要等帳號開好才知道拿不拿得到。
 - 寫 `spec.md`，再拆成實作 ticket（最後兩步）。
 
 ## Out of scope

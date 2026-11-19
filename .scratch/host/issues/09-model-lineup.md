@@ -2,19 +2,30 @@
 
 Type: grilling
 Status: open
-Blocked by: 01, 02, 07
+Blocked by: 01, 02, 07, 14
 Map: [AI 語音主持](../map.md)
 
 ## Question
 
 模型的首選方向是 `Qwen-Audio-3.1-Realtime`，但立倫想考慮「會思考」的做法，保留兩個選項（2026-11-19 畫地圖時決定）：
 
-- a. 改用比 Flash 更強的 Plus 版。
-- c. 即時語音模型只負責聽和說，難題轉交後端的文字思考模型。
+- a. 改用比 Flash 更強的 Plus 版。研究後要修正前提：官方沒有說 Plus 會「先想再答」，查不到可以打開的思考設定，也沒有 Flash 對 Plus 的比較數字。確定的只有 Plus 比較貴（約 3.5 到 12.8 倍）。Plus 答規則題是不是比較好，只能看試聽結果。
+- c. 即時語音模型只負責聽和說，難題轉交後端的文字思考模型。研究確認做得到，但要多處理等待、逾時、玩家中途改問、過期的舊答案。
 
 依規格、轉交做法的研究結果，以及立倫試聽的感受，決定：
 
 1. 即時語音模型用 Flash 還是 Plus。
-2. 要不要轉交思考模型。要的話：用哪一個模型（Qwen 的文字模型，或專案現有的 Azure 模型）、哪些問題才轉交、等待時主持人說什麼。
+2. 要不要轉交思考模型。要的話：用哪一個模型、哪些問題才轉交、等待時主持人說什麼、等太久時怎麼辦。候選有兩邊：
+   - Qwen 的文字模型：`qwen4-max`、`qwen3.7-plus`、`qwen3.8-flash`。
+   - 專案現有的 Azure 文字模型，好處是不用多接一家。games_advisor 的地圖記著立倫的 Foundry 部署了 `gpt-5.6-luna` 與 `gpt-5.6-terra`（[當時的 ticket](../../games-advisor/issues/17-foundry-model-deployments.md)），現在是不是還這樣要立倫確認。host 不擅自改全域的 `LLM_*` 設定。
 3. 試聽結果不理想時怎麼辦：改用備案 Azure `gpt-realtime-2.1`，或退回「語音轉文字 → 文字模型 → 文字轉語音」。這一題只在試聽不理想時才問。
 4. 這個選擇偏離 AGENTS.md §4.2「LLM 一律透過 `integrations/llm` 的介面」的地方有哪些，要不要寫 ADR、請組員同意。
+
+## Comments
+
+- 2026-11-19：「[Qwen 即時語音模型的官方規格](01-qwen-realtime-facts.md)」與「[難題轉交後端思考模型的做法](02-delegate-to-thinking-model.md)」已結案。和這張有關的事實（細節在 [qwen-realtime-facts](../research/qwen-realtime-facts.md)、[delegate-to-thinking-model](../research/delegate-to-thinking-model.md)）：
+  - 新加坡區每 100 萬 tokens 的價格（美元，依序是文字輸入、音訊輸入、文字輸出、音訊輸出）：Flash 0.23、0.93、0.70、1.87；Plus 0.80、6.40、6.40、24.00。每一輪都會把先前的對話重新算一次輸入費用。
+  - 廠商的技術報告說模型本身有推理能力，但沒有把 Flash 與 Plus 分開測。
+  - 現有的 Azure 文字介面是同步的單次呼叫，沒有取消的方法，預設逾時 30 秒。拿來當思考模型時，等待期間不能卡住收音。
+  - 等待語講得快不代表答案來得快。廠商自己的轉交測試用的是舊版原型，而且不含播出聲音的時間，不能拿來預估。
+- 2026-11-19：新增相依「[接不接受阿里雲保留玩家的聲音最多 30 天](14-voice-data-retention.md)」。那張的答案如果是不接受，這張的前提（用 Qwen）就要改。

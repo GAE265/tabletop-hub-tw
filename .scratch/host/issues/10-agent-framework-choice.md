@@ -7,13 +7,32 @@ Map: [AI 語音主持](../map.md)
 
 ## Question
 
-立倫為了展示，一定要用 Agent 框架，三選一：LangChain、LangGraph、Microsoft Agent Framework（2026-11-19 畫地圖時決定）。展示重點是「看得到主持人走到哪個階段、查了什麼資料」。依框架比較的研究結果與已定的模型組合，決定：
+立倫為了展示，一定要用 Agent 框架，三選一：LangChain、LangGraph、Microsoft Agent Framework（2026-11-19 畫地圖時決定）。展示重點是「看得到主持人走到哪個階段、查了什麼資料」。
+
+研究後已知的前提：三個框架都沒有能直接接 Qwen 即時語音的官方轉接器，聲音這條路不經過框架。框架能放的位置，是後端收到語音模型的工具請求之後的那一段。
+
+依框架比較的研究結果與已定的模型組合，決定：
 
 1. 用哪一個框架。
 2. 框架負責哪一段：記住這一局走到哪個階段、處理即時語音模型轉交過來的查詢、呼叫思考模型，或其中幾項。哪些事明確不交給框架。
+   - 如果工具只是查資料、不需要第二個模型，框架裡就沒有 LLM，只是把查詢步驟排成流程。這樣還符不符合立倫想展示的內容。
+   - 工具迴圈由誰控制：專案現在的做法是 `service` 自己管迴圈、整合層一次只呼叫 1 次模型。LangChain 與 Microsoft Agent Framework 的 Agent 會自己管迴圈，LangGraph 可以只排一次工具處理。要不要為了框架改這個做法。
+   - 「這一局走到哪個階段」記在框架的狀態裡，還是記在資料庫；它和 Qwen 自己保留的對話歷史（最近 50 輪、300 秒）怎麼分工。
 3. 展示時給人看什麼：流程圖、每一步的查詢紀錄，或其他。需不需要另外註冊付費服務。
-4. 框架的程式放在哪一層（AGENTS.md §4.2 規定外部服務包在 `integrations/` 後面、`service` 不 import FastAPI）。
+4. 框架的程式放在哪一層（AGENTS.md §4.2 規定外部服務包在 `integrations/` 後面、`service` 不 import FastAPI）。Microsoft Agent Framework 的 Python 寫法是非同步的，專案的資料庫存取一律同步（AGENTS.md §4.4），選它的話邊界怎麼接。
 5. 新增套件的理由怎麼寫（AGENTS.md §2 第 4 點要求寫在 MR 說明）。
 6. 要不要寫 ADR：這是難以回頭、沒背景會讓人意外、而且有真實取捨的決定。
+7. 選定之後，要不要先做一個小試跑再寫進 spec。三個框架都只查過文件，沒有執行過。
 
-三個框架都接不上時，停下來問立倫，不自行改成不用框架。
+研究的結論是三個都放得進「處理工具請求」那一段，不算接不上。試跑後才發現接不上時，停下來問立倫，不自行改成不用框架。
+
+## Comments
+
+- 2026-11-19：「[三個 Agent 框架怎麼接 Qwen、怎麼展示](03-agent-frameworks-fit.md)」已結案，細節與三欄比較表在[結果檔](../research/agent-frameworks-fit.md)。和這張有關的事實：
+  - 版本：LangChain 1.5.2、LangGraph 1.2.22、Microsoft Agent Framework 1.26.0。核心都是正式版、MIT 授權。Microsoft 的 DevUI 還是預覽版。
+  - 三個都能接 Qwen 的文字模型。LangChain 的 Agent 底層就是 LangGraph。
+  - 展示：三個都能在本機輸出流程圖與每一步的事件，不用另外註冊付費服務。LangSmith、Foundry 是選用的。
+  - LangChain：有現成的 Agent，接工具最快；但預設的「模型、工具、模型」迴圈不會自己長成遊戲的階段，要另外定義。
+  - LangGraph：可以把主持的步驟直接畫成節點，流程圖和實際執行的路徑最好對照；但狀態、節點、儲存都要自己定義。
+  - Microsoft Agent Framework：本機就有畫圖與 DevUI，不必改用 .NET 或搬到 Foundry；Python 寫法是非同步的。
+  - 研究沒有替立倫選，也沒有沿用選型報告的排名。
