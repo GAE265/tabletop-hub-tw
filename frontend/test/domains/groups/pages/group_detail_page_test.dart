@@ -338,7 +338,7 @@ void main() {
     expect(find.text('退出'), findsNothing);
   });
 
-  testWidgets('按「填入戰績」：跳到帶好揪團資料的戰績頁', (tester) async {
+  testWidgets('按「填入戰績」：跳到只帶 group_id 的戰績頁', (tester) async {
     Uri? opened;
     setScreenSize(tester, const Size(400, 900));
     final router = GoRouter(
@@ -378,10 +378,6 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('戰績頁'), findsOneWidget);
-    expect(opened!.queryParameters, {
-      'date': '2026-11-14',
-      'shop_id': 's-shop',
-      'group_id': 'g-1',
-    });
+    expect(opened!.queryParameters, {'group_id': 'g-1'});
   });
 }

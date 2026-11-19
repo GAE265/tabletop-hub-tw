@@ -25,7 +25,7 @@ TurnFormState stateOf(ProviderContainer container) =>
 
 void fillOne(TurnFormNotifier form) {
   form
-    ..setLeaderSeat(2)
+    ..setFirstSeat(2)
     ..togglePlayedSeat(2)
     ..togglePlayedSeat(1)
     ..setCount(TurnCounter.doubleBlade, 1)
@@ -63,13 +63,39 @@ void main() {
     expect(stateOf(container).giantBladeCount, 2);
   });
 
-  test('沒選主導的座位或出牌座位：不送出', () async {
+  test('本回合首家預設不選，也不是必填；沒選出牌座位才不送出', () async {
     final repo = FakeMatchesRepository();
     final container = makeContainer(repo);
     final form = await openForm(container);
+    expect(stateOf(container).firstSeat, isNull);
     await form.submit();
-    expect(stateOf(container).errors.keys, ['leaderSeat', 'playedSeats']);
+    expect(stateOf(container).errors.keys, ['playedSeats']);
     expect(repo.turnCalls, isEmpty);
+  });
+
+  test('沒選本回合首家也能送出：seat_number 送 null', () async {
+    final repo = FakeMatchesRepository();
+    final container = makeContainer(repo);
+    final form = await openForm(container)
+      ..togglePlayedSeat(1)
+      ..togglePlayedSeat(2);
+    await form.submit();
+    final input = repo.turnCalls.single.input;
+    expect(input.seatNumber, isNull);
+    expect(input.toJson()['seat_number'], isNull);
+    expect(input.toJson().containsKey('seat_number'), isTrue);
+    expect(repo.match.turns.single.seatNumber, isNull);
+  });
+
+  test('選了本回合首家再改成不選：送 null', () async {
+    final repo = FakeMatchesRepository();
+    final container = makeContainer(repo);
+    final form = await openForm(container)
+      ..setFirstSeat(2)
+      ..setFirstSeat(null)
+      ..togglePlayedSeat(1);
+    await form.submit();
+    expect(repo.turnCalls.single.input.seatNumber, isNull);
   });
 
   test('回合編號小於 1：不送出', () async {
@@ -110,7 +136,7 @@ void main() {
     expect(state.overwrite, isNull);
     expect(state.turnNumber, 2);
     expect(state.playedSeats, isEmpty);
-    expect(state.leaderSeat, isNull);
+    expect(state.firstSeat, isNull);
     final turns = container
         .read(matchDetailProvider(fakeMatchId))
         .match

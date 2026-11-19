@@ -13,7 +13,7 @@ const _counterLabels = {
   TurnCounter.faithful: '信者',
 };
 
-/// 記錄回合（白薔薇）：第幾回合、主導的座位、出牌的座位、四種數量、有沒有白薔薇。
+/// 記錄回合（白薔薇）：第幾回合、本回合首家（選填）、出牌的座位、四種數量、有沒有白薔薇。
 class TurnFormCard extends ConsumerStatefulWidget {
   const TurnFormCard({required this.matchId, required this.match, super.key});
 
@@ -75,25 +75,26 @@ class _TurnFormCardState extends ConsumerState<TurnFormCard> {
             ),
             const SizedBox(width: AppSpacing.small),
             Expanded(
-              // 記錄成功後主導座位會清空；換 Key 讓下拉選單跟著重建
+              // 記錄成功後本回合首家會清空；換 Key 讓下拉選單跟著重建
               child: KeyedSubtree(
-                key: const Key('turn-leader'),
+                key: const Key('turn-first-seat'),
                 child: DropdownButtonFormField<int>(
-                  key: ValueKey(('leader', form.turnNumber, form.leaderSeat)),
-                  initialValue: form.leaderSeat,
+                  key: ValueKey(('first', form.turnNumber, form.firstSeat)),
+                  initialValue: form.firstSeat,
                   isExpanded: true,
-                  decoration: InputDecoration(
-                    labelText: '主導的座位',
-                    errorText: form.errors['leaderSeat'],
-                  ),
+                  decoration: const InputDecoration(labelText: '本回合首家（選填）'),
                   items: [
+                    const DropdownMenuItem<int>(
+                      value: null,
+                      child: Text('不指定'),
+                    ),
                     for (final p in people)
                       DropdownMenuItem(
                         value: p.seatNumber,
                         child: Text('座位 ${p.seatNumber}・${p.displayName}'),
                       ),
                   ],
-                  onChanged: n.setLeaderSeat,
+                  onChanged: n.setFirstSeat,
                 ),
               ),
             ),
@@ -160,9 +161,10 @@ class _TurnFormCardState extends ConsumerState<TurnFormCard> {
           OverwritePrompt(
             keyPrefix: 'turn-overwrite',
             text: overwritePromptText,
-            existing:
-                '第 ${prompt.existing['turn_number']} 回合・'
-                '主導座位 ${prompt.existing['seat_number']}',
+            existing: [
+              '第 ${prompt.existing['turn_number']} 回合',
+              if (prompt.existing['seat_number'] case final seat?) '首家座位 $seat',
+            ].join('・'),
             busy: form.busy,
             onConfirm: n.confirmOverwrite,
             onCancel: n.cancelOverwrite,

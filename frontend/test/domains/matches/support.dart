@@ -1,6 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tabletop_hub/domains/booking/data/booking_repository.dart';
+import 'package:tabletop_hub/domains/groups/data/groups_repository.dart';
+import 'package:tabletop_hub/domains/groups/state/group_clock.dart';
 import 'package:tabletop_hub/domains/matches/data/matches_repository.dart';
 import 'package:tabletop_hub/domains/matches/state/match_current_user.dart';
 import 'package:tabletop_hub/domains/matches/state/match_detail_state.dart';
@@ -12,12 +14,20 @@ ProviderContainer makeContainer(
   FakeMatchesRepository repo, {
   String? userId = 'u-player',
   FakeBookingRepository? booking,
+  FakeGroupsRepository? groups,
 }) {
   final container = ProviderContainer(
     overrides: [
       matchesRepositoryProvider.overrideWithValue(repo),
       bookingRepositoryProvider.overrideWithValue(
         booking ?? FakeBookingRepository(),
+      ),
+      groupsRepositoryProvider.overrideWithValue(
+        groups ?? FakeGroupsRepository(),
+      ),
+      // 固定在 UTC+8，結果不受執行測試的電腦時區影響
+      groupClockProvider.overrideWithValue(
+        FixedOffsetClock(DateTime.utc(2026, 11, 14, 4)),
       ),
       matchUserIdProvider.overrideWithValue(userId),
     ],

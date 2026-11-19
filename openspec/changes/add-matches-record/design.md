@@ -21,7 +21,7 @@
 ## Decisions
 
 ### D1 回合用 `turn`（已決定）
-術語表（10.2）：`turn`＝輪到某位玩家行動的期間；`round`＝所有玩家各輪過一次。白薔薇 5 人局的 5 次，每次由一位玩家主導，一次就是一個回合。所以表名 `match_turns`、欄位 `turn_number`（從 1 開始）。畫面文字用「回合」，符合術語表即可。日後有遊戲需要整輪紀錄，再另加可空的 `round_number`。
+術語表（10.2）：`turn`＝輪到某位玩家行動的期間；`round`＝所有玩家各輪過一次。白薔薇 5 人局的 5 次，每次由一位玩家行動，一次就是一個回合。所以表名 `match_turns`、欄位 `turn_number`（從 1 開始）。畫面文字用「回合」，符合術語表即可。日後有遊戲需要整輪紀錄，再另加可空的 `round_number`。
 
 ### D2 資料表
 三張表，主鍵 `id` 為 UUID（`server_default gen_random_uuid()`）。每張表用 `__table_args__` 的 `comment`、每個欄位用 `comment=` 寫中文說明（以下「說明」欄就是 comment 的內容方向）。表名在建表前要先在群組告知（4.4）。
@@ -67,7 +67,7 @@
 | `id` | uuid PK | 回合紀錄的編號 |
 | `match_id` | uuid FK `matches.id` CASCADE | 屬於哪一局 |
 | `turn_number` | integer，CHECK >= 1 | 第幾個回合，從 1 開始 |
-| `seat_number` | integer，非空 | 這個回合由哪個座位的玩家主導 |
+| `seat_number` | integer，可為空 | 本回合首家的座位；遊戲沒有這個概念或未填時為空（0012 由非空改為可為空） |
 | `game_data` | jsonb，非空 | 這款遊戲特有的內容，格式由程式裡該遊戲的定義決定 |
 | `recorded_by` | uuid FK `auth_users.id`，非空 | 最後一次寫入這筆紀錄的人（覆蓋時換成覆蓋的人） |
 | `created_at`／`updated_at` | timestamptz | 建立／最後更新時間 |

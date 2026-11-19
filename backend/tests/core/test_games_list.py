@@ -55,7 +55,7 @@ def names(response: Response) -> list[str]:
     return [item["name"] for item in response.json()["items"]]
 
 
-def test_list_games_sorted_by_name(
+def test_list_games_sorted_by_id(
     client: TestClient, as_player: CurrentUser, add_game: Callable[[str, str], int]
 ) -> None:
     add_game("馬可波羅", "The Voyages of Marco Polo")
@@ -65,8 +65,31 @@ def test_list_games_sorted_by_name(
     assert response.status_code == 200
     body = response.json()
     assert body["total"] == 3
-    assert names(response) == sorted(["馬可波羅", "阿瓦隆", "卡坦島"])
+    # 組長決定：遊戲清單依 id 由小到大（也就是建立順序），不依名稱
+    assert names(response) == ["馬可波羅", "阿瓦隆", "卡坦島"]
+    ids = [item["id"] for item in body["items"]]
+    assert ids == sorted(ids)
     assert set(body["items"][0]) == {"id", "name", "english_name"}
+
+
+def test_search_results_are_also_sorted_by_id(
+    client: TestClient, as_player: CurrentUser, add_game: Callable[[str, str], int]
+) -> None:
+    add_game("瑞士卡坦", "Swiss Catan")
+    add_game("阿瓦隆", "Avalon")
+    add_game("卡坦島", "CATAN")
+    response = client.get(URL, params={"q": "卡坦"})
+    assert names(response) == ["瑞士卡坦", "卡坦島"]
+
+
+def test_pages_follow_id_order(
+    client: TestClient, as_player: CurrentUser, add_game: Callable[[str, str], int]
+) -> None:
+    for name in ("甲", "乙", "丙"):  # 名稱順序是 丙、乙、甲，與 id 順序相反
+        add_game(name, name)
+    first = client.get(URL, params={"page": 1, "page_size": 2})
+    second = client.get(URL, params={"page": 2, "page_size": 2})
+    assert names(first) + names(second) == ["甲", "乙", "丙"]
 
 
 def test_search_by_chinese_name(

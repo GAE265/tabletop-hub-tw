@@ -52,7 +52,8 @@ class ParticipantConfirm(BaseModel):
 
 class TurnCreate(BaseModel):
     turn_number: int = Field(ge=1)
-    seat_number: int = Field(ge=1)
+    # 本回合首家的座位，選填；遊戲沒有這個概念或沒填時為空
+    seat_number: int | None = Field(default=None, ge=1)
     game_data: dict[str, Any]
 
 
@@ -112,7 +113,7 @@ class ParticipantResponse(BaseModel):
 class TurnResponse(BaseModel):
     id: uuid.UUID
     turn_number: int
-    seat_number: int
+    seat_number: int | None
     game_data: dict[str, Any]
     recorded_by: uuid.UUID
     updated_at: datetime

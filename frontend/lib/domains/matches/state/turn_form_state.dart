@@ -24,11 +24,11 @@ class TurnOverwritePrompt {
   final Map<String, dynamic> existing;
 }
 
-/// 記錄回合的表單（白薔薇）：第幾回合、誰主導、點選出牌的座位、四種數量、有沒有白薔薇。
+/// 記錄回合的表單（白薔薇）：第幾回合、本回合首家（選填）、點選出牌的座位、四種數量、有沒有白薔薇。
 class TurnFormState {
   const TurnFormState({
     this.turnNumber = 1,
-    this.leaderSeat,
+    this.firstSeat,
     this.playedSeats = const {},
     this.doubleBladeCount = 0,
     this.darkBladeCount = 0,
@@ -44,8 +44,8 @@ class TurnFormState {
 
   final int turnNumber;
 
-  /// 這回合由哪個座位主導。
-  final int? leaderSeat;
+  /// 本回合首家的座位；選填，預設不選。
+  final int? firstSeat;
 
   /// 這回合出牌的座位。
   final Set<int> playedSeats;
@@ -62,7 +62,7 @@ class TurnFormState {
   /// 後端回的錯誤（不含「已有紀錄」，那個走 [overwrite]）。
   final ApiException? error;
 
-  /// 欄位錯誤：鍵是 turnNumber、leaderSeat、playedSeats。
+  /// 欄位錯誤：鍵是 turnNumber、playedSeats。
   final Map<String, String> errors;
 
   /// 不為 null 時，畫面要顯示 [overwritePromptText] 與確認、取消按鈕。
@@ -77,7 +77,7 @@ class TurnFormState {
 
   TurnFormState copyWith({
     int? turnNumber,
-    int? Function()? leaderSeat,
+    int? Function()? firstSeat,
     Set<int>? playedSeats,
     int? doubleBladeCount,
     int? darkBladeCount,
@@ -91,7 +91,7 @@ class TurnFormState {
     TurnOverwritePrompt? Function()? overwrite,
   }) => TurnFormState(
     turnNumber: turnNumber ?? this.turnNumber,
-    leaderSeat: leaderSeat == null ? this.leaderSeat : leaderSeat(),
+    firstSeat: firstSeat == null ? this.firstSeat : firstSeat(),
     playedSeats: playedSeats ?? this.playedSeats,
     doubleBladeCount: doubleBladeCount ?? this.doubleBladeCount,
     darkBladeCount: darkBladeCount ?? this.darkBladeCount,
@@ -118,8 +118,9 @@ class TurnFormNotifier extends Notifier<TurnFormState> {
 
   void setTurnNumber(int value) => state = state.copyWith(turnNumber: value);
 
-  void setLeaderSeat(int? value) =>
-      state = state.copyWith(leaderSeat: () => value);
+  /// 設定本回合首家；傳 null 代表不選。
+  void setFirstSeat(int? value) =>
+      state = state.copyWith(firstSeat: () => value);
 
   /// 點選／取消點選出牌的座位。
   void togglePlayedSeat(int seat) {
@@ -144,13 +145,12 @@ class TurnFormNotifier extends Notifier<TurnFormState> {
 
   Map<String, String> _validate() => {
     if (state.turnNumber < 1) 'turnNumber': '回合編號要從 1 開始',
-    if (state.leaderSeat == null) 'leaderSeat': '請選擇主導的座位',
     if (state.playedSeats.isEmpty) 'playedSeats': '請至少選一個出牌的座位',
   };
 
   TurnInput _buildInput() => TurnInput(
     turnNumber: state.turnNumber,
-    seatNumber: state.leaderSeat!,
+    seatNumber: state.firstSeat,
     gameData: WhiteRoseTurnData(
       playedSeatNumbers: state.playedSeats.toList()..sort(),
       doubleBladeCount: state.doubleBladeCount,

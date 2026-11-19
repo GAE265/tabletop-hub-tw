@@ -31,7 +31,7 @@
 
 ### 頁面：開局／找局
 
-`state/`：`matchFormProvider`（`MatchFormNotifier`）、`matchShopsProvider`、`matchListProvider`
+`state/`：`matchFormProvider`（`MatchFormNotifier`）、`matchShopsProvider`、`matchListProvider(groupId)`（參數 null＝不篩選）
 
 | 元件 | 類型 | 按下／輸入後做什麼 | `state/` 方法 | 後端 API |
 |---|---|---|---|---|
@@ -43,6 +43,21 @@
 | 開局 | 按鈕 | 驗證後送出；成功後 `created` 不為 null；送出中停用 | `submit()` | `POST /api/v1/matches` |
 | 局的編號＋打開 | 輸入欄位＋按鈕 | 打開已有的局（例如朋友傳來的編號） | — | — |
 | 最近的局 | 清單＋重新整理按鈕 | 每筆顯示遊戲、日期、狀態、地點、人數；點進去打開那一局 | `matchListProvider`（重新整理用 `ref.invalidate`） | `GET /api/v1/matches` |
+
+#### 從揪團的「填入戰績」進來（`/matches?group_id=<揪團 id>`）
+
+揪團頁的「填入戰績」只帶 `group_id`。戰績頁在 `initState` 後呼叫 `MatchFormNotifier.loadGroup(groupId)`，其餘由 `state/` 處理：
+
+| 元件 | 類型 | 行為 | `state/` | 後端 API |
+|---|---|---|---|---|
+| 揪團名稱 | 卡片（上方） | 顯示這個揪團的名稱；讀取中顯示進度條 | `MatchFormState.group`、`groupLoading` | `GET /api/v1/groups/{id}` |
+| 讀取揪團失敗 | 錯誤＋「重試」 | 不帶 `group_id`，下方表單照常可用；重試再讀一次 | `MatchFormState.groupError`、`loadGroup(id)` | 同上 |
+| 開一局 | 表單 | 地點自動改成桌遊店並選好揪團的店家；日期用揪團開始日（台灣時間）；揪團**剛好只選一款遊戲**時遊戲自動選好，0 款或 2 款以上自己選 | `loadGroup(id)` | — |
+| 開局 | 按鈕 | 帶 `group_id`。後端自動把該揪團的**正式成員**（不含候補）加為參加者：開局者用自己選的座位，其他人依加入揪團的順序給最小的空位 | `submit()` | `POST /api/v1/matches` |
+| 最近的局 | 清單 | 只列這個揪團的局；點進行中的局可繼續記錄 | `matchListProvider(groupId)` | `GET /api/v1/matches?group_id=` |
+
+- 只有該揪團的開團主、正式成員或 admin 可以帶 `group_id` 開局，其他人回 403（`PERMISSION_DENIED`）；候補也是 403。
+- 之後要減人用「移除參加者」。
 
 ### 頁面：一局
 
@@ -58,13 +73,13 @@
 | 加入這一局＋座位 | 按鈕＋輸入欄位（不在這局且進行中） | 自己加入，座位選填 | `joinSelf({seatNumber})` | `POST /api/v1/matches/{id}/participants`，body 為 `{}` 或 `{"seat_number": n}` |
 | 新增沒有帳號的人 | 名字＋座位輸入＋按鈕（在這局且進行中） | 名字不能空白；成功後清空欄位 | `addNamed(name, {seatNumber})` | `POST /api/v1/matches/{id}/participants`，body 帶 `display_name` |
 | 確認這局的紀錄 | 按鈕（已結束、我是參加者、還沒確認） | 確認自己的紀錄 | `confirmMine()` | `PATCH /api/v1/matches/{id}/participants/{pid}`，`{"is_confirmed": true}` |
-| 回合清單 | 清單 | 第幾回合、主導座位、出牌座位、雙刃／暗刃／巨刃／信者數量、有沒有白薔薇 | `match.turns` | 同上 |
+| 回合清單 | 清單 | 第幾回合、首家座位（沒填就不顯示）、出牌座位、雙刃／暗刃／巨刃／信者數量、有沒有白薔薇 | `match.turns` | 同上 |
 | 第幾回合 | 輸入欄位 | 預設從 1 開始，記完自動加 1 | `setTurnNumber(int)` | — |
-| 主導的座位 | 下拉選單 | 這回合由誰主導 | `setLeaderSeat(int?)` | — |
+| 本回合首家（選填） | 下拉選單 | 預設不選（選項「不指定」）；沒選時送出 `seat_number = null` | `setFirstSeat(int?)` | — |
 | 出牌的座位 | 可點選的標籤（每個座位一個） | 點選／取消 | `togglePlayedSeat(seat)` | — |
 | 雙刃、暗刃、巨刃、信者 | 加減按鈕與數字 | 不小於 0 | `setCount(TurnCounter, value)` | — |
 | 有白薔薇 | 開關 | | `setHasWhiteRose(bool)` | — |
-| 記錄這個回合 | 按鈕 | 驗證（主導、出牌座位必填）後送出；成功後清空表單並前進到下一回合 | `submit()` | `POST /api/v1/matches/{id}/turns` |
+| 記錄這個回合 | 按鈕 | 驗證（出牌座位必填，本回合首家選填）後送出；成功後清空表單並前進到下一回合 | `submit()` | `POST /api/v1/matches/{id}/turns` |
 | 覆蓋提示＋更新／取消 | 提示區塊與兩個按鈕（`turnFormState.overwrite` 不為 null 時顯示） | 「更新」帶 `overwrite=true` 重送；「取消」只清除提示 | `confirmOverwrite()`／`cancelOverwrite()` | `POST /api/v1/matches/{id}/turns?overwrite=true` |
 | 獲勝陣營 | 下拉選單 | 薔薇陣營／血刃陣營 | `setWinningFaction(code)`；選項 `whiteRoseFactions` | — |
 | 每個座位的陣營 | 下拉選單（每個座位一個） | 每個座位都要選 | `setFaction(seat, code)` | — |

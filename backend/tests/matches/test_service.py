@@ -181,10 +181,13 @@ def test_create_match_at_home_has_no_shop(service):
     assert service.create_match(CREATOR, create_input()).shop is None
 
 
-def test_create_match_for_group_does_not_require_membership(service, shared):
-    group_id = shared.add_group()
+def test_create_match_for_group_requires_membership(service, shared, repo):
+    group_id = shared.add_group(members=[(CREATOR.id, "開局者")])
     match = service.create_match(CREATOR, create_input(group_id=group_id))
     assert match.group_id == group_id
+    with pytest.raises(PermissionDenied):
+        service.create_match(OUTSIDER, create_input(group_id=group_id))
+    assert len(repo.matches) == 1
 
 
 @pytest.mark.parametrize(
@@ -200,6 +203,63 @@ def test_create_match_references_must_exist(service, repo, overrides, code):
         service.create_match(CREATOR, create_input(**overrides))
     assert_app_error(exc_info, 404, code)
     assert repo.matches == {}
+
+
+# --- 開局：揪團成員自動加入 ---
+
+MEMBERS = [(CREATOR.id, "開局者"), (PLAYER_B.id, "玩家乙"), (PLAYER_C.id, "玩家丙")]
+
+
+def seats(match) -> dict[str, int]:
+    return {p.display_name: p.seat_number for p in match.participants}
+
+
+def test_group_members_join_in_order_of_joining(service, shared):
+    group_id = shared.add_group(
+        members=[(CREATOR.id, "開局者"), (PLAYER_C.id, "玩家丙"), (PLAYER_B.id, "玩家乙")]
+    )
+    match = service.create_match(CREATOR, create_input(group_id=group_id))
+    assert seats(match) == {"開局者": 1, "玩家丙": 2, "玩家乙": 3}
+    assert match.participant_count == 3
+
+
+def test_group_creator_keeps_chosen_seat_and_others_take_lowest_free(service, shared):
+    group_id = shared.add_group(members=MEMBERS)
+    match = service.create_match(CREATOR, create_input(group_id=group_id, seat_number=2))
+    assert seats(match) == {"開局者": 2, "玩家乙": 1, "玩家丙": 3}
+
+
+def test_group_creator_who_is_member_is_not_added_twice(service, shared):
+    group_id = shared.add_group(members=MEMBERS)
+    match = service.create_match(PLAYER_B, create_input(group_id=group_id))
+    assert [p.user_id for p in match.participants].count(PLAYER_B.id) == 1
+    assert seats(match) == {"玩家乙": 1, "開局者": 2, "玩家丙": 3}
+
+
+def test_group_members_have_accounts_and_are_unconfirmed(service, shared):
+    group_id = shared.add_group(members=MEMBERS)
+    match = service.create_match(CREATOR, create_input(group_id=group_id))
+    assert match.account_count == 3
+    assert all(p.is_confirmed is False for p in match.participants)
+
+
+def test_admin_who_is_not_member_creates_match_and_gets_all_members(service, shared):
+    group_id = shared.add_group(members=MEMBERS)
+    match = service.create_match(ADMIN, create_input(group_id=group_id))
+    assert seats(match) == {"管理員": 1, "開局者": 2, "玩家乙": 3, "玩家丙": 4}
+
+
+def test_non_member_cannot_create_match_for_group(service, shared, repo):
+    group_id = shared.add_group(members=MEMBERS)
+    with pytest.raises(PermissionDenied):
+        service.create_match(OUTSIDER, create_input(group_id=group_id))
+    assert repo.matches == {} and repo.participants == []
+
+
+def test_create_match_without_group_adds_only_creator(service, shared):
+    shared.add_group(members=MEMBERS)
+    match = service.create_match(CREATOR, create_input())
+    assert seats(match) == {"開局者": 1}
 
 
 # --- 查詢 ---
@@ -336,6 +396,24 @@ def test_leader_does_not_have_to_be_in_played_seats(service, match_id):
 def test_name_only_participant_can_lead_a_turn(service, match_id):
     turn, _ = service.record_turn(CREATOR, match_id, turn_input(1, 4, played_seat_numbers=[4]))
     assert turn.seat_number == 4
+
+
+def test_first_seat_is_optional(service, match_id):
+    from app.domains.matches.schemas import TurnCreate
+
+    data = TurnCreate(turn_number=1, game_data=game_data())
+    turn, created = service.record_turn(PLAYER_B, match_id, data)
+    assert created is True
+    assert turn.seat_number is None
+
+
+def test_overwrite_can_clear_first_seat(service, match_id):
+    from app.domains.matches.schemas import TurnCreate
+
+    service.record_turn(CREATOR, match_id, turn_input(1, 2))
+    data = TurnCreate(turn_number=1, seat_number=None, game_data=game_data())
+    turn, created = service.record_turn(CREATOR, match_id, data, overwrite=True)
+    assert (created, turn.seat_number) == (False, None)
 
 
 def test_outsider_cannot_record_turn(service, match_id, repo):

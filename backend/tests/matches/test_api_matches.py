@@ -72,12 +72,12 @@ def test_creator_can_choose_seat(client: TestClient, as_player: CurrentUser, whi
     assert response.json()["participants"][0]["seat_number"] == 4
 
 
-def test_creator_does_not_have_to_be_group_member(
+def test_non_member_cannot_create_match_for_group(
     client: TestClient, as_player: CurrentUser, white_rose_id: int, add_group, api
 ):
-    group_id = str(add_group())  # 開團主是 TEST_PLAYER；路人不是成員
+    group_id = str(add_group())  # 開團主是 TEST_PLAYER；路人不是成員（組長決定：改為 403）
     response = api(OUTSIDER, "POST", BASE, json=match_body(white_rose_id, group_id=group_id))
-    assert response.status_code == 201
+    assert response.status_code == 403
 
 
 def test_create_match_with_progress(client: TestClient, as_player: CurrentUser, white_rose_id: int):

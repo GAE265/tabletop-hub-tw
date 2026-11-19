@@ -8,13 +8,14 @@ repository（MatchesRepository）：
     update_participant(id, values)、clear_confirmations(...)、delete_participant(id)、
     add_turn(...)、find_turn(...)、list_turns(id)、update_turn(...)、turns_using_seat(...)
 共用表與揪團的讀取（各自一個小介面，正式實作見 design.md D8）：
-    games.get_game(id)、shops.get_shop(id)、users.get_user(id)、groups.group_exists(id)
+    games.get_game(id)、shops.get_shop(id)、users.get_user(id)、
+    groups.get_members(id)（揪團不存在回 None；否則回正式成員，依加入順序，不含候補）
 
 回傳的紀錄用屬性存取，欄位名稱與資料表相同。
 """
 
 import uuid
-from collections.abc import Iterator, Mapping
+from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import date, datetime
@@ -85,13 +86,19 @@ class UserInfo:
 
 
 @dataclass
+class GroupMemberInfo:
+    user_id: uuid.UUID
+    display_name: str
+
+
+@dataclass
 class FakeSharedData:
     """共用表與揪團的讀取：同一個物件同時當 games、shops、users、groups 傳給 service。"""
 
     games: dict[int, GameInfo] = field(default_factory=dict)
     shops: dict[uuid.UUID, ShopInfo] = field(default_factory=dict)
     users: dict[uuid.UUID, UserInfo] = field(default_factory=dict)
-    groups: set[uuid.UUID] = field(default_factory=set)
+    groups: dict[uuid.UUID, list[GroupMemberInfo]] = field(default_factory=dict)
 
     def add_game(
         self, game_id: int, name: str, bgg_id: int, result_type: str | None = "faction"
@@ -108,9 +115,10 @@ class FakeSharedData:
         self.users[user_id] = UserInfo(user_id, display_name)
         return user_id
 
-    def add_group(self) -> uuid.UUID:
+    def add_group(self, members: Sequence[tuple[uuid.UUID, str]] = ()) -> uuid.UUID:
+        """新增一個揪團；members 是（使用者 id，顯示名稱），依加入順序排列的正式成員。"""
         group_id = uuid.uuid4()
-        self.groups.add(group_id)
+        self.groups[group_id] = [GroupMemberInfo(user_id, name) for user_id, name in members]
         return group_id
 
     def get_game(self, game_id: int) -> GameInfo | None:
@@ -122,8 +130,8 @@ class FakeSharedData:
     def get_user(self, user_id: uuid.UUID) -> UserInfo | None:
         return self.users.get(user_id)
 
-    def group_exists(self, group_id: uuid.UUID) -> bool:
-        return group_id in self.groups
+    def get_members(self, group_id: uuid.UUID) -> list[GroupMemberInfo] | None:
+        return self.groups.get(group_id)
 
 
 class FakeMatchesRepository:

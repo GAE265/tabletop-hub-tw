@@ -16,44 +16,29 @@ import '../state/match_list_state.dart';
 import '../state/match_shops.dart';
 import 'widgets/match_widgets.dart';
 
-/// 開局表單的預先帶入值（從揪團的「填入戰績」進來）。
+/// 從揪團的「填入戰績」進來時的揪團 id（網址 `?group_id=`）。
 class MatchPrefill {
-  const MatchPrefill({this.gameId, this.playedOn, this.shopId, this.groupId});
+  const MatchPrefill({this.groupId});
 
-  final int? gameId;
-  final DateTime? playedOn;
-
-  /// 有值時地點改成桌遊店並選好這間店。
-  final String? shopId;
-
-  /// 開局時帶 `group_id`，這一局連到該揪團。
+  /// 有值時：上方顯示揪團名稱、最近的局只列這個揪團的局，開局帶入揪團的店家與唯一的遊戲，
+  /// 並帶 `group_id`，這一局連到該揪團。
   final String? groupId;
 }
 
 /// 戰績（`/matches`）：開一局、用編號打開、最近的局。
 ///
 /// 手機上下排列；平板與桌機左右並排。開局成功後跳到這一局（`/matches/<id>`）。
-/// 網址參數 `game_id`、`date`（YYYY-MM-DD）、`shop_id`、`group_id` 會預先帶入開局表單，
-/// 不合法的值略過。
+/// 網址參數 `group_id`（從揪團的「填入戰績」進來）：讀取揪團後帶入開局表單，
+/// 最近的局只列這個揪團的局。
 class MatchesPage extends ConsumerWidget {
   const MatchesPage({this.prefill = const MatchPrefill(), super.key});
 
   factory MatchesPage.fromQuery(Map<String, String> query, {Key? key}) {
-    final date = DateTime.tryParse(query['date'] ?? '');
-    String? text(String name) {
-      final value = query[name]?.trim();
-      return value == null || value.isEmpty ? null : value;
-    }
-
+    final groupId = query['group_id']?.trim();
     return MatchesPage(
       key: key,
       prefill: MatchPrefill(
-        gameId: int.tryParse(query['game_id'] ?? ''),
-        playedOn: date == null
-            ? null
-            : DateTime(date.year, date.month, date.day),
-        shopId: text('shop_id'),
-        groupId: text('group_id'),
+        groupId: groupId == null || groupId.isEmpty ? null : groupId,
       ),
     );
   }
@@ -70,7 +55,10 @@ class MatchesPage extends ConsumerWidget {
       key: const Key('match-form-card'),
       prefill: prefill,
     );
-    const list = _RecentCard(key: Key('match-list-card'));
+    final list = _RecentCard(
+      key: const Key('match-list-card'),
+      groupId: prefill.groupId,
+    );
     return Scaffold(
       key: const Key('matches-page'),
       appBar: AppBar(title: const Text('戰績')),
@@ -83,13 +71,17 @@ class MatchesPage extends ConsumerWidget {
           child: ListView(
             padding: const EdgeInsets.all(AppSpacing.medium),
             children: [
+              if (prefill.groupId case final groupId?) ...[
+                _GroupHeader(groupId: groupId),
+                const SizedBox(height: AppSpacing.medium),
+              ],
               if (wide)
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Expanded(child: form),
                     const SizedBox(width: AppSpacing.medium),
-                    const Expanded(child: list),
+                    Expanded(child: list),
                   ],
                 )
               else ...[
@@ -102,6 +94,41 @@ class MatchesPage extends ConsumerWidget {
         ),
       ),
     );
+  }
+}
+
+/// 從揪團進來時顯示的揪團名稱；讀取失敗時顯示錯誤與「重試」。
+class _GroupHeader extends ConsumerWidget {
+  const _GroupHeader({required this.groupId});
+
+  final String groupId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final form = ref.watch(matchFormProvider);
+    if (form.groupError case final error?) {
+      return KeyedSubtree(
+        key: const Key('match-group-error'),
+        child: MatchLoadError(
+          error: error,
+          prefix: '揪團載入失敗',
+          retryKey: const Key('match-group-retry'),
+          onRetry: () =>
+              ref.read(matchFormProvider.notifier).loadGroup(groupId),
+        ),
+      );
+    }
+    if (form.group case final group?) {
+      return Card(
+        key: const Key('match-group-title'),
+        child: ListTile(
+          leading: const Icon(Icons.groups_outlined),
+          title: Text(group.title),
+          subtitle: const Text('這個揪團的戰績'),
+        ),
+      );
+    }
+    return const LinearProgressIndicator();
   }
 }
 
@@ -129,17 +156,11 @@ class _MatchFormCardState extends ConsumerState<_MatchFormCard> {
     // 改 provider 不能在建立畫面的過程中做，等第一個畫面畫完再帶入
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      final p = widget.prefill;
-      if (p.gameId case final gameId?) _n.setGameId(gameId);
       if (ref.read(matchFormProvider).playedOn == null) {
-        _n.setPlayedOn(p.playedOn ?? _today());
+        _n.setPlayedOn(_today());
       }
-      if (p.shopId case final shopId?) {
-        _n
-          ..setLocationType('shop')
-          ..setShopId(shopId);
-      }
-      if (p.groupId case final groupId?) _n.setGroupId(groupId);
+      // 從揪團進來：讀取揪團，帶入店家、唯一的遊戲、日期與 group_id
+      if (widget.prefill.groupId case final groupId?) _n.loadGroup(groupId);
     });
   }
 
@@ -312,7 +333,10 @@ class _ShopField extends ConsumerWidget {
 
 /// 用編號打開與最近的局。
 class _RecentCard extends ConsumerStatefulWidget {
-  const _RecentCard({super.key});
+  const _RecentCard({this.groupId, super.key});
+
+  /// 不是 null 時只列這個揪團的局。
+  final String? groupId;
 
   @override
   ConsumerState<_RecentCard> createState() => _RecentCardState();
@@ -334,13 +358,14 @@ class _RecentCardState extends ConsumerState<_RecentCard> {
 
   @override
   Widget build(BuildContext context) {
-    final recent = ref.watch(matchListProvider);
+    final provider = matchListProvider(widget.groupId);
+    final recent = ref.watch(provider);
     return MatchSection(
       title: '最近的局',
       trailing: IconButton(
         key: const Key('match-list-refresh'),
         tooltip: '重新整理',
-        onPressed: () => ref.invalidate(matchListProvider),
+        onPressed: () => ref.invalidate(provider),
         icon: const Icon(Icons.refresh),
       ),
       children: [
@@ -369,7 +394,7 @@ class _RecentCardState extends ConsumerState<_RecentCard> {
           error: (error, _) => MatchLoadError(
             error: error,
             retryKey: const Key('match-list-retry'),
-            onRetry: () => ref.invalidate(matchListProvider),
+            onRetry: () => ref.invalidate(provider),
           ),
           data: (items) => items.isEmpty
               ? const Text('還沒有任何一局，先開一局吧')

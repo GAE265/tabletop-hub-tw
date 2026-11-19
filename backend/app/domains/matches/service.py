@@ -53,7 +53,7 @@ class MatchesRepositoryProtocol(Protocol):
         self,
         match_id: uuid.UUID,
         turn_number: int,
-        seat_number: int,
+        seat_number: int | None,
         game_data: dict[str, Any],
         recorded_by: uuid.UUID,
     ) -> Any: ...
@@ -62,7 +62,7 @@ class MatchesRepositoryProtocol(Protocol):
     def update_turn(
         self,
         turn_id: uuid.UUID,
-        seat_number: int,
+        seat_number: int | None,
         game_data: dict[str, Any],
         recorded_by: uuid.UUID,
     ) -> Any: ...
@@ -82,7 +82,9 @@ class UserReader(Protocol):
 
 
 class GroupLookup(Protocol):
-    def group_exists(self, group_id: uuid.UUID) -> bool: ...
+    def get_members(self, group_id: uuid.UUID) -> list[Any] | None:
+        """揪團的正式成員（不含候補），依加入順序；揪團不存在回 None。"""
+        ...
 
 
 def _utc_now() -> datetime:
@@ -119,7 +121,10 @@ def _require_participant(user: CurrentUser, participants: list[Any]) -> None:
 
 
 def _lowest_free_seat(participants: list[Any]) -> int:
-    taken = {p.seat_number for p in participants}
+    return _lowest_free_seat_from({p.seat_number for p in participants})
+
+
+def _lowest_free_seat_from(taken: set[int]) -> int:
     seat = 1
     while seat in taken:
         seat += 1
@@ -151,8 +156,15 @@ class MatchesService:
             raise AppError(404, "MATCH_GAME_NOT_FOUND", "找不到這款遊戲")
         if data.shop_id is not None and self._shops.get_shop(data.shop_id) is None:
             raise AppError(404, "MATCH_SHOP_NOT_FOUND", "找不到這間店家")
-        if data.group_id is not None and not self._groups.group_exists(data.group_id):
-            raise AppError(404, "MATCH_GROUP_NOT_FOUND", "找不到這個揪團")
+        group_members: list[Any] = []
+        if data.group_id is not None:
+            found = self._groups.get_members(data.group_id)
+            if found is None:
+                raise AppError(404, "MATCH_GROUP_NOT_FOUND", "找不到這個揪團")
+            # 只有該揪團的開團主與正式成員（開團主一定是成員）或管理員可以替揪團開局
+            if user.role != "admin" and all(m.user_id != user.id for m in found):
+                raise PermissionDenied()
+            group_members = found
         creator = self._users.get_user(user.id)
         if creator is None:
             raise AppError(404, "MATCH_USER_NOT_FOUND", "找不到目前使用者的帳號")
@@ -171,6 +183,14 @@ class MatchesService:
             self._repo.add_participant(
                 match_id, data.seat_number or 1, user.id, creator.display_name
             )
+            # 帶揪團開局：其他正式成員依加入順序，各給最小的空位
+            taken = {data.seat_number or 1}
+            for member in group_members:
+                if member.user_id == user.id:
+                    continue
+                seat = _lowest_free_seat_from(taken)
+                taken.add(seat)
+                self._repo.add_participant(match_id, seat, member.user_id, member.display_name)
         return self._load(match_id)
 
     # --- 查詢 ---
@@ -294,7 +314,10 @@ class MatchesService:
                 raise _validation_error("game_data 格式不符合這款遊戲的定義", exc) from exc
 
             seats = {p.seat_number for p in participants}
-            unknown = sorted(({data.seat_number} | set(definition.played_seats(game_data))) - seats)
+            used = set(definition.played_seats(game_data))
+            if data.seat_number is not None:
+                used.add(data.seat_number)
+            unknown = sorted(used - seats)
             if unknown:
                 raise AppError(
                     422,

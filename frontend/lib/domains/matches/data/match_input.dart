@@ -84,16 +84,16 @@ class WhiteRoseTurnData {
 
 /// `POST /api/v1/matches/{id}/turns`：記錄一個回合。
 ///
-/// [seatNumber] 是這回合由誰主導；[gameData] 的格式依遊戲而定。
+/// [seatNumber] 是本回合首家的座位，選填，沒選時送 null；[gameData] 的格式依遊戲而定。
 class TurnInput {
   const TurnInput({
     required this.turnNumber,
-    required this.seatNumber,
+    this.seatNumber,
     required this.gameData,
   });
 
   final int turnNumber;
-  final int seatNumber;
+  final int? seatNumber;
   final Map<String, dynamic> gameData;
 
   Map<String, dynamic> toJson() => {
