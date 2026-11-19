@@ -1,7 +1,7 @@
 # Qwen 即時語音模型的官方規格
 
 Type: research
-Status: open
+Status: resolved
 Map: [AI 語音主持](../map.md)
 
 ## Question
@@ -22,3 +22,14 @@ Map: [AI 語音主持](../map.md)
 只用官方文件、官方價格頁、技術報告等一手來源，每項附連結、查核日期與版本。查不到的寫「查不到」，不要推測。
 
 結果寫在 `.scratch/host/research/qwen-realtime-facts.md`。
+
+## Answer
+
+- 2026-11-19 已逐題回查官方文件，完整結果見[查核報告](../research/qwen-realtime-facts.md)。
+- Flash／Plus 都有 WebSocket、WebRTC、AOQ，新加坡與北京可用，官方提供短效 API key 與後端交換 SDP 的瀏覽器接法。
+- 300 秒是累計歷史音訊容量，上限 50 輪，查不到 WebSocket／WebRTC 固定最長連線時間。
+- 可按住說話，可多工具呼叫，停播仍須應用程式清空本地緩衝，工具等待期間持續說話未獲保證。
+- Flash 新加坡四項價格與選型報告一致，免費額度有條件，歷史輸入會重算費用。
+- 查不到 Flash 對 Plus 的中文、工具與速度差距，論文 4.74／1.116 秒／54% 均未分 SKU。
+- 平台預設保留推論資料最多 30 天，含例外，官方說不拿客戶資料訓練，目前 ZDR 清單未列 Realtime。
+- 已區分 DashScope 2.1.0 與 AOQ Linux v1.4.1，模型專用同步範例及 AOQ 授權仍查不到，未做付費 API 或語音實測。

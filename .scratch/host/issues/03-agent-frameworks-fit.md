@@ -1,7 +1,7 @@
 # 三個 Agent 框架怎麼接 Qwen、怎麼展示
 
 Type: research
-Status: open
+Status: resolved
 Map: [AI 語音主持](../map.md)
 
 ## Question
@@ -25,3 +25,14 @@ Map: [AI 語音主持](../map.md)
 只用官方文件、官方 repo、PyPI 等一手來源，每項附連結、查核日期與版本。
 
 結果寫在 `.scratch/host/research/agent-frameworks-fit.md`。
+
+## Answer
+
+- [完整研究結果](../research/agent-frameworks-fit.md)，一手來源查核日為 2026-11-19，逐題附版本與文件日期。
+- 三者都有 Qwen 文字模型接法，但未取得三者的 Qwen-Audio-3.1-Realtime 官方現成音訊轉接器證據。
+- 原生語音可保留在 Qwen，後端框架處理工具事件與查詢流程，這是介面層面的接法，尚未試跑。
+- 三者都有本機展示方式，LangChain Agent 底層使用 LangGraph，Microsoft 不必先搬 Foundry 或改 .NET。
+- 核心版本為 LangChain 1.5.2、LangGraph 1.2.22、Microsoft 1.26.0，核心皆正式且為 MIT，DevUI 仍預覽。
+- 已對照現有同步 LLMProvider 與手寫 fake，框架工具迴圈和目前單次模型呼叫契約的分工仍待決定。
+- 原報告沒有 LangChain，週下載量與社群大小缺少本次可採用的一手證據，未沿用其排名或不使用框架的結論。
+- 未安裝、未執行框架、未呼叫模型 API，僅修改本 ticket 與研究結果，未更新 map.md。

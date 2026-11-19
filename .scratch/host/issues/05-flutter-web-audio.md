@@ -1,7 +1,7 @@
 # Flutter Web 怎麼收音與即時播音
 
 Type: research
-Status: open
+Status: resolved
 Map: [AI 語音主持](../map.md)
 
 ## Question
@@ -18,3 +18,14 @@ Map: [AI 語音主持](../map.md)
 只用官方文件、pub.dev、瀏覽器廠商文件（MDN、WebKit、Chrome）等一手來源，每項附連結、查核日期與版本。
 
 結果寫在 `.scratch/host/research/flutter-web-audio.md`。
+
+## Answer
+
+- 查核日期：2026-11-19，六題均已回答，完整來源與版本見[研究結果](../research/flutter-web-audio.md)。
+- Web 可即時收 PCM，候選為 `record` 或 `getUserMedia` 加 AudioWorklet，不必等錄完才上傳。
+- 播音可用 Flutter Sound 串流或 Web Audio，插話需停播、清空佇列並拒收舊回覆，實際停播時間待測。
+- WebSocket 與 WebRTC 都可用，但模型端須支援相同協定，瀏覽器 WebSocket 不能任意設定握手 header。
+- 手機使用須考慮 HTTPS、麥克風授權與手勢啟用，鎖屏持續雙向語音查不到完整保證。
+- 五個候選套件已逐一列 Web、Android、iOS 支援、授權與維護證據，`record` 7.x 與 `web` 1.1.2 提高 SDK 門檻。
+- 網頁物件、音訊節點、JS interop 與頁面生命週期須封裝於 `core/platform/`，現有介面模式可沿用。
+- 選型報告的「立刻停播」與「回音消除」需補實作及裝置條件，未改地圖、前端程式或套件設定。

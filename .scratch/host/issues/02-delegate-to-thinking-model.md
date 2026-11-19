@@ -1,7 +1,7 @@
 # 難題轉交後端思考模型的做法
 
 Type: research
-Status: open
+Status: resolved
 Map: [AI 語音主持](../map.md)
 
 ## Question
@@ -19,3 +19,14 @@ Map: [AI 語音主持](../map.md)
 只用官方文件、官方範例、技術報告等一手來源，每項附連結、查核日期與版本。
 
 結果寫在 `.scratch/host/research/delegate-to-thinking-model.md`。
+
+## Answer
+
+- [完整研究結果](../research/delegate-to-thinking-model.md)，查核日 2026-11-19，各來源附文件日期或版本。
+- 官方有 Chat-Supervisor 與委派文件，Qwen 可透過工具接回後端結果，查不到業界採用比例。
+- 核對三個當前 Qwen 文字候選的思考、工具、JSON Schema、Singapore 牌價與版本。
+- 現有 Azure 介面支援 Responses、工具及固定格式，但未讀任何 `.env`，實際部署模型仍未知。
+- 可先說等待語，但 Qwen 的穩定性待測，查不到本遊戲的裁決秒數，不能把首音當完成時間。
+- 委派會增加文字推理用量與狀態管理，還須處理同步等待、逾時、中斷、舊答案及語氣一致性。
+- 查不到 Realtime Plus 的可控制深度思考模式或取代後端的證據，第 5 題已與 ticket 01 第 6 節對照。
+- 未改地圖、程式或全域設定，未呼叫付費 API，本題完成研究，架構選擇與原型實測留待後續 ticket。
