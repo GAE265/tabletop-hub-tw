@@ -96,7 +96,6 @@ class _GroupInfo extends ConsumerWidget {
                   icon: Icons.group_outlined,
                 ),
                 if (fee != null) PillBadge(label: fee, tone: PillTone.accent),
-                if (isConfirmedOpen(group)) const GroupConfirmedBadge(),
               ],
             ),
             const SizedBox(height: AppSpacing.medium),
@@ -273,6 +272,12 @@ class _Actions extends ConsumerWidget {
               ),
               icon: const Icon(Icons.check_circle_outline),
               label: const Text('確定成團'),
+            ),
+            GroupAction.confirmed => FilledButton.icon(
+              key: const Key('group-confirmed'),
+              onPressed: null,
+              icon: const Icon(Icons.check_circle),
+              label: const Text('已成團'),
             ),
             GroupAction.cancel => TextButton(
               onPressed: enabled(
