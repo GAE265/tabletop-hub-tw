@@ -23,7 +23,7 @@
   - `GET /api/v1/group-notifications`：自己的通知，新的在前，分頁，附 `unread_count`。
   - `PATCH /api/v1/group-notifications/{notification_id}`：body `{"read": true}` 標成已讀。
 - 新增資料表 `groups_notifications`，與 `groups.confirmed_at` 放在同一個 migration。
-- **前端**：
+- **前端**（和後端放在同一個 MR）：
   - 導覽列加通知鈴鐺與未讀數，進入頁面與每 60 秒重新查詢。
   - 通知列表頁 `/groups/notifications`：點一則就標成已讀，並跳到揪團詳細頁。
   - 揪團詳細頁：開團主看到「確定成團」，已成團的揪團顯示「已成團」。

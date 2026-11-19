@@ -188,4 +188,27 @@ void main() {
     expect(find.text('阿瓦隆'), findsOneWidget);
     expect(find.text('馬可波羅'), findsOneWidget);
   });
+
+  testWidgets('已成團的揪團，卡片顯示「已成團」', (tester) async {
+    final repo = FakeGroupsRepository(
+      groups: [
+        fakeGroup(
+          id: 'g-yes',
+          title: '成團了',
+          startAt: taipei(11, 14, 18),
+          confirmedAt: nowUtc,
+        ),
+        fakeGroup(id: 'g-no', title: '還沒成團', startAt: taipei(11, 14, 20)),
+      ],
+    );
+    await pumpGroupsWidget(tester, const GroupsPage(), repo: repo);
+    expect(find.text('已成團'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.ancestor(of: find.text('成團了'), matching: find.byType(Card)),
+        matching: find.text('已成團'),
+      ),
+      findsOneWidget,
+    );
+  });
 }

@@ -83,13 +83,33 @@ void main() {
       ]);
     });
 
-    test('開團主：編輯、訂位、填入戰績、取消揪團', () async {
+    test('開團主：編輯、訂位、填入戰績、確定成團、取消揪團', () async {
       expect(
         await actions(
           fakeGroup(
             startAt: start,
             organizerId: 'u-player',
             myStatus: 'member',
+          ),
+        ),
+        [
+          GroupAction.edit,
+          GroupAction.book,
+          GroupAction.recordMatch,
+          GroupAction.confirm,
+          GroupAction.cancel,
+        ],
+      );
+    });
+
+    test('已成團：開團主沒有「確定成團」', () async {
+      expect(
+        await actions(
+          fakeGroup(
+            startAt: start,
+            organizerId: 'u-player',
+            myStatus: 'member',
+            confirmedAt: nowUtc,
           ),
         ),
         [

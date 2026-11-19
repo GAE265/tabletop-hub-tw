@@ -380,4 +380,99 @@ void main() {
     expect(find.text('戰績頁'), findsOneWidget);
     expect(opened!.queryParameters, {'group_id': 'g-1'});
   });
+
+  group('確定成團', () {
+    Future<FakeGroupsRepository> pumpAs(
+      WidgetTester tester, {
+      String userId = 'u-org',
+      String status = 'open',
+      String? myStatus = 'member',
+      DateTime? confirmedAt,
+    }) async {
+      final repo = FakeGroupsRepository(
+        groups: [
+          fakeGroup(
+            id: 'g-1',
+            startAt: taipei(11, 14, 19),
+            status: status,
+            myStatus: myStatus,
+            confirmedAt: confirmedAt,
+          ),
+        ],
+      );
+      await pumpGroupsWidget(
+        tester,
+        const GroupDetailPage(groupId: 'g-1'),
+        repo: repo,
+        userId: userId,
+      );
+      return repo;
+    }
+
+    testWidgets('開團主看到「確定成團」', (tester) async {
+      await pumpAs(tester);
+      expect(find.byKey(const Key('group-confirm')), findsOneWidget);
+      expect(find.text('已成團'), findsNothing);
+    });
+
+    testWidgets('成員、候補、其他玩家看不到', (tester) async {
+      for (final myStatus in ['member', 'waitlisted', null]) {
+        await pumpAs(tester, userId: 'u-player', myStatus: myStatus);
+        expect(find.byKey(const Key('group-confirm')), findsNothing);
+      }
+    });
+
+    testWidgets('已成團、已取消、已結束：沒有按鈕', (tester) async {
+      await pumpAs(tester, confirmedAt: nowUtc);
+      expect(find.byKey(const Key('group-confirm')), findsNothing);
+      await pumpAs(tester, status: 'cancelled');
+      expect(find.byKey(const Key('group-confirm')), findsNothing);
+      await pumpAs(tester, status: 'ended');
+      expect(find.byKey(const Key('group-confirm')), findsNothing);
+    });
+
+    testWidgets('確認後送出 confirmed，按鈕消失並顯示「已成團」', (tester) async {
+      final repo = await pumpAs(tester);
+      await tester.tap(find.byKey(const Key('group-confirm')));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('通知所有成員'), findsOneWidget);
+      await tester.tap(find.text('確定'));
+      await tester.pumpAndSettle();
+      expect(repo.updateCalls, [
+        ('g-1', {'confirmed': true}),
+      ]);
+      expect(find.byKey(const Key('group-confirm')), findsNothing);
+      expect(find.text('已成團'), findsOneWidget);
+    });
+
+    testWidgets('對話框按取消：不送出', (tester) async {
+      final repo = await pumpAs(tester);
+      await tester.tap(find.byKey(const Key('group-confirm')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('取消'));
+      await tester.pumpAndSettle();
+      expect(repo.updateCalls, isEmpty);
+    });
+
+    testWidgets('失敗：顯示中文錯誤，按鈕保留', (tester) async {
+      final repo = await pumpAs(tester);
+      repo.actionError = const ApiException(
+        code: 'GROUP_ALREADY_CONFIRMED',
+        message: '這個揪團已經確定成團',
+        statusCode: 409,
+      );
+      await tester.tap(find.byKey(const Key('group-confirm')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('確定'));
+      await tester.pumpAndSettle();
+      expect(find.text('這個揪團已經確定成團'), findsOneWidget);
+      expect(find.byKey(const Key('group-confirm')), findsOneWidget);
+    });
+
+    testWidgets('成團後取消：顯示「已取消」，不顯示「已成團」', (tester) async {
+      await pumpAs(tester, status: 'cancelled', confirmedAt: nowUtc);
+      expect(find.text('已取消'), findsOneWidget);
+      expect(find.text('已成團'), findsNothing);
+    });
+  });
 }

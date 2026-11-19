@@ -7,7 +7,7 @@
 - [ ] 1.1 在群組告知新表名 `groups_notifications` 與新欄位 `groups.confirmed_at`（AGENTS.md 4.4）
 - [ ] 1.2 開 Draft MR，貼上 `groups-notifications` 的情境表，@ 一位組員確認
 
-## 2. MR 1：後端 API 與 migration（@ 立倫、瑋鋐）
+## 2. 後端 API 與 migration（@ 立倫、瑋鋐）
 
 - [x] 2.1 寫測試，先提交（此時失敗）：
   - `tests/groups/test_service.py`：確定成團、三種通知的收件人、排除操作者、失敗不寫通知
@@ -32,7 +32,7 @@
 - [x] 2.9 自我檢查：在 `backend/` 跑 `uv run ruff check .`、`uv run ruff format --check .`、`uv run pytest`
 - [x] 2.10 產出 `docs/mr_info/<分支>.md`，附情境表與對應的測試
 
-## 3. MR 2：前端（MR 1 合併後，從 `dev` 開分支）
+## 3. 前端（同一個分支與 MR，見 design.md D6）
 
 - [ ] 3.1 寫測試，先提交（此時失敗）：
   - `test/domains/groups/group_notifications_state_test.dart`：列表、分頁、未讀數、標成已讀（成功與失敗）、60 秒更新
@@ -48,7 +48,7 @@
 - [ ] 3.5 `app/`：導覽列與手機頂部列放鈴鐺，`router.dart` 加上 `/groups/notifications`
 - [ ] 3.6 更新 `docs/handoff/groups.md`
 - [ ] 3.7 自我檢查：在 `frontend/` 跑 `flutter analyze`、`flutter test`
-- [ ] 3.8 產出 `docs/mr_info/<分支>.md`
+- [ ] 3.8 更新 `docs/mr_info/<分支>.md`，加上前端的情境
 
 ## Workflow follow-up
 

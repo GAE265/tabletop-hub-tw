@@ -93,10 +93,11 @@
   - 使用者是 `groups` 主責，也是 UI 負責人，所以直接做正式頁面 `pages/group_notifications_page.dart`，不另做參考畫面（與 `add-groups-calendar` 的 MR 3 相同）。
   - 顏色、間距只用 `app/theme`。
 
-### D6：拆成兩個 MR
+### D6：前後端放在同一個 MR
 
-- **MR 1**：後端（含 migration）。@ 立倫（契約）、瑋鋐（migration）。
-- **MR 2**：前端 data、state、鈴鐺、通知頁、詳細頁按鈕與標示，以及交接說明。MR 1 合併後，從 `dev` 開分支。
+- 使用者決定前後端一起做，同一個分支 `feature/groups-notifications`、同一個 MR。
+- 同一個功能的前後端算「一件事」；MR 要 @ 立倫（契約）、瑋鋐（migration）。
+- 前端的「確定成團」按鈕只給開團主，和既有的「取消揪團」一致（前端目前只知道使用者 id，不知道角色）；後端仍允許 admin。
 
 ## Risks / Trade-offs
 

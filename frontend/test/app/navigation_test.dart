@@ -7,6 +7,7 @@ import 'package:tabletop_hub/app/navigation.dart';
 import 'package:tabletop_hub/app/shell.dart';
 import 'package:tabletop_hub/app/theme/app_theme.dart';
 import 'package:tabletop_hub/core/config/app_config.dart';
+import 'package:tabletop_hub/domains/groups/data/groups_repository.dart';
 
 import '../support/fakes.dart';
 
@@ -42,6 +43,7 @@ Future<GoRouter> pumpShell(
             '/matches',
             '/matches/m-1',
             '/groups',
+            '/groups/notifications',
             '/games-advisor',
             '/rules',
             '/rules/1',
@@ -59,6 +61,8 @@ Future<GoRouter> pumpShell(
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
+        // 鈴鐺查詢未讀數用假的 repository（add-groups-notifications）
+        groupsRepositoryProvider.overrideWithValue(FakeGroupsRepository()),
         appConfigProvider.overrideWithValue(
           const AppConfig(
             apiBaseUrl: 'http://api.test',
@@ -192,5 +196,32 @@ void main() {
     await pumpShell(tester, location: '/matches/m-1');
     expect(isSelected(tester, 'shell-nav-matches'), isTrue);
     expect(isSelected(tester, 'shell-nav-home'), isFalse);
+  });
+
+  group('通知鈴鐺（add-groups-notifications）', () {
+    testWidgets('手機：鈴鐺在畫面頂部', (tester) async {
+      await pumpShell(tester, size: const Size(400, 900));
+      final bell = find.byKey(const Key('shell-notification-bell'));
+      expect(bell, findsOneWidget);
+      expect(tester.getTopLeft(bell).dy, lessThan(100));
+    });
+
+    testWidgets('桌機：鈴鐺在頂部導覽列', (tester) async {
+      await pumpShell(tester, size: const Size(1280, 800));
+      final bell = find.byKey(const Key('shell-notification-bell'));
+      expect(bell, findsOneWidget);
+      expect(
+        find.descendant(of: find.byType(TopNavigation), matching: bell),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('點鈴鐺：前往通知列表頁，導覽列選取「揪團」', (tester) async {
+      final router = await pumpShell(tester, size: const Size(1280, 800));
+      await tester.tap(find.byKey(const Key('shell-notification-bell')));
+      await tester.pumpAndSettle();
+      expect(router.state.uri.path, '/groups/notifications');
+      expect(isSelected(tester, 'shell-nav-groups'), isTrue);
+    });
   });
 }
