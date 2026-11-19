@@ -37,9 +37,9 @@
   - 首版只做一款：《血與刃的白薔薇》（Blades & Rose，BGG 編號 400566）。`matches` 已有它的回合紀錄格式與陣營（`backend/app/domains/matches/game_definitions.py`），`rules_qa` 已有它的規則影片。
   - 聲音從桌上的手機或平板進出：開 Flutter Web 頁面，用它的麥克風與喇叭。
   - 首版主持人只讀資料，不幫忙記回合。回合照舊由玩家在戰績畫面輸入。
-  - 模型首選方向（不是定案）：阿里雲的 `Qwen-Audio-3.1-Realtime`。Flash 或 Plus、要不要把難題轉交後端的文字思考模型，由決策 ticket 決定。Azure 的 `gpt-realtime-2.1` 只當備案，不排實測。
+  - 模型首選方向（不是定案）：阿里雲的 `Qwen-Audio-3.1-Realtime`。Flash 或 Plus、要不要把難題轉交後端的文字思考模型，由決策 ticket 決定。Azure 的 `gpt-realtime-2.1` 只當備案，不排實測。區域固定新加坡（2026-11-19 立倫決定）。
   - 為了展示，一定要用 Agent 框架，三選一：LangChain、LangGraph、Microsoft Agent Framework。展示重點是「看得到主持人走到哪個階段、查了什麼資料」。三個都接不上時回來問立倫，不自行改成不用框架。
-  - 阿里雲帳號由立倫自己開、用自己的額度，金鑰只放本機 `.env`。測試只用組員自己的聲音。
+  - 阿里雲帳號由立倫自己開、用自己的額度，金鑰只放本機 `.env`。測試與 Demo 都只用組員自己的聲音（2026-11-19 立倫決定）。
 - 會碰到的規則（決策時要對照）：
   - AGENTS.md §4.2：domain 不得直接 import 模型廠商的 SDK，外部服務一律包在 `integrations/` 後面；domain 之間只能呼叫對方的 `service`。
   - AGENTS.md §2 第 4 點：新增第三方套件要在 MR 說明寫理由。
@@ -69,6 +69,7 @@
 - [Flutter Web 怎麼收音與即時播音](issues/05-flutter-web-audio.md)：能即時收音與邊收邊播，WebSocket 與 WebRTC 都可用；插話時的停播、清空待播內容、拒收舊回覆要前端自己做；手機要 HTTPS，並由玩家點一下才能出聲；鎖屏後持續雙向語音沒有保證；`record` 7.x 與 `web` 1.1.2 會提高 Flutter SDK 的門檻；網頁專用的部分要包在 `core/platform/`
 - [註冊阿里雲並確認能呼叫 Qwen 即時語音](issues/06-alibaba-cloud-account.md)：國際站個人帳號、新加坡區；Flash 與 Plus 都實際叫得到並收到聲音（用文字輸入）；Flash 免費額度 100 萬 tokens 到 2027/02/18，Plus 在主控台看不到免費額度；新加坡 Flash 試 74 個聲線有 54 個能用，只在北京的 20 個不行；設定欄位提案 `HOST_REALTIME_API_KEY` 加整段 API Host；立倫選模型先看有感情、自訂工具、成本
 - [用真的聲音試聽 Qwen 主持人](issues/07-listen-to-qwen-host.md)：聲線選 `xunanchuan_v3.1`、`longyuan_v3.1`，品質都很高，Flash 與 Plus 音色、速度聽不出差別；`smart_turn_v2` 講完 0.4 到 0.8 秒出聲，附和不停，但「等一下」也不停；`server_vad` 能打斷，但附和也會停；規則題會先查再答，等待中被追問會先猜答案（加指令後改成丟掉追問）；難題轉交裁判多約 2 秒，Plus 轉交 6 題全對；180 秒沒回答就斷線，歷史預設 20 輪就忘；一條連線不能換聲線；外放加瀏覽器回音消除沒有自己打斷自己
+- [接不接受阿里雲保留玩家的聲音最多 30 天](issues/14-voice-data-retention.md)：接受，開發、組員、玩家都一樣，頁面與文件都不另外告知；測試與 Demo 只用組員的聲音；區域固定新加坡，不用北京
 
 ## Not yet specified
 
