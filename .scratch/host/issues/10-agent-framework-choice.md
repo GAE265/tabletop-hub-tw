@@ -36,3 +36,4 @@ Map: [AI 語音主持](../map.md)
   - LangGraph：可以把主持的步驟直接畫成節點，流程圖和實際執行的路徑最好對照；但狀態、節點、儲存都要自己定義。
   - Microsoft Agent Framework：本機就有畫圖與 DevUI，不必改用 .NET 或搬到 Foundry；Python 寫法是非同步的。
   - 研究沒有替立倫選，也沒有沿用選型報告的排名。
+- 2026-11-19：「[用 Flash 還是 Plus、要不要轉交思考模型](09-model-lineup.md)」已結案：語音用 Flash；難題由語音模型自己用工具呼叫轉交「思考模型」，預設 Azure `gpt-5.6-luna`，透過 `integrations/llm` 呼叫，不接 Qwen 文字模型。所以框架如果要負責呼叫思考模型，也要經過 `integrations/llm`，不能直接連 Azure；等待台詞、第 8 秒補話、15 秒放棄、新問題取代舊題的規則寫在那張的 Answer，框架放在這段時要能做到。
