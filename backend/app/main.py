@@ -11,6 +11,7 @@ from app.core.errors import register_error_handlers
 from app.core.games.router import router as games_router
 from app.domains.booking.router import router as booking_router
 from app.domains.games_advisor.router import router as games_advisor_router
+from app.domains.groups.router import notifications_router as group_notifications_router
 from app.domains.groups.router import router as groups_router
 from app.domains.health.router import router as health_router
 from app.domains.matches.router import router as matches_router
@@ -76,6 +77,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(games_router, prefix=API_PREFIX)
     app.include_router(booking_router, prefix=API_PREFIX)
     app.include_router(groups_router, prefix=API_PREFIX)
+    app.include_router(group_notifications_router, prefix=API_PREFIX)
     app.include_router(games_advisor_router, prefix=API_PREFIX)
     app.include_router(rules_ingest_router, prefix=API_PREFIX)
     app.include_router(rules_qa_router, prefix=API_PREFIX)
