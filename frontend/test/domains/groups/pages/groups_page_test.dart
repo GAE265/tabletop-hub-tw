@@ -2,6 +2,7 @@
 // 邏輯已由 state 測試涵蓋，這裡只確認畫面有正確呈現 state。
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:tabletop_hub/app/theme/app_colors.dart';
 import 'package:tabletop_hub/core/api/api_exception.dart';
 import 'package:tabletop_hub/domains/groups/data/group.dart';
 import 'package:tabletop_hub/domains/groups/pages/groups_page.dart';
@@ -225,5 +226,30 @@ void main() {
     expect(cell('13').onTap, isNull);
     expect(cell('14').onTap, isNotNull);
     expect(cell('20').onTap, isNotNull);
+  });
+
+  testWidgets('已過的揪團：日期格是灰底灰字，和之後的揪團看得出差別', (tester) async {
+    final repo = FakeGroupsRepository(
+      groups: [
+        fakeGroup(id: 'past', startAt: taipei(11, 10)),
+        fakeGroup(id: 'future', startAt: taipei(11, 20)),
+      ],
+    );
+    await pumpGroupsWidget(tester, const GroupsPage(), repo: repo);
+    Material cell(String day) => tester.widget<Material>(
+      find.ancestor(of: find.text(day), matching: find.byType(Material)).first,
+    );
+    Text count(String day) => tester.widget<Text>(
+      find.descendant(
+        of: find
+            .ancestor(of: find.text(day), matching: find.byType(Column))
+            .first,
+        matching: find.text('1 團'),
+      ),
+    );
+    expect(cell('10').color, AppColors.border);
+    expect(count('10').style!.color, AppColors.inkMuted);
+    expect(cell('20').color, isNot(AppColors.border));
+    expect(count('20').style!.color, isNot(AppColors.inkMuted));
   });
 }
