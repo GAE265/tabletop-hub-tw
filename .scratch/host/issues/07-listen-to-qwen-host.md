@@ -35,3 +35,8 @@ Map: [AI 語音主持](../map.md)
   - 公開的數字（同理評分 4.74、停播 1.116 秒、工具一次通過率 54%）都是廠商自己測的，而且沒有分 Flash 與 Plus。
   - 轉交思考模型的等待時間，查不到適用這款遊戲的數字。量的時候分開記「等待語的第一個聲音」與「答案的第一個聲音」。
   - 後端文字模型的候選：Qwen 的 `qwen4-max`、`qwen3.7-plus`、`qwen3.8-flash`，或專案現有的 Azure 文字模型。
+- 2026-11-19：「[註冊阿里雲並確認能呼叫 Qwen 即時語音](06-alibaba-cloud-account.md)」已結案。和這張有關的事實：
+  - 金鑰在 worktree 根目錄的 `.env`（`HOST_REALTIME_API_KEY`、`HOST_REALTIME_WORKSPACE_ID`），連線測試可以重用 [`smoke.py`](../prototypes/qwen-smoke/smoke.py)（`--no-project` 執行，不動專案套件）。
+  - Flash 和 Plus 都叫得動。Flash 有 100 萬 tokens 免費額度，到 2027/02/18；Plus 在主控台看不到免費額度，可能要付費，用的時候省著用。
+  - 新加坡區 Flash 有 54 個聲線叫得動，第 9 題只要從這些裡挑：`smoke.py` 的 `VOICES` 扣掉 06 Comments 列出的 20 個失敗聲線。
+  - 立倫選模型先看三件事：有感情、能串接自訂工具、成本（記在「[用 Flash 還是 Plus、要不要轉交思考模型](09-model-lineup.md)」）。
