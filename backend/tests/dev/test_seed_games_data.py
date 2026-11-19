@@ -7,11 +7,14 @@
 錯誤情境用 tmp_path 裡自己編的小型假資料，不使用心得原文。
 """
 
+import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 from sqlalchemy import Engine, text
 
+from tests.db_utils import BACKEND_DIR
 from tests.dev.conftest import RunSeed
 from tests.dev.support import (
     ADVISOR_FILE,
@@ -40,6 +43,8 @@ SEEDED_NEXT_GAME_ID = 17
 NOTHING_SEEDED = {**dict.fromkeys(SEEDED_COUNTS, 0), "genres": 8}
 
 LESSON_VIDEO_COUNT = 3
+
+REPO_GAMES_FILE = BACKEND_DIR / "app" / "dev" / "seed_data" / GAMES_FILE
 
 
 def games_state(engine: Engine) -> dict[str, object]:
@@ -169,7 +174,11 @@ def test_extra_game_in_use_stops_games_step_only(db: Engine, run_seed: RunSeed) 
 
 # --- 資料檔損壞或缺少 ---
 
-TWO_OTHER_GAMES = [fake_game(1, 900001, "假桌遊甲"), fake_game(2, 900002, "假桌遊乙")]
+
+def _renamed_games() -> list[dict[str, Any]]:
+    """repo 資料檔的 16 款，只把 16 號改名：同步會成功並改到資料，之後失敗時要一起退回。"""
+    games = json.loads(REPO_GAMES_FILE.read_text(encoding="utf-8"))["games"]
+    return [{**game, "name": "改過名字的桌遊"} if game["id"] == 16 else game for game in games]
 
 
 def _broken_games_file(folder: Path) -> Path:
@@ -187,11 +196,11 @@ def _games_file_with_wrong_content(folder: Path) -> Path:
 
 def _broken_advisor_file(folder: Path) -> Path:
     # 桌遊檔是好的：同步桌遊成功之後才失敗，也要連同步一起退回
-    return write_seed_data(folder, games=TWO_OTHER_GAMES, advisor_sql="INSERT INTO 寫到一半")
+    return write_seed_data(folder, games=_renamed_games(), advisor_sql="INSERT INTO 寫到一半")
 
 
 def _missing_advisor_file(folder: Path) -> Path:
-    return write_seed_data(folder, games=TWO_OTHER_GAMES)
+    return write_seed_data(folder, games=_renamed_games())
 
 
 def _advisor_file_for_unknown_game(folder: Path) -> Path:
@@ -200,7 +209,7 @@ def _advisor_file_for_unknown_game(folder: Path) -> Path:
         "('00000000-0000-4000-8000-000000000002', 999, "
         "'00000000-0000-4000-8000-000000000001', 0.5);\n"
     )
-    return write_seed_data(folder, games=TWO_OTHER_GAMES, advisor_sql=fake_tag_sql() + sql)
+    return write_seed_data(folder, games=_renamed_games(), advisor_sql=fake_tag_sql() + sql)
 
 
 @pytest.mark.parametrize(
