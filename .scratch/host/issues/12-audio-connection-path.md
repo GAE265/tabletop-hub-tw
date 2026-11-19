@@ -30,3 +30,8 @@ Map: [AI 語音主持](../map.md)
   - Flutter 這邊，WebSocket 用 `web_socket_channel`，WebRTC 用 `flutter_webrtc`，Web、Android、iOS 都支援。WebRTC 視網路狀況可能需要額外的中繼伺服器。
   - 現有的 Azure 文字介面是同步的單次呼叫，不能直接拿來當即時語音的介面。
   - 固定的最長連線時間查不到；官方只說閒置太久可能斷線。
+- 2026-11-19：「[用真的聲音試聽 Qwen 主持人](07-listen-to-qwen-host.md)」已結案。和連線方式有關的事實：
+  - 原型走「經後端轉送」：瀏覽器連本機 Python 轉接程式，轉接程式帶金鑰連阿里雲，也在轉接程式裡執行工具。這條路走得通，玩家講完 0.4 到 0.8 秒就聽到第一個聲音。瀏覽器直連（WebSocket、WebRTC）都沒有試，第 6 題要等的試驗沒有做。
+  - **180 秒沒產生任何回答，阿里雲就會關掉連線**（code 1007，理由寫「no response was generated for 180 seconds」）。跟有沒有送聲音、有沒有 WebSocket ping 無關。
+  - 單一則用戶端訊息太大，阿里雲會直接斷線（`1009 message too big`）。兩次回報的上限不同，一次 1,048,576 bytes，一次 262,144 bytes。聲音照官方建議每 20 到 100 毫秒送一小段就沒問題。
+  - 工具結果送回去時，如果主持人正在產生回答（「another response is in progress」）或玩家正在講話（「user is speaking」），送出的「請回答」會被拒。不管哪條路，後端都要等到可以送的時候再送，或被拒後重送。

@@ -1,0 +1,677 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Qwen 主持人試聽（原型）</title>
+<!-- PROTOTYPE for ticket 07. Throwaway. Served by server.py; the API key never reaches this page. -->
+<style>
+  body { font-family: system-ui, -apple-system, "PingFang TC", sans-serif; margin: 12px; font-size: 14px; }
+  fieldset { margin: 6px 0; }
+  label { margin-right: 12px; white-space: nowrap; display: inline-block; margin-bottom: 4px; }
+  table { border-collapse: collapse; font-size: 12px; width: 100%; }
+  td, th { border: 1px solid #ccc; padding: 2px 4px; vertical-align: top; }
+  #log { height: 240px; overflow: auto; font: 11px ui-monospace, monospace; background: #f6f6f6; white-space: pre-wrap; }
+  #chat { height: 240px; overflow: auto; background: #fafafa; padding: 4px; }
+  #ptt { font-size: 20px; padding: 14px 28px; }
+  #ptt.held { background: #c33; color: #fff; }
+  .banner { background: #fff3cd; padding: 6px; margin: 6px 0; }
+  .row { display: flex; gap: 12px; flex-wrap: wrap; }
+  .col { flex: 1; min-width: 360px; }
+  .hint { color: #666; font-size: 12px; }
+  textarea { width: 100%; }
+  .user { color: #05c; } .host { color: #a30; } .sys { color: #777; }
+</style>
+</head>
+<body>
+<div class="banner">原型（ticket 07），用完就丟。只用自己的聲音；不錄音，紀錄檔只有事件與文字，存在系統暫存區。</div>
+
+<fieldset id="settings">
+  <legend>設定（改了要重新連線才生效）</legend>
+  <label>模型 <select id="model"><option value="flash">Flash</option><option value="plus">Plus（較貴，省著用）</option></select></label>
+  <label>聲線 <select id="voice"></select></label>
+  <label>接話方式
+    <select id="mode">
+      <option value="smart_turn_v2">自動：smart_turn_v2（官方建議）</option>
+      <option value="server_vad">自動：server_vad（只看聲音）</option>
+      <option value="ptt">按住說話</option>
+    </select></label>
+  <label>靈敏度 threshold <input id="threshold" type="number" step="0.1" min="-1" max="1" value="0.5" style="width:4em"></label>
+  <label>靜音多久算講完（server_vad）<input id="silence_ms" type="number" step="100" min="200" max="6000" value="800" style="width:5em"> ms</label>
+  <br>
+  <label>語速 <input id="speech_rate" type="number" step="0.1" min="0.5" max="2" value="1.0" style="width:4em"></label>
+  <label><input id="emotion" type="checkbox" checked> 加強情感</label>
+  <label>保留幾輪歷史 <input id="max_history_turns" type="number" min="1" max="50" value="20" style="width:4em"></label>
+  <label><input id="tools" type="checkbox" checked> 查規則工具</label>
+  <label><input id="wait_rule" type="checkbox"> 指令加一條：查詢中被追問，先說還在查</label>
+  <label><input id="delegate" type="checkbox"> 難題轉交裁判</label>
+  <label>裁判 <select id="referee_backend"><option value="azure">Azure（專案現有）</option><option value="qwen">Qwen 文字模型（金鑰要開權限）</option></select></label>
+  <label>Qwen 裁判模型 <input id="referee_qwen_model" value="qwen3.8-flash" style="width:8em"></label>
+  <br>
+  <label><input id="ec" type="checkbox" checked> 瀏覽器回音消除</label>
+  <label><input id="ns" type="checkbox" checked> 降噪</label>
+  <label><input id="agc" type="checkbox" checked> 自動增益</label>
+  <label>插話時怎麼停
+    <select id="stop_mode">
+      <option value="auto">自動（server_vad＝聽到就停；smart_turn＝先降音量、確定是一句才停）</option>
+      <option value="started">聽到說話就停</option>
+      <option value="duck">先降音量，確定是一句才停</option>
+      <option value="cancelled">只在伺服器取消回答時停</option>
+    </select></label>
+  <label>本機「開口」門檻 <input id="onset_thr" type="number" step="0.005" min="0" max="1" value="0.03" style="width:5em"></label>
+  <details><summary>主持人指令（可改）</summary><textarea id="instructions" rows="8"></textarea>
+    <div class="hint">勾「難題轉交裁判」時，連線會自動在後面加一段轉交規則。</div></details>
+</fieldset>
+
+<div>
+  <button id="connect">連線</button>
+  <button id="disconnect" disabled>斷線</button>
+  <button id="ptt" disabled>按住說話（或按住空白鍵）</button>
+  <label><input id="muted" type="checkbox"> 暫停送麥克風（測閒置斷線用）</label>
+  <button id="stopNow" disabled>手動停播</button>
+  音量 <meter id="level" min="0" max="0.3" value="0" style="width:120px"></meter>
+</div>
+<div id="status" class="banner">尚未連線</div>
+
+<div class="row">
+  <div class="col">
+    <fieldset>
+      <legend>第 1、2、9 題：唸同一段台詞</legend>
+      <label>試聽聲線 <select id="voiceOverride"><option value="">（跟連線設定一樣）</option></select></label><br>
+      <div class="hint">每按一次另開一條短連線，用選的聲線唸。一條連線開了就不能換聲線，所以這樣試。試聽時自動暫停送麥克風。模型照上面的設定（Flash／Plus）。</div>
+      <button data-scene="開場">開場</button>
+      <button data-scene="宣布結果">宣布結果</button>
+      <button data-scene="緊張時刻">緊張時刻</button>
+    </fieldset>
+    <fieldset>
+      <legend>第 6、7、8 題：規則題（可以用嘴問，也可以按按鈕用文字問）</legend>
+      <label>查規則要等 <select id="tool_delay"><option>0</option><option>3</option><option>8</option><option>15</option></select> 秒（連線中也能改，下一次查規則生效）</label>
+      <div id="questions"></div>
+    </fieldset>
+    <fieldset>
+      <legend>第 10 題：記性</legend>
+      <button id="plant">請它記住暗號</button>
+      <button id="askMemory">問它暗號（文字）</button>
+      <button id="fillAudio" hidden>塞安靜語音</button><!-- removed: big audio items hit the server's message size limit; auto_checks.py memory covers this -->
+      <button id="fillText">塞 22 輪文字對話（只回文字）</button>
+      <div class="hint">先記住 → 塞歷史 → 再問。保留輪數改 50 可以只測 300 秒音訊上限。</div>
+    </fieldset>
+    <fieldset>
+      <legend>標記（寫進紀錄）</legend>
+      <button data-mark="誤停">誤停</button>
+      <button data-mark="誤答">不該回卻回</button>
+      <button data-mark="該查沒查">該查沒查</button>
+      <button data-mark="參數錯">工具參數錯</button>
+      <button data-mark="自己打斷自己">自己打斷自己</button>
+      <button data-mark="答錯">答錯</button>
+      <input id="note" placeholder="自由備註" style="width:12em"><button id="noteBtn">記下</button>
+    </fieldset>
+  </div>
+  <div class="col">
+    <b>對話</b>
+    <div id="chat"></div>
+  </div>
+</div>
+
+<h4>每一句的速度（毫秒）</h4>
+<table id="turnsTable"><thead><tr>
+  <th>#</th><th>方式</th><th>玩家說</th><th>伺服器多久才判定講完</th><th>講完→聽到第一個聲音</th>
+  <th>工具（名稱／參數／耗時）</th><th>講完→聽到答案</th><th>主持人說</th>
+</tr></thead><tbody></tbody></table>
+
+<h4>插話（毫秒）</h4>
+<table id="intrTable"><thead><tr>
+  <th>#</th><th>停法</th><th>本機聽到開口→伺服器偵測到</th><th>本機聽到開口→聲音停</th><th>伺服器偵測到→聲音停</th><th>伺服器有沒有取消回答</th><th>結果</th>
+</tr></thead><tbody></tbody></table>
+<div class="hint">「本機聽到開口」用麥克風音量判斷，外放時會被主持人自己的聲音干擾，要準就戴耳機。</div>
+
+<h4>事件</h4>
+<div id="log"></div>
+
+<script>
+// ---------------------------------------------------------------- data
+const VOICES_TOP = [
+  ["xunanchuan_v3.1", "男・磁性、講故事（立倫首選）"],
+  ["longyuan_v3.1", "女・溫暖有聲書（立倫首選）"],
+  ["longanqian_v3.1", "預設"],
+  ["longanhuan_v3.1", "女・活潑愛笑"],
+  ["yunhuanhuan_v3.1", "女・高亢熱情"],
+  ["longmiao_v3.1", "女・抑揚頓挫、有聲書"],
+  ["loongstella_v3.1", "女・颯爽、新聞播報"],
+  ["yuxiaoyun_v3.1", "女・元氣親切"],
+  ["longsanshu_v3.1", "男・沉穩、有聲書"],
+  ["longanchong_v3.1", "男・激情、直播帶貨"],
+  ["longanlang_v3.1", "男・清爽、語音助手"],
+  ["longanzhi_v3.1", "男・睿智輕熟"],
+];
+// 54 voices that answered in Singapore (ticket 06). Labels from the official TTS voice list.
+const VOICES_ALL = [
+  ["longanqian_v3.1", "預設"], ["longanhuan_v3.1", "女・活潑"], ["longanlingxin_v3.1", "女・溫柔"],
+  ["longanfengyue_v3.1", "女・自然敘述"], ["xunanchuan_v3.1", "男・磁性講故事"], ["yuxiaoyun_v3.1", "女・元氣"],
+  ["qiaoxiaojiao_v3.1", "女・俏麗"], ["xiaxiaochen_v3.1", "女・明亮"], ["anmingyuan_v3.1", "男・清亮"],
+  ["wenhuaiqing_v3.1", "女・柔和"], ["anxiaolan_v3.1", "女・清甜"], ["xieshurou_v3.1", "女・知性"],
+  ["baiqinglan_v3.1", "女・清純"], ["xuyuyuan_v3.1", "女・成熟"], ["anruorou_v3.1", "女・氣聲"],
+  ["wenhuaizhi_v3.1", "女・穩重"], ["xiaoxingzhi_v3.1", "女・端莊"], ["guyunshu_v3.1", "女・成熟穩重"],
+  ["huozhuoshi_v3.1", "男・清亮"], ["yeqinghe_v3.1", "女・親切"], ["yunhuanhuan_v3.1", "女・高亢熱情"],
+  ["xuxiaoqiao_v3.1", "女・俏皮"], ["baianran_v3.1", "女・低沉"], ["xuyanchu_v3.1", "女・沉穩磁性"],
+  ["yezhiqing_v3.1", "女・輕快"], ["andi_v3.1", "男・ABC 口音"], ["anyuqing_v3.1", "女・甜妹"],
+  ["longanyuanfei_v3.1", "女・高傲妃子"], ["longjielidou_v3.1", "男童"], ["longanlingxi_v3.1", "女・可愛"],
+  ["longhuohuo_v3.1", "男・頑皮少年"], ["longyingtao_v3.1", "女・客服"], ["longanya_v3.1", "女・高雅"],
+  ["longwan_v3.1", "女・細膩"], ["longxing_v3.1", "女・鄰家"], ["longhua_v3.1", "女・元氣甜美"],
+  ["longhan_v3.1", "男・溫暖"], ["longanzhi_v3.1", "男・睿智輕熟"], ["longzhe_v3.1", "男・大暖男"],
+  ["longanyang_v3.1", "男・陽光"], ["libai_v3.1", "男・詩詞朗誦"], ["longling_v3.1", "女童"],
+  ["longniuniu_v3.1", "男童"], ["longshanshan_v3.1", "男童・戲劇化"], ["longpaopao_v3.1", "女童・泡泡音"],
+  ["loongstella_v3.1", "女・新聞播報"], ["longyuan_v3.1", "女・溫暖有聲書"], ["longmiao_v3.1", "女・抑揚頓挫"],
+  ["longsanshu_v3.1", "男・沉穩有聲書"], ["longanli_v3.1", "女・利落助手"], ["longanwen_v3.1", "女・知性助手"],
+  ["longanlang_v3.1", "男・清爽助手"], ["longxiaoxia_v3.1", "女・權威助手"], ["longanchong_v3.1", "男・激情帶貨"],
+];
+
+const BASE_INSTR = `你是桌遊店的 AI 主持人，今晚主持《血與刃的白薔薇》（5 到 10 人的陣營推理遊戲）。
+說話：熱情、有戲劇感、會營造緊張氣氛；每次一到三句話，用台灣常用的說法。
+帶流程：開局準備 → 夜晚階段（只在開局）→ 每個回合三個階段：傳金幣放水晶、依序決定出牌、翻牌結算。
+規則問題：先說一句很短的等待語（例如「我翻一下規則」），再呼叫 lookup_rule；只根據查到的內容回答，查不到就說規則摘要沒寫，不要自己編。
+玩家只是附和（嗯、OK、好）或彼此聊天、沒有在跟你說話時，不要回應。
+說遊戲進度用「局、回合、階段」，不要用「次」。`;
+const DELEGATE_INSTR = `
+需要多步推理的規則題（牽涉人數、順序推算、多個效果、勝負判定），先說等待語，再呼叫 ask_referee，把問題和玩家說過的局面完整交給裁判；拿到答案後用你的口吻唸出來，不要改結論。`;
+
+const WAIT_INSTR = `
+你呼叫工具之後、還沒收到結果之前，如果玩家又開口：不要回答還在查的那一題，也不要猜答案。先簡短說「剛剛那題還在查，等我一下」，新問題如果是規則題，也要查了再答。`;
+
+const SCENES = {
+  "開場": "各位晚安，歡迎來到今晚的《血與刃的白薔薇》！我是今天的主持人。這張桌子上，有人誓死守護白薔薇，也有人正在暗中磨刀。準備好了嗎？我們開始發牌！",
+  "宣布結果": "翻牌結果出來了……有刃牌……也有白薔薇！很遺憾，白薔薇倒下了。這一局，血刃陣營獲勝！",
+  "緊張時刻": "死亡區已經躺了一張信者，再死一張，血刃陣營就贏了。金幣現在在你手上，你要交給誰？慢慢想，全桌都在看你。",
+};
+
+const QUESTIONS = [
+  ["我們七個人玩，血刃陣營總共有幾個人？", "3 人（巨刃、雙刃、暗刃各 1）"],
+  ["七個人玩，座位 3 放了水晶，數字是 6。這個回合誰先決定出牌、誰最後？", "座位 4 先，順時針 4、5、6、7、1、2，座位 3 最後"],
+  ["這個回合翻出雙刃、信者、白薔薇各一張，結果怎樣？", "血刃陣營立刻獲勝"],
+  ["獻祭區已經有三張花苞，可是白薔薇還沒打出來，白薔薇陣營贏了嗎？", "還沒贏，遊戲繼續；白薔薇要打出來而且活著才算"],
+  ["死亡區已經有一張信者，這個回合翻出暗刃、司教、幽魂，會怎樣？", "有刃沒白薔薇：幽魂移出、司教進死亡區；死亡區到 2 張，血刃陣營獲勝（測試用門檻）"],
+  ["白水晶可以拿來跟別人換金幣嗎？", "規則摘要沒寫（應該說查不到，不能編）"],
+];
+
+// ---------------------------------------------------------------- helpers
+const $ = (s) => document.querySelector(s);
+const T = () => performance.now();
+const CFG_FIELDS = ["model", "voice", "mode", "threshold", "silence_ms", "speech_rate", "emotion",
+  "max_history_turns", "tools", "tool_delay", "wait_rule", "delegate", "referee_backend", "referee_qwen_model",
+  "ec", "ns", "agc", "stop_mode", "onset_thr", "instructions"];
+
+function readCfg() {
+  const c = {};
+  for (const k of CFG_FIELDS) {
+    const el = document.getElementById(k);
+    c[k] = el.type === "checkbox" ? el.checked : (el.type === "number" ? Number(el.value) : el.value);
+  }
+  c.tool_delay = Number(c.tool_delay);
+  return c;
+}
+function saveCfg() { try { localStorage.setItem("listenTestCfg", JSON.stringify(readCfg())); } catch (e) {} }
+function loadCfg() {
+  let c = null;
+  try { c = JSON.parse(localStorage.getItem("listenTestCfg") || "null"); } catch (e) {}
+  if (!c) { $("#instructions").value = BASE_INSTR; return; }
+  for (const k of CFG_FIELDS) {
+    const el = document.getElementById(k);
+    if (!(k in c)) continue;
+    if (el.type === "checkbox") el.checked = c[k]; else el.value = c[k];
+  }
+  if (!$("#instructions").value.trim()) $("#instructions").value = BASE_INSTR;
+}
+
+function fillVoices() {
+  const add = (sel, label, list) => {
+    const g = document.createElement("optgroup"); g.label = label;
+    for (const [id, desc] of list) { const o = document.createElement("option"); o.value = id; o.textContent = `${id}（${desc}）`; g.appendChild(o); }
+    sel.appendChild(g);
+  };
+  for (const sel of [$("#voice"), $("#voiceOverride")]) {
+    add(sel, "適合主持的候選", VOICES_TOP);
+    add(sel, "新加坡叫得動的 54 個", VOICES_ALL);
+  }
+}
+
+function fmt(a, b) { return (a != null && b != null) ? String(Math.round(a - b)) : "—"; }
+function esc(s) { return String(s ?? "").replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c])); }
+function rel(t) { return t == null ? null : Math.round(t - state.connectedAt); }
+
+function addLog(line) {
+  const el = $("#log");
+  const secs = state.connectedAt ? ((T() - state.connectedAt) / 1000).toFixed(1) : "0.0";
+  el.textContent += `+${secs}s ${line}\n`;
+  if (el.textContent.length > 60000) el.textContent = el.textContent.slice(-40000);
+  el.scrollTop = el.scrollHeight;
+}
+function addChat(who, text, cls) {
+  const d = document.createElement("div"); d.className = cls || "";
+  d.textContent = `${who}：${text}`;
+  $("#chat").appendChild(d); $("#chat").scrollTop = $("#chat").scrollHeight;
+}
+
+// ---------------------------------------------------------------- state
+let ws = null, cfg = null;
+let micCtx = null, micStream = null, micNode = null;
+let playCtx = null, masterGain = null, nextTime = 0;
+const sources = new Set();
+const dropped = new Set();
+const respMeta = {};
+const callTurn = {};
+const toolTurnByCall = {};
+let pendingAnswerTurn = null;
+let turns = [], cur = null, interrupts = [], intr = null;
+let lastOnset = 0, lastLoud = 0;
+let chunkTimes = [];
+let fillingText = false, metricsDirty = false;
+const samples = {};
+const state = {
+  connected: false, connectedAt: 0, lastSentAudio: 0, lastServerEvt: 0, responseActive: null,
+  pttHeld: false, pttStartSamples: 0, sentSamples: 0, userAudioMs: 0, userTurns: 0, closedInfo: null,
+};
+
+// USD per 1M tokens, Singapore list price (model pricing page, checked 2026-11-19):
+// text in, audio in, text out, audio out. Text+audio replies bill only the audio output.
+const PRICES = { flash: [0.23, 0.93, 0.70, 1.87], plus: [0.80, 6.40, 6.40, 24.00] };
+const usage = { textIn: 0, audioIn: 0, textOut: 0, audioOut: 0, usd: 0 };
+function addUsage(u) {
+  if (!u) return;
+  const p = PRICES[cfg.model] || PRICES.flash;
+  const ti = u.input_tokens_details?.text_tokens || 0, ai = u.input_tokens_details?.audio_tokens || 0;
+  const to = u.output_tokens_details?.text_tokens || 0, ao = u.output_tokens_details?.audio_tokens || 0;
+  usage.textIn += ti; usage.audioIn += ai; usage.textOut += to; usage.audioOut += ao;
+  usage.usd += (ti * p[0] + ai * p[1] + (ao ? ao * p[3] : to * p[2])) / 1e6;
+}
+function send(obj) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(obj)); }
+function isPlaying() { return sources.size > 0; }
+function stopModeNow() {
+  if (cfg.stop_mode !== "auto") return cfg.stop_mode;
+  return cfg.mode === "server_vad" ? "started" : (cfg.mode === "ptt" ? "ptt" : "duck");
+}
+
+// ---------------------------------------------------------------- audio out
+function playDelta(b64, rid) {
+  if (dropped.has(rid)) return null;
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  const i16 = new Int16Array(bytes.buffer, 0, bytes.length >> 1);
+  const f32 = new Float32Array(i16.length);
+  for (let i = 0; i < i16.length; i++) f32[i] = i16[i] / 32768;
+  const buf = playCtx.createBuffer(1, f32.length, 24000);
+  buf.copyToChannel(f32, 0);
+  const s = playCtx.createBufferSource();
+  s.buffer = buf; s.connect(masterGain);
+  const startAt = Math.max(playCtx.currentTime + 0.02, nextTime);
+  s.start(startAt);
+  nextTime = startAt + buf.duration;
+  sources.add(s);
+  s.onended = () => { sources.delete(s); };
+  return T() + (startAt - playCtx.currentTime) * 1000;
+}
+function duck(on) { masterGain.gain.setTargetAtTime(on ? 0.2 : 1, playCtx.currentTime, 0.02); }
+function stopPlayback(reason) {
+  for (const s of sources) { try { s.stop(); } catch (e) {} }
+  sources.clear(); nextTime = 0;
+  if (state.responseActive) dropped.add(state.responseActive);
+  duck(false);
+  if (intr && !intr.stopped) { intr.stopped = T(); intr.reason = reason; }
+  addLog(`■ 停播（${reason}）`);
+  render();
+}
+
+// ---------------------------------------------------------------- audio in
+const WORKLET = `
+class Tap extends AudioWorkletProcessor {
+  constructor() { super(); this.buf = new Float32Array(512); this.n = 0; }
+  process(inputs) {
+    const ch = inputs[0] && inputs[0][0];
+    if (ch) for (let i = 0; i < ch.length; i++) {
+      this.buf[this.n++] = ch[i];
+      if (this.n === 512) { this.port.postMessage(this.buf.slice(0)); this.n = 0; }
+    }
+    return true;
+  }
+}
+registerProcessor('pcm-tap', Tap);`;
+
+function onMicChunk(f32) {
+  let sum = 0;
+  for (let i = 0; i < f32.length; i++) sum += f32[i] * f32[i];
+  const rms = Math.sqrt(sum / f32.length);
+  $("#level").value = rms;
+  const now = T();
+  if (rms > cfg.onset_thr) { if (now - lastLoud > 400) lastOnset = now; lastLoud = now; }
+  if (!state.connected || $("#muted").checked || state.samplingUntil > now) return;
+  if (cfg.mode === "ptt" && !state.pttHeld) return;
+  const i16 = new Int16Array(f32.length);
+  for (let i = 0; i < f32.length; i++) { const v = Math.max(-1, Math.min(1, f32[i])); i16[i] = v < 0 ? v * 32768 : v * 32767; }
+  const u8 = new Uint8Array(i16.buffer);
+  let bin = ""; for (let i = 0; i < u8.length; i++) bin += String.fromCharCode(u8[i]);
+  send({ type: "input_audio_buffer.append", audio: btoa(bin) });
+  chunkTimes.push([state.sentSamples, now - 32]);
+  if (chunkTimes.length > 6000) chunkTimes = chunkTimes.slice(-4000);
+  state.sentSamples += f32.length;
+  state.lastSentAudio = now;
+}
+function wallForAudioMs(ms) {
+  if (ms == null) return T();
+  const target = ms * 16;
+  let best = null;
+  for (const c of chunkTimes) { if (c[0] <= target) best = c; else break; }
+  return best ? best[1] + (target - best[0]) / 16 : T();
+}
+
+// ---------------------------------------------------------------- turns
+function newTurn(kind, tEnd, tEvt) {
+  cur = { n: turns.length + 1, kind, tEnd, tEvt: tEvt ?? null, firstDelta: null, firstPlay: null,
+    tools: [], ansDelta: null, ansPlay: null, user: "", host: "", itemId: null };
+  turns.push(cur); metricsDirty = true; render();
+  return cur;
+}
+function sendText(text, kind, voice) {
+  send({ type: "conversation.item.create", item: { type: "message", role: "user", content: [{ type: "input_text", text }] } });
+  const rc = { type: "response.create" };
+  if (voice) rc.response = { voice };
+  send(rc);
+  const t = newTurn(kind, T());
+  t.user = text;
+  addChat("（文字）", text, "user");
+}
+
+// ---------------------------------------------------------------- PTT
+function pttDown() {
+  if (!state.connected || cfg.mode !== "ptt" || state.pttHeld) return;
+  state.pttHeld = true; state.pttStartSamples = state.sentSamples;
+  $("#ptt").classList.add("held");
+  if (isPlaying() || state.responseActive) {
+    intr = { n: interrupts.length + 1, mode: "ptt", onset: T(), started: T(), stopped: null, cancelled: null, reason: "" };
+    interrupts.push(intr);
+    if (state.responseActive) send({ type: "response.cancel" });
+    stopPlayback("按下說話");
+  }
+}
+function pttUp() {
+  if (!state.pttHeld) return;
+  state.pttHeld = false; $("#ptt").classList.remove("held");
+  const secs = (state.sentSamples - state.pttStartSamples) / 16000;
+  if (secs < 0.25) { send({ type: "input_audio_buffer.clear" }); addLog("（太短，丟掉）"); return; }
+  state.userAudioMs += secs * 1000; state.userTurns += 1;
+  send({ type: "input_audio_buffer.commit" });
+  send({ type: "response.create" });
+  newTurn("按住說話", T());
+}
+
+// ---------------------------------------------------------------- server events
+function onEvent(ev) {
+  state.lastServerEvt = T();
+  const k = ev.type;
+  if (!["response.audio.delta", "response.audio_transcript.delta", "response.text.delta",
+    "response.function_call_arguments.delta", "conversation.item.input_audio_transcription.delta",
+    "conversation.item.ambient_audio_transcription.delta"].includes(k)) {
+    addLog(`← ${k}${ev.response?.status ? " " + ev.response.status : ""}${ev.reason ? " reason=" + ev.reason : ""}`);
+  }
+  switch (k) {
+    case "relay.ready":
+      state.connected = true;
+      addChat("系統", `已連上 ${ev.model}（握手 ${ev.connect_ms} ms）。紀錄：${ev.log}${cfg.delegate ? "；裁判：" + ev.referee : ""}`, "sys");
+      break;
+    case "relay.error":
+      addChat("系統", "錯誤：" + ev.message, "sys"); break;
+    case "relay.closed":
+      state.closedInfo = ev;
+      addChat("系統", `連線結束：${ev.by === "upstream" ? "阿里雲那邊關的" : "這邊關的"}，連了 ${ev.seconds} 秒，code=${ev.code}，reason=${ev.reason || "（空）"}`, "sys");
+      break;
+    case "relay.tool_started": {
+      const t = toolTurnByCall[ev.call_id] || cur;
+      if (t) { t.tools.push({ name: ev.name, args: ev.args, delay: ev.delay, startedAt: T(), resultAt: null, elapsed: null, stale: false, callId: ev.call_id }); callTurn[ev.call_id] = t; }
+      addChat("工具", `${ev.name} ${JSON.stringify(ev.args)}`, "sys");
+      break;
+    }
+    case "relay.tool_result": {
+      const t = callTurn[ev.call_id];
+      const tool = t && t.tools.find((x) => x.callId === ev.call_id);
+      if (tool) { tool.resultAt = T(); tool.elapsed = ev.elapsed_ms; tool.stale = ev.stale; }
+      addChat("工具結果", `${ev.elapsed_ms} ms${ev.stale ? "（等待中玩家又開口了）" : ""}：${ev.output}`, "sys");
+      break;
+    }
+    case "relay.tool_output_sent":
+      pendingAnswerTurn = callTurn[ev.call_ids[0]] || cur;
+      if (ev.waited_for_turn) addChat("系統", "工具結果等到上一段回答結束才送出", "sys");
+      break;
+    case "relay.sample_audio": {
+      const at = playDelta(ev.delta, ev.sample_id);
+      const t = samples[ev.sample_id];
+      if (at != null && t && t.firstDelta == null) { t.firstDelta = T(); t.firstPlay = at; metricsDirty = true; render(); }
+      break;
+    }
+    case "relay.sample_done": {
+      const t = samples[ev.sample_id];
+      if (t) { t.host = ev.transcript; render(); }
+      addUsage(ev.usage);
+      const same = ev.voice_reported === ev.voice;
+      addChat("試聽結果", ev.error ? `錯誤：${ev.error}` :
+        `要求 ${ev.voice}，伺服器回報 ${ev.voice_reported}${same ? "" : "（不一樣！）"}`, "sys");
+      state.samplingUntil = T() + Math.max(0, (nextTime - playCtx.currentTime) * 1000) + 300;
+      break;
+    }
+    case "relay.fill_progress":
+      addLog(`填充 ${ev.what} ${ev.done}/${ev.count}`);
+      if (ev.what === "audio") state.userAudioMs += ev.seconds * 1000;
+      if (ev.what === "text" && ev.done === ev.count) fillingText = false;
+      break;
+    case "session.updated":
+      addChat("系統", `session：voice=${ev.session?.voice}，接話=${JSON.stringify(ev.session?.turn_detection)}`, "sys");
+      break;
+    case "error":
+      addChat("系統", `錯誤：${ev.error?.code || ev.error?.type}：${ev.error?.message}`, "sys");
+      if (String(ev.error?.message).includes("user is speaking"))
+        addChat("系統", "伺服器以為你還在講話（環境音也算），所以文字按鈕被擋。要用文字按鈕，改成「按住說話」模式，或先勾「暫停送麥克風」等 2 秒。", "sys");
+      break;
+    case "input_audio_buffer.speech_started":
+      if (cfg.mode === "ptt") break;
+      if (isPlaying()) {
+        intr = { n: interrupts.length + 1, mode: stopModeNow(), onset: (T() - lastOnset < 3000 ? lastOnset : null),
+          started: T(), stopped: null, cancelled: null, reason: "", outcome: "" };
+        interrupts.push(intr);
+        if (intr.mode === "started") stopPlayback("聽到說話");
+        else if (intr.mode === "duck") { duck(true); addLog("↓ 降音量"); }
+        render();
+      } else { intr = null; }
+      break;
+    case "input_audio_buffer.speech_stopped":
+      if (ev.reason === "turn_invalid") {
+        addChat("系統", "（伺服器判定不是在跟它說話，不回答）", "sys");
+        if (intr && !intr.stopped && intr.mode === "duck") { duck(false); intr.outcome = "恢復播放"; addLog("↑ 恢復音量"); render(); }
+      } else {
+        const t = newTurn("語音", wallForAudioMs(ev.audio_end_ms), T());
+        t.itemId = ev.item_id;
+        state.userTurns += 1;
+        if (ev.audio_start_ms != null && ev.audio_end_ms != null) state.userAudioMs += ev.audio_end_ms - ev.audio_start_ms;
+        if (intr && !intr.stopped && intr.mode === "duck") stopPlayback("確定是一句");
+      }
+      break;
+    case "input_audio_buffer.committed":
+      if (cur && cur.kind === "按住說話" && !cur.itemId) cur.itemId = ev.item_id;
+      break;
+    case "conversation.item.input_audio_transcription.completed": {
+      const t = turns.find((x) => x.itemId === ev.item_id) || cur;
+      if (t) t.user = ev.transcript;
+      addChat("玩家", ev.transcript, "user");
+      render();
+      break;
+    }
+    case "conversation.item.ambient_audio_transcription.completed":
+      addChat("旁聽（不進上下文）", ev.transcript, "sys"); break;
+    case "response.created": {
+      const rid = ev.response.id;
+      state.responseActive = rid;
+      if (pendingAnswerTurn) { respMeta[rid] = { turn: pendingAnswerTurn, isAnswer: true }; pendingAnswerTurn = null; }
+      else respMeta[rid] = { turn: fillingText ? null : cur, isAnswer: false };
+      break;
+    }
+    case "response.output_item.added":
+      if (ev.item?.type === "function_call" && ev.item.call_id) toolTurnByCall[ev.item.call_id] = respMeta[ev.response_id]?.turn || cur;
+      break;
+    case "response.audio.delta": {
+      const at = playDelta(ev.delta, ev.response_id);
+      const m = respMeta[ev.response_id];
+      if (at != null && m && m.turn) {
+        const t = m.turn;
+        if (m.isAnswer) { if (t.ansDelta == null) { t.ansDelta = T(); t.ansPlay = at; metricsDirty = true; render(); } }
+        else if (t.firstDelta == null) { t.firstDelta = T(); t.firstPlay = at; metricsDirty = true; render(); }
+      }
+      break;
+    }
+    case "response.audio_transcript.done": {
+      const m = respMeta[ev.response_id];
+      if (m && m.turn) { m.turn.host += (m.isAnswer ? "〔答〕" : "") + ev.transcript; render(); }
+      addChat(dropped.has(ev.response_id) ? "主持人（被打斷）" : "主持人", ev.transcript, "host");
+      break;
+    }
+    case "response.text.done":
+      addChat("主持人（文字）", ev.text, "host"); break;
+    case "response.done":
+      addUsage(ev.response?.usage);
+      if (ev.response?.status === "cancelled") {
+        if (intr && intr.cancelled == null) intr.cancelled = T();
+        if (intr && !intr.stopped && (intr.mode === "cancelled" || intr.mode === "duck")) stopPlayback("伺服器取消");
+      }
+      if (state.responseActive === ev.response?.id) state.responseActive = null;
+      render();
+      break;
+  }
+}
+
+// ---------------------------------------------------------------- render
+function render() {
+  const tb = $("#turnsTable tbody");
+  tb.innerHTML = turns.map((t) => {
+    const tools = t.tools.map((x) => `${esc(x.name)} ${esc(JSON.stringify(x.args))}<br>等 ${x.delay}s，實際 ${x.elapsed ?? "…"} ms${x.stale ? "，期間玩家又開口" : ""}`).join("<hr>");
+    return `<tr><td>${t.n}</td><td>${esc(t.kind)}</td><td>${esc(t.user)}</td>
+      <td>${fmt(t.tEvt, t.tEnd)}</td><td>${fmt(t.firstPlay, t.tEnd)}</td><td>${tools}</td>
+      <td>${t.tools.length ? fmt(t.ansPlay, t.tEnd) : ""}</td><td>${esc(t.host)}</td></tr>`;
+  }).reverse().join("");
+  const ib = $("#intrTable tbody");
+  ib.innerHTML = interrupts.map((x) => {
+    const outcome = x.outcome || (x.stopped ? `停了（${x.reason}）` : "沒停");
+    return `<tr><td>${x.n}</td><td>${x.mode}</td><td>${fmt(x.started, x.onset)}</td><td>${fmt(x.stopped, x.onset)}</td>
+      <td>${fmt(x.stopped, x.started)}</td><td>${x.cancelled ? "有（+" + fmt(x.cancelled, x.started) + "）" : "沒有"}</td><td>${outcome}</td></tr>`;
+  }).reverse().join("");
+}
+function renderStatus() {
+  if (!state.connectedAt) return;
+  const now = T();
+  const s = (v) => v ? ((now - v) / 1000).toFixed(0) + " 秒前" : "—";
+  const conn = state.connected ? `已連線 ${((now - state.connectedAt) / 1000).toFixed(0)} 秒` : (state.closedInfo ? `已斷線（連了 ${state.closedInfo.seconds} 秒）` : "連線中…");
+  $("#status").textContent = `${conn}｜上次送聲音 ${s(state.lastSentAudio)}｜上次伺服器事件 ${s(state.lastServerEvt)}｜玩家說了 ${state.userTurns} 句、累計 ${(state.userAudioMs / 1000).toFixed(0)} 秒音訊｜${state.responseActive ? "主持人正在產生回答" : "沒有進行中的回答"}｜${isPlaying() ? "播放中" : "安靜"}｜這條連線用了 輸入 文字 ${usage.textIn}／音訊 ${usage.audioIn}、輸出 文字 ${usage.textOut}／音訊 ${usage.audioOut} tokens，約 US$${usage.usd.toFixed(4)}（牌價估算）`;
+}
+function snapshot() {
+  return {
+    turns: turns.map((t) => ({ n: t.n, kind: t.kind, user: t.user, host: t.host,
+      end_detect_ms: t.tEvt != null ? Math.round(t.tEvt - t.tEnd) : null,
+      first_audio_ms: t.firstPlay != null ? Math.round(t.firstPlay - t.tEnd) : null,
+      answer_audio_ms: t.ansPlay != null ? Math.round(t.ansPlay - t.tEnd) : null,
+      tools: t.tools.map((x) => ({ name: x.name, args: x.args, delay: x.delay, elapsed: x.elapsed, stale: x.stale })) })),
+    interrupts: interrupts.map((x) => ({ n: x.n, mode: x.mode,
+      onset_to_detect: x.onset != null ? Math.round(x.started - x.onset) : null,
+      onset_to_stop: x.onset != null && x.stopped ? Math.round(x.stopped - x.onset) : null,
+      detect_to_stop: x.stopped ? Math.round(x.stopped - x.started) : null,
+      cancelled: x.cancelled != null, outcome: x.outcome || (x.stopped ? "stopped:" + x.reason : "not_stopped") })),
+  };
+}
+
+// ---------------------------------------------------------------- connect
+async function connect() {
+  cfg = readCfg(); saveCfg();
+  const instructions = cfg.instructions + (cfg.wait_rule ? WAIT_INSTR : "") + (cfg.delegate ? DELEGATE_INSTR : "");
+  playCtx = new AudioContext({ sampleRate: 24000 });
+  masterGain = playCtx.createGain(); masterGain.connect(playCtx.destination);
+  micStream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1,
+    echoCancellation: cfg.ec, noiseSuppression: cfg.ns, autoGainControl: cfg.agc } });
+  micCtx = new AudioContext({ sampleRate: 16000 });
+  await micCtx.audioWorklet.addModule(URL.createObjectURL(new Blob([WORKLET], { type: "application/javascript" })));
+  micNode = new AudioWorkletNode(micCtx, "pcm-tap");
+  micNode.port.onmessage = (e) => onMicChunk(e.data);
+  const sink = micCtx.createGain(); sink.gain.value = 0;
+  micCtx.createMediaStreamSource(micStream).connect(micNode); micNode.connect(sink); sink.connect(micCtx.destination);
+
+  turns = []; interrupts = []; cur = null; intr = null; chunkTimes = []; pendingAnswerTurn = null;
+  Object.assign(state, { connected: false, connectedAt: T(), lastSentAudio: 0, lastServerEvt: 0, responseActive: null,
+    pttHeld: false, sentSamples: 0, userAudioMs: 0, userTurns: 0, closedInfo: null, samplingUntil: 0 });
+  Object.assign(usage, { textIn: 0, audioIn: 0, textOut: 0, audioOut: 0, usd: 0 });
+  $("#chat").innerHTML = ""; $("#log").textContent = ""; render();
+
+  ws = new WebSocket(`ws://${location.host}/ws`);
+  ws.onopen = () => ws.send(JSON.stringify({ type: "relay.start", config: { ...cfg, instructions } }));
+  ws.onmessage = (e) => onEvent(JSON.parse(e.data));
+  ws.onclose = () => { state.connected = false; teardown(); };
+  $("#connect").disabled = true; $("#disconnect").disabled = false;
+  $("#ptt").disabled = cfg.mode !== "ptt"; $("#stopNow").disabled = false;
+  $("#settings").disabled = true;
+}
+function teardown() {
+  try { micStream && micStream.getTracks().forEach((t) => t.stop()); } catch (e) {}
+  try { micCtx && micCtx.close(); } catch (e) {}
+  setTimeout(() => { try { playCtx && playCtx.close(); } catch (e) {} }, 100);
+  $("#connect").disabled = false; $("#disconnect").disabled = true; $("#ptt").disabled = true; $("#stopNow").disabled = true;
+  $("#settings").disabled = false;
+  renderStatus();
+}
+function disconnect() {
+  send({ type: "relay.metrics", ...snapshot() });
+  setTimeout(() => ws && ws.close(), 200);
+}
+
+// ---------------------------------------------------------------- wiring
+fillVoices(); loadCfg();
+$("#questions").innerHTML = QUESTIONS.map(([q, a], i) =>
+  `<div style="margin-bottom:4px">${i + 1}. ${esc(q)} <button data-q="${i}">用文字問</button>
+   <details style="display:inline"><summary class="hint">答案</summary>${esc(a)}</details></div>`).join("");
+$("#connect").onclick = () => connect().catch((e) => { addChat("系統", "連線失敗：" + e.message, "sys"); teardown(); });
+$("#disconnect").onclick = disconnect;
+$("#stopNow").onclick = () => { if (state.responseActive) send({ type: "response.cancel" }); stopPlayback("手動"); };
+$("#ptt").onmousedown = pttDown; $("#ptt").onmouseup = pttUp; $("#ptt").onmouseleave = pttUp;
+document.addEventListener("keydown", (e) => {
+  if (e.code !== "Space" || e.repeat || ["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement.tagName)) return;
+  e.preventDefault(); pttDown();
+});
+document.addEventListener("keyup", (e) => {
+  if (e.code !== "Space" || ["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement.tagName)) return;
+  e.preventDefault(); pttUp();
+});
+document.querySelectorAll("[data-scene]").forEach((b) => b.onclick = () => {
+  if (!state.connected) return;
+  const name = b.dataset.scene;
+  const voice = $("#voiceOverride").value || cfg.voice;
+  const id = "sample-" + Date.now();
+  samples[id] = newTurn(`試聽・${name}・${voice}`, T());
+  state.samplingUntil = Infinity;
+  send({ type: "relay.voice_sample", sample_id: id, voice,
+    text: `請用主持人的語氣把下面這段話唸出來，照字唸，不要加開場白：「${SCENES[name]}」` });
+  addChat("試聽", `${voice} 唸「${name}」`, "sys");
+});
+document.addEventListener("click", (e) => {
+  const q = e.target.dataset && e.target.dataset.q;
+  if (q != null && state.connected) sendText(QUESTIONS[Number(q)][0], "文字問題");
+});
+$("#tool_delay").onchange = () => {
+  saveCfg();
+  if (state.connected) { send({ type: "relay.set", tool_delay: Number($("#tool_delay").value) }); addLog(`查規則改成等 ${$("#tool_delay").value} 秒`); }
+};
+$("#plant").onclick =() => state.connected && sendText("請記住兩件事：今晚的暗號是「藍色鳳梨」，三號座位的玩家叫阿哲。記住就好，只回答「記住了」。", "記憶");
+$("#askMemory").onclick = () => state.connected && sendText("剛剛請你記住的暗號是什麼？三號座位的玩家叫什麼名字？", "記憶");
+// 20 s per item: a client message over 1 MiB closes the connection (code 1009, seen 2026-11-19)
+$("#fillAudio").onclick = () => state.connected && send({ type: "relay.fill_audio", seconds: 20, count: 17 });
+$("#fillText").onclick = () => { if (!state.connected) return; fillingText = true; send({ type: "relay.fill_text", count: 22 }); };
+document.querySelectorAll("[data-mark]").forEach((b) => b.onclick = () => {
+  send({ type: "relay.mark", label: b.dataset.mark, turn: cur ? cur.n : null });
+  addLog(`★ 標記：${b.dataset.mark}`);
+});
+$("#noteBtn").onclick = () => { const v = $("#note").value.trim(); if (!v) return; send({ type: "relay.mark", label: "備註", note: v, turn: cur ? cur.n : null }); addLog(`★ 備註：${v}`); $("#note").value = ""; };
+setInterval(renderStatus, 500);
+setInterval(() => { if (metricsDirty && state.connected) { metricsDirty = false; send({ type: "relay.metrics", ...snapshot() }); } }, 5000);
+</script>
+</body>
+</html>
