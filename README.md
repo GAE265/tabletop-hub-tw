@@ -80,9 +80,11 @@ uv run uvicorn app.main:create_app --factory --reload # http://localhost:8000/do
 
 測試帳號只存在於後端的 `app/dev/`，前端身分切換器會從 `GET /api/v1/dev/users` 讀取。
 
-#### seed 會建立哪些資料
+#### 兩個 seed 指令會建立哪些資料
 
-`uv run alembic upgrade head` 只建好資料表（另外寫入 8 個遊戲類型 `genres`），其他資料表是空的。`uv run python -m app.dev.seed` 會寫入下面這些開發用資料，可以重複執行：
+`uv run alembic upgrade head` 只建好資料表（另外寫入 8 個遊戲類型 `genres`），其他資料表是空的。開發用的資料由上面兩個指令寫入，都只能在 `AUTH_MODE=dev` 執行，都可以重複執行。
+
+**`uv run python -m app.dev.seed`**：測試帳號、共用桌遊、推薦 Agent 的資料、教學影片。
 
 | 資料 | 資料表 | 來源 |
 |---|---|---|
@@ -93,7 +95,18 @@ uv run uvicorn app.main:create_app --factory --reload # http://localhost:8000/do
 
 跑完 seed，每個人的桌遊與編號都相同，講「3 號」都是同一款。資料檔放在 repo 的原因與後果見 [ADR 0004](docs/adr/0004-seed-data-in-repo.md)；資料檔的來源與更新方法見 [`backend/app/dev/seed_data/README.md`](backend/app/dev/seed_data/README.md)。
 
-注意：
+**`uv run python -m app.dev.seed_shop`**：「測試桌遊店」的訂位設定。店家和 `app.dev.seed` 建立的測試店家是同一間；資料寫在 `backend/app/dev/seed_shop.py`，已經存在的資料不會被覆蓋。
+
+| 資料 | 資料表 |
+|---|---|
+| 營業時間：週二公休，其餘每天 13:00–22:00 | `business_hours` |
+| 公休時段 1 筆 | `closing_hours` |
+| 桌子 9 張（A–I，含樓層與座位圖座標）、桌子之間的關係 7 筆（能不能併桌） | `seating_tables`、`seating_tables_rel` |
+| 定價規則 6 條（平日與假日場地費、假日每人最低飲料、計費時數的取整單位與上限、最短訂位時數） | `pricing_rules` |
+| FAQ 4 則 | `faqs` |
+| 菜單分類 3 個、品項 10 個 | `menu_categories`、`menu_items` |
+
+`app.dev.seed` 的注意事項：
 
 - **先升級、再 seed。** 資料表比資料檔舊時，seed 會出現「欄位不存在」之類的錯誤；跑完 `uv run alembic upgrade head` 再跑一次 seed 即可。
 - **seed 會讓桌遊與推薦 Agent 的資料和 repo 的資料檔完全一樣**（`games`、`game_genres` 與 `games_advisor_` 的 4 張表）。自己在本機新增的桌遊會被刪掉，揪團選用它的那筆對應（`group_games`）也會一起被刪，揪團本身保留；測試請用寫在測試程式裡的假資料。
@@ -102,14 +115,13 @@ uv run uvicorn app.main:create_app --factory --reload # http://localhost:8000/do
 - 除了上面提到的 `group_games`，其他資料表原本的資料不會被 seed 刪除或修改。已經存在的測試帳號、店家與教學影片不會被覆蓋，帳號只在電話是空的時候補上假電話。
 - 推薦 Agent 的向量是 1536 維，`.env` 的 `GAMES_ADVISOR_EMBEDDING_DIM` 請留空（預設就是 1536）。
 
-#### 哪些資料不由 seed 建立
+#### 哪些資料不由這兩個指令建立
 
 | 資料 | 怎麼建立 |
 |---|---|
-| 訂位用的店家設定（營業時間、桌子與座位圖、定價規則、FAQ、菜單） | 在 `backend/` 另外執行 `uv run python -m app.dev.seed_shop`（可重複執行） |
 | 規則書頁面（`games_manual`） | 不放在 repo（AGENTS.md 第 2 節：不提交規則書全文）。用規則書入庫的 API 匯入，步驟見 [docs/manual-test-rules-ingest.md](docs/manual-test-rules-ingest.md) |
 | 規則問答的檢索段落（`rules_qa_chunks`） | 規則書頁面入庫後，在 `backend/` 執行 `uv run python -m app.domains.rules_qa.commands index --game-id <遊戲編號>` |
-| 揪團、訂位紀錄、戰績 | repo 目前沒有這些資料的 seed |
+| 揪團、訂位紀錄、戰績 | repo 目前沒有建立這些資料的指令 |
 
 `sync-games` 指令（`uv run python -m app.domains.games_advisor.commands sync-games <匯出檔>`）還在，seed 的桌遊這一步就是呼叫它背後的同一段程式；本機開發不用再另外執行，也不用再到雲端資料夾下載匯出檔。
 
@@ -157,7 +169,7 @@ flutter run -d chrome --web-port 5000 --dart-define=API_BASE_URL=http://localhos
 - `docker compose ps`  的 STATUS 欄位要顯示 `Up`（或 `Up (healthy)`），兩個服務都是才算成功。
 如果顯示 `Exited` 或沒有出現，先確認 Docker Desktop 已經打開，再執行 `docker compose logs` 查看錯誤訊息。
 - 後端套件有變動（`pyproject.toml`／`uv.lock` 被改）：`uv sync`（在 `backend/`）。有新的 migration 時也要跑 `uv run alembic upgrade head`。
-- 測試帳號、共用桌遊資料或推薦 Agent 的資料有變動（桌遊資料更新時立倫會在群組通知）：拉下最新的 `dev`，在 `backend/` 先跑 `uv run alembic upgrade head`，再跑 `uv run python -m app.dev.seed`（可重複執行；會做什麼見「本機啟動」第 3 步的「seed 會建立哪些資料」）。
+- 測試帳號、共用桌遊資料或推薦 Agent 的資料有變動（桌遊資料更新時立倫會在群組通知）：拉下最新的 `dev`，在 `backend/` 先跑 `uv run alembic upgrade head`，再跑 `uv run python -m app.dev.seed`（可重複執行；會做什麼見「本機啟動」第 3 步的「兩個 seed 指令會建立哪些資料」）。
 
 ## 結束時怎麼關
 
