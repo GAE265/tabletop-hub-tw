@@ -2,13 +2,19 @@
 
 遊戲依 bgg_id 尋找（games 唯一不重複的欄位，見 docs/adr/0003-shared-games-table.md）。
 測試自己寫入只有必填欄位的假遊戲，結束後刪除，不動其他測試的資料。
+
+seed 現在也會寫入共用桌遊資料（docs/adr/0004-seed-data-in-repo.md）：假遊戲用和資料檔相同的
+編號，seed 才會把它們當成同一款、原地更新，掛在上面的影片不受影響。
 """
 
 from collections.abc import Callable, Iterator
+from pathlib import Path
 from subprocess import CompletedProcess
 
 import pytest
 from sqlalchemy import Engine, text
+
+from tests.dev.support import fake_game, fake_tag_sql, write_seed_data
 
 # bgg_id → 預期的 YouTube 影片 ID
 EXPECTED = {
@@ -16,6 +22,9 @@ EXPECTED = {
     144734: "5nIdNY056Gw",  # 阿不思學院
     171623: "F5abxTqoEH8",  # 馬可波羅
 }
+
+# bgg_id → 這款遊戲在 seed 資料檔（app/dev/seed_data/games-export.json）裡的編號
+SEED_GAME_IDS = {400566: 1, 144734: 2, 171623: 3}
 
 
 def _cleanup(engine: Engine) -> None:
@@ -42,12 +51,12 @@ def add_games(db: Engine) -> Iterator[Callable[..., dict[int, int]]]:
             for bgg_id in bgg_ids:
                 ids[bgg_id] = conn.scalar(
                     text(
-                        "INSERT INTO games (bgg_id, name, english_name, min_players, "
+                        "INSERT INTO games (id, bgg_id, name, english_name, min_players, "
                         "max_players, min_playtime, max_playtime, min_age, weight, "
-                        "categories, mechanics) VALUES (:bgg, :name, :name, 2, 4, 30, 60, "
+                        "categories, mechanics) VALUES (:id, :bgg, :name, :name, 2, 4, 30, 60, "
                         "10, 2.0, '{}', '{}') RETURNING id"
                     ),
-                    {"bgg": bgg_id, "name": f"假遊戲 {bgg_id}"},
+                    {"id": SEED_GAME_IDS[bgg_id], "bgg": bgg_id, "name": f"假遊戲 {bgg_id}"},
                 )
         return ids
 
@@ -122,9 +131,16 @@ def test_missing_game_is_skipped_with_notice(
     add_games: Callable[..., dict[int, int]],
     db: Engine,
     run_seed: Callable[..., CompletedProcess[str]],
+    tmp_path: Path,
 ) -> None:
     add_games(400566, 144734)
-    result = run_seed()
+    # repo 的資料檔有馬可波羅（171623），seed 會自己寫入；改用只有這 2 款的測試用資料檔
+    data_dir = write_seed_data(
+        tmp_path / "data",
+        games=[fake_game(1, 400566, "假遊戲 400566"), fake_game(2, 144734, "假遊戲 144734")],
+        advisor_sql=fake_tag_sql(),
+    )
+    result = run_seed(data_dir=data_dir)
     assert result.returncode == 0, result.stderr
     assert set(videos(db)) == {400566, 144734}
     assert "171623" in result.stdout
