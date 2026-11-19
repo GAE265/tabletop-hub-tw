@@ -122,3 +122,14 @@
 #### Scenario: 成團後取消
 - **WHEN** 已成團的揪團被取消
 - **THEN** 顯示「已取消」，不顯示「已成團」
+
+### Requirement: 揪團詳細頁的網址
+`/groups/<揪團 id>` SHALL 直接顯示該揪團的詳細頁（和從月曆點進去的是同一個頁面），導覽列選取「揪團」。`/groups/notifications` 仍是通知列表頁，不被當成揪團 id。
+
+#### Scenario: 開啟揪團網址
+- **WHEN** 前往 `/groups/g-1`
+- **THEN** 顯示揪團 g-1 的詳細頁
+
+#### Scenario: 通知列表的網址
+- **WHEN** 前往 `/groups/notifications`
+- **THEN** 顯示通知列表頁，不是揪團詳細頁

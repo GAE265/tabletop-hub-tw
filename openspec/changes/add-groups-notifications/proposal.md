@@ -28,6 +28,7 @@
   - 通知列表頁 `/groups/notifications`：點一則就標成已讀，並跳到揪團詳細頁。
   - 揪團詳細頁：開團主看到「確定成團」，已成團的揪團顯示「已成團」。
   - 揪團卡片：已成團的揪團顯示「已成團」。
+  - 新增揪團詳細頁的網址 `/groups/<揪團 id>`；首頁「接下來的行程」點揪團列改成直接進入該揪團（使用者要求放在同一個 MR）。
 - **不做**：
   - 店家通知（訂位成功、客人超過結束時間還沒離開），屬於 `booking`，留給瑋鋐。
   - Email、瀏覽器推播。
@@ -41,7 +42,7 @@
 - `groups-notifications-page`：通知鈴鐺、通知列表頁、「確定成團」按鈕與「已成團」標示（前端）。
 
 ### Modified Capabilities
-無。`add-groups-calendar` 還沒封存，主規格中還沒有 `groups`；本 change 只新增行為，不改它已定義的情境。
+- `home-page`：「接下來的行程」點揪團列，改成前往該揪團的詳細頁 `/groups/<揪團 id>`。`add-groups-calendar` 還沒封存，主規格中還沒有 `groups`；本 change 只新增行為，不改它已定義的情境。
 
 ## Impact
 
