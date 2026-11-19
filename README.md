@@ -74,6 +74,7 @@ cd backend
 uv sync
 uv run alembic upgrade head
 uv run python -m app.dev.seed        # 建立開發用資料：測試帳號、共用桌遊、推薦 Agent 的資料、教學影片
+uv run python -m app.dev.seed_shop
 uv run uvicorn app.main:create_app --factory --reload # http://localhost:8000/docs
 ```
 
