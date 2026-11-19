@@ -1,0 +1,1518 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>主持人語音檢測台</title>
+<!-- PROTOTYPE for ticket 07 (throwaway). Served by server.py at /studio. The API key never reaches this page.
+     Design direction from ui-ux-pro-max: Swiss minimal, recording red + waveform blue, Fira Sans / Fira Code. -->
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22%3E%3Crect width=%2224%22 height=%2224%22 rx=%226%22 fill=%22%23DC2626%22/%3E%3Cpath d=%22M12 5a2.5 2.5 0 0 0-2.5 2.5v4a2.5 2.5 0 0 0 5 0v-4A2.5 2.5 0 0 0 12 5Z%22 fill=%22white%22/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Fira+Sans:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #F8FAFC; --surface: #FFFFFF; --surface-2: #F1F5F9; --surface-3: #E2E8F0;
+  --fg: #0F172A; --muted: #475569; --faint: #64748B; --border: #E2E8F0;
+  --rec: #DC2626; --on-rec: #FFFFFF; --wave: #2563EB; --on-wave: #FFFFFF;
+  --player: #0F766E; --host: #2563EB; --tool: #B45309; --referee: #7C3AED;
+  --ok: #15803D; --ok-bg: #DCFCE7; --warn: #B45309; --warn-bg: #FEF3C7;
+  --bad: #B91C1C; --bad-bg: #FEE2E2; --info: #1D4ED8; --info-bg: #DBEAFE; --idle-bg: #F1F5F9;
+  --seg-detect: #CBD5E1; --seg-wait: #BFDBFE; --seg-tool: #FCD34D; --seg-invalid: #CBD5E1;
+  --ring: #2563EB; --shadow: 0 1px 2px rgba(15, 23, 42, .06), 0 1px 3px rgba(15, 23, 42, .08);
+  --radius: 10px; --radius-sm: 6px;
+  --font: "Fira Sans", "Noto Sans TC", "PingFang TC", system-ui, sans-serif;
+  --mono: "Fira Code", ui-monospace, "SF Mono", Menlo, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #020617; --surface: #0E1223; --surface-2: #1A1E2F; --surface-3: #273046;
+    --fg: #F8FAFC; --muted: #94A3B8; --faint: #8391A7; --border: #334155;
+    --rec: #EF4444; --wave: #60A5FA; --on-wave: #0B1220;
+    --player: #2DD4BF; --host: #60A5FA; --tool: #FBBF24; --referee: #A78BFA;
+    --ok: #4ADE80; --ok-bg: rgba(74, 222, 128, .14); --warn: #FBBF24; --warn-bg: rgba(251, 191, 36, .14);
+    --bad: #F87171; --bad-bg: rgba(248, 113, 113, .14); --info: #93C5FD; --info-bg: rgba(96, 165, 250, .16); --idle-bg: #1A1E2F;
+    --seg-detect: #475569; --seg-wait: #1E3A8A; --seg-tool: #92400E; --seg-invalid: #475569;
+    --ring: #60A5FA; --shadow: 0 1px 2px rgba(0, 0, 0, .5);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #020617; --surface: #0E1223; --surface-2: #1A1E2F; --surface-3: #273046;
+  --fg: #F8FAFC; --muted: #94A3B8; --faint: #8391A7; --border: #334155;
+  --rec: #EF4444; --wave: #60A5FA; --on-wave: #0B1220;
+  --player: #2DD4BF; --host: #60A5FA; --tool: #FBBF24; --referee: #A78BFA;
+  --ok: #4ADE80; --ok-bg: rgba(74, 222, 128, .14); --warn: #FBBF24; --warn-bg: rgba(251, 191, 36, .14);
+  --bad: #F87171; --bad-bg: rgba(248, 113, 113, .14); --info: #93C5FD; --info-bg: rgba(96, 165, 250, .16); --idle-bg: #1A1E2F;
+  --seg-detect: #475569; --seg-wait: #1E3A8A; --seg-tool: #92400E; --seg-invalid: #475569;
+  --ring: #60A5FA; --shadow: 0 1px 2px rgba(0, 0, 0, .5);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { margin: 0; }
+body { background: var(--bg); color: var(--fg); font: 15px/1.55 var(--font); -webkit-font-smoothing: antialiased; }
+button, input, select, textarea { font: inherit; color: inherit; }
+.mono, .num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.muted { color: var(--muted); } .faint { color: var(--faint); }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; border-radius: 4px; }
+svg.i { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+
+/* ---------- top bar ---------- */
+.topbar { position: sticky; top: 0; z-index: 10; display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px;
+  padding: 10px 20px; background: color-mix(in srgb, var(--surface) 92%, transparent); backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--border); }
+.brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.brand-mark { width: 32px; height: 32px; border-radius: 8px; display: grid; place-items: center; background: var(--rec); color: var(--on-rec); }
+.brand h1 { margin: 0; font-size: 16px; font-weight: 700; letter-spacing: .01em; }
+.brand p { margin: 0; font-size: 12px; color: var(--muted); }
+.tabs { display: flex; gap: 4px; background: var(--surface-2); padding: 3px; border-radius: 8px; }
+.tabs button { border: 0; background: transparent; padding: 6px 14px; border-radius: 6px; cursor: pointer; color: var(--muted); font-weight: 500; min-height: 36px; }
+.tabs button[aria-selected="true"] { background: var(--surface); color: var(--fg); box-shadow: var(--shadow); }
+.status-strip { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-left: auto; }
+.pill { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; background: var(--surface-2);
+  font-size: 12.5px; color: var(--muted); white-space: nowrap; border: 1px solid var(--border); }
+.pill b { color: var(--fg); font-weight: 600; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); }
+.dot.on { background: var(--ok); } .dot.warn { background: var(--warn); } .dot.bad { background: var(--bad); }
+.meter-mini { width: 54px; height: 6px; background: var(--surface-3); border-radius: 3px; overflow: hidden; }
+.meter-mini > span { display: block; height: 100%; width: 0; background: var(--ok); transition: width .3s linear; }
+.icon-btn { border: 1px solid var(--border); background: var(--surface); border-radius: 8px; width: 36px; height: 36px; display: grid; place-items: center; cursor: pointer; }
+.icon-btn:hover { background: var(--surface-2); }
+
+/* ---------- layout ---------- */
+.page { padding: 16px 20px 40px; }
+.live { display: grid; gap: 16px; grid-template-columns: 300px minmax(0, 1fr) 400px; align-items: start; }
+.review { display: grid; gap: 16px; grid-template-columns: 300px minmax(0, 1fr); align-items: start; }
+@media (max-width: 1380px) { .live { grid-template-columns: 280px minmax(0, 1fr); } .live .col-metrics { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; } }
+@media (max-width: 960px) { .live, .review { grid-template-columns: minmax(0, 1fr); } .live .col-metrics { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 640px) { .page { padding: 12px 16px 32px; } .topbar { padding: 10px 16px; position: static; } .status-strip { margin-left: 0; } }
+.col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); min-width: 0; }
+.card-h { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px 14px 0; }
+.card-h h2 { margin: 0; font-size: 14px; font-weight: 600; letter-spacing: .02em; }
+.card-b { padding: 12px 14px 14px; }
+.sticky { position: sticky; top: 72px; max-height: calc(100vh - 88px); overflow-y: auto; }
+@media (max-width: 960px) { .sticky { position: static; max-height: none; } }
+
+/* ---------- buttons & form ---------- */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 40px; padding: 0 14px; border-radius: 8px;
+  border: 1px solid var(--border); background: var(--surface); cursor: pointer; font-weight: 500; transition: background .15s, border-color .15s, opacity .15s; }
+.btn:hover:not(:disabled) { background: var(--surface-2); }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.btn.primary { background: var(--wave); color: var(--on-wave); border-color: transparent; }
+.btn.primary:hover:not(:disabled) { background: color-mix(in srgb, var(--wave) 88%, #000); }
+.btn.rec { background: var(--rec); color: var(--on-rec); border-color: transparent; }
+.btn.ghost { background: transparent; }
+.btn.sm { min-height: 32px; padding: 0 10px; font-size: 13px; }
+.btn-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.field > span { font-size: 12.5px; color: var(--muted); font-weight: 500; }
+.field small { font-size: 12px; color: var(--faint); }
+.field input[type=number], .field select, .field input[type=text], textarea { min-height: 36px; padding: 6px 10px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--surface); width: 100%; }
+textarea { font: 13px/1.5 var(--mono); }
+.check { display: flex; align-items: center; gap: 8px; min-height: 32px; cursor: pointer; font-size: 14px; }
+.check input { width: 18px; height: 18px; accent-color: var(--wave); }
+.grid-form { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px 14px; }
+fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
+fieldset:disabled { opacity: .6; }
+.group-title { font-size: 12px; font-weight: 600; color: var(--faint); text-transform: uppercase; letter-spacing: .06em; margin: 14px 0 8px; }
+.group-title:first-child { margin-top: 0; }
+details.card > summary { list-style: none; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px 14px; font-weight: 600; font-size: 14px; }
+details.card > summary::-webkit-details-marker { display: none; }
+details.card > summary .chev { transition: transform .2s; }
+details.card[open] > summary .chev { transform: rotate(180deg); }
+.lock-note { font-size: 12.5px; color: var(--warn); background: var(--warn-bg); padding: 6px 10px; border-radius: var(--radius-sm); margin-bottom: 10px; }
+
+/* ---------- protocol ---------- */
+.progress { height: 6px; background: var(--surface-3); border-radius: 3px; overflow: hidden; margin-top: 8px; }
+.progress > span { display: block; height: 100%; background: var(--ok); width: 0; transition: width .3s; }
+.qlist { list-style: none; margin: 0; padding: 6px; display: flex; flex-direction: column; gap: 2px; }
+.qlist button { width: 100%; display: grid; grid-template-columns: 28px 1fr auto; align-items: center; gap: 8px; text-align: left;
+  border: 0; background: transparent; padding: 8px; border-radius: 8px; cursor: pointer; min-height: 44px; }
+.qlist button:hover { background: var(--surface-2); }
+.qlist button[aria-current="true"] { background: var(--info-bg); }
+.qnum { width: 28px; height: 28px; border-radius: 7px; display: grid; place-items: center; font: 600 12px var(--mono); background: var(--surface-2); color: var(--muted); }
+.qlist button[aria-current="true"] .qnum { background: var(--wave); color: var(--on-wave); }
+.qtitle { font-size: 14px; line-height: 1.3; }
+.qtitle small { display: block; color: var(--faint); font-size: 12px; }
+.chip { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; padding: 2px 8px; border-radius: 999px; background: var(--idle-bg); color: var(--muted); white-space: nowrap; font-weight: 500; }
+.chip.ok { background: var(--ok-bg); color: var(--ok); } .chip.warn { background: var(--warn-bg); color: var(--warn); }
+.chip.bad { background: var(--bad-bg); color: var(--bad); } .chip.info { background: var(--info-bg); color: var(--info); }
+.qdetail { border-top: 1px solid var(--border); padding: 14px; display: flex; flex-direction: column; gap: 12px; }
+.qdetail h3 { margin: 0; font-size: 16px; }
+.qdetail h4 { margin: 0 0 4px; font-size: 12.5px; color: var(--faint); font-weight: 600; letter-spacing: .04em; }
+.qdetail ol { margin: 0; padding-left: 20px; } .qdetail ol li { margin: 3px 0; }
+.quote { border-left: 3px solid var(--border); padding: 6px 10px; background: var(--surface-2); border-radius: 0 var(--radius-sm) var(--radius-sm) 0; font-size: 14px; }
+.quote.live { border-left-color: var(--wave); }
+.rating { display: flex; flex-direction: column; gap: 6px; }
+.rating-row { display: flex; align-items: center; gap: 8px; }
+.rating-row > span { width: 52px; font-size: 13px; color: var(--muted); }
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.seg button { border: 0; background: var(--surface); width: 36px; height: 32px; cursor: pointer; font: 500 13px var(--mono); }
+.seg button + button { border-left: 1px solid var(--border); }
+.seg button[aria-pressed="true"] { background: var(--wave); color: var(--on-wave); }
+
+/* ---------- hero ---------- */
+.hero { display: grid; grid-template-columns: auto 1fr; gap: 16px; align-items: center; padding: 16px; }
+@media (max-width: 640px) { .hero { grid-template-columns: 1fr; } }
+.orb { width: 96px; height: 96px; border-radius: 50%; display: grid; place-items: center; position: relative; background: var(--surface-2); color: var(--muted); transition: background .2s, color .2s; }
+.orb svg.i { width: 40px; height: 40px; }
+.orb::after { content: ""; position: absolute; inset: -6px; border-radius: 50%; border: 2px solid currentColor; opacity: 0; }
+.orb[data-state="listening"] { background: var(--ok-bg); color: var(--ok); }
+.orb[data-state="user"], .orb[data-state="ptt"] { background: var(--bad-bg); color: var(--rec); }
+.orb[data-state="thinking"], .orb[data-state="sampling"] { background: var(--info-bg); color: var(--info); }
+.orb[data-state="tool"] { background: var(--warn-bg); color: var(--tool); }
+.orb[data-state="speaking"], .orb[data-state="ducked"] { background: var(--info-bg); color: var(--host); }
+.orb[data-state="closed"] { background: var(--bad-bg); color: var(--bad); }
+@media (prefers-reduced-motion: no-preference) {
+  .orb[data-state="user"]::after, .orb[data-state="ptt"]::after, .orb[data-state="speaking"]::after { animation: pulse 1.4s ease-out infinite; }
+  @keyframes pulse { from { opacity: .5; transform: scale(.95); } to { opacity: 0; transform: scale(1.18); } }
+}
+.hero-state { font-size: 20px; font-weight: 700; margin: 0; }
+.hero-sub { margin: 2px 0 10px; color: var(--muted); font-size: 14px; }
+.levels { display: grid; grid-template-columns: auto 1fr; gap: 6px 10px; align-items: center; font-size: 12.5px; color: var(--muted); }
+canvas.spark { width: 100%; height: 40px; display: block; background: var(--surface-2); border-radius: var(--radius-sm); }
+.ptt-btn { width: 100%; min-height: 56px; font-size: 16px; font-weight: 600; border-radius: 12px; touch-action: none; user-select: none; }
+.ptt-btn.held { background: var(--rec); color: var(--on-rec); border-color: transparent; }
+.controls { display: grid; grid-template-columns: 1fr; gap: 10px; padding: 0 16px 16px; }
+
+/* ---------- action tabs ---------- */
+.subtabs { display: flex; gap: 2px; border-bottom: 1px solid var(--border); padding: 0 10px; overflow-x: auto; }
+.subtabs button { border: 0; background: transparent; padding: 10px 12px; cursor: pointer; color: var(--muted); font-weight: 500; border-bottom: 2px solid transparent; min-height: 44px; white-space: nowrap; }
+.subtabs button[aria-selected="true"] { color: var(--fg); border-bottom-color: var(--wave); }
+.subpanel { padding: 14px; }
+.qa-item { display: grid; grid-template-columns: 1fr auto; gap: 6px 10px; align-items: center; padding: 8px 0; border-bottom: 1px dashed var(--border); }
+.qa-item:last-child { border-bottom: 0; }
+.qa-item details { grid-column: 1 / -1; font-size: 13px; color: var(--muted); }
+.qa-item summary { cursor: pointer; width: fit-content; }
+
+/* ---------- chat ---------- */
+.chat { height: 440px; overflow-y: auto; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) { .chat { scroll-behavior: auto; } }
+.msg { max-width: 86%; padding: 8px 12px; border-radius: 12px; font-size: 14.5px; line-height: 1.5; }
+.msg .who { display: block; font-size: 11.5px; font-weight: 600; margin-bottom: 2px; letter-spacing: .03em; }
+.msg.player { align-self: flex-end; background: color-mix(in srgb, var(--player) 12%, var(--surface)); border: 1px solid color-mix(in srgb, var(--player) 30%, transparent); }
+.msg.player .who { color: var(--player); }
+.msg.host { align-self: flex-start; background: color-mix(in srgb, var(--host) 10%, var(--surface)); border: 1px solid color-mix(in srgb, var(--host) 28%, transparent); }
+.msg.host .who { color: var(--host); }
+.msg.host.cut { border-style: dashed; opacity: .8; }
+.msg.sys { align-self: center; max-width: 96%; background: transparent; color: var(--faint); font-size: 12.5px; padding: 2px 8px; text-align: center; }
+.msg.err { align-self: center; max-width: 96%; background: var(--bad-bg); color: var(--bad); font-size: 13px; }
+.msg.ambient { align-self: flex-end; background: transparent; border: 1px dashed var(--border); color: var(--faint); font-size: 13px; }
+.toolcard { align-self: center; width: min(96%, 520px); border: 1px solid color-mix(in srgb, var(--tool) 40%, var(--border)); background: color-mix(in srgb, var(--tool) 8%, var(--surface)); border-radius: 10px; padding: 8px 12px; font-size: 13px; }
+.toolcard.referee { border-color: color-mix(in srgb, var(--referee) 40%, var(--border)); background: color-mix(in srgb, var(--referee) 8%, var(--surface)); }
+.toolcard header { display: flex; align-items: center; gap: 6px; font-weight: 600; }
+.toolcard .args { font: 12px/1.5 var(--mono); color: var(--muted); word-break: break-all; margin-top: 2px; }
+.toolcard .res { margin-top: 4px; font-size: 12.5px; color: var(--muted); }
+.toolcard .bar { height: 4px; border-radius: 2px; background: var(--surface-3); margin-top: 6px; overflow: hidden; }
+.toolcard .bar span { display: block; height: 100%; width: 0; background: var(--tool); transition: width .2s linear; }
+
+/* ---------- metrics ---------- */
+.kpis { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; padding: 12px 14px 14px; }
+.kpi { border: 1px solid var(--border); border-radius: 8px; padding: 10px; background: var(--surface-2); min-width: 0; }
+.kpi .label { font-size: 12px; color: var(--muted); font-weight: 500; }
+.kpi .value { font: 600 22px/1.2 var(--mono); margin-top: 4px; font-variant-numeric: tabular-nums; }
+.kpi .value small { font-size: 12px; color: var(--muted); font-weight: 400; }
+.kpi .sub { font-size: 12px; color: var(--faint); margin-top: 2px; }
+.kpi .ref { font-size: 11.5px; color: var(--faint); margin-top: 4px; border-top: 1px dashed var(--border); padding-top: 4px; }
+.legend { display: flex; flex-wrap: wrap; gap: 10px; font-size: 12px; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 5px; }
+.sw { width: 12px; height: 8px; border-radius: 2px; display: inline-block; }
+.sw.detect { background: var(--seg-detect); } .sw.wait { background: var(--seg-wait); } .sw.tool { background: var(--seg-tool); }
+.mk { width: 3px; height: 12px; display: inline-block; border-radius: 1px; } .mk.first { background: var(--host); } .mk.answer { background: var(--ok); }
+.turns { display: flex; flex-direction: column; gap: 12px; margin-top: 10px; }
+.turn h5 { margin: 0 0 4px; font-size: 12.5px; font-weight: 500; display: flex; gap: 6px; align-items: baseline; min-width: 0; }
+.turn h5 .txt { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.track { position: relative; height: 18px; background: var(--surface-2); border-radius: 4px; overflow: hidden; }
+.track .seg-b { position: absolute; top: 3px; bottom: 3px; border-radius: 2px; }
+.track .seg-b.detect { background: var(--seg-detect); } .track .seg-b.wait { background: var(--seg-wait); } .track .seg-b.tool { background: var(--seg-tool); }
+.track .mark { position: absolute; top: 0; bottom: 0; width: 3px; border-radius: 1px; }
+.track .mark.first { background: var(--host); } .track .mark.answer { background: var(--ok); }
+.turn .vals { font: 12px var(--mono); color: var(--muted); margin-top: 3px; display: flex; flex-wrap: wrap; gap: 4px 10px; }
+.axis { display: flex; justify-content: space-between; font: 11px var(--mono); color: var(--faint); margin-top: 2px; }
+.empty { color: var(--faint); font-size: 13.5px; text-align: center; padding: 18px 8px; }
+table.t { width: 100%; border-collapse: collapse; font-size: 13px; }
+table.t th { text-align: left; font-weight: 600; color: var(--muted); font-size: 12px; padding: 6px 8px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+table.t td { padding: 6px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
+table.t td.num { text-align: right; white-space: nowrap; }
+.table-wrap { overflow-x: auto; }
+.log { max-height: 320px; overflow: auto; font: 11.5px/1.6 var(--mono); color: var(--muted); padding: 10px 14px; white-space: pre-wrap; word-break: break-all; }
+.idle-bar { height: 6px; border-radius: 3px; background: var(--surface-3); overflow: hidden; margin-top: 6px; }
+.idle-bar > span { display: block; height: 100%; width: 0; background: var(--ok); transition: width .5s linear, background .3s; }
+
+/* ---------- review ---------- */
+.sessions { list-style: none; margin: 0; padding: 6px; max-height: calc(100vh - 160px); overflow: auto; }
+.sessions button { width: 100%; text-align: left; border: 0; background: transparent; padding: 8px 10px; border-radius: 8px; cursor: pointer; display: flex; flex-direction: column; gap: 2px; min-height: 44px; }
+.sessions button:hover { background: var(--surface-2); }
+.sessions button[aria-current="true"] { background: var(--info-bg); }
+.sessions .when { font: 500 13px var(--mono); }
+.sessions .meta { font-size: 12px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 4px; }
+.summary-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.lanes-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-2); }
+svg.lanes text { font: 11px var(--mono); fill: var(--muted); }
+svg.lanes .lane-label { font: 600 11.5px var(--font); fill: var(--fg); }
+.zoom { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+.toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: var(--fg); color: var(--bg); padding: 8px 14px; border-radius: 8px; font-size: 14px; opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 50; max-width: calc(100vw - 32px); }
+.toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <div class="brand-mark" aria-hidden="true"><svg class="i" viewBox="0 0 24 24"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg></div>
+    <div><h1>主持人語音檢測台</h1><p>原型・用完就丟・不存錄音</p></div>
+  </div>
+  <nav class="tabs" role="tablist" aria-label="頁面">
+    <button role="tab" id="tab-live-btn" aria-selected="true" aria-controls="tab-live">檢測</button>
+    <button role="tab" id="tab-review-btn" aria-selected="false" aria-controls="tab-review">回看紀錄</button>
+  </nav>
+  <div class="status-strip">
+    <span class="pill" id="pillConn"><span class="dot" id="connDot"></span><b id="connText">未連線</b></span>
+    <span class="pill" id="pillModel" title="模型與聲線">—</span>
+    <span class="pill" title="阿里雲在 180 秒沒有產生回答時會關掉連線">距離上次回答 <b class="num" id="idleText">—</b><span class="meter-mini"><span id="idleMini"></span></span></span>
+    <span class="pill" title="對話歷史保留輪數（預設 20 輪，超過就忘）">歷史 <b class="num" id="histText">—</b></span>
+    <span class="pill" title="依 response.done 的 usage 與新加坡牌價估算">花費 <b class="num" id="costText">US$0</b></span>
+    <button class="icon-btn" id="themeBtn" aria-label="切換深淺色"><svg class="i" viewBox="0 0 24 24"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg></button>
+  </div>
+</header>
+
+<main class="page">
+  <!-- ======================= LIVE ======================= -->
+  <section id="tab-live" role="tabpanel" aria-labelledby="tab-live-btn" class="live">
+    <!-- protocol -->
+    <aside class="col">
+      <div class="card sticky" id="protocolCard">
+        <div class="card-h"><h2>檢測項目</h2><span class="chip" id="protoCount">已核對 0 / 11</span></div>
+        <div class="card-b" style="padding-top:4px"><div class="progress" aria-hidden="true"><span id="protoBar"></span></div></div>
+        <ul class="qlist" id="qlist"></ul>
+        <div class="qdetail" id="qdetail" aria-live="polite"></div>
+      </div>
+    </aside>
+
+    <!-- console -->
+    <section class="col">
+      <details class="card" id="settingsCard" open>
+        <summary><span>連線設定</span><svg class="i chev" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></summary>
+        <div class="card-b" style="padding-top:0">
+          <div class="lock-note" id="lockNote" hidden>連線中不能改設定。要改請先斷線；「查規則要等幾秒」在「規則題」分頁，連線中也能改。</div>
+          <fieldset id="settings">
+            <div class="group-title">模型與聲音</div>
+            <div class="grid-form">
+              <label class="field"><span>模型</span><select id="model"><option value="flash">Flash</option><option value="plus">Plus（較貴）</option></select></label>
+              <label class="field" style="grid-column: span 2"><span>聲線（連線後不能換）</span><select id="voice"></select></label>
+              <label class="field"><span>語速</span><input id="speech_rate" type="number" step="0.1" min="0.5" max="2" value="1.0"></label>
+              <label class="check"><input id="emotion" type="checkbox" checked>加強情感</label>
+            </div>
+            <div class="group-title">接話</div>
+            <div class="grid-form">
+              <label class="field" style="grid-column: span 2"><span>接話方式</span>
+                <select id="mode">
+                  <option value="smart_turn_v2">自動：smart_turn_v2（看語意）</option>
+                  <option value="server_vad">自動：server_vad（只看聲音）</option>
+                  <option value="ptt">按住說話</option>
+                </select></label>
+              <label class="field"><span>靈敏度 threshold</span><input id="threshold" type="number" step="0.1" min="-1" max="1" value="0.5"><small>越低越敏感</small></label>
+              <label class="field"><span>靜音多久算講完（ms）</span><input id="silence_ms" type="number" step="100" min="200" max="6000" value="800"><small>只有 server_vad 用</small></label>
+              <label class="field" style="grid-column: span 2"><span>插話時怎麼停</span>
+                <select id="stop_mode">
+                  <option value="auto">自動（server_vad 聽到就停；smart_turn 先降音量）</option>
+                  <option value="started">聽到說話就停</option>
+                  <option value="duck">先降音量，確定是一句才停</option>
+                  <option value="cancelled">只在伺服器取消回答時停</option>
+                </select></label>
+              <label class="field"><span>保留幾輪歷史</span><input id="max_history_turns" type="number" min="1" max="50" value="20"><small>預設 20，超過就忘</small></label>
+            </div>
+            <div class="group-title">工具</div>
+            <div class="grid-form">
+              <label class="check"><input id="tools" type="checkbox" checked>查規則工具</label>
+              <label class="check"><input id="wait_rule" type="checkbox">查詢中被追問，先說還在查</label>
+              <label class="check"><input id="delegate" type="checkbox">難題轉交裁判</label>
+              <label class="field"><span>裁判</span><select id="referee_backend"><option value="azure">Azure（專案現有）</option><option value="qwen">Qwen 文字模型（金鑰要開權限）</option></select></label>
+              <label class="field"><span>Qwen 裁判模型</span><input id="referee_qwen_model" type="text" value="qwen3.8-flash"></label>
+            </div>
+            <div class="group-title">麥克風（瀏覽器）</div>
+            <div class="grid-form">
+              <label class="check"><input id="ec" type="checkbox" checked>回音消除</label>
+              <label class="check"><input id="ns" type="checkbox" checked>降噪</label>
+              <label class="check"><input id="agc" type="checkbox" checked>自動增益</label>
+              <label class="field"><span>本機「開口」門檻</span><input id="onset_thr" type="number" step="0.005" min="0" max="1" value="0.03"><small>音量線上的虛線</small></label>
+            </div>
+            <details style="margin-top:12px"><summary class="muted" style="cursor:pointer">主持人指令（可改）</summary>
+              <textarea id="instructions" rows="8" style="margin-top:8px"></textarea>
+              <small class="faint">勾「先說還在查」「轉交裁判」時，連線會自動在後面加對應的段落。</small>
+            </details>
+          </fieldset>
+        </div>
+      </details>
+
+      <div class="card">
+        <div class="hero">
+          <div class="orb" id="orb" data-state="off" aria-hidden="true"><svg class="i" viewBox="0 0 24 24" id="orbIcon"></svg></div>
+          <div style="min-width:0">
+            <p class="hero-state" id="heroState" role="status" aria-atomic="true">未連線</p>
+            <p class="hero-sub" id="heroSub">設定好後按「連線」。Chrome 會問麥克風權限，按允許。</p>
+            <div class="levels">
+              <span>麥克風</span><canvas class="spark" id="micSpark" width="600" height="80" aria-label="麥克風音量"></canvas>
+            </div>
+          </div>
+        </div>
+        <div class="controls">
+          <div class="btn-row">
+            <button class="btn primary" id="connectBtn"><svg class="i" viewBox="0 0 24 24"><path d="M12 2v10"/><path d="M18.4 6.6a9 9 0 1 1-12.77.04"/></svg>連線</button>
+            <button class="btn" id="disconnectBtn" disabled>斷線</button>
+            <button class="btn" id="stopBtn" disabled><svg class="i" viewBox="0 0 24 24"><rect width="14" height="14" x="5" y="5" rx="2"/></svg>停播</button>
+            <label class="check" style="margin-left:auto"><input id="muted" type="checkbox">暫停送麥克風</label>
+          </div>
+          <button class="btn ptt-btn" id="pttBtn" hidden>按住說話（或按住空白鍵）</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="subtabs" role="tablist" aria-label="操作">
+          <button role="tab" aria-selected="true" data-sub="sub-voice">台詞試聽</button>
+          <button role="tab" aria-selected="false" data-sub="sub-rules">規則題</button>
+          <button role="tab" aria-selected="false" data-sub="sub-memory">記性</button>
+          <button role="tab" aria-selected="false" data-sub="sub-mark">標記</button>
+        </div>
+        <div class="subpanel" id="sub-voice">
+          <div class="grid-form" style="grid-template-columns: 1fr">
+            <label class="field"><span>試聽聲線（每次另開一條短連線，不影響主對話；試聽時麥克風自動暫停）</span><select id="sampleVoice"><option value="">（跟連線設定一樣）</option></select></label>
+          </div>
+          <div class="btn-row" style="margin-top:10px">
+            <button class="btn" data-scene="開場">開場</button>
+            <button class="btn" data-scene="宣布結果">宣布結果</button>
+            <button class="btn" data-scene="緊張時刻">緊張時刻</button>
+          </div>
+          <p class="faint" style="font-size:12.5px;margin:10px 0 0">試聽的「首音」包含開新連線的時間，比對話慢，不當反應速度看。</p>
+        </div>
+        <div class="subpanel" id="sub-rules" hidden>
+          <label class="field" style="max-width:280px"><span>查規則要等幾秒（連線中也能改）</span>
+            <select id="tool_delay"><option value="0">0 秒</option><option value="3">3 秒</option><option value="8">8 秒</option><option value="15">15 秒</option></select></label>
+          <div id="qaList" style="margin-top:8px"></div>
+          <p class="faint" style="font-size:12.5px;margin:6px 0 0">「用文字問」在自動接話時可能被擋（伺服器以為你在講話）。要用的話改按住說話，或先勾「暫停送麥克風」等 2 秒。</p>
+        </div>
+        <div class="subpanel" id="sub-memory" hidden>
+          <div class="btn-row">
+            <button class="btn" id="plantBtn">請它記住暗號</button>
+            <button class="btn" id="askMemoryBtn">問它暗號</button>
+            <button class="btn" id="fillTextBtn">塞 22 輪文字對話</button>
+            <button class="btn" id="keepAliveBtn" title="插入一段系統訊息，請主持人只回文字。看這樣能不能重置 180 秒的斷線計時">保持連線（不出聲）</button>
+          </div>
+          <p class="faint" style="font-size:12.5px;margin:10px 0 0">記住 → 塞歷史 → 再問。保留輪數 20 時應該會忘、50 時應該記得。300 秒音訊上限用 <span class="mono">auto_checks.py memory</span> 測（一則訊息太大會被斷線）。閒置斷線：勾「暫停送麥克風」後看上方「距離上次回答」。</p>
+        </div>
+        <div class="subpanel" id="sub-mark" hidden>
+          <div class="btn-row">
+            <button class="btn sm" data-mark="誤停">誤停</button>
+            <button class="btn sm" data-mark="不該回卻回">不該回卻回</button>
+            <button class="btn sm" data-mark="該查沒查">該查沒查</button>
+            <button class="btn sm" data-mark="參數錯">工具參數錯</button>
+            <button class="btn sm" data-mark="答錯">答錯</button>
+            <button class="btn sm" data-mark="自己打斷自己">自己打斷自己（回音）</button>
+            <button class="btn sm" data-mark="主持人沒講完就停">主持人沒講完就停</button>
+          </div>
+          <div class="btn-row" style="margin-top:10px">
+            <input id="noteInput" type="text" placeholder="自由備註" aria-label="自由備註" style="flex:1;min-width:160px;min-height:36px;padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:var(--surface)">
+            <button class="btn sm" id="noteBtn">記下</button>
+          </div>
+          <p class="faint" style="font-size:12.5px;margin:10px 0 0">標記會寫進紀錄檔，回看時顯示在時間軸上。</p>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-h"><h2>對話</h2><span class="faint" style="font-size:12px" id="logPath"></span></div>
+        <div class="chat" id="chat" aria-live="polite" aria-relevant="additions"><div class="empty">連線後，玩家說的話、主持人的回答、查規則的過程都會出現在這裡。</div></div>
+      </div>
+    </section>
+
+    <!-- metrics -->
+    <aside class="col col-metrics">
+      <div class="card">
+        <div class="card-h"><h2>這次量到的速度</h2><span class="chip" id="kpiN">0 句</span></div>
+        <div class="kpis" id="kpis"></div>
+      </div>
+      <div class="card">
+        <div class="card-h"><h2>每一句的時間軸</h2></div>
+        <div class="card-b">
+          <div class="legend">
+            <span><i class="sw detect"></i>伺服器判定講完</span>
+            <span><i class="sw wait"></i>等第一個聲音</span>
+            <span><i class="sw tool"></i>查規則／裁判</span>
+            <span><i class="mk first"></i>第一個聲音</span>
+            <span><i class="mk answer"></i>答案的聲音</span>
+          </div>
+          <div class="turns" id="turns"><div class="empty">還沒有句子。0 秒＝玩家講完（按住說話是放開按鍵、文字是送出）。</div></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-h"><h2>插話</h2><span class="chip" id="intrN">0 次</span></div>
+        <div class="card-b table-wrap"><table class="t"><thead><tr><th>#</th><th>停法</th><th class="num">開口→偵測</th><th class="num">開口→停</th><th>結果</th></tr></thead><tbody id="intrBody"><tr><td colspan="5" class="empty">主持人說話時開口，就會記一筆。</td></tr></tbody></table>
+        <p class="faint" style="font-size:12px;margin:8px 0 0">「開口」用本機麥克風音量判斷，外放時會被主持人的聲音干擾，要準就戴耳機。</p></div>
+      </div>
+      <details class="card">
+        <summary><span>事件紀錄</span><svg class="i chev" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></summary>
+        <div class="log" id="log"></div>
+      </details>
+    </aside>
+  </section>
+
+  <!-- ======================= REVIEW ======================= -->
+  <section id="tab-review" role="tabpanel" aria-labelledby="tab-review-btn" class="review" hidden>
+    <aside class="col">
+      <div class="card">
+        <div class="card-h"><h2>測試紀錄</h2><button class="btn sm ghost" id="reloadLogs"><svg class="i" viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>重新整理</button></div>
+        <ul class="sessions" id="sessions"><li class="empty">載入中…</li></ul>
+      </div>
+    </aside>
+    <section class="col">
+      <div class="card" id="reviewCard"><div class="card-b empty">左邊選一筆紀錄。時間軸畫的是伺服器與轉接程式記下的原始事件，可以拿來核對「每一句的時間軸」與 ticket 07 的數字。</div></div>
+      <div class="card">
+        <div class="card-h"><h2>自動檢查：自己答 vs 轉交裁判</h2><span class="chip" id="autoN">—</span></div>
+        <div class="card-b table-wrap" id="autoBox"><div class="empty">載入中…</div></div>
+      </div>
+    </section>
+  </section>
+</main>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+"use strict";
+// =====================================================================================
+// Data
+// =====================================================================================
+const VOICES_TOP = [
+  ["xunanchuan_v3.1", "男・磁性、講故事（首選）"], ["longyuan_v3.1", "女・溫暖有聲書（首選）"],
+  ["longanqian_v3.1", "預設"], ["longanhuan_v3.1", "女・活潑愛笑"], ["yunhuanhuan_v3.1", "女・高亢熱情"],
+  ["longmiao_v3.1", "女・抑揚頓挫"], ["loongstella_v3.1", "女・新聞播報"], ["yuxiaoyun_v3.1", "女・元氣親切"],
+  ["longsanshu_v3.1", "男・沉穩有聲書"], ["longanchong_v3.1", "男・激情帶貨"], ["longanlang_v3.1", "男・清爽助手"], ["longanzhi_v3.1", "男・睿智輕熟"],
+];
+const VOICES_ALL = [
+  ["longanlingxin_v3.1", "女・溫柔"], ["longanfengyue_v3.1", "女・自然敘述"], ["qiaoxiaojiao_v3.1", "女・俏麗"], ["xiaxiaochen_v3.1", "女・明亮"],
+  ["anmingyuan_v3.1", "男・清亮"], ["wenhuaiqing_v3.1", "女・柔和"], ["anxiaolan_v3.1", "女・清甜"], ["xieshurou_v3.1", "女・知性"],
+  ["baiqinglan_v3.1", "女・清純"], ["xuyuyuan_v3.1", "女・成熟"], ["anruorou_v3.1", "女・氣聲"], ["wenhuaizhi_v3.1", "女・穩重"],
+  ["xiaoxingzhi_v3.1", "女・端莊"], ["guyunshu_v3.1", "女・成熟穩重"], ["huozhuoshi_v3.1", "男・清亮"], ["yeqinghe_v3.1", "女・親切"],
+  ["xuxiaoqiao_v3.1", "女・俏皮"], ["baianran_v3.1", "女・低沉"], ["xuyanchu_v3.1", "女・沉穩磁性"], ["yezhiqing_v3.1", "女・輕快"],
+  ["andi_v3.1", "男・ABC 口音"], ["anyuqing_v3.1", "女・甜妹"], ["longanyuanfei_v3.1", "女・高傲妃子"], ["longjielidou_v3.1", "男童"],
+  ["longanlingxi_v3.1", "女・可愛"], ["longhuohuo_v3.1", "男・頑皮少年"], ["longyingtao_v3.1", "女・客服"], ["longanya_v3.1", "女・高雅"],
+  ["longwan_v3.1", "女・細膩"], ["longxing_v3.1", "女・鄰家"], ["longhua_v3.1", "女・元氣甜美"], ["longhan_v3.1", "男・溫暖"],
+  ["longzhe_v3.1", "男・大暖男"], ["longanyang_v3.1", "男・陽光"], ["libai_v3.1", "男・詩詞朗誦"], ["longling_v3.1", "女童"],
+  ["longniuniu_v3.1", "男童"], ["longshanshan_v3.1", "男童・戲劇化"], ["longpaopao_v3.1", "女童・泡泡音"], ["longyuan_v3.1", "女・溫暖有聲書"],
+  ["longanli_v3.1", "女・利落助手"], ["longanwen_v3.1", "女・知性助手"], ["longxiaoxia_v3.1", "女・權威助手"],
+];
+
+const BASE_INSTR = `你是桌遊店的 AI 主持人，今晚主持《血與刃的白薔薇》（5 到 10 人的陣營推理遊戲）。
+說話：熱情、有戲劇感、會營造緊張氣氛；每次一到三句話，用台灣常用的說法。
+帶流程：開局準備 → 夜晚階段（只在開局）→ 每個回合三個階段：傳金幣放水晶、依序決定出牌、翻牌結算。
+規則問題：先說一句很短的等待語（例如「我翻一下規則」），再呼叫 lookup_rule；只根據查到的內容回答，查不到就說規則摘要沒寫，不要自己編。
+玩家只是附和（嗯、OK、好）或彼此聊天、沒有在跟你說話時，不要回應。
+說遊戲進度用「局、回合、階段」，不要用「次」。`;
+const WAIT_INSTR = `
+你呼叫工具之後、還沒收到結果之前，如果玩家又開口：不要回答還在查的那一題，也不要猜答案。先簡短說「剛剛那題還在查，等我一下」，新問題如果是規則題，也要查了再答。`;
+const DELEGATE_INSTR = `
+需要多步推理的規則題（牽涉人數、順序推算、多個效果、勝負判定），先說等待語，再呼叫 ask_referee，把問題和玩家說過的局面完整交給裁判；拿到答案後用你的口吻唸出來，不要改結論。`;
+
+const SCENES = {
+  "開場": "各位晚安，歡迎來到今晚的《血與刃的白薔薇》！我是今天的主持人。這張桌子上，有人誓死守護白薔薇，也有人正在暗中磨刀。準備好了嗎？我們開始發牌！",
+  "宣布結果": "翻牌結果出來了……有刃牌……也有白薔薇！很遺憾，白薔薇倒下了。這一局，血刃陣營獲勝！",
+  "緊張時刻": "死亡區已經躺了一張信者，再死一張，血刃陣營就贏了。金幣現在在你手上，你要交給誰？慢慢想，全桌都在看你。",
+};
+const QUESTIONS = [
+  ["我們七個人玩，血刃陣營總共有幾個人？", "3 人（巨刃、雙刃、暗刃各 1）"],
+  ["七個人玩，座位 3 放了水晶，數字是 6。這個回合誰先決定出牌、誰最後？", "座位 4 先，順時針 4、5、6、7、1、2，座位 3 最後"],
+  ["這個回合翻出雙刃、信者、白薔薇各一張，結果怎樣？", "血刃陣營立刻獲勝"],
+  ["獻祭區已經有三張花苞，可是白薔薇還沒打出來，白薔薇陣營贏了嗎？", "還沒贏，遊戲繼續；白薔薇要打出來而且活著才算"],
+  ["死亡區已經有一張信者，這個回合翻出暗刃、司教、幽魂，會怎樣？", "有刃沒白薔薇：司教進死亡區；死亡區到 2 張，血刃陣營獲勝（測試用門檻）"],
+  ["白水晶可以拿來跟別人換金幣嗎？", "規則摘要沒寫（應該說查不到，不能編）"],
+];
+
+// The 11 questions of ticket 07: how to run each check and what was recorded last time.
+const PROTOCOL = [
+  { id: 1, short: "中文語氣", title: "中文語氣聽起來怎麼樣",
+    preset: { mode: "ptt", model: "flash" },
+    steps: ["到「台詞試聽」選聲線", "依序按「開場」「宣布結果」「緊張時刻」", "在下面替這個聲線打分數"],
+    look: "語氣、自然度、停頓（各 1 到 5 分）。", last: "兩個首選聲線的品質都很高；當時沒有打分數。", rating: true },
+  { id: 2, short: "Flash 對 Plus", title: "Flash 和 Plus 聽起來、用起來差多少",
+    preset: { mode: "ptt", model: "plus" },
+    steps: ["用 Flash 連線，試聽首選聲線的三段台詞", "斷線，模型改 Plus 再連線，同樣三段", "到「回看紀錄」下方看自動檢查的規則題正確率"],
+    look: "音色有沒有差、首音時間、規則題答對幾題。", last: "音色和速度聽不出差別。規則題：自己答 Flash 5/6、Plus 4/6 完全對；可轉交時 Plus 6/6。", rating: true },
+  { id: 3, short: "反應速度", title: "玩家講完到聽到第一個聲音多久",
+    preset: { mode: "smart_turn_v2", model: "flash", tool_delay: 0 },
+    steps: ["戴耳機", "用嘴問 3 題規則（「規則題」分頁有題目）", "看右邊的速度與時間軸"],
+    look: "「伺服器判定講完」「講完→第一個聲音」「講完→答案」。", last: "判定講完 0.2–0.5 秒；第一個聲音 0.4–0.8 秒；查規則不等時答案 2.3–4.0 秒。" },
+  { id: 4, short: "插話", title: "說「等一下」到聲音停下來多久",
+    preset: { mode: "server_vad", model: "flash", stop_mode: "auto" },
+    steps: ["戴耳機，連線（先 server_vad）", "說「請完整介紹開局準備和夜晚階段」", "主持人講到一半時說「等一下」，做 3 次", "斷線改 smart_turn_v2，再做 3 次"],
+    look: "右邊「插話」表的「開口→停」與結果。", last: "server_vad：0.03–0.53 秒就停，停後不會講完原答案。smart_turn_v2：「等一下」5/5 被當成不是在跟它說話，不停。" },
+  { id: 5, short: "附和與旁聊", title: "附和聲和旁邊聊天會不會誤停、誤答",
+    preset: { mode: "smart_turn_v2", model: "flash", stop_mode: "auto" },
+    steps: ["主持人講話時說「嗯」「OK」各 2 次", "跟旁人或自言自語說一句無關的話 2 次", "誤停就按「標記 → 誤停」", "改 server_vad 再做一次"],
+    look: "對話裡的「旁聽」、主持人有沒有停或回話、誤停次數。", last: "smart_turn_v2：OK 3/3 不停不回。server_vad：附和 3/3 停下並回話，句中停頓會被切斷。" },
+  { id: 6, short: "工具呼叫", title: "該查規則時會不會查、參數對不對",
+    preset: { mode: "smart_turn_v2", model: "flash", tools: true, tool_delay: 0 },
+    steps: ["用嘴或文字問 3 題規則，包含「規則沒寫」的第 6 題", "看對話裡的工具卡：topic、question", "對照題目旁的答案"],
+    look: "每題有沒有先查、topic 合不合理、答案對不對。", last: "幾乎都會先查（用嘴問有 1 次沒查就編答案）；topic 合理，question 會帶語音辨識錯字。" },
+  { id: 7, short: "等待中追問", title: "查規則要等時，主持人怎麼撐、被追問會怎樣",
+    preset: { mode: "smart_turn_v2", model: "flash", tool_delay: 8, wait_rule: false },
+    steps: ["查規則等 8 秒，問一題規則", "聽到「我翻一下」後馬上問另一題，做 2 次", "斷線，勾「查詢中被追問，先說還在查」再做 2 次"],
+    look: "有沒有先猜答案、追問那題有沒有被答、工具卡上的「期間玩家又開口」。", last: "不加指令：2/2 先猜錯答案。加指令：不猜了，但追問那題 2/2 被丟掉；工具結果遇到玩家講話時被拒，答案沒唸出來。" },
+  { id: 8, short: "轉交裁判", title: "Plus 自己答 vs 交給後端裁判",
+    preset: { mode: "ptt", model: "plus", delegate: true, tool_delay: 0 },
+    steps: ["勾「難題轉交裁判」連線", "用文字問第 2、5 題", "斷線、取消勾選再問一次", "到「回看紀錄」看自動檢查的 24 次結果"],
+    look: "答案對不對、答案的聲音多晚出來、等待語和答案的語氣接不接得上。", last: "轉交多約 2 秒（裁判 1.4–2.1 秒）。只有要串兩條規則的題差最多；Plus 轉交 6/6。" },
+  { id: 9, short: "聲線", title: "新加坡叫得動哪些中文聲線、挑哪個",
+    preset: { mode: "ptt", model: "flash" },
+    steps: ["到「台詞試聽」換不同聲線按「開場」", "注意對話裡「伺服器回報」的聲線有沒有和要求的一樣"], rating: true,
+    look: "喜歡哪個；伺服器回報的聲線是否一致。", last: "54 個叫得動；選 xunanchuan_v3.1、longyuan_v3.1。一條連線開了就不能換聲線。" },
+  { id: 10, short: "記性與連線", title: "多久會斷、聊久了記不記得",
+    preset: { mode: "ptt", model: "flash", max_history_turns: 20 },
+    steps: ["「記性」分頁：請它記住暗號", "塞 22 輪文字對話，再問暗號", "保留輪數改 50 重做", "閒置：勾「暫停送麥克風」，看上方「距離上次回答」到 180 秒會怎樣"],
+    look: "暗號答不答得出來；斷線時的理由。", last: "180 秒沒產生回答就斷線（1007）。保留 20 輪時 22 輪後忘記，50 輪記得；音訊只留 300 秒，但文字交代的事不會被丟。" },
+  { id: 11, short: "外放", title: "用喇叭時會不會聽到自己而打斷自己",
+    preset: { mode: "smart_turn_v2", model: "flash", ec: true },
+    steps: ["拿掉耳機，用喇叭，音量調到平常講話大小", "說「請完整介紹開局準備和夜晚階段」，然後不要出聲", "斷線改 server_vad 再做一次"],
+    look: "主持人有沒有自己停下來；插話表有沒有出現「開口」是空的紀錄（可能是回音）。", last: "smart_turn_v2：沒有。server_vad：聽得到的 2 段長回答裡有 1 次被很小的聲音打斷，可能是回音（第 1 段因播放排程錯誤沒播出來）。" },
+];
+
+// Grades recorded in ticket 07 for auto_checks.py delegate (by model, mode, question).
+const AUTO_GRADES = {
+  "flash-self": ["對", "對", "對", "對", "漏結論", "對"], "flash-delegate": ["對", "對", "對", "對", "結論對理由錯", "對"],
+  "plus-self": ["對", "不完整", "對", "對", "漏結論", "對"], "plus-delegate": ["對", "對", "對", "對", "對", "對"],
+};
+// USD per 1M tokens, Singapore list price (checked 2026-11-19): text in, audio in, text out, audio out.
+const PRICES = { flash: [0.23, 0.93, 0.70, 1.87], plus: [0.80, 6.40, 6.40, 24.00] };
+const IDLE_LIMIT_MS = 180000;
+
+// =====================================================================================
+// Helpers
+// =====================================================================================
+const $ = (s, root = document) => root.querySelector(s);
+const $$ = (s, root = document) => [...root.querySelectorAll(s)];
+const T = () => performance.now();
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const sec = (ms) => ms == null || Number.isNaN(ms) ? "—" : (ms / 1000).toFixed(ms < 10000 ? 2 : 1) + " s";
+const diff = (a, b) => (a != null && b != null) ? a - b : null;
+function median(xs) { const a = xs.filter((x) => x != null).sort((p, q) => p - q); if (!a.length) return null; const m = a.length >> 1; return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2; }
+function range(xs) { const a = xs.filter((x) => x != null); return a.length ? [Math.min(...a), Math.max(...a)] : null; }
+function store(key, val) { try { if (val === undefined) return JSON.parse(localStorage.getItem(key) || "null"); localStorage.setItem(key, JSON.stringify(val)); } catch (e) { return null; } }
+let toastTimer = null;
+function toast(msg) { const el = $("#toast"); el.textContent = msg; el.classList.add("show"); clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove("show"), 2600); }
+const ICONS = {
+  mic: '<path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/>',
+  micOff: '<line x1="2" x2="22" y1="2" y2="22"/><path d="M18.89 13.23A7.12 7.12 0 0 0 19 12v-2"/><path d="M5 10v2a7 7 0 0 0 12 5"/><path d="M15 9.34V5a3 3 0 0 0-5.68-1.33"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12"/><line x1="12" x2="12" y1="19" y2="22"/>',
+  volume: '<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>',
+  wrench: '<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>',
+  scale: '<path d="m16 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z"/><path d="m2 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z"/><path d="M7 21h10"/><path d="M12 3v18"/><path d="M3 7h2c2 0 5-1 7-2 2 1 5 2 7 2h2"/>',
+  clock: '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
+  power: '<path d="M12 2v10"/><path d="M18.4 6.6a9 9 0 1 1-12.77.04"/>',
+  alert: '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
+  sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>',
+  moon: '<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>',
+};
+const icon = (name) => `<svg class="i" viewBox="0 0 24 24" aria-hidden="true">${ICONS[name]}</svg>`;
+
+// =====================================================================================
+// Settings
+// =====================================================================================
+const CFG_FIELDS = ["model", "voice", "mode", "threshold", "silence_ms", "speech_rate", "emotion", "max_history_turns",
+  "tools", "tool_delay", "wait_rule", "delegate", "referee_backend", "referee_qwen_model", "ec", "ns", "agc", "stop_mode", "onset_thr", "instructions"];
+function readCfg() {
+  const c = {};
+  for (const k of CFG_FIELDS) {
+    const el = document.getElementById(k);
+    c[k] = el.type === "checkbox" ? el.checked : (el.type === "number" ? Number(el.value) : el.value);
+  }
+  c.tool_delay = Number(c.tool_delay);
+  return c;
+}
+function writeCfg(c) {
+  for (const [k, v] of Object.entries(c)) {
+    const el = document.getElementById(k);
+    if (!el) continue;
+    if (el.type === "checkbox") el.checked = !!v; else el.value = v;
+  }
+  syncModeUI();
+}
+function saveCfg() { store("studioCfg", readCfg()); }
+function loadCfg() {
+  const c = store("studioCfg");
+  if (c) writeCfg(c);
+  if (!$("#instructions").value.trim()) $("#instructions").value = BASE_INSTR;
+}
+function fillVoices() {
+  const mk = (sel, label, list) => {
+    const g = document.createElement("optgroup"); g.label = label;
+    for (const [id, desc] of list) { const o = document.createElement("option"); o.value = id; o.textContent = `${id}（${desc}）`; g.appendChild(o); }
+    sel.appendChild(g);
+  };
+  for (const sel of [$("#voice"), $("#sampleVoice")]) { mk(sel, "候選", VOICES_TOP); mk(sel, "其他新加坡叫得動的聲線", VOICES_ALL); }
+}
+function syncModeUI() {
+  const ptt = $("#mode").value === "ptt";
+  $("#pttBtn").hidden = !ptt;
+}
+
+// =====================================================================================
+// Session state
+// =====================================================================================
+let ws = null, cfg = readCfg();
+let micCtx = null, micStream = null, micNode = null, playCtx = null, masterGain = null, nextTime = 0;
+const sources = new Set();
+let S = null; // per-connection state, reset on connect
+function newSession() {
+  return {
+    connected: false, connecting: false, closed: null, connectedAt: T(), lastSentAudio: 0, lastServerEvt: 0,
+    lastResponseAt: null, responseActive: null, userSpeaking: false, pttHeld: false, pttStartSamples: 0,
+    sentSamples: 0, samplingUntil: 0, sampling: 0, ducked: false, completedResponses: 0,
+    usage: { ti: 0, ai: 0, to: 0, ao: 0, usd: 0 },
+    turns: [], cur: null, interrupts: [], intr: null, respMeta: {}, callTurn: {}, toolTurnByCall: {}, pendingAnswerTurn: null,
+    samples: {}, dropped: new Set(), chunkTimes: [], fillingText: false, metricsDirty: false,
+    counts: { turnInvalid: 0, ambient: 0, cancelled: 0, rejectedSpeaking: 0, rejectedBusy: 0, waitPhrase: 0, errors: 0, retries: 0 },
+    pendingAnswerAt: 0,
+    marks: {}, tools: [], hostTexts: [], memoryAnswer: null, logPath: "",
+  };
+}
+S = newSession();
+let lastOnset = 0, lastLoud = 0;
+const sparkBuf = new Array(150).fill(0);
+
+function send(obj) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(obj)); }
+const isPlaying = () => sources.size > 0;
+function stopModeNow() {
+  if (cfg.stop_mode !== "auto") return cfg.stop_mode;
+  return cfg.mode === "server_vad" ? "started" : (cfg.mode === "ptt" ? "ptt" : "duck");
+}
+function addUsage(u) {
+  if (!u) return;
+  const p = PRICES[cfg.model] || PRICES.flash;
+  const ti = u.input_tokens_details?.text_tokens || 0, ai = u.input_tokens_details?.audio_tokens || 0;
+  const to = u.output_tokens_details?.text_tokens || 0, ao = u.output_tokens_details?.audio_tokens || 0;
+  Object.assign(S.usage, { ti: S.usage.ti + ti, ai: S.usage.ai + ai, to: S.usage.to + to, ao: S.usage.ao + ao });
+  S.usage.usd += (ti * p[0] + ai * p[1] + (ao ? ao * p[3] : to * p[2])) / 1e6;
+}
+
+// =====================================================================================
+// Audio out
+// =====================================================================================
+function playDelta(b64, rid) {
+  if (S.dropped.has(rid)) return null;
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  const i16 = new Int16Array(bytes.buffer, 0, bytes.length >> 1);
+  const f32 = new Float32Array(i16.length);
+  for (let i = 0; i < i16.length; i++) f32[i] = i16[i] / 32768;
+  const buf = playCtx.createBuffer(1, f32.length, 24000);
+  buf.copyToChannel(f32, 0);
+  const s = playCtx.createBufferSource();
+  s.buffer = buf; s.connect(masterGain);
+  const startAt = Math.max(playCtx.currentTime + 0.02, nextTime);
+  s.start(startAt);
+  nextTime = startAt + buf.duration;
+  sources.add(s);
+  s.onended = () => sources.delete(s);
+  return T() + (startAt - playCtx.currentTime) * 1000;
+}
+function duck(on) { S.ducked = on; if (masterGain) masterGain.gain.setTargetAtTime(on ? 0.2 : 1, playCtx.currentTime, 0.02); }
+function stopPlayback(reason) {
+  for (const s of sources) { try { s.stop(); } catch (e) {} }
+  sources.clear(); nextTime = 0;
+  if (S.responseActive) S.dropped.add(S.responseActive);
+  duck(false);
+  if (S.intr && !S.intr.stopped) { S.intr.stopped = T(); S.intr.reason = reason; }
+  logLine(`■ 停播（${reason}）`);
+  renderMetrics();
+}
+
+// =====================================================================================
+// Audio in
+// =====================================================================================
+const WORKLET = `
+class Tap extends AudioWorkletProcessor {
+  constructor() { super(); this.buf = new Float32Array(512); this.n = 0; }
+  process(inputs) {
+    const ch = inputs[0] && inputs[0][0];
+    if (ch) for (let i = 0; i < ch.length; i++) {
+      this.buf[this.n++] = ch[i];
+      if (this.n === 512) { this.port.postMessage(this.buf.slice(0)); this.n = 0; }
+    }
+    return true;
+  }
+}
+registerProcessor('pcm-tap', Tap);`;
+
+function onMicChunk(f32) {
+  let sum = 0;
+  for (let i = 0; i < f32.length; i++) sum += f32[i] * f32[i];
+  const rms = Math.sqrt(sum / f32.length);
+  sparkBuf.push(rms); sparkBuf.shift();
+  const now = T();
+  if (rms > cfg.onset_thr) { if (now - lastLoud > 400) lastOnset = now; lastLoud = now; }
+  if (!S.connected || $("#muted").checked || S.samplingUntil > now) return;
+  if (cfg.mode === "ptt" && !S.pttHeld) return;
+  const i16 = new Int16Array(f32.length);
+  for (let i = 0; i < f32.length; i++) { const v = Math.max(-1, Math.min(1, f32[i])); i16[i] = v < 0 ? v * 32768 : v * 32767; }
+  const u8 = new Uint8Array(i16.buffer);
+  let bin = ""; for (let i = 0; i < u8.length; i++) bin += String.fromCharCode(u8[i]);
+  send({ type: "input_audio_buffer.append", audio: btoa(bin) });
+  S.chunkTimes.push([S.sentSamples, now - 32]);
+  if (S.chunkTimes.length > 6000) S.chunkTimes = S.chunkTimes.slice(-4000);
+  S.sentSamples += f32.length;
+  S.lastSentAudio = now;
+}
+// Map the server's audio_end_ms (position in the audio we sent) back to the wall time we captured it.
+function wallForAudioMs(ms) {
+  if (ms == null) return T();
+  const target = ms * 16;
+  let best = null;
+  for (const c of S.chunkTimes) { if (c[0] <= target) best = c; else break; }
+  return best ? best[1] + (target - best[0]) / 16 : T();
+}
+function drawSpark() {
+  const cv = $("#micSpark"); const ctx = cv.getContext("2d");
+  const w = cv.width, h = cv.height, css = getComputedStyle(document.documentElement);
+  ctx.clearRect(0, 0, w, h);
+  const scale = (v) => h - Math.min(1, v / 0.25) * (h - 6) - 3;
+  ctx.strokeStyle = css.getPropertyValue("--faint"); ctx.setLineDash([6, 6]); ctx.lineWidth = 2;
+  const ty = scale(cfg.onset_thr); ctx.beginPath(); ctx.moveTo(0, ty); ctx.lineTo(w, ty); ctx.stroke(); ctx.setLineDash([]);
+  const sending = S.connected && !$("#muted").checked && !(cfg.mode === "ptt" && !S.pttHeld) && !(S.samplingUntil > T());
+  ctx.strokeStyle = css.getPropertyValue(sending ? "--player" : "--faint"); ctx.lineWidth = 3;
+  ctx.beginPath();
+  sparkBuf.forEach((v, i) => { const x = (i / (sparkBuf.length - 1)) * w; const y = scale(v); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
+  ctx.stroke();
+}
+
+// =====================================================================================
+// Turns, text, PTT
+// =====================================================================================
+function newTurn(kind, tEnd, tEvt) {
+  S.cur = { n: S.turns.length + 1, kind, tEnd, tEvt: tEvt ?? null, firstDelta: null, firstPlay: null, tools: [],
+    ansDelta: null, ansPlay: null, user: "", host: "", itemId: null };
+  S.turns.push(S.cur); S.metricsDirty = true; renderMetrics();
+  return S.cur;
+}
+function sendText(text, kind) {
+  if (!S.connected) { toast("先連線"); return; }
+  send({ type: "conversation.item.create", item: { type: "message", role: "user", content: [{ type: "input_text", text }] } });
+  send({ type: "response.create" });
+  const t = newTurn(kind, T()); t.user = text;
+  chat("player", "玩家（文字）", text);
+}
+function pttDown() {
+  if (!S.connected || cfg.mode !== "ptt" || S.pttHeld) return;
+  S.pttHeld = true; S.pttStartSamples = S.sentSamples;
+  $("#pttBtn").classList.add("held"); $("#pttBtn").textContent = "錄音中… 放開送出";
+  if (isPlaying() || S.responseActive) {
+    S.intr = { n: S.interrupts.length + 1, mode: "ptt", onset: T(), started: T(), stopped: null, cancelled: null, reason: "", outcome: "" };
+    S.interrupts.push(S.intr);
+    if (S.responseActive) send({ type: "response.cancel" });
+    stopPlayback("按下說話");
+  }
+}
+function pttUp() {
+  if (!S.pttHeld) return;
+  S.pttHeld = false; $("#pttBtn").classList.remove("held"); $("#pttBtn").textContent = "按住說話（或按住空白鍵）";
+  const secs = (S.sentSamples - S.pttStartSamples) / 16000;
+  if (secs < 0.25) { send({ type: "input_audio_buffer.clear" }); logLine("（太短，丟掉）"); return; }
+  send({ type: "input_audio_buffer.commit" });
+  send({ type: "response.create" });
+  newTurn("按住說話", T());
+}
+
+// =====================================================================================
+// Chat & log
+// =====================================================================================
+function chat(kind, who, text, extra = "") {
+  const box = $("#chat");
+  const empty = box.querySelector(".empty"); if (empty) empty.remove();
+  const d = document.createElement("div");
+  d.className = `msg ${kind} ${extra}`;
+  d.innerHTML = who ? `<span class="who">${esc(who)}</span>${esc(text)}` : esc(text);
+  box.appendChild(d);
+  while (box.children.length > 300) box.firstChild.remove();
+  box.scrollTop = box.scrollHeight;
+  return d;
+}
+function toolCard(ev) {
+  const box = $("#chat");
+  const empty = box.querySelector(".empty"); if (empty) empty.remove();
+  const ref = ev.name === "ask_referee";
+  const d = document.createElement("div");
+  d.className = "toolcard" + (ref ? " referee" : "");
+  d.id = "tool-" + ev.call_id;
+  d.innerHTML = `<header>${icon(ref ? "scale" : "wrench")}<span>${ref ? "請裁判（後端文字模型）" : "查規則 lookup_rule"}</span>
+    <span class="chip warn" style="margin-left:auto" data-status>進行中</span></header>
+    <div class="args">${esc(JSON.stringify(ev.args))}</div>
+    <div class="bar"><span data-bar></span></div><div class="res" data-res>${ref ? "等待裁判回覆…" : `故意等 ${ev.delay} 秒`}</div>`;
+  d.dataset.started = T(); d.dataset.delay = ref ? 3 : ev.delay;
+  box.appendChild(d); box.scrollTop = box.scrollHeight;
+}
+function finishToolCard(ev) {
+  const d = document.getElementById("tool-" + ev.call_id); if (!d) return;
+  d.dataset.done = "1";
+  const st = d.querySelector("[data-status]");
+  st.textContent = ev.stale ? `完成・期間玩家又開口` : "完成"; st.className = "chip " + (ev.stale ? "warn" : "ok");
+  d.querySelector("[data-bar]").style.width = "100%";
+  let out = ev.output;
+  try { const o = JSON.parse(ev.output); out = o.answer || (o.results ? o.results.map((r) => r.topic).join("、") : (o.note || o.error || ev.output)); } catch (e) {}
+  d.querySelector("[data-res]").textContent = `${(ev.elapsed_ms / 1000).toFixed(2)} 秒回來：${out}`;
+}
+function tickToolCards() {
+  for (const d of $$(".toolcard:not([data-done])")) {
+    const el = (T() - Number(d.dataset.started)) / 1000, total = Math.max(0.5, Number(d.dataset.delay));
+    d.querySelector("[data-bar]").style.width = Math.min(100, (el / total) * 100) + "%";
+  }
+}
+function logLine(line) {
+  const el = $("#log");
+  const secs = S.connectedAt ? ((T() - S.connectedAt) / 1000).toFixed(1) : "0.0";
+  el.textContent += `+${secs}s ${line}\n`;
+  if (el.textContent.length > 60000) el.textContent = el.textContent.slice(-40000);
+  el.scrollTop = el.scrollHeight;
+}
+
+// =====================================================================================
+// Server events
+// =====================================================================================
+const QUIET = new Set(["response.audio.delta", "response.audio_transcript.delta", "response.text.delta", "response.function_call_arguments.delta",
+  "conversation.item.input_audio_transcription.delta", "conversation.item.ambient_audio_transcription.delta", "relay.sample_audio"]);
+function onEvent(ev) {
+  S.lastServerEvt = T();
+  const k = ev.type;
+  if (!QUIET.has(k)) logLine(`← ${k}${ev.response?.status ? " " + ev.response.status : ""}${ev.reason ? " reason=" + ev.reason : ""}`);
+  switch (k) {
+    case "relay.ready":
+      S.connected = true; S.connecting = false; S.lastResponseAt = T(); S.logPath = ev.log;
+      $("#logPath").textContent = "紀錄：" + ev.log.split("/").pop();
+      chat("sys", "", `已連上 ${ev.model}（握手 ${ev.connect_ms} ms）${cfg.delegate ? "，裁判 " + ev.referee : ""}`);
+      break;
+    case "relay.error": chat("err", "連線失敗", ev.message); S.connecting = false; break;
+    case "relay.closed":
+      S.closed = ev;
+      chat(ev.by === "upstream" ? "err" : "sys", "", `連線結束：${ev.by === "upstream" ? "阿里雲關的" : "這邊關的"}，連了 ${ev.seconds} 秒${ev.reason ? "，理由：" + ev.reason : ""}`);
+      break;
+    case "relay.tool_started": {
+      const t = S.toolTurnByCall[ev.call_id] || S.cur;
+      if (t) { t.tools.push({ name: ev.name, args: ev.args, delay: ev.delay, startedAt: T(), resultAt: null, elapsed: null, stale: false, callId: ev.call_id }); S.callTurn[ev.call_id] = t; }
+      S.tools.push({ name: ev.name, args: ev.args });
+      toolCard(ev); renderMetrics();
+      break;
+    }
+    case "relay.tool_result": {
+      const t = S.callTurn[ev.call_id];
+      const tool = t && t.tools.find((x) => x.callId === ev.call_id);
+      if (tool) { tool.resultAt = T(); tool.elapsed = ev.elapsed_ms; tool.stale = ev.stale; }
+      finishToolCard(ev); renderMetrics();
+      break;
+    }
+    case "relay.tool_output_sent":
+      S.pendingAnswerTurn = S.callTurn[ev.call_ids[0]] || S.cur; S.pendingAnswerAt = T();
+      if (ev.attempt === 1 && ev.waited_for_turn) chat("sys", "", "工具結果等上一段回答結束才送出");
+      break;
+    case "relay.tool_output_retry":
+      S.pendingAnswerTurn = null; S.counts.retries++;
+      chat("err", "重送", `「請回答」第 ${ev.attempt} 次被拒（${ev.reason}），轉接程式等安靜後重送`);
+      break;
+    case "relay.sample_audio": {
+      const at = playDelta(ev.delta, ev.sample_id);
+      const t = S.samples[ev.sample_id];
+      if (at != null && t && t.firstDelta == null) { t.firstDelta = T(); t.firstPlay = at; renderMetrics(); }
+      break;
+    }
+    case "relay.sample_done": {
+      const t = S.samples[ev.sample_id];
+      if (t) t.host = ev.transcript;
+      addUsage(ev.usage); S.sampling = Math.max(0, S.sampling - 1);
+      if (ev.error) chat("err", "試聽失敗", ev.error);
+      else {
+        chat("host", `試聽・${ev.voice}`, ev.transcript);
+        chat("sys", "", `要求 ${ev.voice}，伺服器回報 ${ev.voice_reported}${ev.voice_reported === ev.voice ? "（一致）" : "（不一致）"}`);
+      }
+      S.samplingUntil = T() + Math.max(0, (nextTime - playCtx.currentTime) * 1000) + 300;
+      renderMetrics();
+      break;
+    }
+    case "relay.fill_progress":
+      if (ev.what === "text") { logLine(`填充對話 ${ev.done}/${ev.count}`); if (ev.done === ev.count) { S.fillingText = false; chat("sys", "", `已塞 ${ev.count} 輪文字對話`); } }
+      break;
+    case "session.updated":
+      chat("sys", "", `設定生效：聲線 ${ev.session?.voice}，接話 ${ev.session?.turn_detection ? ev.session.turn_detection.type : "按住說話"}`);
+      break;
+    case "error": {
+      S.counts.errors++;
+      const msg = String(ev.error?.message || "");
+      if (msg.includes("user is speaking")) { S.counts.rejectedSpeaking++; chat("err", "被拒", "伺服器以為有人還在講話（環境音也算），這次「請回答」被擋。工具答案會自動重送；文字按鈕請改用按住說話，或先暫停送麥克風。"); }
+      else if (msg.includes("another response")) { S.counts.rejectedBusy++; chat("err", "被拒", "上一段回答還沒結束，這次「請回答」被擋。"); }
+      else chat("err", "錯誤", `${ev.error?.code || ev.error?.type}：${msg}`);
+      break;
+    }
+    case "input_audio_buffer.speech_started":
+      if (cfg.mode === "ptt") break;
+      S.userSpeaking = true;
+      if (isPlaying()) {
+        S.intr = { n: S.interrupts.length + 1, mode: stopModeNow(), onset: (T() - lastOnset < 3000 ? lastOnset : null),
+          started: T(), stopped: null, cancelled: null, reason: "", outcome: "" };
+        S.interrupts.push(S.intr);
+        if (S.intr.mode === "started") stopPlayback("聽到說話");
+        else if (S.intr.mode === "duck") { duck(true); logLine("↓ 降音量"); }
+        renderMetrics();
+      } else S.intr = null;
+      break;
+    case "input_audio_buffer.speech_stopped":
+      S.userSpeaking = false;
+      if (ev.reason === "turn_invalid") {
+        S.counts.turnInvalid++;
+        chat("sys", "", "伺服器判定這段不是在跟主持人說話，不回答");
+        if (S.intr && !S.intr.stopped && S.intr.mode === "duck") { duck(false); S.intr.outcome = "恢復播放"; logLine("↑ 恢復音量"); renderMetrics(); }
+      } else {
+        const t = newTurn("語音", wallForAudioMs(ev.audio_end_ms), T());
+        t.itemId = ev.item_id;
+        if (S.intr && !S.intr.stopped && S.intr.mode === "duck") stopPlayback("確定是一句");
+      }
+      break;
+    case "input_audio_buffer.committed":
+      if (S.cur && S.cur.kind === "按住說話" && !S.cur.itemId) S.cur.itemId = ev.item_id;
+      break;
+    case "conversation.item.input_audio_transcription.completed": {
+      const t = S.turns.find((x) => x.itemId === ev.item_id) || S.cur;
+      if (t && !t.user) t.user = ev.transcript;
+      if (ev.transcript) chat("player", "玩家", ev.transcript);
+      renderMetrics();
+      break;
+    }
+    case "conversation.item.ambient_audio_transcription.completed":
+      S.counts.ambient++; if (ev.transcript) chat("ambient", "旁聽（不進對話）", ev.transcript);
+      break;
+    case "response.created": {
+      const rid = ev.response.id;
+      S.responseActive = rid;
+      if (S.pendingAnswerTurn && T() - S.pendingAnswerAt < 2500) { S.respMeta[rid] = { turn: S.pendingAnswerTurn, isAnswer: true }; S.pendingAnswerTurn = null; }
+      else S.respMeta[rid] = { turn: S.fillingText ? null : S.cur, isAnswer: false };
+      break;
+    }
+    case "response.output_item.added":
+      if (ev.item?.type === "function_call" && ev.item.call_id) S.toolTurnByCall[ev.item.call_id] = S.respMeta[ev.response_id]?.turn || S.cur;
+      break;
+    case "response.audio.delta": {
+      const at = playDelta(ev.delta, ev.response_id);
+      const m = S.respMeta[ev.response_id];
+      if (at != null && m && m.turn) {
+        const t = m.turn;
+        if (m.isAnswer) { if (t.ansDelta == null) { t.ansDelta = T(); t.ansPlay = at; S.metricsDirty = true; renderMetrics(); } }
+        else if (t.firstDelta == null) { t.firstDelta = T(); t.firstPlay = at; S.metricsDirty = true; renderMetrics(); }
+      }
+      break;
+    }
+    case "response.audio_transcript.done": {
+      const m = S.respMeta[ev.response_id];
+      const text = (ev.transcript || "").trim();
+      if (m && m.turn) { m.turn.host += (m.isAnswer ? "〔答〕" : "") + text; }
+      if (text.includes("還在查")) S.counts.waitPhrase++;
+      S.hostTexts.push(text);
+      if (/鳳梨|阿哲/.test(text) || /暗號/.test(text)) S.memoryAnswer = text;
+      chat("host", S.dropped.has(ev.response_id) ? "主持人（被打斷）" : "主持人", text, S.dropped.has(ev.response_id) ? "cut" : "");
+      renderMetrics();
+      break;
+    }
+    case "response.text.done":
+      if (/鳳梨|阿哲|暗號/.test(ev.text || "")) S.memoryAnswer = ev.text;
+      if (!S.fillingText) chat("host", "主持人（文字）", ev.text);
+      break;
+    case "response.done":
+      addUsage(ev.response?.usage);
+      S.lastResponseAt = T();
+      if (ev.response?.status === "completed") S.completedResponses++;
+      if (ev.response?.status === "cancelled") {
+        S.counts.cancelled++;
+        if (S.intr && S.intr.cancelled == null) S.intr.cancelled = T();
+        if (S.intr && !S.intr.stopped && (S.intr.mode === "cancelled" || S.intr.mode === "duck")) stopPlayback("伺服器取消");
+      }
+      if (S.responseActive === ev.response?.id) S.responseActive = null;
+      renderMetrics();
+      break;
+  }
+}
+
+// =====================================================================================
+// Rendering: status, hero, metrics
+// =====================================================================================
+function heroState() {
+  if (S.closed && !S.connected) return ["closed", "連線已結束", S.closed.reason || "按「連線」重新開始。"];
+  if (S.connecting) return ["thinking", "連線中…", "正在連到阿里雲。"];
+  if (!S.connected) return ["off", "未連線", "設定好後按「連線」。Chrome 會問麥克風權限，按允許。"];
+  const pendingTool = S.turns.some((t) => t.tools.some((x) => x.resultAt == null));
+  if (S.samplingUntil > T() && (isPlaying() || S.sampling)) return ["sampling", "試聽中", "另開一條短連線唸台詞，麥克風暫停中。"];
+  if (S.pttHeld) return ["ptt", "錄音中", "放開按鍵就送出。"];
+  if (S.userSpeaking) return ["user", "偵測到有人說話", cfg.mode === "smart_turn_v2" ? "smart_turn_v2 會判斷是不是在跟主持人說話。" : "server_vad 聽到聲音就算。"];
+  if (S.ducked && isPlaying()) return ["ducked", "降低音量中", "正在判斷剛剛那段是不是在跟主持人說話。"];
+  if (isPlaying()) return ["speaking", "主持人說話中", cfg.mode === "ptt" ? "按住說話鍵可以打斷。" : "直接開口可以試著打斷。"];
+  if (pendingTool) return ["tool", "查規則中", "工具結果回來後主持人才會回答。"];
+  if (S.responseActive) return ["thinking", "主持人準備回答", "已收到你的話，等第一個聲音。"];
+  if ($("#muted").checked) return ["off", "麥克風暫停中", "主持人聽不到你。取消勾選「暫停送麥克風」恢復。"];
+  return ["listening", "聆聽中", cfg.mode === "ptt" ? "按住下方按鈕（或空白鍵）說話。" : "直接說話就可以。"];
+}
+function renderHero() {
+  const [state, title, sub] = heroState();
+  const orb = $("#orb");
+  if (orb.dataset.state !== state) {
+    orb.dataset.state = state;
+    const ic = { off: "micOff", closed: "alert", listening: "mic", user: "mic", ptt: "mic", thinking: "clock", tool: "wrench", speaking: "volume", ducked: "volume", sampling: "volume" }[state];
+    $("#orbIcon").innerHTML = ICONS[ic];
+  }
+  if ($("#heroState").textContent !== title) $("#heroState").textContent = title;
+  $("#heroSub").textContent = sub;
+}
+function renderStatus() {
+  const now = T();
+  const dot = $("#connDot");
+  dot.className = "dot " + (S.connected ? "on" : (S.closed?.by === "upstream" ? "bad" : ""));
+  $("#connText").textContent = S.connected ? `已連線 ${((now - S.connectedAt) / 1000).toFixed(0)} 秒` : (S.connecting ? "連線中" : (S.closed ? `已斷線（${S.closed.seconds} 秒）` : "未連線"));
+  $("#pillModel").innerHTML = `<b>${esc(cfg.model === "plus" ? "Plus" : "Flash")}</b>${esc(cfg.voice.replace("_v3.1", ""))}・${esc({ smart_turn_v2: "smart_turn_v2", server_vad: "server_vad", ptt: "按住說話" }[cfg.mode])}`;
+  if (S.connected && S.lastResponseAt) {
+    const idle = now - S.lastResponseAt, pct = Math.min(100, (idle / IDLE_LIMIT_MS) * 100);
+    $("#idleText").textContent = `${(idle / 1000).toFixed(0)} / 180 s`;
+    const bar = $("#idleMini"); bar.style.width = pct + "%";
+    bar.style.background = pct > 85 ? "var(--bad)" : pct > 60 ? "var(--warn)" : "var(--ok)";
+  } else { $("#idleText").textContent = "—"; $("#idleMini").style.width = "0"; }
+  $("#histText").textContent = S.connected ? `約 ${S.completedResponses} / ${cfg.max_history_turns}` : "—";
+  $("#costText").textContent = "US$" + S.usage.usd.toFixed(4);
+}
+// Audio is heard later than received when it queues behind audio still playing (e.g. a voice sample).
+function queued(delta, play, end) { return delta != null && play != null && play - delta > 300 ? `（收到 ${sec(delta - end)}，排在前一段聲音後面）` : ""; }
+function voiceTurns() { return S.turns.filter((t) => t.kind === "語音" || t.kind === "按住說話"); }
+function kpi(label, vals, ref, note) {
+  const last = [...vals].reverse().find((v) => v != null);
+  const med = median(vals), n = vals.filter((v) => v != null).length, r = range(vals);
+  return `<div class="kpi"><div class="label">${label}</div>
+    <div class="value">${last == null ? "—" : sec(last).replace(" s", "")}<small>${last == null ? "" : " s 最近"}</small></div>
+    <div class="sub">${n ? `中位數 ${sec(med)}・${n} 筆${r && n > 1 ? `・${sec(r[0])}–${sec(r[1])}` : ""}` : (note || "還沒有資料")}</div>
+    <div class="ref">上次（ticket 07）：${ref}</div></div>`;
+}
+function renderMetrics() {
+  const vt = voiceTurns();
+  $("#kpiN").textContent = `${vt.length} 句`;
+  const intrStops = S.interrupts.map((x) => x.onset != null && x.stopped ? x.stopped - x.onset : null);
+  $("#kpis").innerHTML =
+    kpi("伺服器判定講完", vt.map((t) => diff(t.tEvt, t.tEnd)), "0.2–0.5 s（smart_turn_v2）", "自動接話才有") +
+    kpi("講完 → 第一個聲音", vt.map((t) => diff(t.firstPlay, t.tEnd)), "0.4–0.8 s") +
+    kpi("講完 → 答案的聲音", vt.filter((t) => t.tools.length).map((t) => diff(t.ansPlay, t.tEnd)), "查規則不等 2.3–4.0 s；轉交 4.5–5.2 s", "有查規則的句子才有") +
+    kpi("插話：開口 → 聲音停", intrStops, "server_vad 0.03–0.53 s", "主持人說話時開口才有");
+
+  // per-turn timelines (latest first, max 10)
+  const rows = S.turns.slice(-10).reverse();
+  if (!rows.length) { $("#turns").innerHTML = '<div class="empty">還沒有句子。0 秒＝玩家講完（按住說話是放開按鍵、文字是送出）。</div>'; }
+  else {
+    const spans = rows.flatMap((t) => [diff(t.firstPlay, t.tEnd), diff(t.ansPlay, t.tEnd), ...t.tools.map((x) => diff(x.resultAt, t.tEnd))]).filter((v) => v != null);
+    const maxMs = Math.max(4000, ...spans) * 1.05;
+    const pos = (ms) => Math.max(0, Math.min(100, (ms / maxMs) * 100));
+    $("#turns").innerHTML = rows.map((t) => {
+      const detect = diff(t.tEvt, t.tEnd), first = diff(t.firstPlay, t.tEnd), ans = diff(t.ansPlay, t.tEnd);
+      let bar = "";
+      if (detect != null) bar += `<span class="seg-b detect" style="left:0;width:${pos(detect)}%" title="伺服器判定講完 ${sec(detect)}"></span>`;
+      if (first != null) bar += `<span class="seg-b wait" style="left:${pos(detect || 0)}%;width:${Math.max(0, pos(first) - pos(detect || 0))}%"></span>`;
+      for (const x of t.tools) {
+        const a = diff(x.startedAt, t.tEnd), b = diff(x.resultAt ?? T(), t.tEnd);
+        if (a != null) bar += `<span class="seg-b tool" style="left:${pos(a)}%;width:${Math.max(0.6, pos(b) - pos(a))}%" title="${esc(x.name)} ${sec(b - a)}"></span>`;
+      }
+      if (first != null) bar += `<span class="mark first" style="left:${pos(first)}%" title="第一個聲音 ${sec(first)}"></span>`;
+      if (ans != null) bar += `<span class="mark answer" style="left:${pos(ans)}%" title="答案的聲音 ${sec(ans)}"></span>`;
+      const tools = t.tools.map((x) => `${x.name === "ask_referee" ? "裁判" : "查規則"} ${x.elapsed != null ? sec(x.elapsed) : "進行中"}${x.stale ? "・期間玩家又開口" : ""}`).join("、");
+      return `<div class="turn"><h5><span class="chip">#${t.n} ${esc(t.kind)}</span><span class="txt">${esc(t.user || (t.kind.startsWith("試聽") ? "" : "（辨識中）"))}</span></h5>
+        <div class="track">${bar}</div>
+        <div class="vals">${detect != null ? `<span>判定 ${sec(detect)}</span>` : ""}<span>首音 ${sec(first)}${queued(t.firstDelta, t.firstPlay, t.tEnd)}</span>${t.tools.length ? `<span>${esc(tools)}</span><span>答案 ${sec(ans)}${queued(t.ansDelta, t.ansPlay, t.tEnd)}</span>` : ""}</div></div>`;
+    }).join("") + `<div class="axis"><span>0 s（講完）</span><span>${sec(maxMs / 2)}</span><span>${sec(maxMs)}</span></div>`;
+  }
+
+  // interruptions
+  $("#intrN").textContent = `${S.interrupts.length} 次`;
+  const modeName = { started: "聽到就停", duck: "先降音量", cancelled: "等伺服器取消", ptt: "按鍵" };
+  $("#intrBody").innerHTML = S.interrupts.length ? S.interrupts.slice().reverse().map((x) => {
+    const outcome = x.outcome || (x.stopped ? `停了（${x.reason}）` : "沒停");
+    const cls = x.outcome === "恢復播放" ? "warn" : (x.stopped ? "ok" : "bad");
+    return `<tr><td>${x.n}</td><td>${modeName[x.mode] || x.mode}</td><td class="num mono">${x.onset == null ? "<span title='本機沒聽到開口，可能是回音或很小的聲音'>—</span>" : sec(x.started - x.onset)}</td>
+      <td class="num mono">${x.onset != null && x.stopped ? sec(x.stopped - x.onset) : "—"}</td><td><span class="chip ${cls}">${esc(outcome)}</span>${x.cancelled ? ' <span class="chip">伺服器取消</span>' : ""}</td></tr>`;
+  }).join("") : '<tr><td colspan="5" class="empty">主持人說話時開口，就會記一筆。</td></tr>';
+  renderProtocolLive();
+}
+
+// =====================================================================================
+// Protocol panel
+// =====================================================================================
+let currentQ = store("studioQ") || 1;
+let protoState = store("studioProtocol") || {};
+function protoChip(id) {
+  const s = protoState[id]?.status;
+  return s === "ok" ? '<span class="chip ok">一致</span>' : s === "diff" ? '<span class="chip bad">有出入</span>' : '<span class="chip">未核對</span>';
+}
+function renderProtocolList() {
+  $("#qlist").innerHTML = PROTOCOL.map((q) => `<li><button aria-current="${q.id === currentQ}" data-q="${q.id}">
+    <span class="qnum">${q.id}</span><span class="qtitle">${esc(q.short)}<small>${esc(q.title)}</small></span>${protoChip(q.id)}</button></li>`).join("");
+  const done = PROTOCOL.filter((q) => protoState[q.id]?.status).length;
+  $("#protoCount").textContent = `已核對 ${done} / ${PROTOCOL.length}`;
+  $("#protoBar").style.width = (done / PROTOCOL.length) * 100 + "%";
+}
+function liveSummary(id) {
+  const vt = voiceTurns();
+  const f = (xs) => { const n = xs.filter((x) => x != null).length; if (!n) return "還沒有資料"; const r = range(xs); return `中位數 ${sec(median(xs))}（${n} 筆，${sec(r[0])}–${sec(r[1])}）`; };
+  const samples = Object.values(S.samples);
+  switch (id) {
+    case 1: case 9: return samples.length ? `試聽了 ${samples.length} 段：${[...new Set(samples.map((s) => s.kind.split("・")[2]))].join("、")}` : "還沒有試聽。";
+    case 2: return `目前模型 ${cfg.model === "plus" ? "Plus" : "Flash"}；試聽 ${samples.length} 段，首音 ${f(samples.map((s) => diff(s.firstPlay, s.tEnd)))}（含開新連線）。`;
+    case 3: return `判定講完 ${f(vt.map((t) => diff(t.tEvt, t.tEnd)))}；第一個聲音 ${f(vt.map((t) => diff(t.firstPlay, t.tEnd)))}；答案 ${f(vt.filter((t) => t.tools.length).map((t) => diff(t.ansPlay, t.tEnd)))}。`;
+    case 4: { const st = S.interrupts.filter((x) => x.stopped).length; return `插話 ${S.interrupts.length} 次，停下 ${st} 次；開口→停 ${f(S.interrupts.map((x) => x.onset != null && x.stopped ? x.stopped - x.onset : null))}。伺服器取消回答 ${S.counts.cancelled} 次。`; }
+    case 5: return `伺服器判定「不是在跟它說話」${S.counts.turnInvalid} 次；旁聽 ${S.counts.ambient} 段；標記誤停 ${S.marks["誤停"] || 0}、不該回卻回 ${S.marks["不該回卻回"] || 0}。`;
+    case 6: return S.tools.length ? `工具呼叫 ${S.tools.length} 次：${S.tools.map((x) => x.args?.topic || x.name).join("、")}。標記該查沒查 ${S.marks["該查沒查"] || 0}、參數錯 ${S.marks["參數錯"] || 0}。` : "還沒有工具呼叫。";
+    case 7: { const stale = S.turns.flatMap((t) => t.tools).filter((x) => x.stale).length; return `工具等待中玩家又開口 ${stale} 次；主持人說「還在查」${S.counts.waitPhrase} 次；「請回答」被拒 ${S.counts.rejectedSpeaking + S.counts.rejectedBusy} 次、自動重送 ${S.counts.retries} 次。指令開關：${cfg.wait_rule ? "開" : "關"}。`; }
+    case 8: { const ref = S.turns.filter((t) => t.tools.some((x) => x.name === "ask_referee")); return `轉交 ${ref.length} 次；裁判 ${f(ref.flatMap((t) => t.tools.filter((x) => x.name === "ask_referee").map((x) => x.elapsed)))}；這些題的答案 ${f(ref.map((t) => diff(t.ansPlay, t.tEnd)))}。`; }
+    case 10: return S.connected ? `已連線 ${((T() - S.connectedAt) / 1000).toFixed(0)} 秒；距離上次回答 ${S.lastResponseAt ? ((T() - S.lastResponseAt) / 1000).toFixed(0) : "—"} 秒；完成回答約 ${S.completedResponses} 輪（保留 ${cfg.max_history_turns}）。${S.memoryAnswer ? `最近提到暗號的回答：「${S.memoryAnswer}」` : ""}` : (S.closed ? `上一條連線 ${S.closed.seconds} 秒後由${S.closed.by === "upstream" ? "阿里雲" : "這邊"}關閉。${S.closed.reason || ""}` : "還沒連線。");
+    case 11: { const echo = S.interrupts.filter((x) => x.onset == null && x.mode !== "ptt").length; return `主持人說話時伺服器偵測到說話 ${S.interrupts.length} 次，其中本機沒聽到開口的 ${echo} 次（可能是回音）；標記自己打斷自己 ${S.marks["自己打斷自己"] || 0}。回音消除：${cfg.ec ? "開" : "關"}。`; }
+  }
+  return "";
+}
+function renderProtocolDetail() {
+  const q = PROTOCOL.find((x) => x.id === currentQ);
+  const st = protoState[q.id] || {};
+  const presetText = Object.entries(q.preset).map(([k, v]) => {
+    const names = { mode: "接話", model: "模型", tool_delay: "查規則等", wait_rule: "先說還在查", delegate: "轉交裁判", tools: "查規則工具", stop_mode: "插話停法", max_history_turns: "保留輪數", ec: "回音消除" };
+    const val = v === true ? "開" : v === false ? "關" : ({ ptt: "按住說話", flash: "Flash", plus: "Plus", auto: "自動" }[v] ?? v);
+    return `${names[k] || k} ${val}`;
+  }).join("・");
+  const ratings = st.ratings || {};
+  const ratingHtml = q.rating ? `<div><h4>你的評分（${esc($("#sampleVoice").value || cfg.voice)}）</h4><div class="rating">${["語氣", "自然度", "停頓"].map((dim) =>
+    `<div class="rating-row"><span>${dim}</span><div class="seg" role="group" aria-label="${dim}">${[1, 2, 3, 4, 5].map((n) => `<button aria-pressed="${ratings[dim] === n}" data-rate="${dim}" data-val="${n}">${n}</button>`).join("")}</div></div>`).join("")}</div></div>` : "";
+  $("#qdetail").innerHTML = `
+    <div><span class="chip info">第 ${q.id} 題</span><h3 style="margin-top:6px">${esc(q.title)}</h3></div>
+    <div><h4>建議設定</h4><div class="muted" style="font-size:13.5px">${esc(presetText)}</div>
+      <button class="btn sm" style="margin-top:6px" id="applyPreset">套用這題的設定</button></div>
+    <div><h4>步驟</h4><ol>${q.steps.map((s) => `<li>${esc(s)}</li>`).join("")}</ol></div>
+    <div><h4>看哪裡</h4><div style="font-size:14px">${esc(q.look)}</div></div>
+    <div><h4>上次的結果（ticket 07）</h4><div class="quote">${esc(q.last)}</div></div>
+    <div><h4>這次量到的</h4><div class="quote live" id="liveSummary">${esc(liveSummary(q.id))}</div></div>
+    ${ratingHtml}
+    <div><h4>核對結果</h4>
+      <div class="btn-row"><button class="btn sm" data-verdict="ok" aria-pressed="${st.status === "ok"}">${st.status === "ok" ? "✓ " : ""}和上次一致</button>
+      <button class="btn sm" data-verdict="diff" aria-pressed="${st.status === "diff"}">${st.status === "diff" ? "✓ " : ""}有出入</button></div>
+      <textarea id="verdictNote" rows="2" placeholder="哪裡不一樣？（選填）" style="margin-top:8px;font-family:var(--font)">${esc(st.note || "")}</textarea></div>`;
+}
+function renderProtocolLive() { const el = $("#liveSummary"); if (el) el.textContent = liveSummary(currentQ); }
+function selectQ(id) { currentQ = id; store("studioQ", id); renderProtocolList(); renderProtocolDetail(); }
+
+// =====================================================================================
+// Connect / disconnect
+// =====================================================================================
+async function connect() {
+  cfg = readCfg(); saveCfg();
+  S = newSession(); S.connecting = true;
+  const instructions = cfg.instructions + (cfg.wait_rule ? WAIT_INSTR : "") + (cfg.delegate ? DELEGATE_INSTR : "");
+  playCtx = new AudioContext({ sampleRate: 24000 });
+  // A new AudioContext starts at currentTime 0; reset the queue or audio waits for the old session's end time.
+  nextTime = 0; sources.clear();
+  masterGain = playCtx.createGain(); masterGain.connect(playCtx.destination);
+  micStream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: cfg.ec, noiseSuppression: cfg.ns, autoGainControl: cfg.agc } });
+  micCtx = new AudioContext({ sampleRate: 16000 });
+  await micCtx.audioWorklet.addModule(URL.createObjectURL(new Blob([WORKLET], { type: "application/javascript" })));
+  micNode = new AudioWorkletNode(micCtx, "pcm-tap");
+  micNode.port.onmessage = (e) => onMicChunk(e.data);
+  const sink = micCtx.createGain(); sink.gain.value = 0;
+  micCtx.createMediaStreamSource(micStream).connect(micNode); micNode.connect(sink); sink.connect(micCtx.destination);
+  $("#chat").innerHTML = ""; $("#log").textContent = "";
+  ws = new WebSocket(`ws://${location.host}/ws`);
+  ws.onopen = () => ws.send(JSON.stringify({ type: "relay.start", config: { ...cfg, instructions } }));
+  ws.onmessage = (e) => onEvent(JSON.parse(e.data));
+  ws.onclose = () => { S.connected = false; S.connecting = false; teardown(); };
+  setConnectedUI(true);
+  renderMetrics();
+}
+function teardown() {
+  try { micStream && micStream.getTracks().forEach((t) => t.stop()); } catch (e) {}
+  try { micCtx && micCtx.close(); } catch (e) {}
+  setTimeout(() => { try { playCtx && playCtx.close(); } catch (e) {} }, 150);
+  setConnectedUI(false);
+}
+function disconnect() { send({ type: "relay.metrics", ...snapshot() }); setTimeout(() => ws && ws.close(), 200); }
+function setConnectedUI(on) {
+  $("#connectBtn").disabled = on; $("#disconnectBtn").disabled = !on; $("#stopBtn").disabled = !on;
+  $("#settings").disabled = on; $("#lockNote").hidden = !on;
+  $("#settingsCard").open = !on;
+  $("#pttBtn").disabled = !on;
+}
+function snapshot() {
+  return {
+    turns: S.turns.map((t) => ({ n: t.n, kind: t.kind, user: t.user, host: t.host,
+      end_detect_ms: t.tEvt != null ? Math.round(t.tEvt - t.tEnd) : null,
+      first_audio_ms: t.firstPlay != null ? Math.round(t.firstPlay - t.tEnd) : null,
+      answer_audio_ms: t.ansPlay != null ? Math.round(t.ansPlay - t.tEnd) : null,
+      tools: t.tools.map((x) => ({ name: x.name, args: x.args, delay: x.delay, elapsed: x.elapsed, stale: x.stale })) })),
+    interrupts: S.interrupts.map((x) => ({ n: x.n, mode: x.mode,
+      onset_to_detect: x.onset != null ? Math.round(x.started - x.onset) : null,
+      onset_to_stop: x.onset != null && x.stopped ? Math.round(x.stopped - x.onset) : null,
+      detect_to_stop: x.stopped ? Math.round(x.stopped - x.started) : null,
+      cancelled: x.cancelled != null, outcome: x.outcome || (x.stopped ? "stopped:" + x.reason : "not_stopped") })),
+  };
+}
+
+// =====================================================================================
+// Review tab
+// =====================================================================================
+let logsCache = [], currentLog = null;
+async function loadLogs() {
+  try {
+    logsCache = await (await fetch("/api/logs")).json();
+  } catch (e) { $("#sessions").innerHTML = '<li class="empty">讀不到紀錄（轉接程式有開嗎？）</li>'; return; }
+  if (!logsCache.length) { $("#sessions").innerHTML = '<li class="empty">還沒有紀錄。</li>'; return; }
+  $("#sessions").innerHTML = logsCache.map((l) => {
+    const m = l.name.match(/^(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})/);
+    const when = m ? `${m[2]}/${m[3]} ${m[4]}:${m[5]}:${m[6]}` : l.name;
+    return `<li><button data-log="${esc(l.name)}" aria-current="${l.name === currentLog}"><span class="when">${when}</span>
+      <span class="meta"><span class="chip">${esc(l.model || "?")}</span><span class="chip">${esc((l.voice || "").replace("_v3.1", ""))}</span><span class="chip">${esc(l.mode === "ptt" ? "按住說話" : (l.mode || "?"))}</span>${l.tool_delay ? `<span class="chip warn">等 ${l.tool_delay}s</span>` : ""}${l.wait_rule ? '<span class="chip info">還在查</span>' : ""}${l.delegate ? '<span class="chip info">轉交</span>' : ""}<span class="faint">${(l.size / 1024).toFixed(0)} KB</span></span></button></li>`;
+  }).join("");
+}
+function parseLog(text) { return text.split("\n").filter(Boolean).map((l) => { try { return JSON.parse(l); } catch (e) { return null; } }).filter(Boolean); }
+function analyze(evs) {
+  const out = { cfg: {}, lanes: { player: [], host: [], tool: [], sample: [] }, points: [], rows: [], metrics: null, end: 0, stats: {} };
+  let speech = null; const resp = {}, tools = {}, samples = {};
+  const st = { valid: 0, invalid: 0, completed: 0, cancelled: 0, tools: 0, referee: 0, errors: 0, marks: 0, ambient: 0, reactMs: [], firstMs: [], toolMs: [] };
+  let pend = null; // { stop, reacted, heard } for the latest player turn
+  for (const e of evs) {
+    const ms = e.ms ?? 0; out.end = Math.max(out.end, ms);
+    switch (e.type) {
+      case "relay.config": out.cfg = e.config || {}; out.model = e.model; break;
+      case "input_audio_buffer.speech_started": speech = { start: ms }; break;
+      case "input_audio_buffer.speech_stopped": {
+        const seg = { start: speech ? speech.start : ms - 300, end: ms, invalid: e.reason === "turn_invalid" };
+        out.lanes.player.push(seg); speech = null;
+        if (seg.invalid) st.invalid++; else { st.valid++; pend = { stop: ms }; }
+        break;
+      }
+      case "input_audio_buffer.commit": if (e.dir === "down") { out.lanes.player.push({ start: ms - 150, end: ms, ptt: true }); st.valid++; pend = { stop: ms }; } break;
+      case "conversation.item.create":
+        if (e.dir === "down" && e.item?.type === "message" && e.item.content?.[0]?.type === "input_text") { out.points.push({ lane: "player", ms, label: "文字", cls: "text" }); out.rows.push({ ms, who: "玩家（文字）", text: e.item.content[0].text }); pend = { stop: ms }; }
+        break;
+      case "response.created": resp[e.response?.id] = { start: ms }; if (pend && !pend.reacted) { st.reactMs.push(ms - pend.stop); pend.reacted = true; } break;
+      case "response.audio.first_delta": if (resp[e.response_id]) { resp[e.response_id].first = ms; if (pend && !pend.heard) { st.firstMs.push(ms - pend.stop); pend.heard = true; } } break;
+      case "response.done": {
+        const r = resp[e.response?.id] || { start: ms };
+        r.end = ms; r.status = e.response?.status; out.lanes.host.push(r);
+        if (r.status === "cancelled") st.cancelled++; else st.completed++;
+        break;
+      }
+      case "relay.tool_started": tools[e.call_id] = { start: ms, name: e.name, args: e.args }; st.tools++; if (e.name === "ask_referee") st.referee++;
+        out.rows.push({ ms, who: e.name === "ask_referee" ? "請裁判" : "查規則", text: JSON.stringify(e.args) }); break;
+      case "relay.tool_result": { const t = tools[e.call_id] || { start: ms - (e.elapsed_ms || 0), name: e.name }; t.end = ms; t.stale = e.stale; out.lanes.tool.push(t); st.toolMs.push(e.elapsed_ms);
+        out.rows.push({ ms, who: "工具結果", text: `${(e.elapsed_ms / 1000).toFixed(2)} s${e.stale ? "・期間玩家又開口" : ""}` }); break; }
+      case "relay.voice_sample": samples[e.sample_id] = { start: ms, voice: e.voice }; break;
+      case "relay.sample_done": { const s = samples[e.sample_id] || { start: ms }; s.end = ms; s.voice = e.voice; out.lanes.sample.push(s); break; }
+      case "conversation.item.input_audio_transcription.completed": if (e.transcript) out.rows.push({ ms, who: "玩家", text: e.transcript }); break;
+      case "conversation.item.ambient_audio_transcription.completed": st.ambient++; if (e.transcript) out.rows.push({ ms, who: "旁聽", text: e.transcript }); break;
+      case "response.audio_transcript.done": out.rows.push({ ms, who: "主持人", text: (e.transcript || "").trim() }); break;
+      case "response.text.done": out.rows.push({ ms, who: "主持人（文字）", text: e.text }); break;
+      case "error": if (e.dir === "up") { st.errors++; out.points.push({ lane: "host", ms, label: "錯誤", cls: "err" }); out.rows.push({ ms, who: "錯誤", text: e.error?.message, err: true }); } break;
+      case "relay.mark": st.marks++; out.points.push({ lane: "mark", ms, label: e.label, cls: "mark" }); out.rows.push({ ms, who: "標記", text: e.label + (e.note ? "：" + e.note : "") }); break;
+      case "relay.metrics": out.metrics = e; break;
+      case "relay.closed": out.closed = e; break;
+    }
+  }
+  out.stats = st;
+  return out;
+}
+function laneSVG(a, pxPerSec) {
+  const dur = Math.max(5, a.end / 1000 + 1), W = Math.ceil(dur * pxPerSec) + 110, laneH = 28, top = 22;
+  const lanes = [["player", "玩家說話"], ["host", "主持人回答"], ["tool", "工具"], ["sample", "試聽"], ["mark", "標記"]];
+  const H = top + lanes.length * laneH + 8, x = (ms) => 100 + (ms / 1000) * pxPerSec;
+  const css = getComputedStyle(document.documentElement), v = (n) => css.getPropertyValue(n).trim();
+  let s = `<svg class="lanes" width="${W}" height="${H}" role="img" aria-label="事件時間軸">`;
+  const step = pxPerSec >= 40 ? 5 : pxPerSec >= 15 ? 10 : 30;
+  for (let t = 0; t <= dur; t += step) s += `<line x1="${x(t * 1000)}" x2="${x(t * 1000)}" y1="${top - 6}" y2="${H}" stroke="${v("--border")}"/><text x="${x(t * 1000) + 3}" y="12">${t}s</text>`;
+  lanes.forEach(([key, label], i) => {
+    const y = top + i * laneH;
+    s += `<text class="lane-label" x="8" y="${y + 18}">${label}</text>`;
+    const items = a.lanes[key] || [];
+    for (const it of items) {
+      let fill = v("--player"), tip = "";
+      if (key === "player") { fill = it.invalid ? v("--seg-invalid") : v("--player"); tip = `${it.ptt ? "按住說話" : it.invalid ? "不算一句（turn_invalid）" : "玩家說話"} ${((it.end - it.start) / 1000).toFixed(2)} s`; }
+      if (key === "host") { fill = it.status === "cancelled" ? v("--rec") : v("--host"); tip = `回答 ${it.status}，${((it.end - it.start) / 1000).toFixed(2)} s${it.first != null ? `，首段聲音在 +${((it.first - it.start) / 1000).toFixed(2)} s` : ""}`; }
+      if (key === "tool") { fill = it.name === "ask_referee" ? v("--referee") : v("--tool"); tip = `${it.name} ${((it.end - it.start) / 1000).toFixed(2)} s${it.stale ? "（期間玩家又開口）" : ""}`; }
+      if (key === "sample") { fill = v("--faint"); tip = `試聽 ${it.voice || ""}`; }
+      const w = Math.max(3, x(it.end) - x(it.start));
+      s += `<rect x="${x(it.start)}" y="${y + 5}" width="${w}" height="${laneH - 12}" rx="3" fill="${fill}" opacity=".85"><title>${esc(tip)} @ ${(it.start / 1000).toFixed(1)}s</title></rect>`;
+      if (key === "host" && it.first != null) s += `<rect x="${x(it.first) - 1}" y="${y + 2}" width="3" height="${laneH - 6}" fill="${v("--ok")}"><title>第一段聲音到達轉接程式</title></rect>`;
+    }
+    for (const p of a.points.filter((p) => p.lane === key)) {
+      const col = p.cls === "err" ? v("--bad") : p.cls === "mark" ? v("--warn") : v("--player");
+      s += `<g><polygon points="${x(p.ms)},${y + 4} ${x(p.ms) + 6},${y + 14} ${x(p.ms)},${y + 24} ${x(p.ms) - 6},${y + 14}" fill="${col}"/><title>${esc(p.label)} @ ${(p.ms / 1000).toFixed(1)}s</title></g>`;
+    }
+  });
+  return s + "</svg>";
+}
+let reviewZoom = 15, reviewData = null;
+async function openLog(name) {
+  currentLog = name; $$("#sessions button").forEach((b) => b.setAttribute("aria-current", b.dataset.log === name));
+  const text = await (await fetch("/api/logs/" + encodeURIComponent(name))).text();
+  reviewData = analyze(parseLog(text));
+  renderReview();
+}
+function renderReview() {
+  const a = reviewData, st = a.stats, c = a.cfg;
+  const chips = [
+    `<span class="chip info">${esc(a.model || c.model || "?")}</span>`, `<span class="chip">${esc(c.voice || "")}</span>`,
+    `<span class="chip">${esc(c.mode === "ptt" ? "按住說話" : c.mode || "")}</span>`, `<span class="chip">長 ${(a.end / 1000).toFixed(0)} s</span>`,
+    `<span class="chip ok">玩家有效 ${st.valid} 句</span>`, `<span class="chip">不算一句 ${st.invalid}</span>`, `<span class="chip">旁聽 ${st.ambient}</span>`,
+    `<span class="chip ok">回答完成 ${st.completed}</span>`, `<span class="chip ${st.cancelled ? "bad" : ""}">回答被取消 ${st.cancelled}</span>`,
+    `<span class="chip warn">工具 ${st.tools}（裁判 ${st.referee}）</span>`, `<span class="chip ${st.errors ? "bad" : ""}">錯誤 ${st.errors}</span>`, `<span class="chip">標記 ${st.marks}</span>`,
+  ].join("");
+  const fmtRange = (xs) => { const n = xs.length; if (!n) return "—"; const r = range(xs); return `${sec(median(xs))}（${n} 筆，${sec(r[0])}–${sec(r[1])}）`; };
+  const m = a.metrics;
+  const metricRows = m && m.turns?.length ? m.turns.map((t) => `<tr><td>${t.n}</td><td>${esc(t.kind)}</td><td>${esc(t.user)}</td><td class="num mono">${sec(t.end_detect_ms)}</td><td class="num mono">${sec(t.first_audio_ms)}${t.first_audio_ms > 8000 && !(t.tools || []).length ? ' <span class="chip bad" title="重連時播放排程沒歸零造成的錯誤數字（2026-11-19 修好）">可疑</span>' : ""}</td><td class="num mono">${t.tools.length ? sec(t.answer_audio_ms) : ""}</td><td>${esc(t.tools.map((x) => `${x.name} ${x.elapsed ?? "?"}ms${x.stale ? " 期間又開口" : ""}`).join("、"))}</td></tr>`).join("") : "";
+  $("#reviewCard").innerHTML = `
+    <div class="card-h"><h2>${esc(currentLog)}</h2><div class="zoom"><label for="zoomSel">縮放</label>
+      <select id="zoomSel"><option value="6">6 px/秒</option><option value="15">15 px/秒</option><option value="40">40 px/秒</option><option value="80">80 px/秒</option></select></div></div>
+    <div class="card-b">
+      <div class="summary-chips">${chips}</div>
+      ${a.closed ? `<p class="${a.closed.by === "upstream" ? "" : "muted"}" style="font-size:13.5px;margin:10px 0 0">結束：${a.closed.by === "upstream" ? "阿里雲關的" : "這邊關的"}，連了 ${a.closed.seconds} 秒${a.closed.reason ? "，理由：" + esc(a.closed.reason) : ""}</p>` : ""}
+      <div class="legend" style="margin:12px 0 6px">
+        <span><i class="sw" style="background:var(--player)"></i>玩家說話</span><span><i class="sw" style="background:var(--seg-invalid)"></i>不算一句</span>
+        <span><i class="sw" style="background:var(--host)"></i>回答完成</span><span><i class="sw" style="background:var(--rec)"></i>回答被取消</span>
+        <span><i class="mk answer"></i>第一段聲音</span><span><i class="sw" style="background:var(--tool)"></i>查規則</span><span><i class="sw" style="background:var(--referee)"></i>裁判</span>
+      </div>
+      <div class="lanes-wrap">${laneSVG(a, reviewZoom)}</div>
+      <p class="faint" style="font-size:12px;margin:6px 0 0">滑鼠停在色塊上看秒數。時間是轉接程式收到事件的時間（從連線開始算），比瀏覽器聽到的聲音早一點點。</p>
+      <h3 style="font-size:14px;margin:18px 0 6px">從原始事件算出來的（轉接程式的時間）</h3>
+      <table class="t"><tbody>
+        <tr><td>玩家講完 → 伺服器開始回答（response.created）</td><td class="num mono">${fmtRange(st.reactMs)}</td></tr>
+        <tr><td>玩家講完 → 第一段聲音到達轉接程式</td><td class="num mono">${st.firstMs.length ? fmtRange(st.firstMs) : "—（這筆紀錄比較舊，還沒記第一段聲音）"}</td></tr>
+        <tr><td>工具耗時</td><td class="num mono">${fmtRange(st.toolMs)}</td></tr>
+      </tbody></table>
+      <p class="faint" style="font-size:12px;margin:6px 0 0">「講完」用伺服器的 speech_stopped（或按住說話的 commit、文字送出），所以不含伺服器判定講完前的等待；瀏覽器量的「講完」是用聲音的位置回推，會再早一點。</p>
+      ${metricRows ? `<h3 style="font-size:14px;margin:18px 0 6px">瀏覽器當時量的（每一句的時間軸）</h3><div class="table-wrap"><table class="t"><thead><tr><th>#</th><th>方式</th><th>玩家說</th><th class="num">判定講完</th><th class="num">首音</th><th class="num">答案</th><th>工具</th></tr></thead><tbody>${metricRows}</tbody></table></div>` : ""}
+      ${m && m.interrupts?.length ? `<h3 style="font-size:14px;margin:18px 0 6px">插話（瀏覽器當時量的）</h3><table class="t"><thead><tr><th>#</th><th>停法</th><th class="num">開口→偵測</th><th class="num">開口→停</th><th>結果</th></tr></thead><tbody>${m.interrupts.map((x) => `<tr><td>${x.n}</td><td>${esc(x.mode)}</td><td class="num mono">${sec(x.onset_to_detect)}</td><td class="num mono">${sec(x.onset_to_stop)}</td><td>${esc(x.outcome)}${x.cancelled ? "・伺服器取消" : ""}</td></tr>`).join("")}</tbody></table>` : ""}
+      <h3 style="font-size:14px;margin:18px 0 6px">逐句紀錄</h3>
+      <div class="table-wrap" style="max-height:420px;overflow:auto"><table class="t"><thead><tr><th class="num">時間</th><th>誰</th><th>內容</th></tr></thead><tbody>
+        ${a.rows.map((r) => `<tr><td class="num mono">${(r.ms / 1000).toFixed(1)}s</td><td style="white-space:nowrap">${r.err ? `<span class="chip bad">${esc(r.who)}</span>` : esc(r.who)}</td><td>${esc(r.text)}</td></tr>`).join("")}
+      </tbody></table></div>
+    </div>`;
+  $("#zoomSel").value = String(reviewZoom);
+  $("#zoomSel").onchange = (e) => { reviewZoom = Number(e.target.value); renderReview(); };
+}
+async function loadAuto() {
+  let rows = [];
+  try { rows = await (await fetch("/api/auto/delegate")).json(); } catch (e) {}
+  if (!rows.length) { $("#autoBox").innerHTML = '<div class="empty">還沒有結果。跑 <span class="mono">auto_checks.py delegate</span> 之後會出現在這裡。</div>'; $("#autoN").textContent = "0 筆"; return; }
+  $("#autoN").textContent = `${rows.length} 筆`;
+  $("#autoBox").innerHTML = `<table class="t"><thead><tr><th>模型</th><th>方式</th><th>題</th><th class="num">等待語</th><th class="num">答案</th><th>工具</th><th>主持人說</th><th>應答</th><th>ticket 07 的判定</th></tr></thead><tbody>
+    ${rows.map((r) => { const g = (AUTO_GRADES[`${r.model}-${r.delegate ? "delegate" : "self"}`] || [])[r.q - 1] || "—"; const cls = g === "對" ? "ok" : g === "—" ? "" : "bad";
+      return `<tr><td>${esc(r.model)}</td><td>${r.delegate ? "可轉交" : "自己答"}</td><td>${r.q}</td><td class="num mono">${sec(r.first_audio_ms)}</td><td class="num mono">${sec(r.answer_audio_ms)}</td>
+      <td>${esc(r.tools.map((t) => `${t.name === "ask_referee" ? "裁判" : "查規則"}${t.tool_ms ? " " + t.tool_ms + "ms" : ""}`).join("、") || "沒用")}</td><td>${esc(r.spoken.join(" / "))}</td><td class="muted">${esc(r.expected)}</td><td><span class="chip ${cls}">${esc(g)}</span></td></tr>`; }).join("")}
+  </tbody></table><p class="faint" style="font-size:12px;margin:8px 0 0">用文字送出、每題開新連線、每格只跑 1 次。聲音檔在系統暫存區 host-listen-test/auto/。</p>`;
+}
+
+// =====================================================================================
+// Wiring
+// =====================================================================================
+function initTheme() {
+  const saved = store("studioTheme"); if (saved) document.documentElement.dataset.theme = saved;
+  const setIcon = () => { const dark = document.documentElement.dataset.theme === "dark" || (!document.documentElement.dataset.theme && matchMedia("(prefers-color-scheme: dark)").matches); $("#themeBtn").innerHTML = icon(dark ? "sun" : "moon"); };
+  setIcon();
+  $("#themeBtn").onclick = () => {
+    const dark = document.documentElement.dataset.theme === "dark" || (!document.documentElement.dataset.theme && matchMedia("(prefers-color-scheme: dark)").matches);
+    document.documentElement.dataset.theme = dark ? "light" : "dark"; store("studioTheme", document.documentElement.dataset.theme); setIcon();
+    if (reviewData) renderReview();
+  };
+}
+function initTabs() {
+  const show = (id) => {
+    for (const [btn, panel] of [["#tab-live-btn", "#tab-live"], ["#tab-review-btn", "#tab-review"]]) {
+      const on = panel === id; $(btn).setAttribute("aria-selected", on); $(panel).hidden = !on;
+    }
+    if (id === "#tab-review") { loadLogs(); loadAuto(); }
+    store("studioTab", id);
+  };
+  $("#tab-live-btn").onclick = () => show("#tab-live");
+  $("#tab-review-btn").onclick = () => show("#tab-review");
+  if (store("studioTab") === "#tab-review") show("#tab-review");
+  $$(".subtabs button").forEach((b) => b.onclick = () => {
+    $$(".subtabs button").forEach((x) => { x.setAttribute("aria-selected", x === b); $("#" + x.dataset.sub).hidden = x !== b; });
+  });
+}
+
+fillVoices(); loadCfg(); cfg = readCfg(); initTheme(); initTabs();
+$("#qaList").innerHTML = QUESTIONS.map(([q, a], i) => `<div class="qa-item"><div><span class="chip">${i + 1}</span> ${esc(q)}</div>
+  <button class="btn sm" data-q="${i}">用文字問</button><details><summary>看答案</summary>${esc(a)}</details></div>`).join("");
+renderProtocolList(); renderProtocolDetail(); renderMetrics();
+
+$("#mode").addEventListener("change", syncModeUI);
+$("#settings").addEventListener("change", () => { saveCfg(); cfg = readCfg(); renderStatus(); renderProtocolDetail(); });
+$("#connectBtn").onclick = () => connect().catch((e) => { chat("err", "連線失敗", e.message); S.connecting = false; teardown(); });
+$("#disconnectBtn").onclick = disconnect;
+$("#stopBtn").onclick = () => { if (S.responseActive) send({ type: "response.cancel" }); stopPlayback("手動"); };
+$("#pttBtn").addEventListener("pointerdown", (e) => { e.preventDefault(); pttDown(); });
+["pointerup", "pointerleave", "pointercancel"].forEach((k) => $("#pttBtn").addEventListener(k, pttUp));
+document.addEventListener("keydown", (e) => {
+  if (e.code !== "Space" || e.repeat || ["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement.tagName)) return;
+  e.preventDefault(); pttDown();
+});
+document.addEventListener("keyup", (e) => {
+  if (e.code !== "Space" || ["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement.tagName)) return;
+  e.preventDefault(); pttUp();
+});
+$("#tool_delay").onchange = () => {
+  saveCfg(); cfg.tool_delay = Number($("#tool_delay").value);
+  if (S.connected) { send({ type: "relay.set", tool_delay: cfg.tool_delay }); toast(`查規則改成等 ${cfg.tool_delay} 秒`); }
+};
+document.addEventListener("click", (e) => {
+  const t = e.target.closest("button"); if (!t) return;
+  if (t.dataset.q != null && t.closest("#qaList")) sendText(QUESTIONS[Number(t.dataset.q)][0], "文字問題");
+  else if (t.dataset.q != null && t.closest("#qlist")) selectQ(Number(t.dataset.q));
+  else if (t.dataset.scene) {
+    if (!S.connected) { toast("先連線"); return; }
+    const voice = $("#sampleVoice").value || cfg.voice, id = "sample-" + Date.now();
+    S.samples[id] = newTurn(`試聽・${t.dataset.scene}・${voice}`, T());
+    S.samplingUntil = Infinity; S.sampling++;
+    send({ type: "relay.voice_sample", sample_id: id, voice, text: `請用主持人的語氣把下面這段話唸出來，照字唸，不要加開場白：「${SCENES[t.dataset.scene]}」` });
+    chat("sys", "", `試聽 ${voice} 唸「${t.dataset.scene}」`);
+  } else if (t.dataset.mark) {
+    S.marks[t.dataset.mark] = (S.marks[t.dataset.mark] || 0) + 1;
+    send({ type: "relay.mark", label: t.dataset.mark, turn: S.cur ? S.cur.n : null });
+    logLine(`★ 標記：${t.dataset.mark}`); toast(`已標記：${t.dataset.mark}`); renderProtocolLive();
+  } else if (t.dataset.rate) {
+    const st = protoState[currentQ] || (protoState[currentQ] = {}); st.ratings = st.ratings || {};
+    st.ratings[t.dataset.rate] = Number(t.dataset.val); store("studioProtocol", protoState);
+    send({ type: "relay.mark", label: "評分", q: currentQ, voice: $("#sampleVoice").value || cfg.voice, model: cfg.model, ratings: st.ratings });
+    renderProtocolDetail();
+  } else if (t.dataset.verdict) {
+    const st = protoState[currentQ] || (protoState[currentQ] = {});
+    st.status = st.status === t.dataset.verdict ? undefined : t.dataset.verdict; st.note = $("#verdictNote")?.value || st.note;
+    store("studioProtocol", protoState);
+    send({ type: "relay.mark", label: "核對", q: currentQ, status: st.status, note: st.note });
+    renderProtocolList(); renderProtocolDetail();
+  } else if (t.id === "applyPreset") {
+    if (S.connected) { toast("連線中不能改設定，先斷線"); return; }
+    const q = PROTOCOL.find((x) => x.id === currentQ); writeCfg(q.preset); saveCfg(); cfg = readCfg(); renderStatus();
+    $("#settingsCard").open = true; toast(`已套用第 ${q.id} 題的設定`);
+  } else if (t.dataset.log) openLog(t.dataset.log);
+});
+document.addEventListener("input", (e) => {
+  if (e.target.id === "verdictNote") { const st = protoState[currentQ] || (protoState[currentQ] = {}); st.note = e.target.value; store("studioProtocol", protoState); }
+});
+$("#noteBtn").onclick = () => { const v = $("#noteInput").value.trim(); if (!v) return; send({ type: "relay.mark", label: "備註", note: v, turn: S.cur ? S.cur.n : null }); logLine(`★ 備註：${v}`); toast("已記下"); $("#noteInput").value = ""; };
+$("#plantBtn").onclick = () => sendText("請記住兩件事：今晚的暗號是「藍色鳳梨」，三號座位的玩家叫阿哲。記住就好，只回答「記住了」。", "記憶");
+$("#askMemoryBtn").onclick = () => sendText("剛剛請你記住的暗號是什麼？三號座位的玩家叫什麼名字？", "記憶");
+$("#fillTextBtn").onclick = () => { if (!S.connected) { toast("先連線"); return; } S.fillingText = true; send({ type: "relay.fill_text", count: 22 }); chat("sys", "", "開始塞 22 輪文字對話（只回文字）…"); };
+$("#reloadLogs").onclick = () => { loadLogs(); loadAuto(); };
+$("#keepAliveBtn").onclick = () => {
+  if (!S.connected) { toast("先連線"); return; }
+  send({ type: "conversation.item.create", item: { type: "message", role: "system", content: [{ type: "input_text", text: "（保持連線用的系統訊息，不是玩家說的話）請只回一個字：好" }] } });
+  send({ type: "response.create", response: { modalities: ["text"] } });
+  S.marks["保持連線"] = (S.marks["保持連線"] || 0) + 1;
+  send({ type: "relay.mark", label: "保持連線" });
+  chat("sys", "", "送出保持連線（只回文字，不出聲）");
+};
+
+setInterval(() => { renderStatus(); renderHero(); tickToolCards(); }, 250);
+setInterval(drawSpark, 60);
+setInterval(() => { if (S.metricsDirty && S.connected) { S.metricsDirty = false; send({ type: "relay.metrics", ...snapshot() }); } }, 5000);
+setInterval(renderProtocolLive, 1000);
+</script>
+</body>
+</html>

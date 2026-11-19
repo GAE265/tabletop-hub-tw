@@ -3,6 +3,7 @@
   idle      how long a connection survives with nobody talking (3 variants in parallel)
   memory    does the host still remember a planted fact after 300+ s of history audio / 20+ turns
   delegate  same rule questions: model answers alone vs hands off to the referee (text model)
+  keepalive does a text-only reply (no voice) every 150 s reset the 180 s "no response" disconnect
 
 Run from the worktree root:
   uv run --no-project --with 'websockets>=14' python .scratch/host/prototypes/listen-test/auto_checks.py idle
@@ -239,6 +240,69 @@ async def cmd_delegate(models: list[str]) -> None:
     print(f"聲音檔與結果：{OUT}", flush=True)
 
 
+# ------------------------------------------------------------------ keepalive
+async def keepalive_variant(label: str, kind: str, every_s: int, total_s: int) -> None:
+    """kind: item = only a system item; create = only response.create (rejected, no user message);
+    user = a user text item + text-only response (a real reply)."""
+    t0 = time.monotonic()
+    async with connect(url("flash"), additional_headers=HEADERS, max_size=None) as ws:
+        await ws.send(json.dumps({"type": "session.update", "session": {
+            "modalities": ["text", "audio"], "turn_detection": None, "instructions": "你是桌遊主持人。"}}))
+        await wait_for(ws, "session.updated")
+        try:
+            while time.monotonic() - t0 < total_s:
+                await asyncio.sleep(every_s)
+                if kind in ("item", "user"):
+                    role = "system" if kind == "item" else "user"
+                    await ws.send(json.dumps({"type": "conversation.item.create", "item": {
+                        "type": "message", "role": role,
+                        "content": [{"type": "input_text", "text": "（保持連線）請只回一個字：好"}]}}, ensure_ascii=False))
+                    await wait_for(ws, "conversation.item.created")
+                if kind in ("create", "user"):
+                    await ws.send(json.dumps({"type": "response.create", "response": {"modalities": ["text"]}}))
+                    ev = await wait_for(ws, "response.done")
+                    note = ev.get("response", {}).get("status") or ev.get("error", {}).get("message")
+                else:
+                    note = "item created"
+                print(f"  [{label}] {time.monotonic() - t0:.0f} 秒：{note}", flush=True)
+            print(f"[{label}] 撐過 {time.monotonic() - t0:.0f} 秒沒斷線", flush=True)
+        except ConnectionClosed as exc:
+            print(f"[{label}] {time.monotonic() - t0:.0f} 秒斷線：{exc}", flush=True)
+
+
+async def cmd_keepalive_variants(every_s: int, total_s: int) -> None:
+    await asyncio.gather(
+        keepalive_variant("K1 只插系統訊息", "item", every_s, total_s),
+        keepalive_variant("K2 只送請回答（會被拒）", "create", every_s, total_s),
+        keepalive_variant("K3 玩家訊息加只回文字", "user", every_s, total_s),
+    )
+
+
+async def cmd_keepalive(every_s: int, total_s: int) -> None:
+    t0 = time.monotonic()
+    async with connect(url("flash"), additional_headers=HEADERS, max_size=None) as ws:
+        await ws.send(json.dumps({"type": "session.update", "session": {
+            "modalities": ["text", "audio"], "turn_detection": None, "instructions": "你是桌遊主持人。"}}))
+        await wait_for(ws, "session.updated")
+        n = 0
+        try:
+            while time.monotonic() - t0 < total_s:
+                await asyncio.sleep(every_s)
+                await ws.send(json.dumps({"type": "conversation.item.create", "item": {
+                    "type": "message", "role": "system",
+                    "content": [{"type": "input_text", "text": "（保持連線用的系統訊息）請只回一個字：好"}]}},
+                    ensure_ascii=False))
+                await ws.send(json.dumps({"type": "response.create", "response": {"modalities": ["text"]}}))
+                ev = await wait_for(ws, "response.done")
+                n += 1
+                u = ev.get("response", {}).get("usage")
+                print(f"  {time.monotonic() - t0:.0f} 秒：第 {n} 次只回文字，event={ev.get('type')} "
+                      f"status={ev.get('response', {}).get('status')} error={ev.get('error')} usage={u}", flush=True)
+            print(f"[keepalive] 撐過 {time.monotonic() - t0:.0f} 秒沒斷線（每 {every_s} 秒只回一次文字）", flush=True)
+        except ConnectionClosed as exc:
+            print(f"[keepalive] {time.monotonic() - t0:.0f} 秒斷線：{exc}", flush=True)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -247,11 +311,21 @@ def main() -> int:
     sub.add_parser("memory")
     p_del = sub.add_parser("delegate")
     p_del.add_argument("--models", nargs="+", default=["flash", "plus"], choices=list(S.MODELS))
+    p_keep = sub.add_parser("keepalive")
+    p_keep.add_argument("--every", type=int, default=150)
+    p_keep.add_argument("--total", type=int, default=480)
+    p_kv = sub.add_parser("keepalive-variants")
+    p_kv.add_argument("--every", type=int, default=150)
+    p_kv.add_argument("--total", type=int, default=400)
     args = parser.parse_args()
     if args.cmd == "idle":
         asyncio.run(cmd_idle(args.cap))
     elif args.cmd == "memory":
         asyncio.run(cmd_memory())
+    elif args.cmd == "keepalive":
+        asyncio.run(cmd_keepalive(args.every, args.total))
+    elif args.cmd == "keepalive-variants":
+        asyncio.run(cmd_keepalive_variants(args.every, args.total))
     else:
         asyncio.run(cmd_delegate(args.models))
     return 0

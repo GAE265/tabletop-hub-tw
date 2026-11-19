@@ -13,7 +13,7 @@ Settings (names are proposals from ticket 06):
                      if missing there, the main checkout's .env
 Secrets are never printed or sent to the browser.
 
-Run from the worktree root, then open http://localhost:8787 in Chrome:
+Run from the worktree root, then open http://localhost:8787/studio in Chrome (plain first page: /):
   uv run --no-project --with 'websockets>=14' python .scratch/host/prototypes/listen-test/server.py
 
 Event log (no audio) goes to the system temp folder, never into the repo.
@@ -317,8 +317,11 @@ class Relay:
         self.idle.set()
         self.done_count = 0
         self.speech_count = 0
+        self.user_speaking = False
+        self.create_outcome: asyncio.Queue | None = None  # set while the relay waits on its own response.create
         self.tool_tasks: dict[str, list[asyncio.Task]] = {}
         self.counts = {"append": 0, "audio_delta": 0}
+        self.audio_seen: set[str] = set()
         self.log_fh = None
 
     def ms(self) -> int:
@@ -437,6 +440,8 @@ class Relay:
                 kind = ev.get("type", "")
                 if kind == "response.created":
                     self.idle.clear()
+                    if self.create_outcome:
+                        self.create_outcome.put_nowait("created")
                 elif kind == "response.done":
                     self.idle.set()
                     self.done_count += 1
@@ -449,8 +454,19 @@ class Relay:
                     self.tool_tasks.setdefault(rid, []).append(asyncio.create_task(self.run_tool(ev)))
                 elif kind == "input_audio_buffer.speech_started":
                     self.speech_count += 1
+                    self.user_speaking = True
+                elif kind == "input_audio_buffer.speech_stopped":
+                    self.user_speaking = False
+                elif kind == "error" and self.create_outcome and ev.get("error", {}).get("param") == "response.create":
+                    self.create_outcome.put_nowait(ev.get("error", {}).get("message", "rejected"))
                 elif kind == "response.audio.delta":
                     self.counts["audio_delta"] += 1
+                    rid = ev.get("response_id", "")
+                    if rid not in self.audio_seen:
+                        # Audio deltas are not logged; keep one marker per response so a
+                        # session can be reviewed afterwards (relay-side receive time).
+                        self.audio_seen.add(rid)
+                        self.log("up", {"type": "response.audio.first_delta", "response_id": rid})
                 self.log("up", ev)
                 await self.browser.send(raw)
         except ConnectionClosed:
@@ -573,9 +589,28 @@ class Relay:
         for call_id, output in results:
             await self.send_up({"type": "conversation.item.create",
                                 "item": {"type": "function_call_output", "call_id": call_id, "output": output}})
-        await self.send_up({"type": "response.create"})
-        await self.to_browser({"type": "relay.tool_output_sent", "response_id": rid,
-                               "call_ids": [c for c, _ in results], "waited_for_turn": waited_for_turn})
+        # "Please answer" is rejected while the player is talking or another response runs
+        # (seen in ticket 07). Wait for a quiet moment, and resend if it still gets rejected.
+        for attempt in range(1, 6):
+            for _ in range(300):  # up to 30 s
+                if self.idle.is_set() and not self.user_speaking:
+                    break
+                await asyncio.sleep(0.1)
+            self.create_outcome = asyncio.Queue()
+            # Tell the page first, so it can tie the next response to the tool's turn.
+            await self.to_browser({"type": "relay.tool_output_sent", "response_id": rid, "attempt": attempt,
+                                   "call_ids": [c for c, _ in results], "waited_for_turn": waited_for_turn})
+            await self.send_up({"type": "response.create"})
+            try:
+                outcome = await asyncio.wait_for(self.create_outcome.get(), 3)
+            except TimeoutError:
+                outcome = "created"  # no error within 3 s: treat as accepted
+            self.create_outcome = None
+            if outcome == "created":
+                break
+            await self.to_browser({"type": "relay.tool_output_retry", "response_id": rid, "attempt": attempt,
+                                   "reason": outcome})
+            await asyncio.sleep(0.5)
 
     async def fill_audio(self, seconds: float, count: int) -> None:
         for i in range(count):
@@ -612,23 +647,54 @@ def main() -> int:
     log_dir = args.log_dir or Path(tempfile.gettempdir()) / "host-listen-test"
     log_dir.mkdir(parents=True, exist_ok=True)
 
+    def reply(body: bytes, content_type: str, status: int = 200) -> Response:
+        return Response(status, "OK" if status == 200 else "Not Found",
+                        Headers([("Content-Type", content_type), ("Content-Length", str(len(body))),
+                                 ("Cache-Control", "no-store")]), body)
+
+    def log_summary(path: Path) -> dict:
+        info = {"name": path.name, "size": path.stat().st_size, "mtime": int(path.stat().st_mtime)}
+        try:
+            with path.open(encoding="utf-8") as fh:
+                first = json.loads(fh.readline() or "{}")
+            cfg = first.get("config", {})
+            info.update({k: cfg.get(k) for k in ("model", "voice", "mode", "tool_delay", "wait_rule", "delegate")})
+        except (OSError, json.JSONDecodeError):
+            pass
+        return info
+
     def process_request(connection, request):
         path = request.path.split("?")[0]
         if path == "/ws":
             return None
+        # Pages are re-read on every request so edits show on reload.
         if path in ("/", "/index.html"):
-            body = (HERE / "index.html").read_bytes()  # re-read so edits show on reload
-            return Response(200, "OK", Headers([("Content-Type", "text/html; charset=utf-8"),
-                                                ("Content-Length", str(len(body))),
-                                                ("Cache-Control", "no-store")]), body)
-        return Response(404, "Not Found", Headers([("Content-Length", "0")]), b"")
+            return reply((HERE / "index.html").read_bytes(), "text/html; charset=utf-8")
+        if path in ("/studio", "/studio.html"):
+            return reply((HERE / "studio.html").read_bytes(), "text/html; charset=utf-8")
+        if path == "/api/logs":
+            items = [log_summary(p) for p in sorted(log_dir.glob("*.jsonl"), reverse=True)]
+            return reply(json.dumps(items, ensure_ascii=False).encode(), "application/json; charset=utf-8")
+        if path.startswith("/api/logs/"):
+            name = path.removeprefix("/api/logs/")
+            target = log_dir / name
+            # Only plain file names inside the log folder (no ../, no sub folders).
+            if "/" in name or not name.endswith(".jsonl") or not target.is_file():
+                return reply(b"", "text/plain", 404)
+            return reply(target.read_bytes(), "application/x-ndjson; charset=utf-8")
+        if path == "/api/auto/delegate":
+            target = log_dir / "auto" / "delegate.json"
+            if not target.is_file():
+                return reply(b"[]", "application/json; charset=utf-8")
+            return reply(target.read_bytes(), "application/json; charset=utf-8")
+        return reply(b"", "text/plain", 404)
 
     async def handler(browser):
         await Relay(browser, settings, log_dir).run()
 
     async def serve_forever():
         async with serve(handler, "127.0.0.1", args.port, process_request=process_request, max_size=2**22):
-            print(f"開 Chrome：http://localhost:{args.port}")
+            print(f"開 Chrome：http://localhost:{args.port}/studio（舊版頁面在 /）")
             print(f"阿里雲主機已設定；裁判：{'Azure ' + settings['LLM_MODEL'] if settings.get('LLM_ENDPOINT') else '沒有 Azure 設定'}")
             print(f"紀錄（不含聲音）：{log_dir}\nCtrl+C 結束")
             await asyncio.get_running_loop().create_future()

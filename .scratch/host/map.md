@@ -68,7 +68,7 @@
 - [《血與刃的白薔薇》一局的流程](issues/04-white-rose-match-flow.md)：5 至 10 人；開局準備、夜晚階段（只在開局）、若干回合，每個回合三個階段（傳金幣放水晶、依序決定出牌、翻牌結算）；規則書裡沒有主持人，開局口令是玩家自己喊；`matches` 的回合欄位要到階段 2、3 才知道；獲勝門檻的數字印在圖上讀不到，共 11 條要問立倫或其他 domain 的主責
 - [Flutter Web 怎麼收音與即時播音](issues/05-flutter-web-audio.md)：能即時收音與邊收邊播，WebSocket 與 WebRTC 都可用；插話時的停播、清空待播內容、拒收舊回覆要前端自己做；手機要 HTTPS，並由玩家點一下才能出聲；鎖屏後持續雙向語音沒有保證；`record` 7.x 與 `web` 1.1.2 會提高 Flutter SDK 的門檻；網頁專用的部分要包在 `core/platform/`
 - [註冊阿里雲並確認能呼叫 Qwen 即時語音](issues/06-alibaba-cloud-account.md)：國際站個人帳號、新加坡區；Flash 與 Plus 都實際叫得到並收到聲音（用文字輸入）；Flash 免費額度 100 萬 tokens 到 2027/02/18，Plus 在主控台看不到免費額度；新加坡 Flash 試 74 個聲線有 54 個能用，只在北京的 20 個不行；設定欄位提案 `HOST_REALTIME_API_KEY` 加整段 API Host；立倫選模型先看有感情、自訂工具、成本
-- [用真的聲音試聽 Qwen 主持人](issues/07-listen-to-qwen-host.md)：聲線選 `xunanchuan_v3.1`、`longyuan_v3.1`，品質都很高，Flash 與 Plus 音色、速度聽不出差別；`smart_turn_v2` 講完 0.4 到 0.8 秒出聲，附和不停，但「等一下」也不停；`server_vad` 能打斷，但附和也會停；規則題會先查再答，等待中被追問會先猜答案（加指令後改成丟掉追問）；難題轉交裁判多約 2 秒，Plus 轉交 6 題全對；180 秒沒回答就斷線，歷史預設 20 輪就忘；一條連線不能換聲線；外放加瀏覽器回音消除沒有自己打斷自己
+- [用真的聲音試聽 Qwen 主持人](issues/07-listen-to-qwen-host.md)：聲線選 `xunanchuan_v3.1`、`longyuan_v3.1`，品質都很高，Flash 與 Plus 音色、速度聽不出差別；`smart_turn_v2` 講完 0.4 到 0.8 秒出聲，附和不停，但「等一下」也不停；`server_vad` 能打斷，但附和也會停；規則題會先查再答，等待中被追問會先猜答案（加指令後改成丟掉追問）；難題轉交裁判多約 2 秒，Plus 轉交 6 題全對；180 秒沒回答就斷線，歷史預設 20 輪就忘；一條連線不能換聲線；外放加瀏覽器回音消除沒有自己打斷自己。結案後補測：桌邊閒聊 `smart_turn_v2` 0／6 回應、`server_vad` 5／6；沒查規則就會編；每 2 分鐘插系統訊息可以不出聲避開 180 秒斷線
 - [接不接受阿里雲保留玩家的聲音最多 30 天](issues/14-voice-data-retention.md)：接受，開發、組員、玩家都一樣，頁面與文件都不另外告知；測試與 Demo 只用組員的聲音；區域固定新加坡，不用北京
 
 ## Not yet specified
