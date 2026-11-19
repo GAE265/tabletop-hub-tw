@@ -35,7 +35,7 @@
 | 上個月／下個月 | 按鈕 | 切換月份並重新載入 | `previousMonth()`／`nextMonth()` | `GET /api/v1/groups?start_from=&start_before=`（超過 100 團會自動載入後面的分頁） |
 | 今天 | 按鈕 | 回到本月並選取今天 | `goToToday()` | 同上 |
 | 開團主篩選 | 下拉選單 | 「全部開團主」與「名稱（N 場）」；選擇後月曆團數與當日列表只算該開團主 | 選項 `organizerOptionsProvider`；選擇 `setOrganizer(id)`（null 為全部） | 不另外呼叫，前端篩選 |
-| 日期格 | 按鈕 | 選取該日；有揪團時顯示「N 團」。今天以前的日期停用（文字變淡、點不下去），但照樣顯示團數 | `selectDate(date)`；團數 `calendarCountsProvider`；選取日 `GroupsCalendarState.selectedDate` | — |
+| 日期格 | 按鈕 | 選取該日；有揪團時顯示「N 團」。今天以前的日期停用（文字變淡、點不下去），但照樣顯示團數；已過的揪團是灰底灰字，和之後的揪團區別 | `selectDate(date)`；團數 `calendarCountsProvider`；選取日 `GroupsCalendarState.selectedDate` | — |
 | 當日列表 | 清單 | 依開始時間排序。每筆顯示：標題、時段、店家、開團主、遊戲（有才顯示）、費用（沒填不顯示，0 顯示「免費」）、名額狀態 | `selectedDayGroupsProvider`；名額文字 `groupSlotLabel(group)` | — |
 | 列表項目 | 點擊 | 進入揪團詳細 | — | — |
 | 我要開團 | 按鈕 | 開啟開團表單，日期預設為目前選取的日期 | `groupFormProvider.notifier.reset()` 後開表單 | — |

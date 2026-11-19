@@ -182,14 +182,21 @@ class _DayCell extends ConsumerWidget {
         : enabled
         ? scheme.onSurface
         : AppColors.inkMuted;
-    final countColor = selected ? scheme.onPrimary : scheme.onPrimaryContainer;
+    final countColor = selected
+        ? scheme.onPrimary
+        : enabled
+        ? scheme.onPrimaryContainer
+        : AppColors.inkMuted;
     final radius = BorderRadius.circular(AppRadius.button);
     return Material(
+      // 已過的揪團用灰底，和之後的揪團區別
       color: selected
           ? scheme.primary
-          : count > 0
+          : count == 0
+          ? Colors.transparent
+          : enabled
           ? scheme.primaryContainer
-          : Colors.transparent,
+          : AppColors.border,
       shape: RoundedRectangleBorder(
         borderRadius: radius,
         side: isToday && !selected
