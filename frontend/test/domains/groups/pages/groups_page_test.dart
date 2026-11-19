@@ -6,6 +6,7 @@ import 'package:tabletop_hub/app/theme/app_colors.dart';
 import 'package:tabletop_hub/core/api/api_exception.dart';
 import 'package:tabletop_hub/domains/groups/data/group.dart';
 import 'package:tabletop_hub/domains/groups/pages/groups_page.dart';
+import 'package:tabletop_hub/domains/groups/pages/widgets/group_widgets.dart';
 
 import '../../../support/fakes.dart';
 import '../support.dart';
@@ -164,7 +165,9 @@ void main() {
 
     testWidgets('「我要開團」開啟表單，日期預設為選取的日期', (tester) async {
       await pumpGroupsWidget(tester, const GroupsPage(), repo: sampleRepo());
-      await tester.tap(find.byKey(const Key('groups-create')));
+      // 右上角的按鈕拿掉了，改用當天列表下方的「我要揪團」（add-groups-notifications）
+      await tester.ensureVisible(find.byKey(const Key('groups-day-create')));
+      await tester.tap(find.byKey(const Key('groups-day-create')));
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('group-form-page')), findsOneWidget);
       expect(find.text('2026/11/14'), findsOneWidget);
@@ -251,5 +254,38 @@ void main() {
     expect(count('10').style!.color, AppColors.inkMuted);
     expect(cell('20').color, isNot(AppColors.border));
     expect(count('20').style!.color, isNot(AppColors.inkMuted));
+  });
+
+  group('開團入口（add-groups-notifications）', () {
+    testWidgets('右上角沒有開團按鈕', (tester) async {
+      await pumpGroupsWidget(tester, const GroupsPage(), repo: sampleRepo());
+      expect(find.byKey(const Key('groups-create')), findsNothing);
+    });
+
+    testWidgets('當天有揪團：列表下方有「我要揪團」，只有一顆', (tester) async {
+      await pumpGroupsWidget(tester, const GroupsPage(), repo: sampleRepo());
+      expect(find.byKey(const Key('groups-day-create')), findsOneWidget);
+      expect(find.byKey(const Key('groups-empty-create')), findsNothing);
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('groups-day-create')),
+          matching: find.text('我要揪團'),
+        ),
+        findsOneWidget,
+      );
+      final lastCard = find.byType(GroupCard).last;
+      expect(
+        tester.getTopLeft(find.byKey(const Key('groups-day-create'))).dy,
+        greaterThan(tester.getBottomLeft(lastCard).dy),
+      );
+    });
+
+    testWidgets('當天沒有揪團：只有空狀態裡的一顆', (tester) async {
+      await pumpGroupsWidget(tester, const GroupsPage(), repo: sampleRepo());
+      await tester.tap(find.text('15'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('groups-empty-create')), findsOneWidget);
+      expect(find.byKey(const Key('groups-day-create')), findsNothing);
+    });
   });
 }
