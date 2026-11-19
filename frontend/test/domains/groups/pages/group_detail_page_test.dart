@@ -382,6 +382,18 @@ void main() {
   });
 
   group('確定成團', () {
+    /// 停用、文字是「已成團」的按鈕。
+    bool isDisabledConfirmed(WidgetTester tester) {
+      final finder = find.byKey(const Key('group-confirmed'));
+      if (finder.evaluate().length != 1) return false;
+      final button = tester.widget<ButtonStyleButton>(finder);
+      return button.onPressed == null &&
+          find
+              .descendant(of: finder, matching: find.text('已成團'))
+              .evaluate()
+              .isNotEmpty;
+    }
+
     Future<FakeGroupsRepository> pumpAs(
       WidgetTester tester, {
       String userId = 'u-org',
@@ -422,16 +434,33 @@ void main() {
       }
     });
 
-    testWidgets('已成團、已取消、已結束：沒有按鈕', (tester) async {
+    testWidgets('已成團：開團主的按鈕變成停用的「已成團」', (tester) async {
       await pumpAs(tester, confirmedAt: nowUtc);
       expect(find.byKey(const Key('group-confirm')), findsNothing);
-      await pumpAs(tester, status: 'cancelled');
-      expect(find.byKey(const Key('group-confirm')), findsNothing);
-      await pumpAs(tester, status: 'ended');
-      expect(find.byKey(const Key('group-confirm')), findsNothing);
+      expect(isDisabledConfirmed(tester), isTrue);
     });
 
-    testWidgets('確認後送出 confirmed，按鈕消失並顯示「已成團」', (tester) async {
+    testWidgets('已成團：成員與未報名的人也看到停用的「已成團」', (tester) async {
+      for (final myStatus in ['member', null]) {
+        await pumpAs(
+          tester,
+          userId: 'u-player',
+          myStatus: myStatus,
+          confirmedAt: nowUtc,
+        );
+        expect(isDisabledConfirmed(tester), isTrue);
+      }
+    });
+
+    testWidgets('已取消、已結束：沒有「確定成團」也沒有「已成團」', (tester) async {
+      for (final status in ['cancelled', 'ended']) {
+        await pumpAs(tester, status: status, confirmedAt: nowUtc);
+        expect(find.byKey(const Key('group-confirm')), findsNothing);
+        expect(find.byKey(const Key('group-confirmed')), findsNothing);
+      }
+    });
+
+    testWidgets('確認後送出 confirmed，按鈕變成停用的「已成團」', (tester) async {
       final repo = await pumpAs(tester);
       await tester.tap(find.byKey(const Key('group-confirm')));
       await tester.pumpAndSettle();
@@ -441,7 +470,7 @@ void main() {
       expect(repo.updateCalls.single.$1, 'g-1');
       expect(repo.updateCalls.single.$2, {'confirmed': true});
       expect(find.byKey(const Key('group-confirm')), findsNothing);
-      expect(find.text('已成團'), findsOneWidget);
+      expect(isDisabledConfirmed(tester), isTrue);
     });
 
     testWidgets('對話框按取消：不送出', (tester) async {

@@ -102,7 +102,7 @@ void main() {
       );
     });
 
-    test('已成團：開團主沒有「確定成團」', () async {
+    test('已成團：開團主的「確定成團」變成「已成團」', () async {
       expect(
         await actions(
           fakeGroup(
@@ -116,9 +116,33 @@ void main() {
           GroupAction.edit,
           GroupAction.book,
           GroupAction.recordMatch,
+          GroupAction.confirmed,
           GroupAction.cancel,
         ],
       );
+    });
+
+    test('已成團：成員、候補、未報名的人也看到「已成團」', () async {
+      expect(
+        await actions(
+          fakeGroup(startAt: start, myStatus: 'member', confirmedAt: nowUtc),
+        ),
+        [GroupAction.leave, GroupAction.recordMatch, GroupAction.confirmed],
+      );
+      expect(
+        await actions(
+          fakeGroup(
+            startAt: start,
+            myStatus: 'waitlisted',
+            confirmedAt: nowUtc,
+          ),
+        ),
+        [GroupAction.leave, GroupAction.confirmed],
+      );
+      expect(await actions(fakeGroup(startAt: start, confirmedAt: nowUtc)), [
+        GroupAction.join,
+        GroupAction.confirmed,
+      ]);
     });
 
     test('已取消或已結束：沒有按鈕', () async {
