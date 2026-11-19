@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app/theme/app_spacing.dart';
 import '../../../core/api/api_exception.dart';
 import '../../../core/layout/breakpoints.dart';
+import '../state/group_clock.dart';
 import '../state/group_form_state.dart';
 import '../state/group_labels.dart';
 import '../state/group_pickers_state.dart';
@@ -48,14 +49,16 @@ class _GroupFormPageState extends ConsumerState<GroupFormPage> {
   );
 
   Future<void> _pickDate() async {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final initial = _data.date ?? today;
+    final clock = ref.read(groupClockProvider);
+    final today = dateOnly(clock.toLocal(clock.now()));
+    final current = _data.date ?? today;
+    // 只能選今天以後；編輯日期已過的揪團時，從今天開始選
+    final initial = current.isBefore(today) ? today : current;
     final picked = await showDatePicker(
       context: context,
       initialDate: initial,
-      firstDate: initial.isBefore(today) ? initial : today,
-      lastDate: DateTime(now.year + 1, 12, 31),
+      firstDate: today,
+      lastDate: DateTime(today.year + 1, 12, 31),
     );
     if (picked != null) setState(() => _data = _data.copyWith(date: picked));
   }
