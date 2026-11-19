@@ -38,7 +38,7 @@
 | 日期格 | 按鈕 | 選取該日；有揪團時顯示「N 團」。今天以前的日期停用（文字變淡、點不下去），但照樣顯示團數；已過的揪團是灰底灰字，和之後的揪團區別 | `selectDate(date)`；團數 `calendarCountsProvider`；選取日 `GroupsCalendarState.selectedDate` | — |
 | 當日列表 | 清單 | 依開始時間排序。每筆顯示：標題、時段、店家、開團主、遊戲（有才顯示）、費用（沒填不顯示，0 顯示「免費」）、名額狀態 | `selectedDayGroupsProvider`；名額文字 `groupSlotLabel(group)` | — |
 | 列表項目 | 點擊 | 進入揪團詳細 | — | — |
-| 我要開團 | 按鈕 | 開啟開團表單，日期預設為目前選取的日期 | `groupFormProvider.notifier.reset()` 後開表單 | — |
+| 我要揪團 | 按鈕（當天有揪團時在列表最下方；沒有揪團時在空狀態裡；右上角不放） | 開啟開團表單，日期預設為目前選取的日期 | `groupFormProvider.notifier.reset()` 後開表單 | — |
 
 ### 頁面：揪團詳細
 
