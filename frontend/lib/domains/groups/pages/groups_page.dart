@@ -115,7 +115,7 @@ class _DayList extends ConsumerWidget {
                     key: const Key('groups-empty-create'),
                     onPressed: () => openGroupForm(context, ref, date: date),
                     icon: const Icon(Icons.add),
-                    label: const Text('我要開團'),
+                    label: const Text('我要揪團'),
                   ),
                 ],
               ),

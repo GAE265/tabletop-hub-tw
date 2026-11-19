@@ -15,7 +15,7 @@
 
 | 頁面 | 參考畫面 | 用途 |
 |---|---|---|
-| 揪團月曆 | `prototypes/groups/groups_proto_page.dart`（路由 `/proto/groups`） | 月曆每天顯示團數，點日期列出當天揪團；依開團主篩選；入口「我要開團」 |
+| 揪團月曆 | `prototypes/groups/groups_proto_page.dart`（路由 `/proto/groups`） | 月曆每天顯示團數，點日期列出當天揪團；依開團主篩選；入口「我要揪團」 |
 | 揪團詳細 | `prototypes/groups/group_detail_proto_page.dart`（從月曆列表點進去；也可以直接開網址 `/groups/<揪團 id>`，首頁行程的揪團列連到這裡） | 揪團資訊、成員與候補名單、報名／候補／退出／編輯／取消 |
 | 開團／編輯表單 | `prototypes/groups/group_form_proto_page.dart`（從月曆或詳細頁進入） | 建立或修改揪團 |
 | 通知列表 | 無（直接做正式頁面 `pages/group_notifications_page.dart`，路由 `/groups/notifications`） | 成團、解散、候補正取的站內通知（add-groups-notifications） |
@@ -112,7 +112,7 @@
 | 狀態 | 要顯示什麼 |
 |---|---|
 | 載入中 | 月曆：`state.groups.isLoading` 時顯示載入中，不顯示舊月份的團數（`calendarCountsProvider` 會回空）。詳細：`state.group` 載入中。操作進行中：`GroupDetailState.busy`／`GroupFormState.submitting` 為 true 時停用按鈕、顯示載入中 |
-| 沒有資料 | 選取的日期沒有揪團：「這天還沒有人揪團」與「我要開團」按鈕。通知列表沒有通知：「目前沒有通知」 |
+| 沒有資料 | 選取的日期沒有揪團：「這天還沒有人揪團」與「我要揪團」按鈕。通知列表沒有通知：「目前沒有通知」 |
 | 錯誤（依 `error.code` 區分） | 載入失敗：顯示 `ApiException.message` 與「重試」按鈕（月曆 `reload()`、詳細 `reload()`）。操作失敗直接顯示後端 `message`，常見代碼：`GROUP_CLOSED`（已取消或已結束）、`GROUP_ALREADY_JOINED`、`GROUP_SHOP_NOT_FOUND`、`GROUP_GAME_NOT_FOUND`、`GROUP_INVALID_TIME`、`GROUP_CAPACITY_BELOW_MEMBERS`、`GROUP_ORGANIZER_CANNOT_LEAVE`、`NETWORK_ERROR` |
 | 沒有權限（403） | 正常操作不會發生，因為按鈕已依身分隱藏。若仍收到 403，同樣顯示後端 `message` |
 

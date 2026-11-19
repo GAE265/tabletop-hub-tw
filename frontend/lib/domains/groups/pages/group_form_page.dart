@@ -102,7 +102,7 @@ class _GroupFormPageState extends ConsumerState<GroupFormPage> {
 
     return Scaffold(
       key: const Key('group-form-page'),
-      appBar: AppBar(title: Text(_editing ? '編輯揪團' : '我要開團')),
+      appBar: AppBar(title: Text(_editing ? '編輯揪團' : '我要揪團')),
       body: Align(
         alignment: Alignment.topCenter,
         child: ConstrainedBox(

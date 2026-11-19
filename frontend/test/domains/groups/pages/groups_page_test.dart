@@ -137,7 +137,7 @@ void main() {
       expect(find.text('開團主：阿寶'), findsOneWidget);
     });
 
-    testWidgets('點選沒有揪團的日期：顯示「這天還沒有人揪團」與「我要開團」', (tester) async {
+    testWidgets('點選沒有揪團的日期：顯示「這天還沒有人揪團」與「我要揪團」', (tester) async {
       await pumpGroupsWidget(tester, const GroupsPage(), repo: sampleRepo());
       await tester.tap(find.text('15'));
       await tester.pumpAndSettle();
@@ -163,7 +163,7 @@ void main() {
       expect(find.byKey(const Key('group-detail-page')), findsOneWidget);
     });
 
-    testWidgets('「我要開團」開啟表單，日期預設為選取的日期', (tester) async {
+    testWidgets('「我要揪團」開啟表單，日期預設為選取的日期', (tester) async {
       await pumpGroupsWidget(tester, const GroupsPage(), repo: sampleRepo());
       // 右上角的按鈕拿掉了，改用當天列表下方的「我要揪團」（add-groups-notifications）
       await tester.ensureVisible(find.byKey(const Key('groups-day-create')));
