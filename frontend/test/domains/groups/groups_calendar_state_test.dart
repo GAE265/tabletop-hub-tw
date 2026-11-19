@@ -261,4 +261,58 @@ void main() {
       expect(container.read(calendarCountsProvider)[DateTime(2026, 11, 14)], 2);
     });
   });
+
+  group('今天以前的日期不能選（add-groups-notifications）', () {
+    test('點過去的日期：選取維持不變；今天與以後可以選', () async {
+      final container = makeContainer(FakeGroupsRepository());
+      final notifier = container.read(groupsCalendarProvider.notifier);
+      await notifier.loaded;
+      expect(
+        container.read(groupsCalendarProvider).selectedDate,
+        DateTime(2026, 11, 14),
+      );
+
+      notifier.selectDate(DateTime(2026, 11, 13));
+      expect(
+        container.read(groupsCalendarProvider).selectedDate,
+        DateTime(2026, 11, 14),
+      );
+
+      notifier.selectDate(DateTime(2026, 11, 20));
+      expect(
+        container.read(groupsCalendarProvider).selectedDate,
+        DateTime(2026, 11, 20),
+      );
+      notifier.selectDate(DateTime(2026, 11, 14));
+      expect(
+        container.read(groupsCalendarProvider).selectedDate,
+        DateTime(2026, 11, 14),
+      );
+    });
+
+    test('從 12 月切回本月：選取今天，不是 1 號', () async {
+      final container = makeContainer(FakeGroupsRepository());
+      final notifier = container.read(groupsCalendarProvider.notifier);
+      await notifier.loaded;
+      notifier.nextMonth();
+      await notifier.loaded;
+      expect(
+        container.read(groupsCalendarProvider).selectedDate,
+        DateTime(2026, 12, 1),
+      );
+      notifier.previousMonth();
+      await notifier.loaded;
+      expect(
+        container.read(groupsCalendarProvider).selectedDate,
+        DateTime(2026, 11, 14),
+      );
+    });
+
+    test('isSelectableDate：今天以前為 false', () {
+      final today = DateTime(2026, 11, 14);
+      expect(isSelectableDate(DateTime(2026, 11, 13), today), isFalse);
+      expect(isSelectableDate(DateTime(2026, 11, 14), today), isTrue);
+      expect(isSelectableDate(DateTime(2026, 12, 1), today), isTrue);
+    });
+  });
 }

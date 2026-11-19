@@ -211,4 +211,19 @@ void main() {
       findsOneWidget,
     );
   });
+
+  testWidgets('今天以前的日期格停用，但照樣顯示團數', (tester) async {
+    final repo = FakeGroupsRepository(
+      groups: [fakeGroup(id: 'past', startAt: taipei(11, 10))],
+    );
+    await pumpGroupsWidget(tester, const GroupsPage(), repo: repo);
+    InkWell cell(String day) => tester.widget<InkWell>(
+      find.ancestor(of: find.text(day), matching: find.byType(InkWell)).first,
+    );
+    expect(find.text('1 團'), findsOneWidget);
+    expect(cell('10').onTap, isNull);
+    expect(cell('13').onTap, isNull);
+    expect(cell('14').onTap, isNotNull);
+    expect(cell('20').onTap, isNotNull);
+  });
 }
