@@ -1,0 +1,38 @@
+# 用已打包的 container image 在本機啟動前後端
+# 啟動：docker-compose -f docker-compose-app.yml --env-file .env.app up -d
+
+services:
+  backend:
+    image: ghcr.io/gae265/tabletop-hub-tw-backend:${BACKEND_TAG:-latest}
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?請設定 DATABASE_URL}
+      AUTH_MODE: ${AUTH_MODE:-jwt}
+      DEV_DEFAULT_USER_ID: ${DEV_DEFAULT_USER_ID:-}
+      CORS_ALLOW_ORIGINS: ${CORS_ALLOW_ORIGINS:-http://localhost:8080}
+      LLM_PROVIDER: ${LLM_PROVIDER:-fake}
+      LLM_ENDPOINT: ${LLM_ENDPOINT:-}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_MODEL: ${LLM_MODEL:-}
+      LLM_REASONING_EFFORT: ${LLM_REASONING_EFFORT:-}
+      GAMES_ADVISOR_EMBEDDING_PROVIDER: ${GAMES_ADVISOR_EMBEDDING_PROVIDER:-fake}
+      GAMES_ADVISOR_EMBEDDING_ENDPOINT: ${GAMES_ADVISOR_EMBEDDING_ENDPOINT:-}
+      GAMES_ADVISOR_EMBEDDING_API_KEY: ${GAMES_ADVISOR_EMBEDDING_API_KEY:-}
+      GAMES_ADVISOR_EMBEDDING_MODEL: ${GAMES_ADVISOR_EMBEDDING_MODEL:-}
+      RULES_QA_EMBEDDING_PROVIDER: ${RULES_QA_EMBEDDING_PROVIDER:-fake}
+      RULES_QA_EMBEDDING_ENDPOINT: ${RULES_QA_EMBEDDING_ENDPOINT:-}
+      RULES_QA_EMBEDDING_API_KEY: ${RULES_QA_EMBEDDING_API_KEY:-}
+      RULES_QA_EMBEDDING_MODEL: ${RULES_QA_EMBEDDING_MODEL:-}
+      OCR_PROVIDER: ${OCR_PROVIDER:-fake}
+      OCR_DI_ENDPOINT: ${OCR_DI_ENDPOINT:-}
+      STORAGE_PROVIDER: ${STORAGE_PROVIDER:-fake}
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+
+  frontend:
+    image: ghcr.io/gae265/tabletop-hub-tw-frontend:${FRONTEND_TAG:-latest}
+    environment:
+      API_BASE_URL: http://localhost:8000
+    ports:
+      - "${FRONTEND_PORT:-8080}:80"
+    restart: unless-stopped

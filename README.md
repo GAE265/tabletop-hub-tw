@@ -17,6 +17,17 @@
 | `device/` | 發牌機（樹莓派 5） |
 | `docs/`、`openspec/` | 規格、交接說明、API 說明 |
 
+## 快速部署（用已打包的 container）
+
+如果不想在本機建置，可以直接用 GitHub Actions 打包好的 container image 啟動前後端：
+
+```bash
+cp .env.app.example .env.app   # 編輯 .env.app 填入資料庫連線等設定
+docker-compose -f docker-compose-app.yml --env-file .env.app up -d
+```
+
+image 來自 `ghcr.io/gae265/tabletop-hub-tw-backend` 和 `ghcr.io/gae265/tabletop-hub-tw-frontend`，每次 push 到 `feature/deploy` 分支時自動更新。
+
 ## 需要安裝
 
 - [Docker](https://docs.docker.com/get-docker/)（PostgreSQL 16 + pgvector、Mosquitto）
