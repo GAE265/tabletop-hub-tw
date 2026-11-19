@@ -1,0 +1,47 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+.venv
+*.egg-info
+.pytest_cache
+.ruff_cache
+
+# Backend env (never in image — injected at runtime)
+.env
+.env.*
+
+# Flutter / Dart
+frontend/.dart_tool
+frontend/build
+frontend/.packages
+frontend/.pub-cache
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docs (not needed in container)
+docs/
+openspec/
+
+# CI / GitHub
+.github/
+
+# Device (not needed in backend/frontend containers)
+device/
+
+# Docker
+docker-compose.yml
+Dockerfile*
+.dockerignore
