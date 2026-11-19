@@ -30,7 +30,7 @@
   - 通知的查詢與標成已讀
 - [x] 2.8 `router.py` 新增 `/group-notifications` router，並在 `main.py` 掛載
 - [x] 2.9 自我檢查：在 `backend/` 跑 `uv run ruff check .`、`uv run ruff format --check .`、`uv run pytest`
-- [ ] 2.10 產出 `docs/mr_info/<分支>.md`，附情境表與對應的測試
+- [x] 2.10 產出 `docs/mr_info/<分支>.md`，附情境表與對應的測試
 
 ## 3. MR 2：前端（MR 1 合併後，從 `dev` 開分支）
 
