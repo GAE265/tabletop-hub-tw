@@ -26,6 +26,8 @@ ASSET_KINDS = ("flat_photo", "drawn")
 RESERVED_ASSET_KINDS = ("drawn",)
 PRIORITIES = ("must", "optional")
 ORIENTATIONS = (0, 90, 180, 270)
+# crop 的寬、高下限（相對原圖）；太小時裁切後的圖會是 0 像素
+MIN_CROP = 0.01
 SHAPES = ("box", "cross")
 HIGHLIGHT_STYLES = ("gold", "red")
 LABEL_STYLES = ("plain", "gold", "red")
@@ -404,6 +406,8 @@ def _parse_assets(p: _Parser, data: dict[str, Any], base_dir: Path) -> dict[str,
         if kind == "flat_photo":
             if file is None:
                 p.error(where, "flat_photo 素材必須有 file")
+            elif not _inside_assets(base_dir, file):
+                p.error(where, f"素材檔案必須在 assets/ 內，不能用 .. 或絕對路徑：{file}")
             elif not (base_dir / "assets" / file).is_file():
                 p.error(where, f"素材檔案不存在：assets/{file}")
         keys.append(key)
@@ -423,6 +427,14 @@ def _parse_assets(p: _Parser, data: dict[str, Any], base_dir: Path) -> dict[str,
     return assets
 
 
+def _inside_assets(base_dir: Path, file: str) -> bool:
+    """file 解析後必須在 <資料夾>/assets/ 之內（不能用 .. 跳出，也不能是絕對路徑）。"""
+    if Path(file).is_absolute() or Path(file).drive:
+        return False
+    root = (base_dir / "assets").resolve()
+    return (root / file).resolve().is_relative_to(root)
+
+
 def _parse_slot(p: _Parser, raw: Any, where: str) -> Slot | None:
     item = p.obj(raw, where)
     if item is None:
@@ -438,6 +450,9 @@ def _parse_slot(p: _Parser, raw: Any, where: str) -> Slot | None:
     if kind == "asset":
         p.fields(item, where, ("kind", "hidden", "asset_key", "crop"))
         crop = p.box(item["crop"], where, "crop") if "crop" in item else None
+        if crop is not None and (crop.w < MIN_CROP or crop.h < MIN_CROP):
+            p.error(where, f"crop 太小：寬、高至少要 {MIN_CROP}（原圖的 1%）")
+            crop = None
         return Slot(kind, hidden, asset_key=p.text(item, "asset_key", where), crop=crop)
     if kind == "items":
         p.fields(item, where, ("kind", "hidden", "items"))
@@ -533,7 +548,10 @@ def _parse_segment(p: _Parser, raw: Any, index: int) -> Segment | None:
         ),
     )
     template = data.get("template", DEFAULT_TEMPLATE)
-    if template not in TEMPLATES:
+    if not isinstance(template, str):
+        p.error(where, f"template 必須是字串，收到 {template!r}")
+        template = DEFAULT_TEMPLATE
+    elif template not in TEMPLATES:
         p.error(where, f"本版尚未支援的版型：{template!r}")
 
     slots: dict[str, Slot] = {}
@@ -661,6 +679,29 @@ class Target:
     name: str | None = None  # item_key、區域名稱、highlight／label 的 key
 
 
+def region_in_crop(region: Region, crop: Region | None) -> Region | None:
+    """區域以原圖為準記錄；槽位有 crop 時，換算成相對裁切後圖片的比例。
+
+    區域不完全在 crop 範圍內（畫面上看不到）時回 None。
+    """
+    if crop is None:
+        return region
+    eps = 1e-9
+    if (
+        region.x < crop.x - eps
+        or region.y < crop.y - eps
+        or region.x + region.w > crop.x + crop.w + eps
+        or region.y + region.h > crop.y + crop.h + eps
+    ):
+        return None
+    return Region(
+        (region.x - crop.x) / crop.w,
+        (region.y - crop.y) / crop.h,
+        region.w / crop.w,
+        region.h / crop.h,
+    )
+
+
 def resolve_target(segment: Segment, assets: dict[str, Asset], text: str) -> Target | None:
     """把 `main`、`main.c2`、`sidebar@zone`、highlight／label 的 key 轉成 Target；找不到回 None。"""
     if "@" in text:
@@ -764,6 +805,22 @@ def _validate_segment(
     for beat in seg.beats:
         for n, cue in enumerate(beat.cues, start=1):
             _validate_cue(p, seg, assets, cue, f"{where} 句 {beat.beat_key} cue {n}")
+
+    # 槽位有 crop 時，用到的區域必須在 crop 範圍內，否則畫面上看不到
+    cues = [c for b in seg.beats for c in b.cues]
+    references = [h.target for h in seg.highlights] + [lab.target for lab in seg.labels]
+    references += [c.target for c in cues] + [c.to for c in cues if c.to]
+    for text in dict.fromkeys(references):
+        target = resolve_target(seg, assets, text)
+        if target is None or target.kind != "region" or target.slot is None:
+            continue
+        slot = seg.slots[target.slot]
+        region = assets[slot.asset_key or ""].regions[target.name or ""]
+        if region_in_crop(region, slot.crop) is None:
+            p.error(
+                where,
+                f"區域 {target.name} 不在槽位 {target.slot} 的 crop 範圍內，畫面上看不到",
+            )
 
 
 _ALLOWED_TARGETS = {

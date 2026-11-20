@@ -24,12 +24,14 @@ class AssetLibrary:
                 image = image.rotate(-asset.orientation, expand=True)
             if crop is not None:
                 w, h = image.size
+                left, top = round(crop.x * w), round(crop.y * h)
                 image = image.crop(
                     (
-                        round(crop.x * w),
-                        round(crop.y * h),
-                        round((crop.x + crop.w) * w),
-                        round((crop.y + crop.h) * h),
+                        left,
+                        top,
+                        # 至少保留 1 像素，避免後續縮放時除以零（載入時已擋下太小的 crop）
+                        max(left + 1, round((crop.x + crop.w) * w)),
+                        max(top + 1, round((crop.y + crop.h) * h)),
                     )
                 )
             self._images[cache_key] = image

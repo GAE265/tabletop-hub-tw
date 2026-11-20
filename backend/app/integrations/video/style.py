@@ -10,6 +10,9 @@ from app.integrations.video.geometry import Rect
 RGB = tuple[int, int, int]
 RGBA = tuple[int, int, int, int]
 
+# 字幕框上下的留白合計（像素）
+SUBTITLE_PADDING = 30
+
 
 @dataclass(frozen=True)
 class Style:
@@ -20,11 +23,11 @@ class Style:
     # --- 分區 ---
     # 左上章節標籤（「11 步驟三」）
     header_rect: Rect = Rect(40, 30, 320, 88)
-    # 內容區：章節標籤之下、字幕列之上
-    content_rect: Rect = Rect(90, 120, 1830, 840)
-    # 字幕列的上緣與下緣
-    subtitle_top: float = 850
+    # 內容區：章節標籤之下、字幕列之上（下緣要高於兩行字幕框的上緣，見 subtitle_top）
+    content_rect: Rect = Rect(90, 120, 1830, 796)
+    # 字幕框的下緣；上緣依行數往上長，最多 subtitle_max_lines 行
     subtitle_bottom: float = 952
+    subtitle_max_lines: int = 2
     # 進度條
     progress_rect: Rect = Rect(330, 982, 1590, 990)
 
@@ -73,6 +76,19 @@ class Style:
     subtitle_fade_seconds: float = 0.3
     subtitle_rise: float = 14
     transition_seconds: float = 0.4
+
+    @property
+    def subtitle_line_height(self) -> float:
+        return self.subtitle_size * 1.45
+
+    @property
+    def subtitle_top(self) -> float:
+        """字幕框最高會到的位置（最多行數時的上緣）。內容區不能低於這裡。"""
+        return (
+            self.subtitle_bottom
+            - self.subtitle_max_lines * self.subtitle_line_height
+            - SUBTITLE_PADDING
+        )
 
 
 DEFAULT_STYLE = Style()

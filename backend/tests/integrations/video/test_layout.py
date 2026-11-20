@@ -17,6 +17,8 @@ from app.integrations.video import (
     layout_video,
     load_video,
 )
+from app.integrations.video.fonts import text_width
+from app.integrations.video.layout import subtitle_box
 from tests.integrations.video.support import base_data, segment, write_game
 
 STYLE = DEFAULT_STYLE
@@ -154,3 +156,56 @@ def test_title_card(tmp_path: Path) -> None:
     timeline = build_timeline(video, lambda beat: estimate_narration_seconds(beat.narration), STYLE)
     assert timeline.segments[0].duration == pytest.approx(3.0)
     assert timeline.segments[0].beats == ()
+
+
+# --- #71 審核修正 ---
+
+
+@pytest.mark.parametrize("lines", [1, 2])
+def test_subtitle_box_never_covers_content(lines: int) -> None:
+    box = subtitle_box(STYLE, lines)
+    assert box.y0 >= STYLE.content_rect.y1
+    assert box.y1 <= STYLE.progress_rect.y0
+
+
+def test_two_line_subtitle_fits(tmp_path: Path) -> None:
+    data = base_data()
+    # 量字寬組出約 1.5 倍最大寬度的字幕，一定會斷成兩行
+    font = FONTS.get(STYLE.subtitle_size)
+    text = "word"
+    while text_width(font, text) < STYLE.subtitle_max_width * 1.5:
+        text += " word"
+    segment(data, "s2")["beats"][0]["subtitle"] = text
+    video, layouts = _layouts(tmp_path, data)
+    assert len(layouts["s2"].subtitle_lines["b3"]) == 2
+
+
+def test_subtitle_over_two_lines_rejected(tmp_path: Path) -> None:
+    data = base_data()
+    segment(data, "s2")["beats"][0]["subtitle"] = "word " * 300
+    video = load_video(write_game(tmp_path, data))
+    with pytest.raises(LayoutError) as exc:
+        layout_video(video, FONTS, STYLE)
+    message = str(exc.value)
+    assert "s2" in message and "b3" in message and "兩行" in message
+
+
+def test_region_with_crop_maps_from_original_image(tmp_path: Path) -> None:
+    data = base_data()
+    s1 = segment(data, "s1")
+    # 只顯示盤面右下四分之一；zone_b 正好是右下四分之一，換算後應該等於整張裁切後的圖
+    s1["slots"]["sidebar"]["crop"] = [0.5, 0.5, 0.5, 0.5]
+    s1["highlights"] = [{"key": "h1", "target": "sidebar@zone_b", "shape": "box"}]
+    s1["beats"][1]["cues"] = [
+        {"at": 1.0, "do": "move", "target": "main.c1", "to": "sidebar@zone_b"}
+    ]
+    _, layouts = _layouts(tmp_path, data)
+    image = layouts["s1"].image_rects["sidebar"]
+    region = layouts["s1"].region_rects["sidebar@zone_b"]
+    for a, b in (
+        (region.x0, image.x0),
+        (region.y0, image.y0),
+        (region.x1, image.x1),
+        (region.y1, image.y1),
+    ):
+        assert abs(a - b) <= 2

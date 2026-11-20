@@ -69,6 +69,22 @@
 - **WHEN** `flat_photo` 素材的 `file` 在 `assets/` 中找不到
 - **THEN** 載入失敗，訊息包含檔名
 
+#### Scenario: 素材路徑跳出 assets/
+- **WHEN** 素材的 `file` 用 `..` 或絕對路徑指到 `assets/` 以外（即使檔案存在）
+- **THEN** 載入失敗，說明素材必須在 `assets/` 內
+
+#### Scenario: crop 太小
+- **WHEN** 槽位 `crop` 的寬或高小於 0.01（原圖的 1%）
+- **THEN** 載入失敗，說明 crop 太小
+
+#### Scenario: template 型別錯誤
+- **WHEN** 段的 `template` 不是字串（例如數字、陣列）
+- **THEN** 載入失敗並指出 template，不拋 `TypeError`
+
+#### Scenario: 區域不在 crop 範圍內
+- **WHEN** highlight、label 或 cue 用到的區域，不完全在該槽位 `crop` 的範圍內
+- **THEN** 載入失敗，說明這個區域在畫面上看不到
+
 #### Scenario: 寫了絕對時間
 - **WHEN** 段或句帶有 `start_sec` 之類的絕對時間欄位，或 cue 的 `at` 小於 0
 - **THEN** 載入失敗，說明時間由旁白與動作長度自動計算
@@ -115,6 +131,14 @@
 #### Scenario: 素材解析度不足
 - **WHEN** 素材實際貼上的大小超過原圖尺寸的 2 倍
 - **THEN** 照常渲染（一般放大，不使用 AI 放大），並在報告中列出警告
+
+#### Scenario: 有 crop 時的區域
+- **WHEN** 槽位有 `crop`，素材的 `regions` 以原圖為準記錄
+- **THEN** 區域換算成裁切後圖片上的位置；框與 `move` 的目的地仍對準原圖上的同一處（誤差 2 px 以內）
+
+#### Scenario: 字幕最多兩行
+- **WHEN** 字幕斷成一行或兩行
+- **THEN** 字幕框的上緣不高於內容區的下緣，下緣不低於進度條；字幕斷行後超過兩行時，排版失敗並指出段與句
 
 #### Scenario: 標題字卡
 - **WHEN** 段的 `template` 為 `title_card`
@@ -200,6 +224,14 @@
 #### Scenario: 字型集合 index 超出範圍（external）
 - **WHEN** 在有微軟正黑體的電腦上，`VIDEO_FONT_INDEX` 超出 `.ttc` 的字型數量
 - **THEN** 不輸出任何圖片，結束代碼不為 0，訊息指出 `VIDEO_FONT_INDEX`
+
+#### Scenario: key 含檔名不允許的字元
+- **WHEN** 段或句的 key 含 `/`、`\`、`:` 等字元
+- **THEN** 靜態圖檔名把這些字元換成 `-`，全部輸出在 `stills/` 同一層
+
+#### Scenario: 輸出到一半失敗
+- **WHEN** 輸出靜態圖途中發生錯誤
+- **THEN** 先前輸出的靜態圖保持原樣（新圖先寫到暫存資料夾，全部成功才取代）
 
 #### Scenario: 段資料錯誤
 - **WHEN** 對驗證失敗的段資料執行 `check` 或 `stills`
