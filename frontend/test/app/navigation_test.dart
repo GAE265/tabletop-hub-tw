@@ -49,6 +49,7 @@ Future<GoRouter> pumpShell(
             '/groups',
             '/notifications',
             '/rules-ingest',
+            '/shops',
             '/games-advisor',
             '/rules',
             '/rules/1',
@@ -272,6 +273,38 @@ void main() {
         for (final other in navKeys) {
           expect(find.byKey(Key(other)), findsOneWidget, reason: other);
         }
+      });
+    }
+  });
+  group('店家人員與管理員才有的「店家」（add-shops-management）', () {
+    const key = Key('shell-nav-shops');
+    const player = DevUser(id: 'u-player', displayName: '測試玩家', role: 'player');
+    const staff = DevUser(
+      id: 'u-staff',
+      displayName: '測試店家人員',
+      role: 'shop_staff',
+      shopId: 's-b',
+    );
+    const admin = DevUser(id: 'u-admin', displayName: '測試管理員', role: 'admin');
+
+    for (final user in [staff, admin]) {
+      testWidgets(
+        '${user.role}：有「店家」，點下前往 /shops（轉到哪一頁見 resolveShopsEntryPath 的測試）',
+        (tester) async {
+          final router = await pumpShell(tester, user: user);
+          expect(find.byKey(key), findsOneWidget);
+          await tester.tap(find.byKey(key));
+          await tester.pumpAndSettle();
+          expect(router.state.uri.path, '/shops');
+          expect(isSelected(tester, 'shell-nav-shops'), isTrue);
+        },
+      );
+    }
+
+    for (final user in [player, null]) {
+      testWidgets('${user?.role ?? '沒有身分'}：沒有「店家」', (tester) async {
+        await pumpShell(tester, user: user);
+        expect(find.byKey(key), findsNothing);
       });
     }
   });
