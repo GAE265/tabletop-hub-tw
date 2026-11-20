@@ -1,5 +1,6 @@
 """段資料格式與驗證（spec rules-video-maker「段資料格式與驗證」）。"""
 
+import json
 from pathlib import Path
 from typing import Any
 
@@ -252,3 +253,51 @@ def test_missing_asset_file_rejected(tmp_path: Path) -> None:
     with pytest.raises(VideoDataError) as exc:
         load_video(tmp_path)
     assert "blue.png" in str(exc.value)
+
+
+# --- #71 審核修正 ---
+
+
+@pytest.mark.parametrize("crop", [[0.0, 0.0, 0.005, 0.5], [0.0, 0.0, 0.5, 0.001]])
+def test_tiny_crop_rejected(tmp_path: Path, crop: list[float]) -> None:
+    data = base_data()
+    segment(data, "s2")["slots"]["main"]["crop"] = crop
+    message = _errors(tmp_path, data)
+    assert "s2" in message and "crop 太小" in message
+
+
+@pytest.mark.parametrize("file", ["../outside.png", "sub/../../outside.png"])
+def test_asset_path_outside_assets_rejected(tmp_path: Path, file: str) -> None:
+    data = base_data()
+    data["assets"][1]["file"] = file
+    game = tmp_path / "game"
+    write_game(game, base_data())
+    # 檔案確實存在，只是在 assets/ 外面
+    (game / "outside.png").write_bytes((game / "assets" / "red.png").read_bytes())
+    (game / "video.json").write_text(json.dumps(data), encoding="utf-8")
+    with pytest.raises(VideoDataError) as exc:
+        load_video(game)
+    assert "必須在 assets/ 內" in str(exc.value) and "red" in str(exc.value)
+
+
+def test_absolute_asset_path_rejected(tmp_path: Path) -> None:
+    data = base_data()
+    data["assets"][1]["file"] = str((tmp_path / "assets" / "red.png").resolve())
+    assert "必須在 assets/ 內" in _errors(tmp_path, data)
+
+
+@pytest.mark.parametrize("template", [3, ["main_with_sidebar"], {"name": "x"}])
+def test_template_wrong_type_rejected(tmp_path: Path, template: object) -> None:
+    data = base_data()
+    segment(data, "s2")["template"] = template
+    message = _errors(tmp_path, data)  # 不是 TypeError
+    assert "s2" in message and "template" in message
+
+
+def test_region_outside_crop_rejected(tmp_path: Path) -> None:
+    data = base_data()
+    s1 = segment(data, "s1")
+    # 側欄只顯示盤面右下四分之一，zone_a（左上）不在畫面上
+    s1["slots"]["sidebar"]["crop"] = [0.5, 0.5, 0.5, 0.5]
+    message = _errors(tmp_path, data)
+    assert "zone_a" in message and "crop" in message
