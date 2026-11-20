@@ -12,8 +12,7 @@ ARG API_BASE_URL=__API_BASE_URL__
 RUN flutter build web \
     --dart-define=API_BASE_URL=$API_BASE_URL \
     --dart-define=SHOW_PROTOTYPES=true \
-    --base-href=/ \
-    --no-release
+    --base-href=/
 
 FROM nginx:alpine
 
