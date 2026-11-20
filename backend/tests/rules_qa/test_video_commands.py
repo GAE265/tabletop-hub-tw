@@ -3,6 +3,7 @@
 不連資料庫、不需要 ffmpeg 與金鑰；字型未設定時用 Pillow 內建字型。
 """
 
+import json
 from collections.abc import Callable
 from pathlib import Path
 
@@ -329,3 +330,23 @@ def test_compare_includes_coverage_section(
     report = (ai / "compare.md").read_text(encoding="utf-8")
     assert "規則陳述檢查" in report and "僅供參考" in report
     capsys.readouterr()
+
+
+def test_draft_writes_cleanup_log_and_compare_section(
+    tmp_path: Path, make_settings: Callable[..., Settings], capsys: pytest.CaptureFixture[str]
+) -> None:
+    folder = write_inputs(write_game(tmp_path / "game", base_data()))
+    output = llm_output()
+    output["segments"][0]["beats"][1]["cues"][1]["to"] = "sidebar@ zone_a"
+    code = main(
+        _draft_args(folder), settings=make_settings(), llm=FakeLLMProvider(json_outputs=[output])
+    )
+    out = capsys.readouterr().out
+    assert code == 0
+    assert "自動清理" in out and "C1" in out
+    log = json.loads((folder / "draft" / "cleanup.json").read_text(encoding="utf-8"))
+    assert log[0]["rule"] == "C1" and log[0]["after"] == "sidebar@zone_a"
+    code = main(["compare", str(folder / "draft"), str(folder)], settings=make_settings())
+    assert code == 0
+    report = (folder / "draft" / "compare.md").read_text(encoding="utf-8")
+    assert "自動清理" in report and "sidebar@ zone_a" in report
