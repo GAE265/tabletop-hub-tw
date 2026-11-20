@@ -62,3 +62,8 @@ Map: [AI 語音主持](../map.md)
   - `backend/app/domains/rules_qa/service.py` 的 `send_message`：先把問題轉成向量、檢索規則片段，再呼叫 LLM 產生答案與出處；答案出現禁用字時會再呼叫一次。
   - 檢索用的 `search_chunks` 在 `repository`，其他 domain 不能直接用（AGENTS.md §4.2：domain 之間只能呼叫對方的 `service`）。
   - 試聽原型的規則摘要在 [`prototypes/listen-test/server.py`](../prototypes/listen-test/server.py) 的 `RULES`，是自己寫的 9 段，用主題與關鍵字比對。
+- 2026-11-21：「[玩家怎麼和主持人說話](11-how-players-talk-to-host.md)」已結案。和第 2 題有關的事實與決定（細節在它的 Answer 與 Comments）：
+  - 自動接話時，閒聊也會被當成一句。用合成語音直接餵，一般閒聊 8 句主持人 8 句都回話；真人多人沒測過。所以選項 b「後端對玩家的每句話都先查一次」會連閒聊都查，每句都多一次檢索。
+  - 已定模型多一個「不回應」工具：聽到的話不是在問它、也不是語音指令，就呼叫它、不出聲（小測 8／8）。選 b 或 c 時可以考慮只對沒有呼叫這個工具的話查規則；這是線索，不是決定。
+  - 語音指令（等一下、暫停、繼續、下一步、上一步、結束了、某一方贏了）不是規則問題，不用查規則。
+  - 前提「主持人會呼叫的工具有五個」已經不只五個：多了暫停、繼續、不回應。工具清單仍在「[寫 spec.md](21-write-spec.md)」定。
