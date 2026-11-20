@@ -1,7 +1,7 @@
-"""店家庫存（shops_games）的資料存取。
+"""店家庫存（shop_games）的資料存取。
 
 店家本身（booking_shops）與帳號（auth_users）、桌遊（games）是共用資料表，
-各自由擁有者的 repository 提供（AGENTS.md 4.2），這裡只管 shops_games。
+各自由擁有者的 repository 提供（AGENTS.md 4.2），這裡只管 shop_games。
 """
 
 import uuid

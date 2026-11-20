@@ -1,6 +1,6 @@
-"""shops games: 店家庫存（每間店有哪些桌遊）
+"""shop games: 店家庫存（每間店有哪些桌遊）
 
-新增 shops_games。只記「有沒有」，不記數量。
+新增 shop_games。只記「有沒有」，不記數量。
 
 Revision ID: 0015
 Revises: 0014
@@ -20,7 +20,7 @@ depends_on: str | Sequence[str] | None = None
 
 def upgrade() -> None:
     op.create_table(
-        "shops_games",
+        "shop_games",
         sa.Column(
             "id",
             sa.Uuid(),
@@ -49,10 +49,10 @@ def upgrade() -> None:
             nullable=False,
             comment="加入庫存的時間（UTC）",
         ),
-        sa.UniqueConstraint("shop_id", "game_id", name="uq_shops_games_shop_game"),
+        sa.UniqueConstraint("shop_id", "game_id", name="uq_shop_games_shop_game"),
         comment="店家庫存：每間店有哪些桌遊，同一間店同一款桌遊只有一筆，目前不記數量",
     )
 
 
 def downgrade() -> None:
-    op.drop_table("shops_games")
+    op.drop_table("shop_games")

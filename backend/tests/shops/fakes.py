@@ -54,7 +54,7 @@ class FakeGames:
 
 
 class FakeShopGamesRepository:
-    """shops_games 的 repository。"""
+    """shop_games 的 repository。"""
 
     def __init__(self, games: FakeGames) -> None:
         self.games = games

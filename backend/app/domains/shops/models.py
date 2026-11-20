@@ -14,9 +14,9 @@ from app.core.db import Base
 
 
 class ShopGame(Base):
-    __tablename__ = "shops_games"
+    __tablename__ = "shop_games"
     __table_args__ = (
-        UniqueConstraint("shop_id", "game_id", name="uq_shops_games_shop_game"),
+        UniqueConstraint("shop_id", "game_id", name="uq_shop_games_shop_game"),
         {"comment": "店家庫存：每間店有哪些桌遊，同一間店同一款桌遊只有一筆，目前不記數量"},
     )
 

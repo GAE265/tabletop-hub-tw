@@ -1,4 +1,4 @@
-"""shops 的 migration：shops_games（每間店有哪些桌遊）。"""
+"""shops 的 migration：shop_games（每間店有哪些桌遊）。"""
 
 import uuid
 from collections.abc import Iterator
@@ -29,7 +29,7 @@ def migrate(url: str, action: str = "upgrade", revision: str = "head") -> None:
 
 @pytest.fixture(scope="module")
 def migrated_url() -> str:
-    url = recreate_database(Settings().database_url, "shops_games")
+    url = recreate_database(Settings().database_url, "shop_games")
     migrate(url)
     return url
 
@@ -61,7 +61,7 @@ def insert_game(engine: Engine, bgg_id: int = 900001) -> int:
         )
 
 
-ADD = text("INSERT INTO shops_games (shop_id, game_id) VALUES (:s, :g)")
+ADD = text("INSERT INTO shop_games (shop_id, game_id) VALUES (:s, :g)")
 
 
 def test_upgrade_creates_table_with_columns(engine: Engine):
@@ -70,7 +70,7 @@ def test_upgrade_creates_table_with_columns(engine: Engine):
             conn.scalars(
                 text(
                     "SELECT column_name FROM information_schema.columns "
-                    "WHERE table_schema = 'public' AND table_name = 'shops_games'"
+                    "WHERE table_schema = 'public' AND table_name = 'shop_games'"
                 )
             ).all()
         )
@@ -81,7 +81,7 @@ def test_id_is_generated_uuid_and_created_at_is_filled(engine: Engine):
     shop, game = insert_shop(engine), insert_game(engine)
     with engine.begin() as conn:
         conn.execute(ADD, {"s": shop, "g": game})
-        row = conn.execute(text("SELECT id, created_at FROM shops_games")).one()
+        row = conn.execute(text("SELECT id, created_at FROM shop_games")).one()
     assert isinstance(row.id, uuid.UUID)
     assert row.created_at is not None
 
@@ -105,12 +105,12 @@ def test_shop_and_game_must_exist(engine: Engine):
 def test_table_and_every_column_have_comments(engine: Engine):
     with engine.connect() as conn:
         table_comment = conn.scalar(
-            text("SELECT obj_description('public.shops_games'::regclass, 'pg_class')")
+            text("SELECT obj_description('public.shop_games'::regclass, 'pg_class')")
         )
         missing = conn.scalars(
             text(
                 "SELECT a.attname FROM pg_attribute a "
-                "WHERE a.attrelid = 'public.shops_games'::regclass AND a.attnum > 0 "
+                "WHERE a.attrelid = 'public.shop_games'::regclass AND a.attnum > 0 "
                 "AND NOT a.attisdropped "
                 "AND col_description(a.attrelid, a.attnum) IS NULL"
             )
@@ -120,11 +120,11 @@ def test_table_and_every_column_have_comments(engine: Engine):
 
 
 def test_downgrade_removes_table(migrated_url: str):
-    url = recreate_database(Settings().database_url, "shops_games_down")
+    url = recreate_database(Settings().database_url, "shop_games_down")
     migrate(url)
     migrate(url, "downgrade", "0014")
     engine = create_engine(url)
     with engine.connect() as conn:
-        exists = conn.scalar(text("SELECT to_regclass('public.shops_games') IS NOT NULL"))
+        exists = conn.scalar(text("SELECT to_regclass('public.shop_games') IS NOT NULL"))
     engine.dispose()
     assert exists is False

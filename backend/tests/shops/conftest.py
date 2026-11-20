@@ -83,7 +83,7 @@ def stock(db: Engine) -> Callable[[uuid.UUID, int], None]:
     def _stock(shop_id: uuid.UUID, game_id: int) -> None:
         with db.begin() as conn:
             conn.execute(
-                text("INSERT INTO shops_games (shop_id, game_id) VALUES (:s, :g)"),
+                text("INSERT INTO shop_games (shop_id, game_id) VALUES (:s, :g)"),
                 {"s": shop_id, "g": game_id},
             )
 
