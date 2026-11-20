@@ -39,6 +39,20 @@
 - [x] 2.11 自我檢查：`uv run ruff check .`、`uv run ruff format --check .`、`uv run pytest`，驗證：全部通過、CI 全綠，再改成 Ready for review
   - 本機（2026-11-20）：ruff check、ruff format --check 通過；`uv run pytest` 1379 passed；`uv run pytest -m external` 11 passed、9 errors（都是 OCR，本機 `.env` 缺 `OCR_DI_ENDPOINT`，與本 MR 無關；本 MR 的 2 個字型測試通過）。#71 CI 全綠。
 
+## 2b. #71 審核修正 MR（分支 `fix/integrations-video-review`，2026-11-21）
+
+#71 審核意見中延後的項目，另開這個 MR 先做先合併（AGENTS.md 第 2 節規則 6：一個 MR 只做一件事）；MR 3 從合併後的 dev 開分支。每項都先補測試再修。
+
+- [x] 2b.1 字幕兩行時，字幕框上緣（約 806 px）高於內容區下緣（840 px），會蓋住圖片底部約 34 px。驗證：兩行字幕時字幕框不與內容區重疊
+  - 做法：字幕最多兩行，`subtitle_top` 依兩行的高度計算，內容區下緣改為 796；斷行後超過兩行時排版失敗並指出段與句
+- [x] 2b.2 圖片有 `crop` 時，`regions` 套在裁切後的圖上，框與 `move` 的位置會錯。驗證：有 crop 時區域仍對準原圖上的同一處
+  - 做法：區域一律以原圖為準記錄，排版時換算成裁切後的位置；用到不在 crop 範圍內的區域時，載入就失敗
+- [x] 2b.3 `stills.py`：key 含「/」時輸出失敗而且舊圖已被刪 → 檔名把不允許的字元換成 `-`；先輸出到 `stills.tmp/`，全部成功才取代舊圖
+- [x] 2b.4 `assets.py`：`crop` 太小時除以零 → 載入時 crop 寬、高至少 0.01；裁切時至少保留 1 像素
+- [x] 2b.5 `model.py`：素材 `file` 可以用 `..` 或絕對路徑指到 `assets/` 以外 → 載入時檢查解析後的路徑在 `assets/` 內
+- [x] 2b.6 `model.py`：`template` 不是字串時拋 `TypeError` → 改成驗證錯誤
+- [ ] 2b.7 自我檢查與 Draft MR，驗證：全部通過、CI 全綠，再改成 Ready for review
+
 ## 3. MR 2：`integrations/tts`（可與 MR 1 平行）
 
 - [x] 3.1 永傑開 Draft MR 2，AI 從 `specs/media-integrations` 的「文字轉語音」整理分組情境表格，驗證：Draft MR 已存在
@@ -58,18 +72,6 @@
 - [ ] 4.6 實作 TTS 接上時間軸、逐格渲染、ffmpeg 編碼與串接、背景音樂、混音、`timing.csv` 與報告；`video_commands render`；`core/config.py` 與 `.env.example` 加上 `FFMPEG_PATH`、`VIDEO_MUSIC_VOLUME`；新增 scipy，驗證：4.2–4.4 通過；本機 `uv run pytest -m external` 的結果寫進 MR 說明
 - [ ] 4.7 用 2.10 的 `video.json` 以 Azure TTS 輸出《血與刃》步驟三完整影片，驗證：**交給永傑看完整支影片**，依「規則正確、新手能看懂」判斷，並與手做版比較
 - [ ] 4.8 自我檢查（同 2.11），驗證：全部通過、CI 全綠，再改成 Ready for review
-
-### #71 審核意見中留到 MR 3 的項目（2026-11-20）
-
-每項都先補測試再修。
-
-- [ ] 4.9 字幕兩行時，字幕框上緣（約 806 px）高於內容區下緣（840 px），會蓋住圖片底部約 34 px（`render.py` 字幕位置）。驗證：兩行字幕時，字幕框不與內容區重疊
-- [ ] 4.10 圖片有 `crop` 時，`regions` 套在裁切後的圖上，框與 `move` 的位置會錯（`layout.py` 的區域換算）。決定區域是相對原圖還是裁切後的圖，並依此換算。驗證：有 crop 時區域仍對準原圖上的同一處
-- [ ] 4.11 不急的建議，評估後處理或記錄為不處理：
-  - `stills.py`：key 含「/」時輸出失敗，而且舊圖已經被刪掉 → 檔名要安全化，或先輸出再刪舊圖
-  - `assets.py`：`crop` 太小時除以零 → 驗證 crop 的最小尺寸
-  - `model.py`：素材 `file` 可以用 `..` 指到 `assets/` 以外 → 檢查路徑必須在 `assets/` 內
-  - `model.py`：`template` 不是字串時拋 `TypeError` → 改成驗證錯誤
 
 ## Workflow follow-up
 

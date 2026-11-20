@@ -8,12 +8,13 @@ from dataclasses import dataclass, field
 
 from app.integrations.video.assets import AssetLibrary
 from app.integrations.video.errors import LayoutError
-from app.integrations.video.fonts import FontSet, text_width, wrap
+from app.integrations.video.fonts import Font, FontSet, text_width, wrap
 from app.integrations.video.geometry import Rect, fit
-from app.integrations.video.model import Segment, Slot, Video, resolve_target
-from app.integrations.video.style import Style
+from app.integrations.video.model import Segment, Slot, Video, region_in_crop, resolve_target
+from app.integrations.video.style import SUBTITLE_PADDING, Style
 
 LINE_HEIGHT = 1.4
+SUBTITLE_BREAKS = "，。；：、！？,.;:!?"
 
 
 @dataclass(frozen=True)
@@ -46,6 +47,8 @@ class SegmentLayout:
     texts: dict[str, TextBlock] = field(default_factory=dict)
     highlight_rects: dict[str, Rect] = field(default_factory=dict)
     labels: dict[str, LabelBox] = field(default_factory=dict)
+    # 每一句字幕斷好的行（key：beat_key），畫圖時直接使用
+    subtitle_lines: dict[str, tuple[str, ...]] = field(default_factory=dict)
     warnings: list[str] = field(default_factory=list)
 
     @property
@@ -71,6 +74,7 @@ def layout_segment(
     video: Video, segment: Segment, fonts: FontSet, style: Style, library: AssetLibrary
 ) -> SegmentLayout:
     layout = SegmentLayout(segment.segment_key, style.content_rect)
+    _layout_subtitles(layout, segment, fonts, style)
     if segment.template == "title_card":
         return layout
 
@@ -135,9 +139,12 @@ def _place_slot(
         layout.image_rects[name] = image
         _check_resolution(layout, segment, name, slot.asset_key, size, image, style)
         for region_name, region in video.assets[slot.asset_key].regions.items():
-            layout.region_rects[f"{name}@{region_name}"] = image.sub(
-                region.x, region.y, region.w, region.h
-            )
+            # 區域以原圖為準記錄；有 crop 時換算成裁切後的位置，看不到的區域不放進來
+            visible = region_in_crop(region, slot.crop)
+            if visible is not None:
+                layout.region_rects[f"{name}@{region_name}"] = image.sub(
+                    visible.x, visible.y, visible.w, visible.h
+                )
     elif slot.kind == "items":
         _place_items(layout, segment, name, slot, area, style, library)
 
@@ -294,3 +301,40 @@ def _place_label(
     x0 = min(max(cx - width / 2, content.x0), content.x1 - width)
     y0 = min(max(y0, content.y0), content.y1 - height)
     return LabelBox(Rect(x0, y0, x0 + width, y0 + height), text, size, label_style)
+
+
+def _layout_subtitles(
+    layout: SegmentLayout, segment: Segment, fonts: FontSet, style: Style
+) -> None:
+    """字幕最多 subtitle_max_lines 行；超過就報錯，否則字幕框會往上蓋到內容區。"""
+    font = fonts.get(style.subtitle_size)
+    for beat in segment.beats:
+        lines = subtitle_lines(font, beat.subtitle, style.subtitle_max_width)
+        if len(lines) > style.subtitle_max_lines:
+            raise LayoutError(
+                f"段 {segment.segment_key} 句 {beat.beat_key} 的字幕太長："
+                f"斷行後有 {len(lines)} 行，最多兩行，請縮短字幕"
+            )
+        layout.subtitle_lines[beat.beat_key] = tuple(lines)
+
+
+def subtitle_lines(font: Font, text: str, max_width: float) -> list[str]:
+    """字幕超過寬度時斷行，兩行時優先在接近中間的標點後斷開。"""
+    if text_width(font, text) <= max_width:
+        return [text]
+    middle = len(text) / 2
+    breaks = [i + 1 for i, ch in enumerate(text[:-1]) if ch in SUBTITLE_BREAKS]
+    if breaks:
+        cut = min(breaks, key=lambda i: abs(i - middle))
+        first, second = text[:cut], text[cut:]
+        if text_width(font, first) <= max_width and text_width(font, second) <= max_width:
+            return [first, second]
+    return wrap(font, text, max_width)
+
+
+def subtitle_box(style: Style, lines: int, width: float | None = None) -> Rect:
+    """字幕框：下緣固定在 subtitle_bottom，依行數往上長。width 沒給時用最大寬度。"""
+    height = lines * style.subtitle_line_height + SUBTITLE_PADDING
+    w = width if width is not None else style.subtitle_max_width + 64
+    cx = style.width / 2
+    return Rect(cx - w / 2, style.subtitle_bottom - height, cx + w / 2, style.subtitle_bottom)

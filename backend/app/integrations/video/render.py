@@ -7,13 +7,12 @@ from app.integrations.video.assets import AssetLibrary
 from app.integrations.video.compose import Frame, frame_at
 from app.integrations.video.fonts import Font, FontSet, text_width, wrap
 from app.integrations.video.geometry import Rect
-from app.integrations.video.layout import SegmentLayout, TextBlock
+from app.integrations.video.layout import SegmentLayout, TextBlock, subtitle_box
 from app.integrations.video.model import Video
 from app.integrations.video.style import RGB, Style
 from app.integrations.video.timeline import Timeline
 
 LINE_HEIGHT = 1.4
-SUBTITLE_BREAKS = "，。；：、！？,.;:!?"
 
 
 def _rgba(color: RGB, alpha: float) -> tuple[int, int, int, int]:
@@ -246,13 +245,11 @@ class Renderer:
         alpha = min(1.0, max(0.0, elapsed / style.subtitle_fade_seconds))
         rise = (1 - alpha) * style.subtitle_rise
         font = self.fonts.get(style.subtitle_size)
-        lines = _subtitle_lines(font, beat.beat.subtitle, style.subtitle_max_width)
-        line_h = style.subtitle_size * 1.45
+        lines = frame.layout.subtitle_lines[beat.beat.beat_key]
+        line_h = style.subtitle_line_height
         width = max(text_width(font, line) for line in lines) + 64
-        height = len(lines) * line_h + 30
+        box = subtitle_box(style, len(lines), width).translate(0, rise)
         cx = style.width / 2
-        y1 = style.subtitle_bottom + rise
-        box = Rect(cx - width / 2, y1 - height, cx + width / 2, y1)
         draw.rounded_rectangle(
             (box.x0, box.y0, box.x1, box.y1),
             radius=16,
@@ -340,20 +337,6 @@ def _background(style: Style) -> Image.Image:
     vignette = 1 - style.vignette_strength * np.clip(radius - 0.35, 0, 1) ** 1.4
     image = np.clip(gradient * vignette[..., None], 0, 255).astype(np.uint8)
     return Image.fromarray(image, "RGB")
-
-
-def _subtitle_lines(font: Font, text: str, max_width: float) -> list[str]:
-    """字幕超過寬度時斷成兩行，優先在接近中間的標點後斷開。"""
-    if text_width(font, text) <= max_width:
-        return [text]
-    middle = len(text) / 2
-    breaks = [i + 1 for i, ch in enumerate(text[:-1]) if ch in SUBTITLE_BREAKS]
-    if breaks:
-        cut = min(breaks, key=lambda i: abs(i - middle))
-        first, second = text[:cut], text[cut:]
-        if text_width(font, first) <= max_width and text_width(font, second) <= max_width:
-            return [first, second]
-    return wrap(font, text, max_width)
 
 
 def _split_keywords(line: str, keywords: tuple[str, ...]) -> list[tuple[str, bool]]:

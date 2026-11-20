@@ -4,6 +4,8 @@
 不需要 ffmpeg；旁白長度由呼叫端提供（沒有 TTS 時用估計值）。
 """
 
+import re
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -37,6 +39,14 @@ class StillsResult:
     report: Path
     warnings: tuple[str, ...]
     total_seconds: float
+
+
+_UNSAFE = re.compile(r'[\\/:*?"<>|\s]+')
+
+
+def safe_file_part(text: str) -> str:
+    """把 key 轉成可以放進檔名的字串：路徑分隔字元、Windows 不允許的字元與空白改成「-」。"""
+    return _UNSAFE.sub("-", text).strip("-.") or "_"
 
 
 def still_times(timeline: Timeline) -> list[tuple[float, str]]:
@@ -80,17 +90,25 @@ def render_stills(
     )
     renderer = Renderer(video, timeline, layouts, fonts, style, library)
 
+    # 先輸出到暫存資料夾，全部成功才換掉舊圖；中途失敗時舊圖保持原樣
     stills_dir = out_dir / "stills"
-    stills_dir.mkdir(parents=True, exist_ok=True)
-    for old in stills_dir.glob("*.png"):
-        old.unlink()
-    paths: list[Path] = []
+    staging = out_dir / "stills.tmp"
+    shutil.rmtree(staging, ignore_errors=True)
+    staging.mkdir(parents=True)
+    names: list[str] = []
     captions: list[str] = []
-    for n, (t, tag) in enumerate(still_times(timeline), start=1):
-        path = stills_dir / f"{n:03d}_{tag}_{t:06.2f}s.png"
-        renderer.render(t).save(path)
-        paths.append(path)
-        captions.append(f"{t:6.2f}s  {tag}")
+    try:
+        for n, (t, tag) in enumerate(still_times(timeline), start=1):
+            name = f"{n:03d}_{safe_file_part(tag)}_{t:06.2f}s.png"
+            renderer.render(t).save(staging / name)
+            names.append(name)
+            captions.append(f"{t:6.2f}s  {tag}")
+    except BaseException:
+        shutil.rmtree(staging, ignore_errors=True)
+        raise
+    shutil.rmtree(stills_dir, ignore_errors=True)
+    staging.rename(stills_dir)
+    paths = [stills_dir / name for name in names]
 
     sheet = out_dir / "sheet.png"
     _write_sheet(paths, captions, sheet, fonts)
