@@ -107,6 +107,33 @@ LLM 的輸出 SHALL 依序檢查：草稿模式的段資料驗證、旁白、字
 - **WHEN** 某段的 `source_pages` 有輸入以外的頁碼
 - **THEN** 視為不通過
 
+### Requirement: 格式小錯的自動清理
+LLM 的每次輸出 SHALL 先自動清理四種格式小錯，清理後仍要通過所有檢查；其他錯誤照舊走改寫。四種是：C1「@」「.」前後的空白、C2 開頭與結尾的空白、C3 全形分隔符號（＠、．）、C4 cue target 的 `highlight:`／`label:` 前綴（去掉後必須是這一段的 highlight 或 label 的 key）。每次清了什麼 SHALL 記錄在 `draft/cleanup.json`、執行時印出，並在比對報告加上「自動清理」一節（2026-11-21 永傑同意）。
+
+#### Scenario: C1 分隔符號前後的空白
+- **WHEN** move 的 to 是 `sidebar@ zone_a`
+- **THEN** 清成 `sidebar@zone_a` 並記錄 C1
+
+#### Scenario: C2 開頭結尾的空白
+- **WHEN** highlight 的 key 是 ` h1 `
+- **THEN** 清成 `h1` 並記錄 C2
+
+#### Scenario: C3 全形分隔符號
+- **WHEN** to 是 `sidebar＠zone_a`
+- **THEN** 清成 `sidebar@zone_a` 並記錄 C3
+
+#### Scenario: C4 前綴
+- **WHEN** cue 的 target 是 `highlight:h1`，而這一段有 highlight `h1`
+- **THEN** 清成 `h1` 並記錄 C4；去掉前綴後不是這一段的 key 時不清
+
+#### Scenario: 清理後照樣檢查
+- **WHEN** 輸出有可以清的格式小錯，也有其他錯誤（例如指向不存在的項目）
+- **THEN** 清掉格式小錯，其他錯誤照舊進入改寫
+
+#### Scenario: 清理紀錄
+- **WHEN** `draft` 清了格式小錯
+- **THEN** 印出清了什麼、寫出 `draft/cleanup.json`；`compare` 的報告加上「自動清理」一節
+
 ### Requirement: 逐項比對
 `compare` 指令 SHALL 用草稿模式載入兩份段資料，輸出 Markdown 報告 `compare.md`：分段、旁白與字幕（並列加相似度）、素材清單（依 `asset_key`）、槽位、句內動作（target 換算成素材後依順序對齊）、highlight 與 label、區域名稱、出處頁碼。每個項目標出相同、不同、缺少或多出，報告最上面是各項的數量摘要。報告不判定合格與否。
 
