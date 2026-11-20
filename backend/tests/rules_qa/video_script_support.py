@@ -142,7 +142,7 @@ def llm_output() -> dict[str, Any]:
 
 
 def write_inputs(folder: Path) -> Path:
-    """在 folder 寫出 rulebook/en-005.txt（本章）、en-003.txt（參考頁）與 terms.json，回傳 folder。"""
+    """寫出 rulebook/en-005.txt（本章）、en-003.txt（參考頁）與 terms.json，回傳 folder。"""
     (folder / "rulebook").mkdir(parents=True, exist_ok=True)
     (folder / "rulebook" / "en-005.txt").write_text(FAKE_PAGE, encoding="utf-8")
     (folder / "rulebook" / "en-003.txt").write_text(FAKE_REFERENCE_PAGE, encoding="utf-8")
