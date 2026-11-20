@@ -11,7 +11,13 @@ from PIL import Image
 
 from app.core.config import Settings
 from app.domains.rules_qa.video_commands import main
-from tests.integrations.video.support import base_data, segment, write_game
+from tests.integrations.video.support import (
+    base_data,
+    fake_ffmpeg,
+    fake_ffmpeg_calls,
+    segment,
+    write_game,
+)
 
 Run = Callable[..., tuple[int, str, str]]
 
@@ -73,3 +79,57 @@ def test_invalid_data_no_output(tmp_path: Path, run: Run, command: str) -> None:
     assert code != 0
     assert "ghost" in err
     assert not (tmp_path / "out").exists()
+
+
+# --- render（MR 3）：用手寫的假 ffmpeg，不需要安裝 ffmpeg ---
+
+
+def test_render_with_fake_tts_warns_estimated_time(
+    tmp_path: Path,
+    make_settings: Callable[..., Settings],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    write_game(tmp_path / "game", base_data())
+    ffmpeg = fake_ffmpeg(tmp_path / "bin")
+    code = main(["render", str(tmp_path / "game")], settings=make_settings(), ffmpeg=ffmpeg)
+    err = capsys.readouterr().err
+    assert code == 0
+    assert "旁白為靜音" in err and "時間為估計值" in err
+    out = tmp_path / "game" / "out"
+    assert (out / "fake_game.mp4").is_file()
+    assert (out / "timing.csv").is_file()
+    assert "時間為估計值" in (out / "report.txt").read_text(encoding="utf-8")
+    # 編碼 2 段、串接、混音
+    calls = fake_ffmpeg_calls(ffmpeg)
+    assert len(calls) == 4
+    assert any("sidechaincompress" in call for call in calls)
+
+
+def test_render_invalid_data_no_output(
+    tmp_path: Path,
+    make_settings: Callable[..., Settings],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    data = base_data()
+    segment(data, "s2")["slots"]["main"]["asset_key"] = "ghost"
+    write_game(tmp_path / "game", data)
+    ffmpeg = fake_ffmpeg(tmp_path / "bin")
+    code = main(["render", str(tmp_path / "game")], settings=make_settings(), ffmpeg=ffmpeg)
+    assert code != 0
+    assert "ghost" in capsys.readouterr().err
+    assert not (tmp_path / "game" / "out").exists()
+    assert not (tmp_path / "game" / "cache").exists()  # 沒有呼叫 TTS
+    assert fake_ffmpeg_calls(ffmpeg) == []
+
+
+def test_render_missing_ffmpeg_fails_before_tts(
+    tmp_path: Path,
+    make_settings: Callable[..., Settings],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    write_game(tmp_path / "game", base_data())
+    settings = make_settings(ffmpeg_path=str(tmp_path / "no-such-ffmpeg.exe"))
+    code = main(["render", str(tmp_path / "game")], settings=settings)
+    assert code != 0
+    assert "FFMPEG_PATH" in capsys.readouterr().err
+    assert not (tmp_path / "game" / "cache").exists()
