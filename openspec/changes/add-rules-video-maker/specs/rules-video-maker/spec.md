@@ -167,6 +167,10 @@
 - **WHEN** 重新輸出時，某句的旁白文字與聲音都沒變
 - **THEN** 不重新呼叫 TTS，使用快取的音檔
 
+#### Scenario: 換 TTS 種類
+- **WHEN** 先在 TTS 未設定（fake，靜音）時輸出，再換成 Azure 重新輸出
+- **THEN** 重新合成每一句旁白，不沿用快取裡的靜音檔（快取檔名包含 TTS 種類，#75 審核）
+
 ### Requirement: 句內動作與畫面狀態
 系統 SHALL 依 cue 計算第 t 秒每個槽位、項、highlight、label 的狀態，再交給版型畫出畫面。動作只有 `show`、`hide`、`flip`、`shuffle`、`move`。highlight、label 與 `hidden` 槽位預設隱藏。狀態 SHALL 以段為範圍，每段開始時重置。
 
@@ -247,6 +251,10 @@
 #### Scenario: 只重做有變的段
 - **WHEN** 輸出過一次後，只改第 2 段的 `sidebar` 文字再執行 `render`
 - **THEN** 只有第 2 段重新逐格渲染，其他段沿用快取的段影片；串接與混音重新執行
+
+#### Scenario: 音軌與畫面一樣長
+- **WHEN** 最後一句旁白之後還有畫面（句的後留白，或片尾的標題字卡）
+- **THEN** 背景音樂一直播到片尾，音軌長度與畫面相差 0.05 秒內（#75 審核）
 
 #### Scenario: 背景音樂長度
 - **WHEN** 影片總長為 N 秒

@@ -152,8 +152,10 @@ def mix_filter(delays_ms: list[int], music_volume: float) -> str:
     return ";".join(
         [
             *voices,
+            # apad：旁白在最後一句後就結束；補上無限長的靜音，sidechain 才會一直延續到片尾。
+            # 否則 sidechaincompress 在旁白結束時就停止，背景音樂被截斷（#75 審核）
             f"{inputs}amix=inputs={len(delays_ms)}:normalize=0:duration=longest,"
-            "loudnorm=I=-20:TP=-2:LRA=7,asplit=2[voice][sidechain]",
+            "loudnorm=I=-20:TP=-2:LRA=7,apad,asplit=2[voice][sidechain]",
             music,
             "[music][sidechain]sidechaincompress=threshold=0.03:ratio=6:attack=40:release=900[ducked]",
             "[ducked][voice]amix=inputs=2:normalize=0:duration=first,"

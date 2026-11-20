@@ -20,6 +20,11 @@ class FailingOnSecondCall(TTSProvider):
         self.fake = FakeTTSProvider()
         self.calls = 0
 
+    @property
+    def cache_name(self) -> str:
+        # 代表「同一種 TTS 在第二句時暫時失敗」，所以快取名稱與 FakeTTSProvider 相同
+        return self.fake.cache_name
+
     def synthesize(self, text: str, voice: str | None = None) -> AudioClip:
         self.calls += 1
         if self.calls >= 2:

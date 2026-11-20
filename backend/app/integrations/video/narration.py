@@ -1,7 +1,8 @@
 """旁白合成與快取（spec rules-video-maker「先音後畫的時間軸」）。
 
-每句旁白用 TTS 合成一次，音檔存在 <cache>/narration/，檔名是「聲音＋文字」的雜湊。
-文字與聲音沒變就直接用快取，不重新呼叫 TTS；中途失敗時，已合成的句子保留在快取，下次只補缺的。
+每句旁白用 TTS 合成一次，音檔存在 <cache>/narration/，檔名是「TTS 種類＋聲音＋文字」的雜湊。
+TTS 種類、文字與聲音都沒變就直接用快取，不重新呼叫 TTS；
+中途失敗時，已合成的句子保留在快取，下次只補缺的。
 """
 
 import hashlib
@@ -19,8 +20,13 @@ class NarrationClip:
     seconds: float
 
 
-def narration_key(voice: str, text: str) -> str:
-    return hashlib.sha256(f"{voice}\n{text}".encode()).hexdigest()
+def narration_key(provider: str, voice: str, text: str) -> str:
+    """快取的檔名：TTS 的種類、聲音與文字任何一個不同，就是不同的音檔。
+
+    種類一定要算進來：先在 TTS 未設定（fake，靜音）時輸出、再換成 Azure，
+    不能沿用靜音檔（#75 審核）。
+    """
+    return hashlib.sha256(f"{provider}\n{voice}\n{text}".encode()).hexdigest()
 
 
 def prepare_narration(video: Video, tts: TTSProvider, cache_dir: Path) -> dict[str, NarrationClip]:
@@ -30,7 +36,8 @@ def prepare_narration(video: Video, tts: TTSProvider, cache_dir: Path) -> dict[s
     clips: dict[str, NarrationClip] = {}
     for segment in video.segments:
         for beat in segment.beats:
-            path = folder / f"{narration_key(video.voice, beat.narration)}.wav"
+            key = narration_key(tts.cache_name, video.voice, beat.narration)
+            path = folder / f"{key}.wav"
             if path.is_file():
                 seconds = wav_seconds(path.read_bytes())
             else:
