@@ -18,6 +18,9 @@ from app.integrations.video import VideoDataError, load_video, parse_video
 
 FORBIDDEN_WORD = "次"  # AGENTS.md 10.2：遊戲教學內容不使用「次」
 PAGE_FILE = re.compile(r"^([a-z]{2})-(\d+)\.txt$")
+TERM_CATEGORIES = ("generic", "single")
+CATEGORY_LABELS = {"generic": "泛稱", "single": "單一種牌"}
+REPRESENTATIVE = "代表牌"
 
 
 class ScriptInputError(Exception):
@@ -46,6 +49,8 @@ class Term:
     zh: str
     key: str | None = None
     avoid: tuple[str, ...] = ()
+    # generic：泛稱（一整類的牌，素材必須寫代表牌說明）；single：單一種牌（素材不可標代表牌）
+    category: str | None = None
 
 
 @dataclass(frozen=True)
@@ -107,9 +112,21 @@ def load_terms(path: Path) -> list[Term]:
         avoid = entry.get("avoid", [])
         if not isinstance(avoid, list) or not all(isinstance(a, str) for a in avoid):
             raise ScriptInputError(f"{path.name} 第 {i + 1} 筆的 avoid 必須是字串陣列")
+        category = entry.get("category")
+        if category not in (None, *TERM_CATEGORIES):
+            raise ScriptInputError(
+                f"{path.name} 第 {i + 1} 筆的 category 必須是 "
+                f"{'、'.join(TERM_CATEGORIES)} 之一（generic＝泛稱、single＝單一種牌）"
+            )
         key = entry.get("key")
         terms.append(
-            Term(entry["en"], entry["zh"], key if isinstance(key, str) else None, tuple(avoid))
+            Term(
+                entry["en"],
+                entry["zh"],
+                key if isinstance(key, str) else None,
+                tuple(avoid),
+                category,
+            )
         )
     return terms
 
@@ -118,12 +135,14 @@ def build_input(request: ScriptRequest) -> str:
     lines = [
         f"章節：第 {request.chapter_number} 章「{request.chapter_title}」",
         "",
-        "用語對照表（英文 → 中文；key 是段資料中使用的名稱；不要用的譯法）：",
+        "用語對照表（英文 → 中文；key 是段資料中使用的名稱；泛稱或單一種牌；不要用的譯法）：",
     ]
     for term in request.terms:
         line = f"- {term.en} → {term.zh}"
         if term.key:
             line += f"（key：{term.key}）"
+        if term.category:
+            line += f"（{CATEGORY_LABELS[term.category]}）"
         if term.avoid:
             line += f"（不要用：{'、'.join(term.avoid)}）"
         lines.append(line)
@@ -302,6 +321,8 @@ def check_script(data: dict[str, Any], request: ScriptRequest, base_dir: Path) -
                 if word in text:
                     errors.append(f"{where}用了「{word}」，請改用「{term.zh}」：{text}")
 
+    errors += _check_assets(data, request)
+
     chapter_pages = {p.page for p in request.pages}
     reference_pages = {p.page for p in request.reference_pages} - chapter_pages
     allowed = "、".join(str(p) for p in sorted(chapter_pages))
@@ -321,6 +342,27 @@ def check_script(data: dict[str, Any], request: ScriptRequest, base_dir: Path) -
             errors.append(
                 f"段 {key} 的 source_pages 有輸入以外的頁碼：{listed}（只能用 {allowed}）"
             )
+    return errors
+
+
+def _check_assets(data: dict[str, Any], request: ScriptRequest) -> list[str]:
+    """每個素材都要有拍攝說明；泛稱要寫代表牌說明，單一種牌不可標代表牌。"""
+    categories = {t.key: t.category for t in request.terms if t.key and t.category}
+    errors = []
+    for asset in data.get("assets", []):
+        key = asset.get("asset_key")
+        shot = asset.get("shot")
+        if not isinstance(shot, str) or not shot.strip():
+            errors.append(f"素材 {key} 沒有拍攝說明（shot）：每個素材都要寫要拍什麼、怎麼拍")
+        reason = asset.get("reason") or ""
+        category = categories.get(key)
+        if category == "generic" and REPRESENTATIVE not in reason:
+            errors.append(
+                f"素材 {key} 是泛稱，reason 必須寫明"
+                "「代表牌：<泛稱>，店員可以替換成同類的任一張牌」"
+            )
+        if category == "single" and REPRESENTATIVE in reason:
+            errors.append(f"素材 {key} 是單一種牌，reason 不可標「代表牌」")
     return errors
 
 

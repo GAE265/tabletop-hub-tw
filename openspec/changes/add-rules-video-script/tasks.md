@@ -43,9 +43,16 @@
     代表牌：花苞用具體的 believer，血刃牌仍是泛稱 blood_blades_card（待拍 1 項，靜態圖出不來）。
     依永傑指示停止調整提示，結果交給永傑判斷。
 - [x] 2.10 新增 `--reference-pages`（2026-11-21 永傑決定，放在本 MR、獨立 commit）：參考頁只供查牌名與分類，不可寫成旁白，`source_pages` 只能用本章的頁。做完重新產生一次就停止調整提示，把結果交給永傑判斷，不再為了貼近手寫版改提示
+- [x] 2.11 依三次重跑的判斷（2026-11-21 永傑：1c 目前不合格；規則錯誤兩次待涵蓋檢查判斷，素材問題三次超過標準）加入：
+  對照表 `category`（generic 泛稱／single 單一種牌）與代表牌檢查、每個素材必須有 shot、
+  提示通則「旁白可以口語，但不能省略字幕裡的任何條件」；提示第 10 條改為泛稱素材用泛稱的 key（與新檢查一致）。
+  做完同樣的提示再跑三次並排
 - [ ] 2.9 自我檢查：`uv run ruff check .`、`uv run ruff format --check .`、`uv run pytest`、`uv run pytest -m external`，驗證：全部通過（external 的 OCR 項目除外）、CI 全綠，再改成 Ready for review
 
 ## Workflow follow-up
 
+- **第 3 階段自動檢查的輸入**（2026-11-21，第 5 版草稿的靜態圖）：
+  - 項目被 hide 後，打在它身上的紅叉（highlight cross）留在空位上
+  - 紅色 label 疊在側欄文字上
 - 依比對結果，由永傑決定：要調整指示或用語對照表重新產生，還是可以進入 1d。
 - MR 合併後，與 `add-rules-video-maker` 一起執行 `/opsx:archive`。
