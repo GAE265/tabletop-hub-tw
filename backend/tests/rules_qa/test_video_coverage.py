@@ -81,8 +81,16 @@ def test_llm_input_only_pages_narration_subtitle(tmp_path: Path) -> None:
     text = llm.calls[0].kwargs["input"]
     assert FAKE_PAGE.splitlines()[0] in text
     assert "b1" in text and "a" * 12 in text and "Shuffle and flip the cards." in text
-    # 不含參考頁、素材、槽位、動作
-    for absent in (FAKE_REFERENCE_PAGE.splitlines()[0], "board", "sidebar@", "back.png", "flip"):
+    # 不含參考頁、素材、槽位、動作。「flip」會出現在字幕裡，
+    # 所以改用只在動作與槽位資料出現的字串
+    for absent in (
+        FAKE_REFERENCE_PAGE.splitlines()[0],
+        "board",
+        "sidebar@",
+        "back.png",
+        "main.c2",
+        "main_title",
+    ):
         assert absent not in text
 
 

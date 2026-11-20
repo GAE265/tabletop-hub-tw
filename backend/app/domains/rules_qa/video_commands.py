@@ -21,6 +21,7 @@ import sys
 from pathlib import Path
 
 from app.core.config import Settings, get_settings
+from app.domains.rules_qa.video_coverage import check_coverage, markdown_from_json
 from app.domains.rules_qa.video_script import (
     ScriptInputError,
     ScriptRejected,
@@ -86,6 +87,17 @@ def _build_parser() -> argparse.ArgumentParser:
         metavar="<video.json>",
         help="從這份段資料借用同一個 asset_key 的照片檔與區域座標（相對資料夾）",
     )
+    coverage = commands.add_parser(
+        "coverage", help="規則涵蓋檢查：本章原文分別對照旁白與字幕，輸出 coverage.json、coverage.md"
+    )
+    coverage.add_argument("folder", type=Path, metavar="<草稿資料夾>")
+    coverage.add_argument(
+        "--pages",
+        action="append",
+        required=True,
+        metavar="<頁面檔>",
+        help="本章的規則書頁面（相對草稿資料夾，例如 ../rulebook/en-005.txt）；可指定多次",
+    )
     compare = commands.add_parser("compare", help="逐項比對兩份段資料，輸出 compare.md")
     compare.add_argument("a", type=Path, metavar="<AI 草稿資料夾>")
     compare.add_argument("b", type=Path, metavar="<手寫資料夾>")
@@ -104,6 +116,8 @@ def main(
         return _draft(args, settings or get_settings(), llm)
     if args.command == "compare":
         return _compare(args.a, args.b)
+    if args.command == "coverage":
+        return _coverage(args, settings or get_settings(), llm)
     try:
         video = load_video(args.folder)
     except VideoDataError as exc:
@@ -280,13 +294,51 @@ def _compare(a: Path, b: Path) -> int:
             return EXIT_FAILED
     report = compare_videos(videos[0], videos[1])
     target = a / "compare.md"
-    target.write_text(report.markdown(), encoding="utf-8")
+    coverage = a / "coverage.json"
+    if coverage.is_file():
+        section = markdown_from_json(coverage.read_text(encoding="utf-8"))
+    else:
+        section = "## 規則陳述檢查\n\n未做規則涵蓋檢查（沒有 coverage.json）。\n"
+    target.write_text(report.markdown() + "\n" + section, encoding="utf-8")
     print(f"已輸出比對報告：{target}")
     for category, counts in report.summary.items():
         print(
             f"  {category}：相同 {counts.same}、不同 {counts.different}、"
             f"缺少 {counts.missing}、多出 {counts.extra}"
         )
+    return EXIT_OK
+
+
+def _coverage(args: argparse.Namespace, settings: Settings, llm: LLMProvider | None) -> int:
+    folder: Path = args.folder
+    try:
+        video = load_video(folder, draft=True)
+        pages = load_pages(folder, args.pages)
+    except VideoDataError as exc:
+        print(f"{folder} 的段資料有錯或不存在：{exc}", file=sys.stderr)
+        return EXIT_FAILED
+    except ScriptInputError as exc:
+        print(f"輸入錯誤：{exc}", file=sys.stderr)
+        return EXIT_FAILED
+    try:
+        report = check_coverage(
+            llm or get_llm_provider(settings.llm_provider, settings), video, pages
+        )
+    except LLMError as exc:
+        print(f"LLM 暫時無法使用或拒絕輸出：{exc}", file=sys.stderr)
+        return EXIT_FAILED
+    except (KeyError, TypeError) as exc:
+        print(f"LLM 的輸出格式不符：{exc!r}", file=sys.stderr)
+        return EXIT_FAILED
+    (folder / "coverage.json").write_text(report.to_json(), encoding="utf-8")
+    (folder / "coverage.md").write_text(report.markdown(), encoding="utf-8")
+    shorter = sum(1 for r in report.rules if r.narration_shorter)
+    issues = sum(1 for r in report.rules if r.has_issue)
+    print(f"已輸出規則涵蓋檢查：{folder / 'coverage.md'}（AI 檢查，僅供參考）")
+    print(
+        f"  規則 {len(report.rules)} 條：有問題 {issues} 條（旁白比字幕少條件 {shorter} 條）；"
+        f"說反或規則書沒有的句子 {len(report.problems)} 句"
+    )
     return EXIT_OK
 
 
