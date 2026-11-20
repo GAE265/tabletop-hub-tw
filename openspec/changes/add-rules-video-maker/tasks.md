@@ -9,7 +9,7 @@
   - 結論（2026-11-17）：TTS 用 Azure AI Speech（REST，用既有的 `httpx`）、儲存用 Azure Blob Storage（#42 已合併）、合成用 ffmpeg。
 - [x] 1.3 規格決定 A1–A5、C1–C5，驗證：記在 design.md Context
 - [x] 1.4 第 1 階段的驗證對象與素材，驗證：記在 design.md Context
-  - 結論（2026-11-20）：《血與刃》步驟三（138.15–170.15 秒）；背景用暗色漸層；聲音 `zh-TW-YunJheNeural`；不需要玩家環形；動作只有 show、hide、flip、shuffle、move；手做版的飛入改成彈出；進度條只有一段，比對時排除；情況二的暗刃先不移動。
+  - 結論（2026-11-20）：《血與刃》步驟三（138.15–170.15 秒）；背景用暗色漸層；聲音 `zh-TW-YunJheNeural`；不需要玩家環形；動作只有 show、hide、flip、shuffle、move；手做版的飛入改成彈出；進度條只有一段，比對時排除；情況二的暗刃移進血刃區（見 1.9）。
 - [x] 1.5 本機資料就位（`backend/.local/rules_video/reference/`、`assets/`），並以 `.git/info/exclude` 排除，驗證：`git status` 看不到這些檔案
 - [x] 1.6 本機安裝 ffmpeg，驗證：`ffmpeg -version` 可執行（9.0.2）
 - [x] 1.7 使用微軟正黑體，驗證：本機有 `C:\Windows\Fonts\msjh.ttc`（一般）與 `msjhbd.ttc`（粗體），可填進 `VIDEO_FONT_REGULAR`、`VIDEO_FONT_BOLD`
@@ -17,7 +17,7 @@
 - [x] 1.8 永傑提供步驟三的規則書頁碼（`source_pages`），驗證：記在本機 `video.json`
   - 結論（2026-11-20）：英文版規則書 RC1 PDF 第 5 頁，`source_pages` 為 `[{"lang": "en", "page": 5}]`；於 2.10 寫進本機 `video.json`。
 - [x] 1.9 永傑對照規則書，確認情況二的暗刃是否要移進盤面，驗證：結論記在本檔（不影響 MR 1）
-  - 結論（2026-11-20）：暗刃不移動，依規則書文字。
+  - 結論（2026-11-20）：先決定暗刃不移動（依規則書文字），後來永傑更正為暗刃也移進盤面右上的血刃區（`sidebar@blade_zone`），與手做版相同。
 
 > 先前計畫的 API、資料表、前端精靈、發布移到 1c／1d，等第 1 階段結果確認後另開 change。
 
@@ -33,7 +33,7 @@
 - [x] 2.7 撰寫畫面狀態的單元測試（`test_frame_state.py`）：涵蓋「句內動作與畫面狀態」每個 scenario，驗證：測試存在且失敗
 - [x] 2.8 撰寫指令的測試（`backend/tests/rules_qa/test_video_commands.py`）：`check` 通過與失敗、`stills` 輸出張數與尺寸、沒有設定字型時的警告、字型檔不存在、驗證失敗時不輸出；`.ttc` 字型集合檔（index 0 可用、index 超出範圍）需要實際的微軟正黑體，寫在 `tests/integrations/video/test_fonts.py` 並加 `@pytest.mark.external` 在本機執行（MR 說明要附 `uv run pytest -m external` 結果），驗證：測試存在且失敗
 - [x] 2.9 實作 `integrations/video/` 的段資料模型與驗證、`main_with_sidebar` 與 `title_card`、《血與刃》風格資料、排版、時間軸（旁白長度由呼叫端提供）、畫面狀態與五種動作、靜態圖；`rules_qa/video_commands.py` 的 `check`、`stills`；`core/config.py` 與 `.env.example` 加上 `VIDEO_FONT_REGULAR`、`VIDEO_FONT_BOLD`、`VIDEO_FONT_INDEX`（@ 立倫）；新增 Pillow、numpy，驗證：2.4–2.8 全部通過
-- [x] 2.10 手寫《血與刃》步驟三的 `video.json`（只放本機），在實際的盤面圖上精確量測區域座標，輸出靜態圖，與手做版同一時間點的畫面並排比對、調整風格數值，驗證：**交給永傑確認對照圖**（已知差異排除：進度條只有一段、字型不同、暗刃不移動、飛入改彈出、背景為漸層）
+- [x] 2.10 手寫《血與刃》步驟三的 `video.json`（只放本機），在實際的盤面圖上精確量測區域座標，輸出靜態圖，與手做版同一時間點的畫面並排比對、調整風格數值，驗證：**交給永傑確認對照圖**（已知差異排除：進度條只有一段、字型不同、飛入改彈出、背景為漸層）
   - 進度（2026-11-20）：`video.json` 已寫好（3 段、4 句、7 個素材），盤面四個區域已在實際盤面圖上量測；輸出 25 張靜態圖、對照圖 `out/sheet.png`、與手做版並排的 `out/compare.png`（都在 `backend/.local/rules_video/`）。依並排比對調整了字幕、章節標籤、標題、紅色標籤的字級與位置，側欄圖片改成靠上對齊。
   - 永傑確認對照圖 OK（2026-11-20）。
 - [x] 2.11 自我檢查：`uv run ruff check .`、`uv run ruff format --check .`、`uv run pytest`，驗證：全部通過、CI 全綠，再改成 Ready for review
