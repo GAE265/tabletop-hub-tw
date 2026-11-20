@@ -56,5 +56,7 @@ $RECYCLE.BIN/
 docs/mr_info/
 # 手動測試腳本，不提交
 backend/manual_case_*.py
+# 規則影片的本機資料（規則書、素材、手做影片、段資料與輸出），不提交（AGENTS.md 2.2）
+backend/.local/
 
 .idea

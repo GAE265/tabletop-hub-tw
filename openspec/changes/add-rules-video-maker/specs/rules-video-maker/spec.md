@@ -2,178 +2,228 @@
 
 ## Purpose
 
-給店家使用的規則影片生產器（`rules_qa` domain）。一個「影片製作專案」對應一款遊戲，依序經過以下狀態：
-
-| `status` | 意思 | 下一步 |
-|---|---|---|
-| `script_draft` | 腳本草稿，店員可以修改 | 確認腳本 → `collecting_materials` |
-| `collecting_materials` | 腳本已確認，等店員上傳素材照片 | 開始合成 → `rendering` |
-| `rendering` | 正在合成影片 | 成功 → `ready`；失敗 → `failed` |
-| `ready` | 影片完成，可以預覽 | 發布 → `published` |
-| `failed` | 合成失敗，附錯誤訊息 | 重新合成 → `rendering` |
-| `published` | 已發布為這款遊戲的教學影片 | — |
-
-只有 `shop_staff` 與 `admin` 可以使用。專案只有建立者與 `admin` 可以修改；其他店家人員可以查看。腳本、旁白與素材說明的遊戲用語依 AGENTS.md 第 10.2 節，不使用「次」。
+規則影片生產器第 1 階段（1a＋1b）：用宣告式的段資料描述一支影片，以 `main_with_sidebar` 版型輸出靜態圖與含旁白、背景音樂的完整影片。段資料格式、版型、時間軸都不依賴特定遊戲；《血與刃》的資料只放在本機，測試使用假遊戲。句內動作本階段只有 `show`、`hide`、`flip`、`shuffle`、`move` 五種。
 
 ## ADDED Requirements
 
-### Requirement: 建立專案與腳本草稿
-`POST /api/v1/rules-videos` SHALL 接收 `game_id`，透過 `rules_ingest` 的 service 讀取這款遊戲的規則書頁面，交給 LLM 產生腳本草稿，建立 `status=script_draft` 的專案並回 201。腳本為 4–8 段，每段有 `section_number`（從 1 開始）、`title`、`narration`（旁白，每段 30–400 字）；預設依序涵蓋遊戲目標、準備、一個回合怎麼進行、遊戲結束與計分。
+### Requirement: 段資料格式與驗證
+系統 SHALL 從 `video.json` 載入一支影片：`chapters`、專案層的 `assets`、依序排列的 `segments`。每段 SHALL 有 `segment_key`、`chapter_key`、`slots`、至少一句 `beats`（`title_card` 沒有槽位也沒有句）；`template` 預設 `main_with_sidebar`。`flat_photo` 素材的檔案 SHALL 存在於 `assets/`。素材 SHALL 標記 `kind`（`flat_photo`｜`drawn`）、`priority`（`must`｜`optional`）、`usable`（`null`｜`true`｜`false`），可以宣告具名 `regions`。有旁白的段 SHALL 有 `source_pages`。格式錯誤時 SHALL 在渲染前失敗，訊息指出哪一段、哪一句、哪個欄位。
 
-#### Scenario: 已有規則書
-- **WHEN** 店員對已入庫規則書的遊戲建立專案
-- **THEN** 回 201，`status=script_draft`，回傳依規則書產生的分段腳本，不需要重新拍說明書
+#### Scenario: 一段一張照片加字幕
+- **WHEN** 某段只填 `main` 槽位（一個 `asset`）、一句、`source_pages`
+- **THEN** 載入成功，`template` 為 `main_with_sidebar`，其他欄位使用預設值
 
-#### Scenario: 還沒有規則書
-- **WHEN** 遊戲存在，但沒有任何規則書頁面
-- **THEN** 回 409，`RULES_VIDEO_NO_RULEBOOK`，訊息提示先拍攝並匯入說明書；不建立專案、不呼叫 LLM
+#### Scenario: 缺少頂層欄位
+- **WHEN** `video.json` 沒有 `game_key` 或 `title`，或它們是空白，或 `voice` 不是非空字串
+- **THEN** 載入失敗，說明是哪個欄位；沒寫 `voice` 時使用 `zh-TW-YunJheNeural`
 
-#### Scenario: 遊戲不存在
-- **WHEN** `game_id` 在 `games` 找不到
-- **THEN** 回 404，`GAME_NOT_FOUND`
+#### Scenario: 引用不存在的素材
+- **WHEN** 槽位或項的 `asset_key` 不在 `assets` 中
+- **THEN** 載入失敗，訊息包含 `segment_key`、槽位名稱與找不到的 `asset_key`
 
-#### Scenario: 玩家沒有權限
-- **WHEN** `player` 建立專案
-- **THEN** 回 403
+#### Scenario: 缺少必填槽位
+- **WHEN** `main_with_sidebar` 的段沒有 `main` 槽位
+- **THEN** 載入失敗，說明缺少 `main`
 
-#### Scenario: 腳本用語
-- **WHEN** LLM 產生的腳本使用了「次」
-- **THEN** 要求 LLM 改寫一次；仍有「次」時回 503，`RULES_VIDEO_OUTPUT_REJECTED`，不建立專案
+#### Scenario: 槽位不在版型定義中
+- **WHEN** 段使用了版型沒有的槽位名稱
+- **THEN** 載入失敗，列出這個版型可用的槽位
 
-#### Scenario: LLM 無法使用
-- **WHEN** LLM 服務無法連線
-- **THEN** 回 503，`RULES_VIDEO_UNAVAILABLE`，不建立專案
+#### Scenario: 槽位內容種類不符
+- **WHEN** `sidebar` 放 `items`，或 `main` 放 `bullets`
+- **THEN** 載入失敗，列出該槽位可放的種類
 
-### Requirement: 查詢專案
-`GET /api/v1/rules-videos` SHALL 依建立時間由新到舊列出專案（可用 `game_id` 篩選，分頁），`GET /api/v1/rules-videos/{video_id}` SHALL 回傳專案的狀態、腳本、素材清單（含每項是否已上傳）、完成的影片網址（`ready` 以後）與失敗訊息（`failed` 時）。
+#### Scenario: 重複的 key
+- **WHEN** 段、句、素材、項、highlight、label 任一 key 重複
+- **THEN** 載入失敗，指出重複的 key
 
-#### Scenario: 查看專案
-- **WHEN** 店員查詢自己的專案
-- **THEN** 回 200，包含 `status`、`sections`、`materials`
+#### Scenario: target 找不到
+- **WHEN** cue、highlight 或 label 的 `target`，或 `move` 的 `to`，指向不存在的槽位、項、區域或 key
+- **THEN** 載入失敗，指出段、句與找不到的 target
 
-#### Scenario: 其他店家人員查看
-- **WHEN** 另一位店家人員查詢這個專案
-- **THEN** 回 200，可以查看
+#### Scenario: 翻沒有背面的項
+- **WHEN** 對沒有 `back_asset_key` 的項 `flip`
+- **THEN** 載入失敗
 
-#### Scenario: 專案不存在
-- **WHEN** `video_id` 不存在
-- **THEN** 回 404，`RULES_VIDEO_NOT_FOUND`
+#### Scenario: move 的目的地不是區域
+- **WHEN** `move` 的 `to` 不是 `<槽位>@<區域>` 的形式
+- **THEN** 載入失敗
 
-### Requirement: 修改腳本
-`PUT /api/v1/rules-videos/{video_id}/script` SHALL 以送出的段落整份取代腳本，只能在 `script_draft` 時修改。
+#### Scenario: 區域超出範圍
+- **WHEN** 素材 `regions` 的框超出 0–1
+- **THEN** 載入失敗
 
-#### Scenario: 修改旁白
-- **WHEN** 建立者修改第 2 段的旁白並送出
-- **THEN** 回 200，腳本更新
+#### Scenario: 使用不可用的素材
+- **WHEN** 段引用 `usable=false` 的素材
+- **THEN** 載入失敗，說明該素材已標記為不可用
 
-#### Scenario: 段落格式錯誤
-- **WHEN** 段落數不在 1–8 之間、`section_number` 不連續，或某段旁白為空
-- **THEN** 回 422，腳本不變
+#### Scenario: 缺少出處頁碼
+- **WHEN** 有旁白的段沒有 `source_pages`
+- **THEN** 載入失敗，說明旁白必須依據規則書並標示頁碼；`title_card` 不受此限
 
-#### Scenario: 已確認後不能修改
-- **WHEN** 專案狀態不是 `script_draft`
-- **THEN** 回 409，`RULES_VIDEO_INVALID_STATUS`
+#### Scenario: 尚未支援的內容
+- **WHEN** 段的 `template` 不是 `main_with_sidebar` 或 `title_card`，或槽位 `kind` 為 `player_ring`，或素材 `kind` 為 `drawn`，或 cue 的 `do` 不是五種動作之一
+- **THEN** 載入失敗，訊息說明「本版尚未支援」與名稱，不靜默略過
 
-#### Scenario: 不是建立者
-- **WHEN** 另一位店家人員修改腳本
-- **THEN** 回 403；`admin` 可以修改
+#### Scenario: 素材檔案不存在
+- **WHEN** `flat_photo` 素材的 `file` 在 `assets/` 中找不到
+- **THEN** 載入失敗，訊息包含檔名
 
-### Requirement: 確認腳本並產生素材清單
-`PATCH /api/v1/rules-videos/{video_id}` 帶 `{"status": "collecting_materials"}` SHALL 確認腳本，交給 LLM 依腳本產生素材清單，狀態改為 `collecting_materials`。素材清單最多 15 項，每項有 `material_number`（從 1 開始）、所屬的 `section_number`、`description`（要拍什麼、怎麼拍，例如「從正上方拍攝整個遊戲盤面，配件擺成開局的樣子」）。每一段至少有一項素材。
+#### Scenario: 寫了絕對時間
+- **WHEN** 段或句帶有 `start_sec` 之類的絕對時間欄位，或 cue 的 `at` 小於 0
+- **THEN** 載入失敗，說明時間由旁白與動作長度自動計算
 
-#### Scenario: 確認腳本
-- **WHEN** 建立者確認腳本
-- **THEN** 回 200，`status=collecting_materials`，`materials` 不為空，每段都有素材，全部標示為未上傳
+### Requirement: main_with_sidebar 版型
+`main_with_sidebar` SHALL 有 `main_title`（選填，`text`）、`main`（必填，`asset` 或 `items`）、`sidebar`（選填，`asset`、`text` 或 `bullets`）三個槽位。所有區塊 SHALL 位於內容區內，不壓到章節標籤與字幕列。側欄沒有內容時，`main` SHALL 放大成整個內容區。區域、highlight、label、`move` 的目的地 SHALL 依圖片實際貼上的位置換算。
 
-#### Scenario: LLM 漏掉某一段的素材
-- **WHEN** LLM 產生的清單中，有一段沒有任何素材
-- **THEN** 後端替該段補上一項「拍攝與『段落標題』相關的配件」，不讓任何一段沒有畫面
+#### Scenario: 有側欄
+- **WHEN** 段有 `main` 與 `sidebar`（`asset`）
+- **THEN** 主體區與側欄不重疊，兩者都在內容區內
 
-#### Scenario: 狀態不對
-- **WHEN** 專案不是 `script_draft`
-- **THEN** 回 409，`RULES_VIDEO_INVALID_STATUS`
+#### Scenario: 沒有側欄
+- **WHEN** 段只有 `main`
+- **THEN** `main` 的可用範圍等於整個內容區
 
-#### Scenario: LLM 無法使用
-- **WHEN** LLM 服務無法連線
-- **THEN** 回 503，`RULES_VIDEO_UNAVAILABLE`，狀態維持 `script_draft`
+#### Scenario: 側欄放文字
+- **WHEN** `sidebar` 為 `bullets`
+- **THEN** 文字畫在側欄內，不超出側欄
 
-### Requirement: 上傳素材照片
-`PUT /api/v1/rules-videos/{video_id}/materials/{material_number}/photo` SHALL 接收一張 JPEG 或 PNG（不超過 10 MB），存進檔案儲存，取代該項素材之前的照片。只能在 `collecting_materials` 或 `failed` 時上傳。
+#### Scenario: 一排物件
+- **WHEN** `main` 為 2 項或 3 項的 `items`
+- **THEN** 各項等高、等距，整排在主體區內置中
 
-#### Scenario: 上傳照片
-- **WHEN** 建立者上傳第 1 項素材的照片
-- **THEN** 回 200，該項標示為已上傳
+#### Scenario: 主體標題
+- **WHEN** 段有 `main_title`
+- **THEN** 標題位於主體上方，不與各項重疊
 
-#### Scenario: 重拍
-- **WHEN** 已上傳過的素材再上傳一張
-- **THEN** 回 200，以新照片取代，舊檔案從儲存中刪除
+#### Scenario: 區域跟著圖片位置
+- **WHEN** 同一個素材在不同段被縮放成不同大小
+- **THEN** 同一個區域框都落在圖片上同一個相對位置（誤差 2 px 以內）
 
-#### Scenario: 圖片格式錯誤
-- **WHEN** 上傳的不是 JPEG 或 PNG，或是空檔案
-- **THEN** 回 400，`INVALID_IMAGE`（與 `rules_ingest` 相同）
+#### Scenario: 標籤位置
+- **WHEN** label 的 `target` 為某一項、`position` 為 `below`
+- **THEN** 標籤在該項正下方，不超出內容區；`target` 為 `items` 槽位時，以整排物件的範圍為準
 
-#### Scenario: 圖片太大
-- **WHEN** 圖片超過 10 MB
-- **THEN** 回 400，`IMAGE_TOO_LARGE`
+#### Scenario: 文字放不下
+- **WHEN** 文字換行並縮到最小字級後仍超出槽位
+- **THEN** 渲染失敗，指出 `segment_key` 與槽位，不讓文字超出槽位或壓到字幕列
 
-#### Scenario: 素材不存在
-- **WHEN** `material_number` 不在清單中
-- **THEN** 回 404，`RULES_VIDEO_MATERIAL_NOT_FOUND`
+#### Scenario: 素材方向
+- **WHEN** 素材的 `orientation` 為 90
+- **THEN** 渲染前先旋轉擺正再排版
 
-#### Scenario: 狀態不對
-- **WHEN** 專案是 `script_draft`、`rendering`、`ready` 或 `published`
-- **THEN** 回 409，`RULES_VIDEO_INVALID_STATUS`
+#### Scenario: 素材解析度不足
+- **WHEN** 素材實際貼上的大小超過原圖尺寸的 2 倍
+- **THEN** 照常渲染（一般放大，不使用 AI 放大），並在報告中列出警告
 
-#### Scenario: 儲存服務無法使用
-- **WHEN** 檔案儲存無法連線
-- **THEN** 回 503，`RULES_VIDEO_UNAVAILABLE`，素材維持原狀
+#### Scenario: 標題字卡
+- **WHEN** 段的 `template` 為 `title_card`
+- **THEN** 不需要素材，畫面顯示影片標題與章名，長度固定 3 秒
 
-### Requirement: 合成影片
-`PATCH /api/v1/rules-videos/{video_id}` 帶 `{"status": "rendering"}` SHALL 在所有素材都已上傳時開始合成，立即回 202 並把狀態改為 `rendering`，在背景依序：用 TTS 產生每段旁白的音檔 → 每段的畫面平均分配該段素材照片，長度等於旁白長度 → 加上旁白字幕 → 合成 1280×720 的 mp4 → 存進檔案儲存。成功時狀態改為 `ready` 並記錄影片網址；任何一步失敗時改為 `failed` 並記錄錯誤訊息。
+### Requirement: 先音後畫的時間軸
+系統 SHALL 先取得每句旁白的長度（MR 1 用 fake 估計，MR 3 用 TTS 實際合成），計算每句長度 `max(min_beat_sec, pad_before + 旁白長度 + pad_after, 最後一個 cue 結束 + cue_hold)`、每段長度（各句相加）與每句、每個 cue 的絕對秒數，並輸出 `timing.csv`。時間結果 SHALL NOT 回寫段資料。
 
-#### Scenario: 開始合成
-- **WHEN** 所有素材都已上傳，建立者開始合成
-- **THEN** 回 202，`status=rendering`
+#### Scenario: 一般的句子
+- **WHEN** 旁白長度 3.0 秒、沒有 cue、使用預設時間規則
+- **THEN** 這句長度為 3.55 秒（0.15＋3.0＋0.4）
 
-#### Scenario: 合成成功
-- **WHEN** 背景合成完成
-- **THEN** `status=ready`，`video_url` 指向儲存中的 mp4；影片的段落順序與腳本相同，每段長度等於該段旁白音檔長度
+#### Scenario: 很短的句子
+- **WHEN** 旁白長度 1.0 秒、沒有 cue
+- **THEN** 這句長度為 `min_beat_sec`（預設 2.6 秒）
 
-#### Scenario: 素材還沒上傳完
-- **WHEN** 還有素材未上傳
-- **THEN** 回 409，`RULES_VIDEO_MATERIALS_MISSING`，`details` 列出未上傳的 `material_number`
+#### Scenario: 動作比旁白長
+- **WHEN** 旁白長度 3.0 秒，最後一個 cue 在第 4.0 秒開始、需要 0.8 秒
+- **THEN** 這句長度為 5.1 秒（4.0＋0.8＋0.3）
 
-#### Scenario: 合成失敗
-- **WHEN** TTS 或合成步驟失敗
-- **THEN** `status=failed`，`error_message` 說明失敗原因（不含金鑰或外部服務的原始回應）
+#### Scenario: 改一句旁白
+- **WHEN** 第 2 段某句的旁白變長 1 秒後重新計算
+- **THEN** 該句以前每句的開始秒數不變，之後每句都往後移 1 秒；不需要手動修改任何時間
 
-#### Scenario: 重新合成
-- **WHEN** 專案是 `failed`，建立者再次開始合成
-- **THEN** 回 202，重新合成
+#### Scenario: 旁白快取
+- **WHEN** 重新輸出時，某句的旁白文字與聲音都沒變
+- **THEN** 不重新呼叫 TTS，使用快取的音檔
 
-#### Scenario: 合成卡住
-- **WHEN** 專案停在 `rendering` 超過 30 分鐘（例如伺服器重啟）
-- **THEN** 查詢時視為 `failed`，`error_message` 為「合成逾時，請重新合成」
+### Requirement: 句內動作與畫面狀態
+系統 SHALL 依 cue 計算第 t 秒每個槽位、項、highlight、label 的狀態，再交給版型畫出畫面。動作只有 `show`、`hide`、`flip`、`shuffle`、`move`。highlight、label 與 `hidden` 槽位預設隱藏。狀態 SHALL 以段為範圍，每段開始時重置。
 
-#### Scenario: 狀態不對
-- **WHEN** 專案不是 `collecting_materials` 或 `failed`
-- **THEN** 回 409，`RULES_VIDEO_INVALID_STATUS`
+#### Scenario: 顯示前隱藏
+- **WHEN** 查詢某個 highlight、label 或 `hidden` 槽位在 `show` 之前與之後的狀態
+- **THEN** 之前不可見，之後可見
 
-### Requirement: 發布
-`PATCH /api/v1/rules-videos/{video_id}` 帶 `{"status": "published"}` SHALL 把完成的影片設為這款遊戲的教學影片：寫入 `rules_qa_videos`（`source=file`、`video_url` 為儲存中的 mp4 網址、`youtube_id` 為空；取代既有影片，標題為「《遊戲名稱》規則教學」），狀態改為 `published`。
+#### Scenario: 隱藏的文字不會畫出來
+- **WHEN** 輸出 `hidden` 的主體標題在 `show` 之前與之後的畫面
+- **THEN** 之前標題範圍內沒有標題顏色的像素，之後有（文字的透明度確實套用到畫面）
 
-#### Scenario: 發布影片
-- **WHEN** 建立者發布 `ready` 的影片
-- **THEN** 回 200，`status=published`；之後 `GET /api/v1/rules-lessons/{game_id}` 的 `video` 為這支影片
+#### Scenario: 翻牌
+- **WHEN** 查詢 `flip` 之前、之中、之後的狀態
+- **THEN** 之前是背面，之中寬度壓縮，之後是正面
 
-#### Scenario: 取代既有影片
-- **WHEN** 這款遊戲原本就有教學影片
-- **THEN** 原本的影片被取代（回應中的 `replaced_video_url` 為舊網址，前端在發布前提醒）
+#### Scenario: 洗牌
+- **WHEN** 查詢 `shuffle` 之中與之後的狀態
+- **THEN** 之中各項離開原位，之後回到原位且仍是背面
 
-#### Scenario: 還沒完成
-- **WHEN** 專案不是 `ready`
-- **THEN** 回 409，`RULES_VIDEO_INVALID_STATUS`
+#### Scenario: 移除
+- **WHEN** `hide` 一排中的某一項之後
+- **THEN** 該項不可見，其他項位置不變
 
-#### Scenario: 不允許的狀態值
-- **WHEN** `PATCH` 帶的 `status` 不是 `collecting_materials`、`rendering`、`published`
-- **THEN** 回 422
+#### Scenario: 移進區域
+- **WHEN** `move` 某一項到 `sidebar@death_zone` 結束後
+- **THEN** 該項縮小並完整落在該區域內，直到段結束都留在那裡
+
+#### Scenario: 狀態不跨段
+- **WHEN** 下一段開始
+- **THEN** 前一段移進區域的項、顯示的 highlight 與 label 都不出現
+
+### Requirement: 本機指令與靜態圖
+`check` 指令 SHALL 只驗證段資料。`stills` 指令 SHALL 在不使用 ffmpeg、不需要金鑰的情況下，於每句開始後 0.8 秒與每個 cue 完成時各輸出一張 1920×1080 PNG（標題字卡輸出一張；同一時間點只輸出一張），並拼成一張對照圖，另輸出時間報表 `timing.csv`（旁白長度為估計值）。
+
+#### Scenario: 驗證通過
+- **WHEN** 對正確的段資料執行 `check`
+- **THEN** 結束代碼為 0，印出段數、句數與素材數
+
+#### Scenario: 輸出靜態圖
+- **WHEN** 對 2 段、3 句、4 個 cue 的假遊戲資料執行 `stills`
+- **THEN** 輸出 7 張 1920×1080 PNG 與 1 張對照圖
+
+#### Scenario: 指定字型集合檔（external）
+- **WHEN** 在有微軟正黑體的電腦上，`VIDEO_FONT_REGULAR`、`VIDEO_FONT_BOLD` 指向 `msjh.ttc`、`msjhbd.ttc`，`VIDEO_FONT_INDEX` 為 0
+- **THEN** 以集合中第 0 個字型輸出，不印出字型警告
+
+#### Scenario: 沒有設定字型
+- **WHEN** 沒有設定 `VIDEO_FONT_REGULAR`、`VIDEO_FONT_BOLD` 就執行 `stills`
+- **THEN** 使用 Pillow 內建字型照常輸出，並印出「未設定中文字型」的警告
+
+#### Scenario: 字型檔不存在
+- **WHEN** `VIDEO_FONT_REGULAR` 指向不存在的檔案
+- **THEN** 不輸出任何圖片，結束代碼不為 0，訊息指出是哪一個設定
+
+#### Scenario: 字型集合 index 超出範圍（external）
+- **WHEN** 在有微軟正黑體的電腦上，`VIDEO_FONT_INDEX` 超出 `.ttc` 的字型數量
+- **THEN** 不輸出任何圖片，結束代碼不為 0，訊息指出 `VIDEO_FONT_INDEX`
+
+#### Scenario: 段資料錯誤
+- **WHEN** 對驗證失敗的段資料執行 `check` 或 `stills`
+- **THEN** 不輸出任何圖片，結束代碼不為 0，印出驗證錯誤
+
+### Requirement: 完整影片輸出
+`render` 指令 SHALL 用 TTS 合成每句旁白、計算時間軸、逐格渲染每段（30 fps），以 ffmpeg 每段編碼一個 mp4 後串接，產生與影片等長的背景音樂，把旁白依時間軸放上並以 `sidechaincompress` 在旁白出現時壓低音樂，輸出 1920×1080、30 fps、H.264＋AAC 的 mp4，以及 `timing.csv` 與報告。
+
+#### Scenario: 輸出整章影片（external）
+- **WHEN** 在裝有 ffmpeg 的電腦上對假遊戲資料執行 `render`
+- **THEN** 產生可播放的 mp4：1920×1080、30 fps、有音軌，長度與 `timing.csv` 的總長相差 0.1 秒以內
+
+#### Scenario: 只重做有變的段
+- **WHEN** 輸出過一次後，只改第 2 段的 `sidebar` 文字再執行 `render`
+- **THEN** 只有第 2 段重新逐格渲染，其他段沿用快取的段影片；串接與混音重新執行
+
+#### Scenario: 背景音樂長度
+- **WHEN** 影片總長為 N 秒
+- **THEN** 背景音樂長度為 N 秒；同樣的 N 產生相同的音樂
+
+#### Scenario: 找不到 ffmpeg
+- **WHEN** 執行環境沒有 ffmpeg
+- **THEN** `render` 在開始渲染前失敗，說明需要安裝 ffmpeg 或設定 `FFMPEG_PATH`
+
+#### Scenario: TTS 無法使用
+- **WHEN** TTS 服務連不上
+- **THEN** `render` 失敗並說明原因（不含金鑰），已合成的旁白保留在快取，下次只補缺的
