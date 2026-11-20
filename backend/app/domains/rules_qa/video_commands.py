@@ -6,7 +6,7 @@
     uv run python -m app.domains.rules_qa.video_commands render <資料夾>   # 完整影片
     uv run python -m app.domains.rules_qa.video_commands draft <資料夾> \
         --pages rulebook/en-005.txt --chapter-number 11 --chapter-title 步驟三 \
-        [--assets-from video.json]                                  # AI 產生段資料草稿
+        [--reference-pages rulebook/en-003.txt] [--assets-from video.json]  # AI 產生草稿
     uv run python -m app.domains.rules_qa.video_commands compare <AI 草稿> <手寫>  # 逐項比對
 
 <資料夾> 內有 video.json 與 assets/，輸出寫到 <資料夾>/out/，旁白與段影片快取在 <資料夾>/cache/。
@@ -70,6 +70,13 @@ def _build_parser() -> argparse.ArgumentParser:
         required=True,
         metavar="<頁面檔>",
         help="規則書頁面文字（相對資料夾），檔名 <語言>-<頁碼>.txt；可指定多次",
+    )
+    draft.add_argument(
+        "--reference-pages",
+        action="append",
+        default=[],
+        metavar="<頁面檔>",
+        help="參考頁（相對資料夾）：只供查牌名與分類，不可寫成旁白；可指定多次",
     )
     draft.add_argument("--chapter-number", type=int, required=True)
     draft.add_argument("--chapter-title", required=True)
@@ -202,6 +209,9 @@ def _draft(args: argparse.Namespace, settings: Settings, llm: LLMProvider | None
             chapter_number=args.chapter_number,
             chapter_title=args.chapter_title,
             pages=load_pages(folder, args.pages),
+            reference_pages=(
+                load_pages(folder, args.reference_pages) if args.reference_pages else []
+            ),
             terms=load_terms(folder / args.terms),
             **_game_identity(folder),
         )

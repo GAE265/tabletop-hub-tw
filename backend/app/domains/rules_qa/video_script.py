@@ -8,7 +8,7 @@
 import json
 import re
 import shutil
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -57,6 +57,8 @@ class ScriptRequest:
     game_key: str
     title: str
     voice: str | None = None
+    # 參考頁：只供查牌名與分類（例如判斷代表牌），不可寫成旁白，也不可列在 source_pages
+    reference_pages: list[RulebookPage] = field(default_factory=list)
 
 
 # --------------------------------------------------------------------------- 輸入
@@ -126,7 +128,14 @@ def build_input(request: ScriptRequest) -> str:
             line += f"（不要用：{'、'.join(term.avoid)}）"
         lines.append(line)
     for page in request.pages:
-        lines += ["", f"=== 規則書第 {page.page} 頁（{page.lang}）===", page.text]
+        lines += ["", f"=== 本章內容：規則書第 {page.page} 頁（{page.lang}）===", page.text]
+    for page in request.reference_pages:
+        lines += [
+            "",
+            f"=== 參考資料：規則書第 {page.page} 頁（{page.lang}）"
+            "——只供查牌名與牌的分類，不可寫成旁白、字幕或畫面文字，也不可列在 source_pages ===",
+            page.text,
+        ]
     return "\n".join(lines)
 
 
@@ -293,15 +302,24 @@ def check_script(data: dict[str, Any], request: ScriptRequest, base_dir: Path) -
                 if word in text:
                     errors.append(f"{where}用了「{word}」，請改用「{term.zh}」：{text}")
 
-    input_pages = {p.page for p in request.pages}
+    chapter_pages = {p.page for p in request.pages}
+    reference_pages = {p.page for p in request.reference_pages} - chapter_pages
+    allowed = "、".join(str(p) for p in sorted(chapter_pages))
     for segment in data.get("segments", []):
+        key = segment.get("segment_key")
         pages = [p["page"] for p in segment.get("source_pages", [])]
-        outside = [p for p in pages if p not in input_pages]
+        from_reference = [p for p in pages if p in reference_pages]
+        outside = [p for p in pages if p not in chapter_pages and p not in reference_pages]
+        if from_reference:
+            listed = "、".join(str(p) for p in from_reference)
+            errors.append(
+                f"段 {key} 的 source_pages 用了參考頁：{listed}。參考頁只供查牌名與分類，"
+                f"不可當成旁白的依據；source_pages 只能用本章的頁（{allowed}）"
+            )
         if outside:
             listed = "、".join(str(p) for p in outside)
             errors.append(
-                f"段 {segment.get('segment_key')} 的 source_pages 有輸入以外的頁碼：{listed}"
-                f"（只能用 {'、'.join(str(p) for p in sorted(input_pages))}）"
+                f"段 {key} 的 source_pages 有輸入以外的頁碼：{listed}（只能用 {allowed}）"
             )
     return errors
 

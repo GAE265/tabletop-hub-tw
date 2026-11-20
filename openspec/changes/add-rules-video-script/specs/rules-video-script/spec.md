@@ -44,6 +44,14 @@
 - **WHEN** 指定的頁面檔或 `terms.json` 不存在，或頁面檔名不是 `<語言>-<頁碼>.txt`
 - **THEN** 不呼叫 LLM，結束代碼不為 0，說明缺哪個檔案或檔名格式
 
+#### Scenario: 參考頁
+- **WHEN** 加上 `--reference-pages rulebook/en-003.txt` 執行 `draft`
+- **THEN** LLM 的輸入把參考頁標為「參考資料：只供查牌名與牌的分類，不可寫成旁白、字幕或畫面文字，也不可列在 source_pages」，本章的頁標為「本章內容」；只給 `--pages` 時行為不變
+
+#### Scenario: 參考頁不存在
+- **WHEN** `--reference-pages` 指定的檔案不存在或檔名格式不對
+- **THEN** 不呼叫 LLM，結束代碼不為 0，說明是哪個檔案
+
 #### Scenario: 借用手寫版的照片與座標
 - **WHEN** 加上 `--assets-from video.json` 執行 `draft`
 - **THEN** 草稿中 `asset_key` 與手寫版相同的素材，照片檔與區域座標從手寫版複製過來；沒對上的素材仍為待拍
@@ -70,6 +78,10 @@ LLM 的輸出 SHALL 依序檢查：草稿模式的段資料驗證、旁白、字
 #### Scenario: 不要用的譯法
 - **WHEN** 字幕用了對照表 `avoid` 列出的詞
 - **THEN** 視為不通過，錯誤訊息指出是哪個詞、應改用哪個詞
+
+#### Scenario: 出處頁碼用了參考頁
+- **WHEN** 某段的 `source_pages` 有參考頁的頁碼
+- **THEN** 視為不通過，錯誤訊息說明參考頁只供查牌名與分類，source_pages 只能用本章的頁
 
 #### Scenario: 出處頁碼不在輸入中
 - **WHEN** 某段的 `source_pages` 有輸入以外的頁碼
