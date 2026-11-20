@@ -70,12 +70,13 @@
 > - TTS 未設定（`TTS_PROVIDER` 未填或為 fake）時，旁白為靜音、照常輸出並警告；警告與報告都註明「時間為估計值」。
 
 - [ ] 4.1 永傑開 Draft MR 3，AI 從 `specs/rules-video-maker` 的「先音後畫的時間軸」（旁白快取）、「完整影片輸出」與 `specs/media-integrations` 的「ffmpeg 呼叫」整理分組情境表格，驗證：Draft MR 已存在
-- [ ] 4.2 撰寫旁白快取的單元測試（文字沒變不重新呼叫 TTS），驗證：測試存在且失敗
-- [ ] 4.3 撰寫 `content_hash` 與「只重做有變的段」的單元測試（用手寫的 `FakeSegmentEncoder` 記錄哪些段被編碼），驗證：測試存在且失敗
-- [ ] 4.4 撰寫背景音樂的單元測試（長度、同長度可重現）、找不到 ffmpeg、編碼中斷不留壞檔的測試，驗證：測試存在且失敗
-- [ ] 4.5 撰寫 external 測試：實際編碼、串接、混音，確認 1920×1080、30 fps、有音軌、長度與 `timing.csv` 一致，驗證：`uv run pytest` 不執行它
-- [ ] 4.6 實作 TTS 接上時間軸、逐格渲染、ffmpeg 編碼與串接、背景音樂、混音、`timing.csv` 與報告；`video_commands render`；`core/config.py` 與 `.env.example` 加上 `FFMPEG_PATH`、`VIDEO_MUSIC_VOLUME`；新增 scipy，驗證：4.2–4.4 通過；本機 `uv run pytest -m external` 的結果寫進 MR 說明
+- [x] 4.2 撰寫旁白快取的單元測試（文字沒變不重新呼叫 TTS），驗證：測試存在且失敗
+- [x] 4.3 撰寫 `content_hash` 與「只重做有變的段」的單元測試（用手寫的 `FakeSegmentEncoder` 記錄哪些段被編碼），驗證：測試存在且失敗
+- [x] 4.4 撰寫背景音樂的單元測試（長度、同長度可重現）、找不到 ffmpeg、編碼中斷不留壞檔的測試，驗證：測試存在且失敗
+- [x] 4.5 撰寫 external 測試：實際編碼、串接、混音，確認 1920×1080、30 fps、有音軌、長度與 `timing.csv` 一致，驗證：`uv run pytest` 不執行它
+- [x] 4.6 實作 TTS 接上時間軸、逐格渲染、ffmpeg 編碼與串接、背景音樂、混音、`timing.csv` 與報告；`video_commands render`；`core/config.py` 與 `.env.example` 加上 `FFMPEG_PATH`、`VIDEO_MUSIC_VOLUME`；新增 scipy，驗證：4.2–4.4 通過；本機 `uv run pytest -m external` 的結果寫進 MR 說明
 - [ ] 4.7 用 2.10 的 `video.json` 以 Azure TTS 輸出《血與刃》步驟三完整影片，驗證：**交給永傑看完整支影片**，依「規則正確、新手能看懂」判斷，並與手做版比較
+  - 進度（2026-11-21）：已用 Azure TTS 輸出 `backend/.local/rules_video/out/blades_and_rose.mp4`（27.9 秒，1920×1080、30 fps、H.264＋AAC）。每句時段由實際旁白長度決定，旁白不會超出；量測音量：旁白約 −15～−20 dB，句間只剩音樂約 −25～−29 dB，結尾淡出到靜音。等永傑看完整支影片。
 - [ ] 4.8 自我檢查（同 2.11），驗證：全部通過、CI 全綠，再改成 Ready for review
 
 ## Workflow follow-up

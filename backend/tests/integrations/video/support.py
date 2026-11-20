@@ -144,7 +144,7 @@ def write_game(
     return folder
 
 
-FAKE_FFMPEG_OK = '''
+FAKE_FFMPEG_OK = r"""
 import sys
 # 假 ffmpeg：讀完標準輸入（逐格畫面），在最後一個參數的路徑寫一個假檔案；記下參數方便測試檢查
 data = sys.stdin.buffer.read() if not sys.stdin.isatty() else b""
@@ -153,16 +153,16 @@ with open(args[-1], "wb") as f:
     f.write(b"fake-media " + str(len(data)).encode())
 with open(__file__ + ".log", "a", encoding="utf-8") as log:
     log.write(" ".join(args) + "\n")
-'''
+"""
 
-FAKE_FFMPEG_FAIL = '''
+FAKE_FFMPEG_FAIL = """
 import sys
 # 假 ffmpeg：不讀輸入，直接印出錯誤並以 1 結束
 for n in range(1, 21):
     print(f"log line {n}", file=sys.stderr)
 print("fake encoder exploded", file=sys.stderr)
 sys.exit(1)
-'''
+"""
 
 
 def fake_ffmpeg(folder: Path, *, fail: bool = False) -> list[str]:

@@ -1,7 +1,8 @@
 """實際用 ffmpeg 輸出整章影片（spec rules-video-maker「完整影片輸出」，AGENTS.md 7.6 external）。
 
-需要本機安裝 ffmpeg 與 ffprobe（或用 FFMPEG_PATH 指定），只在本機用 `uv run pytest -m external` 執行；
-找不到時直接失敗並說明，不自動跳過。旁白用 FakeTTSProvider（靜音），不需要金鑰。
+需要本機安裝 ffmpeg 與 ffprobe（從 PATH 找），
+只在本機用 `uv run pytest -m external` 執行；找不到時直接失敗並說明，不自動跳過。
+旁白用 FakeTTSProvider（靜音），不需要金鑰。
 """
 
 import csv
@@ -25,7 +26,9 @@ pytestmark = pytest.mark.external
 def ffmpeg_tools() -> tuple[str, str]:
     ffmpeg, ffprobe = shutil.which("ffmpeg"), shutil.which("ffprobe")
     if not ffmpeg or not ffprobe:
-        pytest.fail("找不到 ffmpeg 或 ffprobe：請安裝 ffmpeg 並加入 PATH（Windows：winget install ffmpeg）")
+        pytest.fail(
+            "找不到 ffmpeg 或 ffprobe：請安裝 ffmpeg 並加入 PATH（Windows：winget install ffmpeg）"
+        )
     return ffmpeg, ffprobe
 
 
@@ -43,7 +46,16 @@ def test_render_whole_chapter(tmp_path: Path, ffmpeg_tools: tuple[str, str]) -> 
     )
     probe = json.loads(
         subprocess.run(
-            [ffprobe, "-v", "error", "-show_streams", "-show_format", "-of", "json", str(result.video)],
+            [
+                ffprobe,
+                "-v",
+                "error",
+                "-show_streams",
+                "-show_format",
+                "-of",
+                "json",
+                str(result.video),
+            ],
             capture_output=True,
             check=True,
         ).stdout

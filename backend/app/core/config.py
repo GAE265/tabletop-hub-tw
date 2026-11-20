@@ -81,6 +81,10 @@ class Settings(BaseSettings):
     video_font_bold: str | None = None
     # .ttc 字型集合檔內要用第幾個字型；.ttf／.otf 忽略
     video_font_index: int = 0
+    # ffmpeg 執行檔；在 PATH 裡就填 ffmpeg，否則填完整路徑
+    ffmpeg_path: str = "ffmpeg"
+    # 背景音樂音量（0–1）；旁白出現時還會再自動壓低
+    video_music_volume: float = 0.25
     # 允許跨來源呼叫 API 的前端網址，逗號分隔。預設是本機 Flutter Web 固定的 port；
     # 部署時必須改成實際的前端網址
     cors_allow_origins: str = "http://localhost:5000"
