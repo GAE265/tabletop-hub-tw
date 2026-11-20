@@ -1,7 +1,7 @@
 # 主持人的人設與台詞
 
 Type: prototype
-Status: open
+Status: closed
 Blocked by: 08
 Map: [AI 語音主持](../map.md)
 
@@ -17,3 +17,16 @@ Map: [AI 語音主持](../map.md)
 試聽用的指令在 `prototypes/listen-test/index.html`，可以沿用。原型放 `.scratch/host/prototypes/`，錄音不進 repo。
 
 ## Comments
+
+## Answer
+
+2026-11-20 整理地圖時關閉，**沒有單獨決定**。立倫要求依專案實務需要刪減 ticket。
+
+原因：人設與台詞的字句不影響架構，也不影響測試。測試只看後端有沒有把對的固定台詞交給主持人，不比對字句。等後端做出來，用真的流程試聽再定稿，比現在再做一個用完就丟的原型省一趟。
+
+題目的去向：
+
+- 第 1、2、3 題（人設、固定台詞的字句、自由說的範圍）：移到實作階段。「[把 spec 拆成實作 ticket](22-split-spec-into-impl-tickets.md)」要排一張由立倫試聽定稿的實作 ticket。
+- spec 先放草稿：固定台詞照「[主持人在一局裡怎麼帶流程](08-host-flow-in-a-match.md)」與「[用 Flash 還是 Plus、要不要轉交思考模型](09-model-lineup.md)」裡已有的例句寫。
+- 第 4 題（禁止事項）：已在「主持人在一局裡怎麼帶流程」定案，spec 直接照寫。
+- 聲線用哪一個、能不能讓玩家選：移到「[玩家怎麼和主持人說話](11-how-players-talk-to-host.md)」第 6 題。「[聲音怎麼從瀏覽器連到模型](12-audio-connection-path.md)」的 Answer 寫聲線由這張決定，改看那一題。

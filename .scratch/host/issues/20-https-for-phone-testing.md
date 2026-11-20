@@ -1,7 +1,7 @@
 # 手機實測怎麼拿到 HTTPS
 
 Type: grilling
-Status: open
+Status: closed
 Blocked by: 12
 Map: [AI 語音主持](../map.md)
 
@@ -15,3 +15,11 @@ Map: [AI 語音主持](../map.md)
 4. 要不要寫進交接說明，讓組員也能照做。
 
 ## Comments
+
+## Answer
+
+2026-11-20 整理地圖時關閉，列為範圍外，**沒有單獨決定**。立倫要求依專案實務需要刪減 ticket。
+
+原因：手機怎麼拿到 HTTPS 是開發與部署環境的事，不影響 spec 怎麼寫。本機開發用 Mac 的 Chrome 開 `localhost` 不需要 HTTPS，試聽就是這樣做的。
+
+題目的去向：「[寫 spec.md](21-write-spec.md)」的驗收會寫一條前置條件：手機實測要有 HTTPS，由實測的人準備。做法（臨時對外網址、自簽憑證、或部署後再測）到要實測時再選。
