@@ -65,6 +65,14 @@ class Settings(BaseSettings):
     storage_public_base_url: str | None = None
     storage_connection_string: str | None = None
     storage_container: str | None = None
+    # --- 規則影片的字型（integrations/video；本機指令輸出畫面用） ---
+    # 直接指定字型檔，例如 Windows 的微軟正黑體 C:\Windows\Fonts\msjh.ttc；
+    # 兩個都沒填時改用 Pillow 內建字型（中文無法正確顯示），並印出警告
+    video_font_regular: str | None = None
+    # 粗體（標題、標籤）；沒填就用 video_font_regular
+    video_font_bold: str | None = None
+    # .ttc 字型集合檔內要用第幾個字型；.ttf／.otf 忽略
+    video_font_index: int = 0
     # 允許跨來源呼叫 API 的前端網址，逗號分隔。預設是本機 Flutter Web 固定的 port；
     # 部署時必須改成實際的前端網址
     cors_allow_origins: str = "http://localhost:5000"
