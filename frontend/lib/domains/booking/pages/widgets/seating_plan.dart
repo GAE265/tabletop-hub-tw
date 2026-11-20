@@ -4,6 +4,7 @@ import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../core/widgets/pill_badge.dart';
 import '../../data/booking.dart';
+import '../../state/booking_overtime.dart';
 import 'booking_widgets.dart';
 
 /// 桌子在座位圖上的分類，決定顏色與圖例。
@@ -16,6 +17,9 @@ enum SeatTone {
 
   /// 玩家自己的訂位。
   mine,
+
+  /// 客人已入座、超過結束時間還沒離店（只在店員看板出現，add-booking-notifications）。
+  overtime,
 }
 
 /// 一張桌子與它在這段時間內的訂位。
@@ -64,8 +68,17 @@ List<SeatGroup> groupSeats(List<TableInfo> tables) {
 ///
 /// 店員與管理員看得到所有訂位，所以有訂位一律是「已訂」；
 /// 玩家只會拿到自己的訂位資料，有訂位資料就是「你的訂位」。
-SeatTone seatTone(SeatGroup seat, {required bool staffView}) {
+///
+/// 店員看板傳入 [now] 時，桌上有超時的訂位就是「已超時」。
+SeatTone seatTone(SeatGroup seat, {required bool staffView, DateTime? now}) {
   if (!staffView && seat.bookings.isNotEmpty) return SeatTone.mine;
+  if (staffView &&
+      now != null &&
+      seat.bookings.any(
+        (b) => overtimeMinutes(b.status, b.endAt, now) != null,
+      )) {
+    return SeatTone.overtime;
+  }
   if (seat.unavailable || seat.bookings.isNotEmpty) return SeatTone.occupied;
   return SeatTone.available;
 }
@@ -93,12 +106,19 @@ String floorLabel(int floor) => floor < 0 ? 'B${-floor}' : '${floor}F';
         border: AppColors.primary,
         text: AppColors.surface,
       ),
+      // 已超時：錯誤色實心，店員一眼看得到
+      SeatTone.overtime => (
+        background: AppColors.error,
+        border: AppColors.error,
+        text: AppColors.surface,
+      ),
     };
 
 String _toneLabel(SeatTone tone) => switch (tone) {
   SeatTone.available => '空桌',
   SeatTone.occupied => '已訂',
   SeatTone.mine => '你的訂位',
+  SeatTone.overtime => '已超時',
 };
 
 /// 依可用寬度放大座位圖的上限：桌子很少時不會被放得太誇張。
@@ -113,11 +133,15 @@ class SeatingPlanView extends StatefulWidget {
   const SeatingPlanView({
     required this.plans,
     required this.staffView,
+    this.now,
     super.key,
   });
 
   final List<SeatingPlan> plans;
   final bool staffView;
+
+  /// 用來判斷超時的「現在」（UTC）；只有店員看板會用到，null 時不標示超時。
+  final DateTime? now;
 
   @override
   State<SeatingPlanView> createState() => _SeatingPlanViewState();
@@ -160,7 +184,7 @@ class _SeatingPlanViewState extends State<SeatingPlanView> {
                 selected: {plan.floor},
                 onSelectionChanged: (v) => setState(() => _floor = v.first),
               ),
-            _Legend(showMine: !widget.staffView),
+            _Legend(staffView: widget.staffView),
           ],
         ),
         const SizedBox(height: AppSpacing.medium),
@@ -235,7 +259,11 @@ class _SeatingPlanViewState extends State<SeatingPlanView> {
                 child: SeatTable(
                   key: Key('seat-table-${s.table.id}'),
                   seat: s,
-                  tone: seatTone(s, staffView: widget.staffView),
+                  tone: seatTone(
+                    s,
+                    staffView: widget.staffView,
+                    now: widget.now,
+                  ),
                   onTap: () => _showDetail(context, s),
                 ),
               ),
@@ -252,7 +280,7 @@ class _SeatingPlanViewState extends State<SeatingPlanView> {
       builder: (context) => SeatDetail(
         key: const Key('seat-detail'),
         seat: seat,
-        tone: seatTone(seat, staffView: widget.staffView),
+        tone: seatTone(seat, staffView: widget.staffView, now: widget.now),
       ),
     );
   }
@@ -324,16 +352,17 @@ class SeatTable extends StatelessWidget {
 }
 
 class _Legend extends StatelessWidget {
-  const _Legend({required this.showMine});
+  const _Legend({required this.staffView});
 
-  final bool showMine;
+  /// 店員看板有「已超時」，玩家有「你的訂位」。
+  final bool staffView;
 
   @override
   Widget build(BuildContext context) {
     final tones = [
       SeatTone.available,
       SeatTone.occupied,
-      if (showMine) SeatTone.mine,
+      staffView ? SeatTone.overtime : SeatTone.mine,
     ];
     return Wrap(
       key: const Key('seating-legend'),

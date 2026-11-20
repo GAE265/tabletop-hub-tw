@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
-import '../domains/groups/pages/widgets/notification_bell.dart';
+import 'notifications/notification_bell.dart';
 import 'theme/app_colors.dart';
 import 'theme/app_spacing.dart';
 
