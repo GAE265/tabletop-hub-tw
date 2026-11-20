@@ -50,6 +50,9 @@ INSTRUCTIONS = """你是桌遊規則教學影片的腳本編寫者。
 - flip：把蓋著的牌翻開；target 是 main（全部）或 main.<item_key>。
 - shuffle：洗牌；target 是 main。
 - move：把一項移進區域；target 是 main.<item_key>，to 是 sidebar@<區域名稱>。
+cue 的 target 寫法：槽位直接寫名稱（main、main_title、sidebar）；某一項寫 main.<item_key>；
+指向 highlight 或 label 時，直接寫它的 key（例如 h1、l_remove），
+不加 highlight: 或 label: 這類前綴。
 at 是從這一句開始算的秒數，依旁白內容安排先後；動作之間至少間隔 0.4 秒。
 
 分段：一段是畫面狀態連續的一小段，可以有一到三句；
