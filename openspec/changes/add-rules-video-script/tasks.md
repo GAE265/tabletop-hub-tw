@@ -52,6 +52,16 @@
     素材：代表牌三次都正確、shot 都有；第 2 次把三個區域多列成素材（細節問題 1 次）。
 - [ ] 2.9 自我檢查：`uv run ruff check .`、`uv run ruff format --check .`、`uv run pytest`、`uv run pytest -m external`，驗證：全部通過（external 的 OCR 項目除外）、CI 全綠，再改成 Ready for review
 
+## 3. MR 2：規則涵蓋檢查（分支 `feature/rules_qa-video-coverage`，從 1c 的分支切出）
+
+2026-11-21 永傑同意情境表格（不含拍攝說明，已移到 1c）。
+
+- [ ] 3.1 第一個 commit：本節與 spec「規則涵蓋檢查」
+- [ ] 3.2 撰寫涵蓋檢查與指令的測試（`FakeLLMProvider`），驗證：測試存在且失敗
+- [ ] 3.3 實作 `coverage` 子指令與 `compare` 報告的「規則陳述檢查」一節，驗證：3.2 通過
+- [ ] 3.4 對兩輪共 6 次的草稿與手寫版各跑一次，抓到、漏掉、誤報分開列，驗證：**交給永傑判斷**（tasks 2.8 依此決定）
+- [ ] 3.5 自我檢查與 MR 說明，驗證：全部通過、CI 全綠
+
 ## Workflow follow-up
 
 - **第 3 階段自動檢查的輸入**（2026-11-21，第 5 版草稿的靜態圖）：
