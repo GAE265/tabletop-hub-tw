@@ -30,15 +30,19 @@ INSTRUCTIONS = """你是桌遊規則教學影片的腳本編寫者。
 8. asset_key 與區域名稱：用語對照表有 key 的，一律使用那個 key；
    沒有的才自己取英文小寫加底線的名稱。
 9. regions 只列這一章會用到的區域名稱（例如盤面上的某一區），座標由人量測，不需要提供。
+10. 規則寫泛稱時（例如「血刃牌」「花苞牌」這類一整類的牌），畫面上要用一張具體的代表牌：
+    從用語對照表中選一張屬於這一類的牌當素材（用它的 key），
+    並在 reason 寫明「代表牌：<泛稱>，店員可以替換成同類的其他牌」。
+    無法判斷哪張牌屬於這一類時，才用泛稱當素材。
 
 畫面規則（版型 main_with_sidebar）：
-10. main：主體，放一張素材（kind=asset）或一排物件
+11. main：主體，放一張素材（kind=asset）或一排物件
     （kind=items，例如幾張牌，蓋著的牌要給 back_asset_key）。
-11. main_title：主體上方的短標題（例如「情況一」），不需要時給 null。
-12. sidebar：側欄，放一張素材（例如盤面）、一段文字或條列；不需要時 kind 給 none。
-13. highlights：框選（shape=box）或打叉（shape=cross），style 為 gold 或 red；
+12. main_title：主體上方的短標題（例如「情況一」），不需要時給 null。
+13. sidebar：側欄，放一張素材（例如盤面）、一段文字或條列；不需要時 kind 給 none。
+14. highlights：框選（shape=box）或打叉（shape=cross），style 為 gold 或 red；
     target 可以是 main、sidebar、main.<item_key> 或 sidebar@<區域名稱>。
-14. labels：短的文字標籤，style 為 plain、gold 或 red，position 為 below、above 或 center。
+15. labels：短的文字標籤，style 為 plain、gold 或 red，position 為 below、above 或 center。
 
 句內動作（cues），只能用這五種：
 - show：讓主體標題、項目、highlight 或 label 出現（它們會先隱藏，直到 show）。
