@@ -167,6 +167,10 @@
 - **WHEN** 重新輸出時，某句的旁白文字與聲音都沒變
 - **THEN** 不重新呼叫 TTS，使用快取的音檔
 
+#### Scenario: 換 TTS 種類
+- **WHEN** 先在 TTS 未設定（fake，靜音）時輸出，再換成 Azure 重新輸出
+- **THEN** 重新合成每一句旁白，不沿用快取裡的靜音檔（快取檔名包含 TTS 種類，#75 審核）
+
 ### Requirement: 句內動作與畫面狀態
 系統 SHALL 依 cue 計算第 t 秒每個槽位、項、highlight、label 的狀態，再交給版型畫出畫面。動作只有 `show`、`hide`、`flip`、`shuffle`、`move`。highlight、label 與 `hidden` 槽位預設隱藏。狀態 SHALL 以段為範圍，每段開始時重置。
 
@@ -248,9 +252,21 @@
 - **WHEN** 輸出過一次後，只改第 2 段的 `sidebar` 文字再執行 `render`
 - **THEN** 只有第 2 段重新逐格渲染，其他段沿用快取的段影片；串接與混音重新執行
 
+#### Scenario: 音軌與畫面一樣長
+- **WHEN** 最後一句旁白之後還有畫面（句的後留白，或片尾的標題字卡）
+- **THEN** 背景音樂一直播到片尾，音軌長度與畫面相差 0.05 秒內（#75 審核）
+
 #### Scenario: 背景音樂長度
 - **WHEN** 影片總長為 N 秒
 - **THEN** 背景音樂長度為 N 秒；同樣的 N 產生相同的音樂
+
+#### Scenario: 旁白長度改變
+- **WHEN** 某句旁白變長後再執行 `render`
+- **THEN** 時間有變的段重新編碼；因為每段都畫了全片進度條，同一章的段都會重做（第 1 階段的限制，報告中註明）
+
+#### Scenario: TTS 未設定
+- **WHEN** `TTS_PROVIDER` 未填或為 `fake` 時執行 `render`
+- **THEN** 旁白為靜音、照常輸出；警告與報告都註明「時間為估計值」
 
 #### Scenario: 找不到 ffmpeg
 - **WHEN** 執行環境沒有 ffmpeg

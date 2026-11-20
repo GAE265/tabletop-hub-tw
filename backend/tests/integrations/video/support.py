@@ -142,3 +142,39 @@ def write_game(
         Image.new("RGB", size, _COLORS.get(name, (120, 120, 120))).save(assets_dir / name)
     (folder / "video.json").write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
     return folder
+
+
+FAKE_FFMPEG_OK = r"""
+import sys
+# 假 ffmpeg：讀完標準輸入（逐格畫面），在最後一個參數的路徑寫一個假檔案；記下參數方便測試檢查
+data = sys.stdin.buffer.read() if not sys.stdin.isatty() else b""
+args = sys.argv[1:]
+with open(args[-1], "wb") as f:
+    f.write(b"fake-media " + str(len(data)).encode())
+with open(__file__ + ".log", "a", encoding="utf-8") as log:
+    log.write(" ".join(args) + "\n")
+"""
+
+FAKE_FFMPEG_FAIL = """
+import sys
+# 假 ffmpeg：不讀輸入，直接印出錯誤並以 1 結束
+for n in range(1, 21):
+    print(f"log line {n}", file=sys.stderr)
+print("fake encoder exploded", file=sys.stderr)
+sys.exit(1)
+"""
+
+
+def fake_ffmpeg(folder: Path, *, fail: bool = False) -> list[str]:
+    """回傳可以當 ffmpeg 指令使用的命令（python 直譯器＋手寫的假指令稿）。"""
+    import sys
+
+    folder.mkdir(parents=True, exist_ok=True)
+    script = folder / ("fake_ffmpeg_fail.py" if fail else "fake_ffmpeg.py")
+    script.write_text(FAKE_FFMPEG_FAIL if fail else FAKE_FFMPEG_OK, encoding="utf-8")
+    return [sys.executable, str(script)]
+
+
+def fake_ffmpeg_calls(command: list[str]) -> list[str]:
+    log = Path(command[-1] + ".log")
+    return log.read_text(encoding="utf-8").splitlines() if log.exists() else []

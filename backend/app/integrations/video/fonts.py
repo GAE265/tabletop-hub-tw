@@ -46,6 +46,13 @@ class FontSet:
                 ) from exc
 
     @property
+    def cache_key(self) -> str:
+        """字型的識別字串，段快取用：換了字型，畫面就不同。"""
+        if self.fallback:
+            return "pillow-default"
+        return f"{self._paths[False]}|{self._paths[True]}|{self.index}"
+
+    @property
     def warning(self) -> str | None:
         return FALLBACK_WARNING if self.fallback else None
 

@@ -52,6 +52,7 @@
 - [x] 2b.5 `model.py`：素材 `file` 可以用 `..` 或絕對路徑指到 `assets/` 以外 → 載入時檢查解析後的路徑在 `assets/` 內
 - [x] 2b.6 `model.py`：`template` 不是字串時拋 `TypeError` → 改成驗證錯誤
 - [ ] 2b.7 自我檢查與 Draft MR，驗證：全部通過、CI 全綠，再改成 Ready for review
+  - 進度（2026-11-21）：Draft MR #74，CI 全綠，等審核。
 
 ## 3. MR 2：`integrations/tts`（可與 MR 1 平行）
 
@@ -64,16 +65,36 @@
 
 ## 4. MR 3（1b）：TTS 時間軸、編碼、背景音樂、混音（MR 1、MR 2 合併後）
 
+> 2026-11-21 決定：為了加快，MR 3 從 #74 的分支（`fix/integrations-video-review`）往下接，不等它合併；#74 合併後再把 dev 合併進 MR 3。
+> - 段快取與進度條：第 1 階段接受限制。每段畫面都畫了進度條，旁白長度一變，同一章的段都會重新編碼；快取只在「只改畫面、不改長度」時有效，報告中註明。
+> - TTS 未設定（`TTS_PROVIDER` 未填或為 fake）時，旁白為靜音、照常輸出並警告；警告與報告都註明「時間為估計值」。
+
 - [ ] 4.1 永傑開 Draft MR 3，AI 從 `specs/rules-video-maker` 的「先音後畫的時間軸」（旁白快取）、「完整影片輸出」與 `specs/media-integrations` 的「ffmpeg 呼叫」整理分組情境表格，驗證：Draft MR 已存在
-- [ ] 4.2 撰寫旁白快取的單元測試（文字沒變不重新呼叫 TTS），驗證：測試存在且失敗
-- [ ] 4.3 撰寫 `content_hash` 與「只重做有變的段」的單元測試（用手寫的 `FakeSegmentEncoder` 記錄哪些段被編碼），驗證：測試存在且失敗
-- [ ] 4.4 撰寫背景音樂的單元測試（長度、同長度可重現）、找不到 ffmpeg、編碼中斷不留壞檔的測試，驗證：測試存在且失敗
-- [ ] 4.5 撰寫 external 測試：實際編碼、串接、混音，確認 1920×1080、30 fps、有音軌、長度與 `timing.csv` 一致，驗證：`uv run pytest` 不執行它
-- [ ] 4.6 實作 TTS 接上時間軸、逐格渲染、ffmpeg 編碼與串接、背景音樂、混音、`timing.csv` 與報告；`video_commands render`；`core/config.py` 與 `.env.example` 加上 `FFMPEG_PATH`、`VIDEO_MUSIC_VOLUME`；新增 scipy，驗證：4.2–4.4 通過；本機 `uv run pytest -m external` 的結果寫進 MR 說明
-- [ ] 4.7 用 2.10 的 `video.json` 以 Azure TTS 輸出《血與刃》步驟三完整影片，驗證：**交給永傑看完整支影片**，依「規則正確、新手能看懂」判斷，並與手做版比較
+- [x] 4.2 撰寫旁白快取的單元測試（文字沒變不重新呼叫 TTS），驗證：測試存在且失敗
+- [x] 4.3 撰寫 `content_hash` 與「只重做有變的段」的單元測試（用手寫的 `FakeSegmentEncoder` 記錄哪些段被編碼），驗證：測試存在且失敗
+- [x] 4.4 撰寫背景音樂的單元測試（長度、同長度可重現）、找不到 ffmpeg、編碼中斷不留壞檔的測試，驗證：測試存在且失敗
+- [x] 4.5 撰寫 external 測試：實際編碼、串接、混音，確認 1920×1080、30 fps、有音軌、長度與 `timing.csv` 一致，驗證：`uv run pytest` 不執行它
+- [x] 4.6 實作 TTS 接上時間軸、逐格渲染、ffmpeg 編碼與串接、背景音樂、混音、`timing.csv` 與報告；`video_commands render`；`core/config.py` 與 `.env.example` 加上 `FFMPEG_PATH`、`VIDEO_MUSIC_VOLUME`；新增 scipy，驗證：4.2–4.4 通過；本機 `uv run pytest -m external` 的結果寫進 MR 說明
+- [x] 4.7 用 2.10 的 `video.json` 以 Azure TTS 輸出《血與刃》步驟三完整影片，驗證：**交給永傑看完整支影片**，依「規則正確、新手能看懂」判斷，並與手做版比較
+  - 進度（2026-11-21）：已用 Azure TTS 輸出 `backend/.local/rules_video/out/blades_and_rose.mp4`（27.9 秒，1920×1080、30 fps、H.264＋AAC）。每句時段由實際旁白長度決定，旁白不會超出；量測音量：旁白約 −15～−20 dB，句間只剩音樂約 −25～−29 dB，結尾淡出到靜音。
+  - 永傑看完整支影片，合格（2026-11-21）。
 - [ ] 4.8 自我檢查（同 2.11），驗證：全部通過、CI 全綠，再改成 Ready for review
+
+### #75 審核修正（2026-11-21）
+
+- [x] 4.12 旁白快取的檔名加上 TTS 種類（`TTSProvider.cache_name`）：先 fake 再換 Azure 時重新合成，不沿用靜音檔
+- [x] 4.13 混音時旁白補 `apad`：音軌與畫面一樣長（修正前《血與刃》步驟三音軌短 0.4 秒；片尾有字卡時會短 3 秒以上）
+
+### #75 審核中「之後再修」的項目（不擋 #75）
+
+- [ ] 4.14 `encode.py` 清舊段快取用開頭比對：段名稱互為開頭（例如 `s1` 與 `s1_2`）或轉成檔名後相同時會互刪
+- [ ] 4.15 `fonts.py` 的字型快取只記路徑：同一路徑換了字型檔，段影片不會重新編碼
+- [ ] 4.16 測試用的假 ffmpeg 一次 `read()` 全部畫面，一個測試約吃 1.3 GB 記憶體 → 改成分塊讀取
+- [ ] 4.17 `pipeline.py` 串接與混音失敗時沒有清掉 `.tmp.mp4`
+- [ ] 4.18 `VIDEO_MUSIC_VOLUME` 沒有 0–1 的範圍檢查
 
 ## Workflow follow-up
 
+- **第 2 階段的前置項目**：進度條改成最後才疊上去（例如在 ffmpeg 合成時疊加），讓段影片不依賴全片長度，才能真正做到「只重做受影響的那一段」（2026-11-21 決定）。
 - 第 1 階段結果確認後，由永傑決定 1c（AI 產生段資料與最小素材清單）與 1d（API、資料表、前端精靈、發布）怎麼做，另開 change。
 - 三個 MR 都合併後，執行 `/opsx:archive`。
