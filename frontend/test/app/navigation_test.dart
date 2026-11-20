@@ -7,6 +7,7 @@ import 'package:tabletop_hub/app/navigation.dart';
 import 'package:tabletop_hub/app/shell.dart';
 import 'package:tabletop_hub/app/theme/app_theme.dart';
 import 'package:tabletop_hub/core/config/app_config.dart';
+import 'package:tabletop_hub/domains/booking/data/booking_repository.dart';
 import 'package:tabletop_hub/domains/groups/data/groups_repository.dart';
 
 import '../support/fakes.dart';
@@ -43,7 +44,7 @@ Future<GoRouter> pumpShell(
             '/matches',
             '/matches/m-1',
             '/groups',
-            '/groups/notifications',
+            '/notifications',
             '/games-advisor',
             '/rules',
             '/rules/1',
@@ -61,8 +62,10 @@ Future<GoRouter> pumpShell(
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
-        // 鈴鐺查詢未讀數用假的 repository（add-groups-notifications）
+        // 鈴鐺查詢揪團與訂位的未讀數，用假的 repository
+        // （add-groups-notifications、add-booking-notifications）
         groupsRepositoryProvider.overrideWithValue(FakeGroupsRepository()),
+        bookingRepositoryProvider.overrideWithValue(FakeBookingRepository()),
         appConfigProvider.overrideWithValue(
           const AppConfig(
             apiBaseUrl: 'http://api.test',
@@ -216,12 +219,16 @@ void main() {
       );
     });
 
-    testWidgets('點鈴鐺：前往通知列表頁，導覽列選取「揪團」', (tester) async {
+    // add-booking-notifications：通知頁改成 /notifications，同時有揪團與訂位，
+    // 不屬於任何導覽項目
+    testWidgets('點鈴鐺：前往通知頁，導覽列不選取任何項目', (tester) async {
       final router = await pumpShell(tester, size: const Size(1280, 800));
       await tester.tap(find.byKey(const Key('shell-notification-bell')));
       await tester.pumpAndSettle();
-      expect(router.state.uri.path, '/groups/notifications');
-      expect(isSelected(tester, 'shell-nav-groups'), isTrue);
+      expect(router.state.uri.path, '/notifications');
+      for (final key in navKeys) {
+        expect(isSelected(tester, key), isFalse, reason: key);
+      }
     });
   });
 }

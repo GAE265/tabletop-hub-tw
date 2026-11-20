@@ -13,6 +13,7 @@ import 'package:tabletop_hub/domains/booking/data/booking_repository.dart';
 import 'package:tabletop_hub/domains/booking/pages/new_booking_page.dart';
 import 'package:tabletop_hub/domains/booking/pages/my_bookings_page.dart';
 import 'package:tabletop_hub/domains/booking/pages/shop_board_page.dart';
+import 'package:tabletop_hub/domains/booking/state/booking_overtime.dart';
 
 import '../../../support/fakes.dart';
 
@@ -56,6 +57,7 @@ Future<FakeBookingRepository> pumpAt(
   FakeBookingRepository? repo,
   DevUser? user = player,
   Size size = const Size(400, 900),
+  DateTime Function()? clock,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
@@ -87,6 +89,8 @@ Future<FakeBookingRepository> pumpAt(
       overrides: [
         bookingRepositoryProvider.overrideWithValue(fake),
         currentDevUserProvider.overrideWithValue(user),
+        // 店家看板的超時用固定的「現在」（add-booking-notifications）
+        if (clock != null) bookingClockProvider.overrideWithValue(clock),
       ],
       child: MaterialApp.router(
         theme: buildAppTheme(const FakeAppFonts()),
