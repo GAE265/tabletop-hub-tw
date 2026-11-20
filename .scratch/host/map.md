@@ -1,0 +1,98 @@
+# AI 語音主持
+
+## Destination
+
+一份 `.scratch/host/spec.md`，清楚到能直接寫出 AGENTS.md §7 的「情境／操作／預期結果」表格，並拆成 TDD 實作 ticket（放 `.scratch/host-impl/issues/`）。
+範圍：主持人在《血與刃的白薔薇》的一局裡帶流程、回答規則問題；即時語音模型與 Agent 框架的選擇（先用真的聲音小測過才寫進 spec）；後端 API 契約；參考畫面與交接說明。
+
+## Notes
+
+- Domain：`host`（#3 AI 遊戲主持，立倫主責，優先級「應做」）。後端會在 `backend/app/domains/host/`；前端只做 `data/`、`state/`、`prototypes/` 與交接說明（AGENTS.md §5.4）。2026-11-19 畫地圖時 repo 裡還沒有任何 host 的程式。
+- 規則：遵守 `AGENTS.md`（AI 只讀，不得修改）。術語用 AGENTS.md §10 與 `GLOSSARY.md` 的提案區。不得修改 `openspec/`。
+- Skills：`grilling` ticket 呼叫 grilling 與 domain-modeling；`research` ticket 呼叫 research；`prototype` ticket 呼叫 prototype。
+- Ticket 的 `Status:` 用 `open`、`claimed`、`resolved`。
+- 分支：`feature/host`（2026-11-19 立倫決定，原名 `docs/host-wayfinder`）。地圖、決策 ticket、spec、實作 ticket 與之後的程式都放這一個分支，開同一支 PR。這和 games_advisor「先開文件 MR、再一張 ticket 一個 MR」的做法不同。
+- 這張地圖只做決策，不寫 `backend/`、`frontend/`、`device/` 的程式。原型放 `.scratch/host/prototypes/`，research 結果放 `.scratch/host/research/<name>.md`。
+- 附件（repo 外）：
+  - 選型查核報告：`/Users/user/Desktop/團隊專題/02_選題研究/AI語音主持選型查核報告.html`。**它是輸入，不是定案**：沒做桌邊實測與中文盲聽，報告自己也寫只供選型討論。引用它的數字前要回查一手來源。
+  - mattpocock 流程指南：`/Users/user/Desktop/團隊專題/99_其他/mattpocock-skills_開發指南.md`（§0、§1 是立倫的專案做法）。
+- wayfinder 的流程（下一張做哪張、怎麼開每張 ticket 的 session、什麼時候 commit）在持有地圖的對話由立倫直接決定，不經總管，也不向總管回報進度（2026-11-19 立倫決定）。到達 Destination（`spec.md` 寫好、實作 ticket 拆好）才交給總管派實作 worker 與驗收。要改可改路徑以外的檔案、牽涉別的分支或 worktree，或立倫明說要通知時，才找總管。
+- 和 wayfinder 原版不同的做法：
+  - `research` ticket 不需要立倫在場。由持有地圖的 wayfinder session 自己用 Orca 派 research worker（`orca orchestration worker-start`），worker 回報給它，不回報給總管（2026-11-19 立倫決定）。它驗收後更新地圖：把結論寫進 Decisions so far，把變清楚的問題開成新 ticket。全部結案後，向總管回報一次摘要。不開 `research/<name>` 分支、不開 subagent、不 push。research worker 不得再往下派工。
+  - 派 research 的規定：
+    - 一個 worker 一張 ticket。
+    - worker 只能改自己的 ticket 檔與自己的結果檔，不改 `map.md`，不 commit。
+    - 只用一手來源，每項附連結與查核日期。查不到就寫「查不到」，不用模型的記憶補。
+    - 規則書這類有著作權的內容，只能用自己的話摘要。
+  - 派 research 用的模型：收集網路資料用 Codex（2026-11-19 時只有 `gpt-6.1-sol` 派得動）；要讀本機資料庫或程式的用 Claude `opus` 以上。不要用 Claude `sonnet` 派需要跑指令或改檔的工作，它每個動作都會跳權限提示給立倫。`--effort` 一定要和 `--model` 一起給。
+  - 驗收 research（不合格就用 `orca orchestration send` 退回原 worker，不自己代修）：
+    - 只動了那兩個檔。
+    - 來源確實是一手的。
+    - 沒有貼原文。規則書要用資料庫全文比對。
+    - 「查不到」與「要問立倫」是讀完整份資料後才下的結論。
+  - `grilling`、`prototype` ticket 要立倫在場，一次一張。
+- 畫地圖時定下的範圍與方向（2026-11-19，立倫）：
+  - 需求前提：反應快、感情豐富的中文、口音不限、能查資料。
+  - 主持人以帶流程為主，也回答規則問題。規則問題用 `rules_qa`（永傑主責）已有的規則檢索，不另建規則庫。
+  - 首版只做一款：《血與刃的白薔薇》（Blades & Rose，BGG 編號 400566）。`matches` 已有它的回合紀錄格式與陣營（`backend/app/domains/matches/game_definitions.py`），`rules_qa` 已有它的規則影片。
+  - 聲音從桌上的手機或平板進出：開 Flutter Web 頁面，用它的麥克風與喇叭。
+  - 首版主持人只讀資料，不幫忙記回合。回合照舊由玩家在戰績畫面輸入。
+  - 模型首選方向（不是定案）：阿里雲的 `Qwen-Audio-3.1-Realtime`。Flash 或 Plus、要不要把難題轉交後端的文字思考模型，由決策 ticket 決定。Azure 的 `gpt-realtime-2.1` 只當備案，不排實測。區域固定新加坡（2026-11-19 立倫決定）。
+  - 為了展示，一定要用 Agent 框架，三選一：LangChain、LangGraph、Microsoft Agent Framework。展示重點是「看得到主持人走到哪個階段、查了什麼資料」。三個都接不上時回來問立倫，不自行改成不用框架。
+  - 阿里雲帳號由立倫自己開、用自己的額度，金鑰只放本機 `.env`。測試與 Demo 都只用組員自己的聲音（2026-11-19 立倫決定）。
+- 會碰到的規則（決策時要對照）：
+  - AGENTS.md §4.2：domain 不得直接 import 模型廠商的 SDK，外部服務一律包在 `integrations/` 後面；domain 之間只能呼叫對方的 `service`。
+  - AGENTS.md §2 第 4 點：新增第三方套件要在 MR 說明寫理由。
+  - AGENTS.md §3：`integrations/llm/` 由瑋鋐擁有，`integrations/tts/` 由永傑擁有（2026-11-19 時還不存在）。改共用區要 @ 擁有者。
+  - AGENTS.md §5.3：前端不放任何秘密；只能在網頁上用的程式碼要包在 `core/platform/` 的介面後面。
+  - AGENTS.md §7.5：domain 的測試一律用手寫 fake，不連真正的外部服務。
+- 牽涉其他 domain 的事（2026-11-19 由「《血與刃的白薔薇》一局的流程」查出，2026-11-20 問到答案，細節在「向新善、永傑、瑋鋐確認戰績欄位與規則全文的問題」）：
+  - `matches`（新善主責）會改：允許整桌都不出牌的空清單；司教算進 `faithful_count`；「本回合首家」是收到金幣、放水晶的人。2026-11-20 遠端還沒看到改動，寫 spec 前要再看一次 `dev`。同日「主持人在一局裡怎麼帶流程」決定一場主持不掛戰績的局、不讀回合紀錄，這三項不再直接影響主持。
+  - `rules_ingest`（瑋鋐主責）、`rules_qa`（永傑主責）：規則全文的雜訊與圖上讀不到的字暫不修正，主持人這邊自己應對。
+- 固定偏好：
+  - 不問時程問題，推薦答案也不附日期或天數。
+  - commit、PR、文件都不加 AI 署名。
+  - 不 push、不建 GitHub issue、不開 research 分支。
+  - 抓取的資料、規則書原文、錄音檔都不進 repo。規則流程只能用自己的話摘要。
+  - 立倫和組員各用自己的 LLM、embedding 模型與 PostgreSQL；設定不要假設共用。
+
+## Decisions so far
+
+<!-- the index: one line per closed ticket, enough to judge relevance, then zoom the link for the detail the ticket holds -->
+
+- [Qwen 即時語音模型的官方規格](issues/01-qwen-realtime-facts.md)：Flash 與 Plus 都能用 WebSocket、WebRTC、AOQ，新加坡與北京可用；官方有不把長效金鑰交給瀏覽器的接法（後端交換 SDP、短效金鑰）；可按住說話、可呼叫工具，停播要應用程式自己清空待播內容；「300 秒」是歷史音訊容量（最多 50 輪），不是連線上限，固定的最長連線時間查不到；Flash 對 Plus 沒有官方比較數字，只有價格差（Plus 約 3.5 到 12.8 倍）；平台預設保留推論資料最多 30 天，零保留清單沒有這個模型
+- [難題轉交後端思考模型的做法](issues/02-delegate-to-thinking-model.md)：做得到，官方有範例，語音模型用工具呼叫把問題交給後端再唸出答案；後端可用 Qwen 文字模型或專案現有的 Azure 文字介面（實際部署哪個模型要問立倫）；查不到 Plus 有可控制的「先想再答」；等待語講得快不代表裁決快，還要處理逾時、中斷、過期的舊答案；本遊戲要等幾秒查不到，只能實測
+- [三個 Agent 框架怎麼接 Qwen、怎麼展示](issues/03-agent-frameworks-fit.md)：LangChain 1.5.2、LangGraph 1.2.22、Microsoft Agent Framework 1.26.0 都接得上 Qwen 文字模型，都查不到能直接接 Qwen 即時語音的官方轉接器，所以框架只能放在後端處理工具請求那一段；三個都能在本機畫流程圖、看每一步，不必另外付費；都沒試跑過；沒有替立倫選
+- [《血與刃的白薔薇》一局的流程](issues/04-white-rose-match-flow.md)：5 至 10 人；開局準備、夜晚階段（只在開局）、若干回合，每個回合三個階段（傳金幣放水晶、依序決定出牌、翻牌結算）；規則書裡沒有主持人，開局口令是玩家自己喊；`matches` 的回合欄位要到階段 2、3 才知道；獲勝門檻的數字印在圖上讀不到，共 11 條要問立倫或其他 domain 的主責
+- [Flutter Web 怎麼收音與即時播音](issues/05-flutter-web-audio.md)：能即時收音與邊收邊播，WebSocket 與 WebRTC 都可用；插話時的停播、清空待播內容、拒收舊回覆要前端自己做；手機要 HTTPS，並由玩家點一下才能出聲；鎖屏後持續雙向語音沒有保證；`record` 7.x 與 `web` 1.1.2 會提高 Flutter SDK 的門檻；網頁專用的部分要包在 `core/platform/`
+- [註冊阿里雲並確認能呼叫 Qwen 即時語音](issues/06-alibaba-cloud-account.md)：國際站個人帳號、新加坡區；Flash 與 Plus 都實際叫得到並收到聲音（用文字輸入）；Flash 免費額度 100 萬 tokens 到 2027/02/18，Plus 在主控台看不到免費額度；新加坡 Flash 試 74 個聲線有 54 個能用，只在北京的 20 個不行；設定欄位提案 `HOST_REALTIME_API_KEY` 加整段 API Host；立倫選模型先看有感情、自訂工具、成本
+- [用真的聲音試聽 Qwen 主持人](issues/07-listen-to-qwen-host.md)：聲線選 `xunanchuan_v3.1`、`longyuan_v3.1`，品質都很高，Flash 與 Plus 音色、速度聽不出差別；`smart_turn_v2` 講完 0.4 到 0.8 秒出聲，附和不停，但「等一下」也不停；`server_vad` 能打斷，但附和也會停；規則題會先查再答，等待中被追問會先猜答案（加指令後改成丟掉追問）；難題轉交裁判多約 2 秒，Plus 轉交 6 題全對；180 秒沒回答就斷線，歷史預設 20 輪就忘；一條連線不能換聲線；外放加瀏覽器回音消除沒有自己打斷自己。結案後補測：桌邊閒聊 `smart_turn_v2` 0／6 回應、`server_vad` 5／6；沒查規則就會編；每 2 分鐘插系統訊息可以不出聲避開 180 秒斷線
+- [接不接受阿里雲保留玩家的聲音最多 30 天](issues/14-voice-data-retention.md)：接受，開發、組員、玩家都一樣，頁面與文件都不另外告知；測試與 Demo 只用組員的聲音；區域固定新加坡，不用北京
+- [用 Flash 還是 Plus、要不要轉交思考模型](issues/09-model-lineup.md)：語音用 Flash；難題由模型自己決定轉交「思考模型」，預設 Azure `gpt-5.6-luna`（走 `integrations/llm`，可用 `HOST_THINKING_MODEL` 換成 Sol）；等待台詞「我翻一下規則」「讓我來好好的想一想～」，第 8 秒補一句，15 秒放棄改用查到的規則回答；等待中問新問題就取代舊題；即時語音偏離 §4.2，要寫 ADR，等連線方式與框架定案
+- [向新善、永傑、瑋鋐確認戰績欄位與規則全文的問題](issues/16-ask-owners-about-matches-and-rules-text.md)：`matches` 會允許空的出牌清單、司教算進 `faithful_count`、首家是收到金幣放水晶的人（遠端尚未改）；規則全文的雜訊與圖上的字暫不修正，獲勝門檻、魔法之書、睜眼角色從檢索拿不到
+- [對照實體遊戲，補齊白薔薇規則裡讀不到的地方](issues/15-white-rose-rule-gaps.md)：獲勝門檻各人數不同（白薔薇獻祭「人數減 1」張、血刃殺 3 到 6 張），圓版水晶格 4 到 7 格，放滿就結束；魔法之書效果不在主持範圍，玩家自己讀；暗刃即瞞刃；睜眼的四種角色分不出誰是誰；以規則書為準，不採用第三方文章
+- [主持人在一局裡怎麼帶流程](issues/08-host-flow-in-a-match.md)：一場主持不掛戰績的局，只填人數；開場唸門檻與格數、帶開局準備與夜晚（敲桌子倒數 10 秒）；換階段用「下一步」鍵或開口，可退回；後端記第幾回合、哪個階段、放了幾顆水晶，主持人不知道翻牌結果、不判勝負；階段開始自由說，固定台詞只有開場、準備、夜晚、最後一個回合、結束、魔法之書；頁面關掉保留 30 分鐘；用規則書的「回合」
+- [聲音怎麼從瀏覽器連到模型](issues/12-audio-connection-path.md)：經後端轉送（手機 ⇄ 後端 ⇄ 阿里雲），WebRTC 直連只記備案；工具請求在後端執行；轉送用非同步，查規則與思考模型丟到另一條執行緒跑同步程式；手機與後端用自己的格式（原始 PCM＋JSON）；先 `POST /api/v1/hosting-sessions` 再用一次性通行碼連 WebSocket；設定 `HOST_REALTIME_PROVIDER`（預設 `fake`）、`_API_KEY`、`_API_HOST`、`_MODEL`；連不上回 `HOST_REALTIME_UNAVAILABLE`；首版後端固定一台
+
+## Not yet specified
+
+<!-- in-scope fog you can't ticket yet; graduates as the frontier advances -->
+
+- 整合層介面與 fake：即時語音與框架的程式放在 `integrations/` 的哪個資料夾、由誰擁有、fake 長什麼樣。用 Qwen 與框架偏離 §4.2「LLM 一律透過 `integrations/llm` 的介面」時，要不要寫 ADR 並請組員同意。已知現有的 `respond()` 是同步、單次呼叫，不能直接當即時語音的介面，需要另一個管連線生命週期的介面。模型已定（思考模型照 §4.2 走 `integrations/llm`；即時語音偏離 §4.2，要在這裡寫 ADR 並 @ 瑋鋐）。連線方式已定：後端轉送、非同步（見「聲音怎麼從瀏覽器連到模型」），「為什麼不直連」寫進同一份 ADR。只等框架那張決策 ticket 結案。
+- 選定框架後，要不要先做一個小試跑（把 Qwen 的工具請求接進框架），再寫進 spec。三個框架都只查過文件，沒有執行過。
+- 主持要不要存資料：要不要有自己的資料表（例如每場主持的紀錄），對話內容存不存、存多久。一場主持的狀態已定在後端記憶體保留 30 分鐘、不建表（見「主持人在一局裡怎麼帶流程」）；剩下的是要不要另外留紀錄與對話內容。
+- API 契約、參考畫面與交接說明：路徑、請求與回應、錯誤狀態碼、畫面上的按鈕與狀態。
+- 怎麼驗收：pytest 用 fake 驗什麼；真的模型要量什麼（首音時間、停播時間、誤停率、中文語氣盲聽）、門檻多少、算不算合併條件。已知要分開量「等待語的第一個聲音」與「有依據的答案的第一個聲音」；公開數字都是廠商自己測的，而且沒有分 Flash 與 Plus。試聽量到的小測數字可以當起點（見「用真的聲音試聽 Qwen 主持人」的 Answer），原型的 `auto_checks.py` 可以改成驗收用的手動檢查。轉交的時間規則（第 8 秒補話、15 秒放棄、新問題取代舊題）要有 fake 測試情境。帶流程的規則（下一步、上一步、放最後一顆水晶的回合提醒、30 分鐘內接著主持、人數不在 5 到 10）也要有。部署後要實測：經後端轉送多一站慢多少、Azure 對長時間連線有沒有閒置逾時（見「聲音怎麼從瀏覽器連到模型」）。
+- 費用上限：一局大約花多少、額度快用完時怎麼辦。已知每一輪都會把先前的對話重新算一次輸入費用，不能只用錄音秒數估；選型報告的「一局約 0.12 美元」只是估算。語音已定用 Flash；轉交思考模型另算 Azure 費用，等待中被作廢的舊題也照算。立倫的帳號拿到 Flash 的免費額度（100 萬 tokens，到 2027/02/18），Plus 在主控台看不到免費額度。`response.done` 會帶每一輪的 `usage`（文件沒寫），可以照實際用量算；歷史塞滿 300 秒音訊時，光重算歷史，每輪 Flash 約 US$0.0035、Plus 約 US$0.024。
+- 寫 `spec.md`，再拆成實作 ticket（最後兩步）。
+
+## Out of scope
+
+<!-- work ruled beyond the destination; closed, never graduates -->
+
+- 接發牌機與睜眼偵測（`dealer`，新善主責）：`device/` 目前只有攝影機與馬達的骨架，沒有連線。之後另開一張地圖。
+- 正式頁面：由永傑依交接說明製作（AGENTS.md §5.4）。
+- 第二款以上的遊戲。
+- 從聲音認出是哪位玩家。
+- 地端模型；要求台灣口音。
+- 寫 `backend/`、`frontend/`、`device/` 的程式：Destination 只到寫好 spec 並拆成實作 ticket。
