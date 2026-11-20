@@ -16,11 +16,12 @@ FAKE_REFERENCE_PAGE = """Card list. Red cards: Red Knight, Red Queen. Blue cards
 FAQ: A player may skip playing a card."""
 
 TERMS: list[dict[str, Any]] = [
-    {"en": "Red card", "zh": "紅牌", "key": "red"},
-    {"en": "Blue card", "zh": "藍牌", "key": "blue"},
-    {"en": "Card back", "zh": "牌背", "key": "back"},
-    {"en": "Board", "zh": "盤面", "key": "board"},
+    {"en": "Red card", "zh": "紅牌", "key": "red", "category": "single"},
+    {"en": "Blue card", "zh": "藍牌", "key": "blue", "category": "single"},
+    {"en": "Card back", "zh": "牌背", "key": "back", "category": "single"},
+    {"en": "Board", "zh": "盤面", "key": "board", "category": "single"},
     {"en": "Zone A", "zh": "甲區", "key": "zone_a", "avoid": ["A區"]},
+    {"en": "Knight cards", "zh": "騎士牌", "key": "knight_cards", "category": "generic"},
 ]
 
 # LLM 依 schema 回傳的內容（對應 tests/integrations/video/support.py 的假遊戲）
@@ -39,7 +40,7 @@ _LLM_OUTPUT: dict[str, Any] = {
             "kind": "flat_photo",
             "priority": "must",
             "reason": "要認得紅牌",
-            "shot": None,
+            "shot": "單張牌正面朝上平放，從正上方拍",
             "regions": [],
         },
         {
@@ -47,7 +48,7 @@ _LLM_OUTPUT: dict[str, Any] = {
             "kind": "flat_photo",
             "priority": "must",
             "reason": "要認得藍牌",
-            "shot": None,
+            "shot": "單張牌正面朝上平放，從正上方拍",
             "regions": [],
         },
         {

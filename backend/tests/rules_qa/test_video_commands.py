@@ -210,7 +210,7 @@ def test_draft_assets_from_hand_version(
     output = llm_output()
     output["assets"].append(
         {"asset_key": "dice", "kind": "drawn", "priority": "optional",
-         "reason": "骰子", "shot": None, "regions": []}
+         "reason": "骰子", "shot": "繪製一顆骰子", "regions": []}
     )  # fmt: skip
     code = main(
         _draft_args(folder, "--assets-from", "video.json"),

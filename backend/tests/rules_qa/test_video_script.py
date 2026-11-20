@@ -183,3 +183,82 @@ def test_source_page_from_reference_rejected(tmp_path: Path) -> None:
         generate_script(llm, _request_with_reference(tmp_path), tmp_path / "draft")
     message = " ".join(exc.value.errors)
     assert "參考頁" in message and "3" in message
+
+
+# --- 素材檢查（2026-11-21 永傑決定）：泛稱／單一種牌、拍攝說明 ---
+
+
+def _asset(**fields: object) -> dict:
+    base = {
+        "asset_key": "x",
+        "kind": "flat_photo",
+        "priority": "must",
+        "reason": "要認得這張牌",
+        "shot": "單張牌正面朝上平放，從正上方拍",
+        "regions": [],
+    }
+    return base | fields
+
+
+def test_generic_asset_needs_representative_note(tmp_path: Path) -> None:
+    bad = llm_output()
+    bad["assets"].append(_asset(asset_key="knight_cards", reason="要認得騎士牌"))
+    llm = FakeLLMProvider(json_outputs=[bad, bad])
+    with pytest.raises(ScriptRejected) as exc:
+        generate_script(llm, _request(tmp_path), tmp_path / "draft")
+    message = " ".join(exc.value.errors)
+    assert "knight_cards" in message and "泛稱" in message and "代表牌" in message
+
+
+def test_generic_asset_with_note_passes(tmp_path: Path) -> None:
+    ok = llm_output()
+    ok["assets"].append(
+        _asset(asset_key="knight_cards", reason="代表牌：騎士牌，店員可以拍同類的任一張牌")
+    )
+    llm = FakeLLMProvider(json_outputs=[ok])
+    generate_script(llm, _request(tmp_path), tmp_path / "draft")
+    assert len(llm.calls) == 1
+
+
+def test_single_card_must_not_be_marked_representative(tmp_path: Path) -> None:
+    bad = llm_output()
+    bad["assets"][1]["reason"] = "代表牌：紅牌，店員可以替換"  # red 是單一種牌
+    llm = FakeLLMProvider(json_outputs=[bad, bad])
+    with pytest.raises(ScriptRejected) as exc:
+        generate_script(llm, _request(tmp_path), tmp_path / "draft")
+    message = " ".join(exc.value.errors)
+    assert "red" in message and "單一種牌" in message
+
+
+@pytest.mark.parametrize("shot", [None, "", "  "])
+def test_every_asset_needs_shot(tmp_path: Path, shot: object) -> None:
+    bad = llm_output()
+    bad["assets"][3]["shot"] = shot  # board
+    llm = FakeLLMProvider(json_outputs=[bad, bad])
+    with pytest.raises(ScriptRejected) as exc:
+        generate_script(llm, _request(tmp_path), tmp_path / "draft")
+    message = " ".join(exc.value.errors)
+    assert "board" in message and "拍攝說明" in message
+
+
+def test_terms_category_shown_in_input(tmp_path: Path) -> None:
+    llm = FakeLLMProvider(json_outputs=[llm_output()])
+    generate_script(llm, _request(tmp_path), tmp_path / "draft")
+    text = llm.calls[0].kwargs["input"]
+    assert "騎士牌（key：knight_cards）（泛稱）" in text
+    assert "紅牌（key：red）（單一種牌）" in text
+
+
+def test_invalid_term_category(tmp_path: Path) -> None:
+    write_inputs(tmp_path)
+    path = tmp_path / "terms.json"
+    path.write_text('[{"en": "X", "zh": "叉", "key": "x", "category": "many"}]', encoding="utf-8")
+    with pytest.raises(ScriptInputError) as exc:
+        load_terms(path)
+    assert "category" in str(exc.value) and "generic" in str(exc.value)
+
+
+def test_instructions_narration_keeps_subtitle_conditions(tmp_path: Path) -> None:
+    llm = FakeLLMProvider(json_outputs=[llm_output()])
+    generate_script(llm, _request(tmp_path), tmp_path / "draft")
+    assert "不能省略字幕裡的任何條件" in llm.calls[0].kwargs["instructions"]
