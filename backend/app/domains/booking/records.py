@@ -81,3 +81,27 @@ class BookingSummary:
     end_at: datetime
     party_size: int
     status: str
+
+
+@dataclass(frozen=True)
+class NotificationRecord:
+    """標成已讀前用來確認通知屬於誰。"""
+
+    id: uuid.UUID
+    user_id: uuid.UUID
+
+
+@dataclass(frozen=True)
+class NotificationView:
+    """一則訂位通知，加上訂位目前的資料。"""
+
+    id: uuid.UUID
+    type: str
+    reservation_id: int
+    reservation_code: str
+    shop_name: str
+    start_at: datetime
+    end_at: datetime
+    party_size: int
+    read_at: datetime | None
+    created_at: datetime
