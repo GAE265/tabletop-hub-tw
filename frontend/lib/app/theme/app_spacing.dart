@@ -83,6 +83,10 @@ abstract final class AppSizes {
 
   /// 列表捲到距離底部這麼近時，載入下一頁。
   static const double loadMoreThreshold = 200;
+
+  /// 規則書匯入：選好的圖片縮圖（直式，接近書頁比例）。
+  static const double pageThumbWidth = 48;
+  static const double pageThumbHeight = 64;
 }
 
 /// 暖色柔和懸浮陰影。

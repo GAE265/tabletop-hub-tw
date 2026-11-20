@@ -14,9 +14,9 @@ import '../domains/matches/pages/match_detail_page.dart';
 import '../domains/matches/pages/matches_page.dart';
 import '../domains/rules_qa/pages/rules_lesson_page.dart';
 import '../domains/rules_qa/pages/rules_lessons_page.dart';
+import '../domains/rules_ingest/pages/rules_ingest_page.dart';
 import '../prototypes/booking/booking_list_proto_page.dart';
 import '../prototypes/booking/booking_proto_page.dart';
-import '../prototypes/rules_ingest/rules_ingest_proto_page.dart';
 import 'home/pages/home_page.dart';
 import 'notifications/notifications_page.dart';
 import 'shell.dart';
@@ -45,6 +45,11 @@ GoRouter createRouter(AppConfig config) => GoRouter(
                   GroupDetailPage(groupId: state.pathParameters['id']!),
             ),
           ],
+        ),
+        // 規則書匯入，只有管理員能用（add-rules-ingest-page）
+        GoRoute(
+          path: '/rules-ingest',
+          builder: (context, state) => const RulesIngestPage(),
         ),
         // 揪團與訂位的通知（add-booking-notifications）
         GoRoute(
@@ -101,10 +106,6 @@ GoRouter createRouter(AppConfig config) => GoRouter(
           GoRoute(
             path: '/proto/theme',
             builder: (context, state) => const ThemePreviewPage(),
-          ),
-          GoRoute(
-            path: '/proto/rules-ingest',
-            builder: (context, state) => const RulesIngestProtoPage(),
           ),
           GoRoute(
             path: '/proto/booking',
