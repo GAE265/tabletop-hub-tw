@@ -247,3 +247,26 @@ def test_compare_invalid_file(
     err = capsys.readouterr().err
     assert "hand" in err and "ghost" in err
     assert not (tmp_path / "ai" / "compare.md").exists()
+
+
+def test_draft_missing_reference_page_does_not_call_llm(
+    tmp_path: Path, make_settings: Callable[..., Settings], capsys: pytest.CaptureFixture[str]
+) -> None:
+    folder = write_inputs(write_game(tmp_path / "game", base_data()))
+    llm = FakeLLMProvider(json_outputs=[])
+    args = _draft_args(folder, "--reference-pages", "rulebook/en-099.txt")
+    code = main(args, settings=make_settings(), llm=llm)
+    assert code != 0
+    assert "en-099.txt" in capsys.readouterr().err
+    assert llm.calls == []
+
+
+def test_draft_with_reference_pages(
+    tmp_path: Path, make_settings: Callable[..., Settings], capsys: pytest.CaptureFixture[str]
+) -> None:
+    folder = write_inputs(write_game(tmp_path / "game", base_data()))
+    llm = FakeLLMProvider(json_outputs=[llm_output()])
+    args = _draft_args(folder, "--reference-pages", "rulebook/en-003.txt")
+    code = main(args, settings=make_settings(), llm=llm)
+    assert code == 0, capsys.readouterr().err
+    assert "Red Knight" in llm.calls[0].kwargs["input"]

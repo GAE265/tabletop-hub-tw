@@ -12,6 +12,9 @@ FAKE_PAGE = """Step 3. Shuffle the played cards face down, then reveal them toge
 Case 1: no Blade card. Remove every Blue card; put Red cards into Zone A.
 Case 2: any Blade card. Remove every Blue card."""
 
+FAKE_REFERENCE_PAGE = """Card list. Red cards: Red Knight, Red Queen. Blue cards: Blue Pawn.
+FAQ: A player may skip playing a card."""
+
 TERMS: list[dict[str, Any]] = [
     {"en": "Red card", "zh": "紅牌", "key": "red"},
     {"en": "Blue card", "zh": "藍牌", "key": "blue"},
@@ -139,8 +142,9 @@ def llm_output() -> dict[str, Any]:
 
 
 def write_inputs(folder: Path) -> Path:
-    """在 folder 寫出 rulebook/en-005.txt 與 terms.json，回傳 folder。"""
+    """在 folder 寫出 rulebook/en-005.txt（本章）、en-003.txt（參考頁）與 terms.json，回傳 folder。"""
     (folder / "rulebook").mkdir(parents=True, exist_ok=True)
     (folder / "rulebook" / "en-005.txt").write_text(FAKE_PAGE, encoding="utf-8")
+    (folder / "rulebook" / "en-003.txt").write_text(FAKE_REFERENCE_PAGE, encoding="utf-8")
     (folder / "terms.json").write_text(json.dumps(TERMS, ensure_ascii=False), encoding="utf-8")
     return folder

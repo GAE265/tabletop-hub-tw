@@ -17,7 +17,12 @@ from app.domains.rules_qa.video_script import (
 )
 from app.integrations.llm.fake import FakeLLMProvider
 from app.integrations.video import parse_video
-from tests.rules_qa.video_script_support import FAKE_PAGE, llm_output, write_inputs
+from tests.rules_qa.video_script_support import (
+    FAKE_PAGE,
+    FAKE_REFERENCE_PAGE,
+    llm_output,
+    write_inputs,
+)
 
 
 def _request(folder: Path) -> ScriptRequest:
@@ -143,3 +148,38 @@ def test_instructions_explain_how_to_target_highlights_and_labels(tmp_path: Path
     generate_script(llm, _request(tmp_path), tmp_path / "draft")
     instructions = llm.calls[0].kwargs["instructions"]
     assert "直接寫它的 key" in instructions and "不加" in instructions
+
+
+# --- 參考頁（--reference-pages）：只供查牌名與分類，不可寫成旁白 ---
+
+
+def _request_with_reference(folder: Path) -> ScriptRequest:
+    request = _request(folder)
+    return ScriptRequest(
+        chapter_number=request.chapter_number,
+        chapter_title=request.chapter_title,
+        pages=request.pages,
+        terms=request.terms,
+        game_key=request.game_key,
+        title=request.title,
+        reference_pages=load_pages(folder, ["rulebook/en-003.txt"]),
+    )
+
+
+def test_reference_pages_marked_in_input(tmp_path: Path) -> None:
+    llm = FakeLLMProvider(json_outputs=[llm_output()])
+    generate_script(llm, _request_with_reference(tmp_path), tmp_path / "draft")
+    call = llm.calls[0].kwargs
+    assert FAKE_REFERENCE_PAGE.splitlines()[0] in call["input"]
+    assert "參考資料" in call["input"] and "不可寫成旁白" in call["input"]
+    assert "參考資料" in call["instructions"]
+
+
+def test_source_page_from_reference_rejected(tmp_path: Path) -> None:
+    bad = llm_output()
+    bad["segments"][1]["source_pages"] = [3]
+    llm = FakeLLMProvider(json_outputs=[bad, bad])
+    with pytest.raises(ScriptRejected) as exc:
+        generate_script(llm, _request_with_reference(tmp_path), tmp_path / "draft")
+    message = " ".join(exc.value.errors)
+    assert "參考頁" in message and "3" in message
