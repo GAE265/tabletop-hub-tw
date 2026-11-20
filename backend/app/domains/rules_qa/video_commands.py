@@ -18,10 +18,13 @@ render 需要 ffmpeg（FFMPEG_PATH）；TTS 用 .env 的 TTS_PROVIDER，未設�
 import argparse
 import json
 import sys
+from dataclasses import asdict
 from pathlib import Path
 
 from app.core.config import Settings, get_settings
 from app.domains.rules_qa.video_script import (
+    CLEANUP_RULES,
+    CleanupRecord,
     ScriptInputError,
     ScriptRejected,
     ScriptRequest,
@@ -221,8 +224,12 @@ def _draft(args: argparse.Namespace, settings: Settings, llm: LLMProvider | None
 
     draft_folder = folder / "draft"
     try:
+        cleanups: list[CleanupRecord] = []
         data = generate_script(
-            llm or get_llm_provider(settings.llm_provider, settings), request, draft_folder
+            llm or get_llm_provider(settings.llm_provider, settings),
+            request,
+            draft_folder,
+            cleanup_log=cleanups,
         )
     except LLMError as exc:
         print(f"LLM 暫時無法使用或拒絕輸出：{exc}", file=sys.stderr)
@@ -247,6 +254,14 @@ def _draft(args: argparse.Namespace, settings: Settings, llm: LLMProvider | None
             print(f"借用照片與座標失敗（{hand}）：{exc}", file=sys.stderr)
             return EXIT_FAILED
     _write_json(draft_folder / "video.json", data)
+    (draft_folder / "cleanup.json").write_text(
+        json.dumps([asdict(r) for r in cleanups], ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    if cleanups:
+        print(f"自動清理了 {len(cleanups)} 處格式小錯（記在 cleanup.json）：")
+        for r in cleanups:
+            print(f"  {r.rule} {CLEANUP_RULES[r.rule]}：{r.where}「{r.before}」→「{r.after}」")
 
     beats = sum(len(s["beats"]) for s in data["segments"])
     pending = [a["asset_key"] for a in data["assets"] if a["file"] is None]
@@ -280,7 +295,7 @@ def _compare(a: Path, b: Path) -> int:
             return EXIT_FAILED
     report = compare_videos(videos[0], videos[1])
     target = a / "compare.md"
-    target.write_text(report.markdown(), encoding="utf-8")
+    target.write_text(report.markdown() + _cleanup_section(a), encoding="utf-8")
     print(f"已輸出比對報告：{target}")
     for category, counts in report.summary.items():
         print(
@@ -288,6 +303,24 @@ def _compare(a: Path, b: Path) -> int:
             f"缺少 {counts.missing}、多出 {counts.extra}"
         )
     return EXIT_OK
+
+
+def _cleanup_section(folder: Path) -> str:
+    """比對報告的「自動清理」一節：AI 草稿產生時清了哪些格式小錯。"""
+    path = folder / "cleanup.json"
+    lines = ["", "## 自動清理", ""]
+    if not path.is_file():
+        return "\n".join([*lines, "沒有自動清理的紀錄（沒有 cleanup.json）。", ""])
+    records = json.loads(path.read_text(encoding="utf-8"))
+    if not records:
+        return "\n".join([*lines, "這份草稿沒有需要清理的格式小錯。", ""])
+    lines += ["| 規則 | 第幾次輸出 | 位置 | 清理前 | 清理後 |", "|---|---|---|---|---|"]
+    for r in records:
+        rule = f"{r['rule']} {CLEANUP_RULES.get(r['rule'], '')}"
+        lines.append(
+            f"| {rule} | {r['attempt']} | {r['where']} | `{r['before']}` | `{r['after']}` |"
+        )
+    return "\n".join(lines) + "\n"
 
 
 def _write_json(path: Path, data: dict) -> None:

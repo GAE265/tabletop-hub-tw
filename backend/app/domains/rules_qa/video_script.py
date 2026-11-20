@@ -161,8 +161,16 @@ def build_input(request: ScriptRequest) -> str:
 # --------------------------------------------------------------------------- 產生
 
 
-def generate_script(llm: LLMProvider, request: ScriptRequest, base_dir: Path) -> dict[str, Any]:
-    """回傳通過檢查的段資料（video.json 的內容）；改寫一次仍不通過時拋 ScriptRejected。"""
+def generate_script(
+    llm: LLMProvider,
+    request: ScriptRequest,
+    base_dir: Path,
+    cleanup_log: list["CleanupRecord"] | None = None,
+) -> dict[str, Any]:
+    """回傳通過檢查的段資料（video.json 的內容）；改寫一次仍不通過時拋 ScriptRejected。
+
+    每次 LLM 輸出都先做格式小錯的自動清理（C1–C4），清了什麼記進 cleanup_log；清理後照樣檢查。
+    """
     llm_input = build_input(request)
     outputs: list[dict[str, Any]] = []
     errors: list[str] = []
@@ -176,8 +184,13 @@ def generate_script(llm: LLMProvider, request: ScriptRequest, base_dir: Path) ->
             schema=video_prompts.SCRIPT_SCHEMA,
         )
         outputs.append(raw)
+        cleaned, records = clean_format(raw)
+        if cleanup_log is not None:
+            cleanup_log += [
+                CleanupRecord(r.rule, r.where, r.before, r.after, attempt + 1) for r in records
+            ]
         try:
-            data = to_video_data(raw, request)
+            data = to_video_data(cleaned, request)
         except (KeyError, TypeError, ValueError, AttributeError) as exc:
             errors = [f"輸出格式不符合 schema：{exc!r}"]
             continue
@@ -185,6 +198,93 @@ def generate_script(llm: LLMProvider, request: ScriptRequest, base_dir: Path) ->
         if not errors:
             return data
     raise ScriptRejected(errors, outputs)
+
+
+# --------------------------------------------------------------------------- 格式小錯的自動清理
+
+CLEANUP_RULES = {
+    "C1": "「@」「.」前後的空白",
+    "C2": "開頭、結尾的空白",
+    "C3": "全形分隔符號（＠、．）",
+    "C4": "cue target 的 highlight:／label: 前綴",
+}
+_SEPARATOR_SPACES = re.compile(r"\s*([@.])\s*")
+_PREFIX = re.compile(r"^(highlight|label)\s*:\s*(.+)$")
+
+
+@dataclass(frozen=True)
+class CleanupRecord:
+    rule: str  # C1–C4
+    where: str
+    before: str
+    after: str
+    attempt: int = 1  # 第幾次 LLM 輸出
+
+
+def clean_format(raw: dict[str, Any]) -> tuple[dict[str, Any], list[CleanupRecord]]:
+    """只清 C1–C4 四種格式小錯，回傳清理後的複本與紀錄；其他內容一律不動。"""
+    data = json.loads(json.dumps(raw))
+    records: list[CleanupRecord] = []
+
+    def strip(obj: dict[str, Any], field_name: str, where: str) -> None:  # C2
+        value = obj.get(field_name)
+        if isinstance(value, str) and value != value.strip():
+            obj[field_name] = value.strip()
+            records.append(CleanupRecord("C2", f"{where} 的 {field_name}", value, value.strip()))
+
+    def target(obj: dict[str, Any], field_name: str, where: str) -> None:  # C2、C3、C1
+        strip(obj, field_name, where)
+        value = obj.get(field_name)
+        if not isinstance(value, str):
+            return
+        full = value.replace("＠", "@").replace("．", ".")
+        if full != value:
+            records.append(CleanupRecord("C3", f"{where} 的 {field_name}", value, full))
+        spaced = _SEPARATOR_SPACES.sub(lambda m: m.group(1), full)
+        if spaced != full:
+            records.append(CleanupRecord("C1", f"{where} 的 {field_name}", full, spaced))
+        obj[field_name] = spaced
+
+    for i, asset in enumerate(data.get("assets", [])):
+        where = f"素材 {asset.get('asset_key', i)}"
+        strip(asset, "asset_key", where)
+        names = asset.get("regions")
+        if isinstance(names, list):
+            stripped = [n.strip() if isinstance(n, str) else n for n in names]
+            for before, after in zip(names, stripped, strict=True):
+                if before != after:
+                    records.append(CleanupRecord("C2", f"{where} 的區域名稱", before, after))
+            asset["regions"] = stripped
+
+    for segment in data.get("segments", []):
+        seg = f"段 {segment.get('segment_key')}"
+        strip(segment, "segment_key", seg)
+        for slot_name in ("main", "sidebar"):
+            slot = segment.get(slot_name) or {}
+            strip(slot, "asset_key", f"{seg} {slot_name}")
+            for item in slot.get("items", []) if slot_name == "main" else []:
+                for field_name in ("item_key", "asset_key", "back_asset_key"):
+                    strip(item, field_name, f"{seg} 項 {item.get('item_key')}")
+        for kind in ("highlights", "labels"):
+            for overlay in segment.get(kind, []):
+                where = f"{seg} {kind[:-1]} {overlay.get('key')}"
+                strip(overlay, "key", where)
+                target(overlay, "target", where)
+        overlay_keys = {
+            "highlight": {h.get("key") for h in segment.get("highlights", [])},
+            "label": {lab.get("key") for lab in segment.get("labels", [])},
+        }
+        for b, beat in enumerate(segment.get("beats", []), start=1):
+            for c, cue in enumerate(beat.get("cues", []), start=1):
+                where = f"{seg} 第 {b} 句 cue {c}"
+                target(cue, "target", where)
+                target(cue, "to", where)
+                value = cue.get("target")
+                match = _PREFIX.match(value) if isinstance(value, str) else None
+                if match and match.group(2) in overlay_keys[match.group(1)]:  # C4
+                    cue["target"] = match.group(2)
+                    records.append(CleanupRecord("C4", f"{where} 的 target", value, match.group(2)))
+    return data, records
 
 
 def to_video_data(raw: dict[str, Any], request: ScriptRequest) -> dict[str, Any]:
