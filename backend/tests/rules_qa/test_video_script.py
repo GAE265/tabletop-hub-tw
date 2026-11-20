@@ -135,3 +135,11 @@ def test_instructions_ask_for_representative_card(tmp_path: Path) -> None:
     generate_script(llm, _request(tmp_path), tmp_path / "draft")
     instructions = llm.calls[0].kwargs["instructions"]
     assert "泛稱" in instructions and "代表牌" in instructions and "店員可以替換" in instructions
+
+
+def test_instructions_explain_how_to_target_highlights_and_labels(tmp_path: Path) -> None:
+    # 實際產生時，AI 曾把 cue 的 target 寫成 highlight:<key>、label:<key>（2026-11-21）
+    llm = FakeLLMProvider(json_outputs=[llm_output()])
+    generate_script(llm, _request(tmp_path), tmp_path / "draft")
+    instructions = llm.calls[0].kwargs["instructions"]
+    assert "直接寫它的 key" in instructions and "不加" in instructions
