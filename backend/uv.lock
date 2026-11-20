@@ -98,6 +98,7 @@ dependencies = [
     { name = "azure-ai-documentintelligence" },
     { name = "azure-storage-blob" },
     { name = "fastapi" },
+    { name = "httpx" },
     { name = "numpy" },
     { name = "openai" },
     { name = "pgvector" },
@@ -111,7 +112,6 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
-    { name = "httpx" },
     { name = "pytest" },
     { name = "ruff" },
 ]
@@ -122,6 +122,7 @@ requires-dist = [
     { name = "azure-ai-documentintelligence", specifier = ">=1.0.2" },
     { name = "azure-storage-blob", specifier = ">=12.31.1" },
     { name = "fastapi", specifier = ">=0.162.0" },
+    { name = "httpx", specifier = ">=0.28.1" },
     { name = "numpy", specifier = ">=2.5.5" },
     { name = "openai", specifier = ">=3.49.0" },
     { name = "pgvector", specifier = ">=0.5.1" },
@@ -135,7 +136,6 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "httpx", specifier = ">=0.28.1" },
     { name = "pytest", specifier = ">=9.2.0" },
     { name = "ruff", specifier = ">=0.17.3" },
 ]
