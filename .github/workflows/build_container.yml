@@ -81,7 +81,7 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  frontend:
+  frontend-dev:
     runs-on: ubuntu-latest
     permissions:
       contents: read
