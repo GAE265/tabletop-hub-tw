@@ -23,7 +23,8 @@
 
 ## 2. MR 1（1a）：段資料、版型、畫面狀態與靜態圖（分支 `feature/integrations-video-segments`）
 
-- [ ] 2.1 永傑開 Draft MR 1，貼上 `docs/mr_info/feature/integrations-video-segments.md` 的說明與分組情境表格，驗證：Draft MR 已存在
+- [x] 2.1 永傑開 Draft MR 1，貼上 `docs/mr_info/feature/integrations-video-segments.md` 的說明與分組情境表格，驗證：Draft MR 已存在
+  - Draft MR：#71（2026-11-20）
 - [x] 2.2 `.gitignore` 加上 `backend/.local/`，驗證：放進該資料夾的檔案不出現在 `git status`
 - [x] 2.3 `GLOSSARY.md` 新增提案術語，驗證：段、句、句內動作（cue）、版型、槽位、素材、區域、必拍／選拍、玩家環形都有定義
 - [x] 2.4 撰寫段資料驗證的單元測試（`backend/tests/integrations/video/test_video_data.py`，用假遊戲資料）：涵蓋 spec「段資料格式與驗證」每個 scenario，驗證：測試存在且失敗

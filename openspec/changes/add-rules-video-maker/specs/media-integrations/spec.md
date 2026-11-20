@@ -19,17 +19,41 @@
 - **WHEN** 文字是空字串或只有空白
 - **THEN** 拋 `ValueError`，不發請求
 
+#### Scenario: 請求內容
+- **WHEN** 用 Azure 實作合成一句
+- **THEN** 請求送到 `https://{TTS_REGION}.tts.speech.microsoft.com/cognitiveservices/v1`，標頭帶金鑰與輸出格式 `riff-48khz-16bit-mono-pcm`，SSML 的語言為 `zh-TW`、聲音為指定的 `voice`
+
+#### Scenario: 特殊字元
+- **WHEN** 文字含 `&`、`<`、`>`
+- **THEN** SSML 中正確跳脫，請求是合法的 XML
+
 #### Scenario: 雲端服務無法使用
-- **WHEN** Azure TTS 連不上或回錯誤
+- **WHEN** Azure TTS 連不上、逾時或回 5xx
 - **THEN** 拋 `TTSUnavailable`，訊息不含金鑰
 
+#### Scenario: 金鑰錯誤
+- **WHEN** Azure TTS 回 401 或 403
+- **THEN** 拋 `TTSError`（不是 `TTSUnavailable`，重試也不會成功），訊息不含金鑰
+
 #### Scenario: 請求太頻繁
-- **WHEN** Azure TTS 回 429
-- **THEN** 等待後重試，超過重試上限才拋 `TTSUnavailable`
+- **WHEN** Azure TTS 先回 429 再回 200
+- **THEN** 等待後重試，回傳音檔
+
+#### Scenario: 一直請求太頻繁
+- **WHEN** Azure TTS 一直回 429，超過重試上限
+- **THEN** 拋 `TTSUnavailable`
 
 #### Scenario: 缺少設定
 - **WHEN** `TTS_PROVIDER=azure` 但沒有設定 `TTS_REGION` 或 `TTS_API_KEY`
-- **THEN** 建立 provider 時拋錯並說明缺哪個設定
+- **THEN** 建立 provider 時拋 `TTSNotConfigured` 並說明缺哪個設定
+
+#### Scenario: 沒有設定 provider
+- **WHEN** 沒有設定 `TTS_PROVIDER`
+- **THEN** 使用 `FakeTTSProvider`
+
+#### Scenario: 未知的 provider
+- **WHEN** `TTS_PROVIDER` 不是 `fake` 或 `azure`
+- **THEN** 建立 provider 時拋錯並說明可用的值
 
 #### Scenario: 實際合成（external）
 - **WHEN** 設好金鑰後合成一句中文
