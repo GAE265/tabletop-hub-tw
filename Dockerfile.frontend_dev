@@ -10,6 +10,7 @@ RUN dart run build_runner build --delete-conflicting-outputs
 
 ARG API_BASE_URL=__API_BASE_URL__
 RUN flutter build web \
+    --debug \
     --dart-define=API_BASE_URL=$API_BASE_URL \
     --dart-define=SHOW_PROTOTYPES=true \
     --base-href=/
