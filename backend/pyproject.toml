@@ -7,6 +7,7 @@ dependencies = [
     "azure-ai-documentintelligence>=1.0.2",
     "azure-storage-blob>=12.31.1",
     "fastapi>=0.162.0",
+    "httpx>=0.28.1",
     "openai>=3.49.0",
     "pgvector>=0.5.1",
     "psycopg[binary]>=3.3.6",
@@ -18,7 +19,6 @@ dependencies = [
 
 [dependency-groups]
 dev = [
-    "httpx>=0.28.1",
     "pillow>=13.0.0",
     "pytest>=9.2.0",
     "ruff>=0.17.3",

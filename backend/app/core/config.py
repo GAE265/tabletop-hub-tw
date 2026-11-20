@@ -57,6 +57,14 @@ class Settings(BaseSettings):
     rules_qa_embedding_api_key: str | None = None
     rules_qa_embedding_model: str | None = None
     rules_qa_embedding_dim: int = 1536
+    # --- 文字轉語音（integrations/tts；影片生產器的旁白） ---
+    # fake：產生靜音音檔（測試與開發用）；azure：Azure AI Speech
+    tts_provider: str = "fake"
+    # Azure AI Speech 資源的區域代碼，例如 eastasia
+    tts_region: str | None = None
+    tts_api_key: str | None = None
+    # 預設聲音；段資料指定的 voice 優先
+    tts_voice: str = "zh-TW-YunJheNeural"
     # --- 檔案儲存（影片生產器的素材照片、旁白與影片） ---
     # fake：存在記憶體（測試用）；local：存在本機資料夾（開發用）；cloud：Azure Blob Storage
     storage_provider: str = "fake"
