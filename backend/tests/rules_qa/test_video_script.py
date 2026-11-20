@@ -127,3 +127,11 @@ def test_missing_input_files(tmp_path: Path) -> None:
     with pytest.raises(ScriptInputError) as exc:
         load_terms(tmp_path / "terms.json")
     assert "terms.json" in str(exc.value)
+
+
+def test_instructions_ask_for_representative_card(tmp_path: Path) -> None:
+    # 規則寫泛稱（例如「血刃牌」）時，選一張具體的代表牌，素材說明寫明店員可以替換
+    llm = FakeLLMProvider(json_outputs=[llm_output()])
+    generate_script(llm, _request(tmp_path), tmp_path / "draft")
+    instructions = llm.calls[0].kwargs["instructions"]
+    assert "泛稱" in instructions and "代表牌" in instructions and "店員可以替換" in instructions
