@@ -36,10 +36,18 @@ def test_identical(tmp_path: Path) -> None:
 def test_asset_list_differences(tmp_path: Path) -> None:
     hand = base_data()
     hand["assets"].append(
-        {"asset_key": "spare", "kind": "flat_photo", "priority": "optional", "reason": "x", "file": None}
+        {
+            "asset_key": "spare",
+            "kind": "flat_photo",
+            "priority": "optional",
+            "reason": "x",
+            "file": None,
+        }
     )
     ai = base_data()
-    ai["assets"].append({"asset_key": "die", "kind": "drawn", "priority": "optional", "reason": "y"})
+    ai["assets"].append(
+        {"asset_key": "die", "kind": "drawn", "priority": "optional", "reason": "y"}
+    )
     ai["assets"][1]["priority"] = "optional"  # red：手寫版是 must
     report = _pair(tmp_path, ai, hand)
     assets = report.summary["素材"]

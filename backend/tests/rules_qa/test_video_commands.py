@@ -10,10 +10,10 @@ import pytest
 from PIL import Image
 
 from app.core.config import Settings
+from app.domains.rules_qa.video_commands import main
 from app.integrations.llm.errors import LLMUnavailable
 from app.integrations.llm.fake import FakeLLMProvider
 from app.integrations.video import load_video
-from app.domains.rules_qa.video_commands import main
 from tests.integrations.video.support import (
     base_data,
     fake_ffmpeg,

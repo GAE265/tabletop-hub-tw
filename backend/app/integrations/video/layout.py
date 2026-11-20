@@ -140,6 +140,8 @@ def _place_slot(
         _check_resolution(layout, segment, name, slot.asset_key, size, image, style)
         for region_name, region in video.assets[slot.asset_key].regions.items():
             # 區域以原圖為準記錄；有 crop 時換算成裁切後的位置，看不到的區域不放進來
+            if region is None:  # 待量測只會出現在草稿，草稿不排版
+                continue
             visible = region_in_crop(region, slot.crop)
             if visible is not None:
                 layout.region_rects[f"{name}@{region_name}"] = image.sub(

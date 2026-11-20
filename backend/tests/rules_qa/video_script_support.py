@@ -23,14 +23,38 @@ TERMS: list[dict[str, Any]] = [
 # LLM 依 schema 回傳的內容（對應 tests/integrations/video/support.py 的假遊戲）
 _LLM_OUTPUT: dict[str, Any] = {
     "assets": [
-        {"asset_key": "back", "kind": "flat_photo", "priority": "must",
-         "reason": "觀眾要知道牌是蓋著洗", "shot": "牌背一張，正面朝下平放", "regions": []},
-        {"asset_key": "red", "kind": "flat_photo", "priority": "must",
-         "reason": "要認得紅牌", "shot": None, "regions": []},
-        {"asset_key": "blue", "kind": "flat_photo", "priority": "must",
-         "reason": "要認得藍牌", "shot": None, "regions": []},
-        {"asset_key": "board", "kind": "flat_photo", "priority": "must",
-         "reason": "要知道牌放進哪一區", "shot": "從正上方拍整個盤面", "regions": ["zone_a"]},
+        {
+            "asset_key": "back",
+            "kind": "flat_photo",
+            "priority": "must",
+            "reason": "觀眾要知道牌是蓋著洗",
+            "shot": "牌背一張，正面朝下平放",
+            "regions": [],
+        },
+        {
+            "asset_key": "red",
+            "kind": "flat_photo",
+            "priority": "must",
+            "reason": "要認得紅牌",
+            "shot": None,
+            "regions": [],
+        },
+        {
+            "asset_key": "blue",
+            "kind": "flat_photo",
+            "priority": "must",
+            "reason": "要認得藍牌",
+            "shot": None,
+            "regions": [],
+        },
+        {
+            "asset_key": "board",
+            "kind": "flat_photo",
+            "priority": "must",
+            "reason": "要知道牌放進哪一區",
+            "shot": "從正上方拍整個盤面",
+            "regions": ["zone_a"],
+        },
     ],
     "segments": [
         {
@@ -46,10 +70,24 @@ _LLM_OUTPUT: dict[str, Any] = {
                     {"item_key": "c3", "asset_key": "red", "back_asset_key": "back"},
                 ],
             },
-            "sidebar": {"kind": "asset", "asset_key": "board", "text": None, "title": None, "items": []},
-            "highlights": [{"key": "h1", "target": "sidebar@zone_a", "shape": "box", "style": "gold"}],
+            "sidebar": {
+                "kind": "asset",
+                "asset_key": "board",
+                "text": None,
+                "title": None,
+                "items": [],
+            },
+            "highlights": [
+                {"key": "h1", "target": "sidebar@zone_a", "shape": "box", "style": "gold"}
+            ],
             "labels": [
-                {"key": "l1", "text": "移除", "target": "main.c2", "position": "below", "style": "plain"}
+                {
+                    "key": "l1",
+                    "text": "移除",
+                    "target": "main.c2",
+                    "position": "below",
+                    "style": "plain",
+                }
             ],
             "beats": [
                 {
@@ -75,15 +113,25 @@ _LLM_OUTPUT: dict[str, Any] = {
             "source_pages": [5],
             "main_title": None,
             "main": {"kind": "asset", "asset_key": "red", "items": []},
-            "sidebar": {"kind": "none", "asset_key": None, "text": None, "title": None, "items": []},
+            "sidebar": {
+                "kind": "none",
+                "asset_key": None,
+                "text": None,
+                "title": None,
+                "items": [],
+            },
             "highlights": [],
             "labels": [],
             "beats": [
-                {"narration": "情況二：移除藍牌。", "subtitle": "情況二：移除所有藍牌。", "cues": []}
+                {
+                    "narration": "情況二：移除藍牌。",
+                    "subtitle": "情況二：移除所有藍牌。",
+                    "cues": [],
+                }
             ],
         },
     ],
-}  # fmt: skip
+}
 
 
 def llm_output() -> dict[str, Any]:

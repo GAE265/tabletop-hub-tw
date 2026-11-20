@@ -82,7 +82,10 @@ def test_rejected_after_rewrite(tmp_path: Path) -> None:
 @pytest.mark.parametrize(
     "mutate, expected",
     [
-        (lambda o: o["segments"][0]["beats"][1]["cues"][0].__setitem__("target", "main.c9"), "main.c9"),
+        (
+            lambda o: o["segments"][0]["beats"][1]["cues"][0].__setitem__("target", "main.c9"),
+            "main.c9",
+        ),
         (lambda o: o["segments"][0]["beats"][1].__setitem__("subtitle", "紅牌放進A區。"), "甲區"),
         (lambda o: o["segments"][1].__setitem__("source_pages", [9]), "9"),
     ],

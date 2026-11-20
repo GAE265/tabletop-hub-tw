@@ -15,12 +15,12 @@
 ## 2. MR（分支 `feature/rules_qa-video-script`，從 #75 的分支往下接）
 
 - [x] 2.1 第一個 commit：本 change 的 OpenSpec 文件
-- [ ] 2.2 撰寫草稿模式的測試（`tests/integrations/video/test_draft.py`），驗證：測試存在且失敗
-- [ ] 2.3 撰寫逐項比對的測試（`tests/integrations/video/test_compare.py`），驗證：測試存在且失敗
-- [ ] 2.4 撰寫 AI 產生與檢查改寫的測試（`tests/rules_qa/test_video_script.py`，`FakeLLMProvider`），驗證：測試存在且失敗
-- [ ] 2.5 撰寫 `draft`、`compare` 指令的測試（`tests/rules_qa/test_video_commands.py`），驗證：測試存在且失敗
+- [x] 2.2 撰寫草稿模式的測試（`tests/integrations/video/test_draft.py`），驗證：測試存在且失敗
+- [x] 2.3 撰寫逐項比對的測試（`tests/integrations/video/test_compare.py`），驗證：測試存在且失敗
+- [x] 2.4 撰寫 AI 產生與檢查改寫的測試（`tests/rules_qa/test_video_script.py`，`FakeLLMProvider`），驗證：測試存在且失敗
+- [x] 2.5 撰寫 `draft`、`compare` 指令的測試（`tests/rules_qa/test_video_commands.py`），驗證：測試存在且失敗
 - [x] 2.6 ~~撰寫 external 測試~~：不做。AGENTS.md 7.6 只允許 `integrations/` 的測試需要金鑰；實際呼叫 LLM 改在 2.8 本機驗收（2026-11-21 修正）
-- [ ] 2.7 實作草稿模式、比對、AI 產生、檢查與改寫、兩個子指令，驗證：2.2–2.5 通過
+- [x] 2.7 實作草稿模式、比對、AI 產生、檢查與改寫、兩個子指令，驗證：2.2–2.5 通過
 - [ ] 2.8 用《血與刃》第 5 頁實際產生草稿，與手寫版逐項比對，加上 `--assets-from` 輸出靜態圖，驗證：**交給永傑看比對報告與靜態圖**
 - [ ] 2.9 自我檢查：`uv run ruff check .`、`uv run ruff format --check .`、`uv run pytest`、`uv run pytest -m external`，驗證：全部通過（external 的 OCR 項目除外）、CI 全綠，再改成 Ready for review
 
