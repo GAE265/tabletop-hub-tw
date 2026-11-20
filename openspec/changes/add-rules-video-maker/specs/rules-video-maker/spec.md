@@ -252,6 +252,14 @@
 - **WHEN** 影片總長為 N 秒
 - **THEN** 背景音樂長度為 N 秒；同樣的 N 產生相同的音樂
 
+#### Scenario: 旁白長度改變
+- **WHEN** 某句旁白變長後再執行 `render`
+- **THEN** 時間有變的段重新編碼；因為每段都畫了全片進度條，同一章的段都會重做（第 1 階段的限制，報告中註明）
+
+#### Scenario: TTS 未設定
+- **WHEN** `TTS_PROVIDER` 未填或為 `fake` 時執行 `render`
+- **THEN** 旁白為靜音、照常輸出；警告與報告都註明「時間為估計值」
+
 #### Scenario: 找不到 ffmpeg
 - **WHEN** 執行環境沒有 ffmpeg
 - **THEN** `render` 在開始渲染前失敗，說明需要安裝 ffmpeg 或設定 `FFMPEG_PATH`
