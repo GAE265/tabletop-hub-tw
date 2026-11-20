@@ -38,6 +38,10 @@
   - 第 4 版（第 3、5、11 頁）：8 段 12 句，一次通過。代表牌改為具體的 believer（花苞）、dark_blade（血刃），
     素材 6 項與手寫版相同，只多出選拍的 bishop（待拍）、少了 great_blade；頁尾規則在字幕中完整（旁白仍省略）。
     新問題：AI 把第 3、11 頁當成本章內容，多了「司教牌也算花苞牌」（重複兩句）與 FAQ「一輪可以都不出牌」。
+  - 第 5 版（最終，`--pages en-005 --reference-pages en-003 en-011`）：5 段 11 句，一次通過。
+    參考頁的規則不再寫進旁白；頁尾規則的旁白與字幕都完整（「直到有人獲勝或所有輪結束」）；用了「這局」。
+    代表牌：花苞用具體的 believer，血刃牌仍是泛稱 blood_blades_card（待拍 1 項，靜態圖出不來）。
+    依永傑指示停止調整提示，結果交給永傑判斷。
 - [x] 2.10 新增 `--reference-pages`（2026-11-21 永傑決定，放在本 MR、獨立 commit）：參考頁只供查牌名與分類，不可寫成旁白，`source_pages` 只能用本章的頁。做完重新產生一次就停止調整提示，把結果交給永傑判斷，不再為了貼近手寫版改提示
 - [ ] 2.9 自我檢查：`uv run ruff check .`、`uv run ruff format --check .`、`uv run pytest`、`uv run pytest -m external`，驗證：全部通過（external 的 OCR 項目除外）、CI 全綠，再改成 Ready for review
 
