@@ -34,7 +34,10 @@ def ffmpeg_tools() -> tuple[str, str]:
 
 def test_render_whole_chapter(tmp_path: Path, ffmpeg_tools: tuple[str, str]) -> None:
     ffmpeg, ffprobe = ffmpeg_tools
-    video = load_video(write_game(tmp_path / "game", base_data()))
+    data = base_data()
+    # 片尾加標題字卡（沒有旁白），確認音軌仍然和畫面一樣長（#75 審核）
+    data["segments"].append({"segment_key": "end", "chapter_key": "c1", "template": "title_card"})
+    video = load_video(write_game(tmp_path / "game", data))
     result = render_video(
         video,
         tmp_path / "game" / "out",
@@ -70,3 +73,5 @@ def test_render_whole_chapter(tmp_path: Path, ffmpeg_tools: tuple[str, str]) -> 
         rows = list(csv.DictReader(f))
     assert len(rows) == 3
     assert abs(float(probe["format"]["duration"]) - result.total_seconds) < 0.1
+    # 音軌與畫面一樣長（旁白結束後，背景音樂要一直播到片尾）
+    assert abs(float(audio_stream["duration"]) - float(video_stream["duration"])) < 0.05

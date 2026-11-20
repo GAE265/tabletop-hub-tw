@@ -78,3 +78,28 @@ def test_failure_keeps_finished_beats(tmp_path: Path) -> None:
     tts = FakeTTSProvider()
     prepare_narration(video, tts, tmp_path / "cache")
     assert [text for text, _ in tts.calls] == ["b" * 12, "c" * 12]
+
+
+class LoudTTS(TTSProvider):
+    """手寫的 fake：代表另一種 TTS（例如 Azure），回傳有聲音的音檔並記下呼叫。"""
+
+    def __init__(self) -> None:
+        self.fake = FakeTTSProvider()
+        self.calls: list[str] = []
+
+    def synthesize(self, text: str, voice: str | None = None) -> AudioClip:
+        self.calls.append(text)
+        clip = self.fake.synthesize(text, voice)
+        return AudioClip(
+            data=clip.data[:44] + b"\x10\x00" * ((len(clip.data) - 44) // 2), seconds=clip.seconds
+        )
+
+
+def test_switching_tts_provider_resynthesizes(tmp_path: Path) -> None:
+    # #75 審核：先在 TTS 未設定（fake）時輸出，再換成 Azure，不能沿用快取裡的靜音檔
+    video = _video(tmp_path)
+    prepare_narration(video, FakeTTSProvider(), tmp_path / "cache")
+    loud = LoudTTS()
+    clips = prepare_narration(video, loud, tmp_path / "cache")
+    assert len(loud.calls) == 3
+    assert set(clips["b1"].path.read_bytes()[44:]) != {0}
