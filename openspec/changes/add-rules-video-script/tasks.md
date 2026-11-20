@@ -47,6 +47,9 @@
   對照表 `category`（generic 泛稱／single 單一種牌）與代表牌檢查、每個素材必須有 shot、
   提示通則「旁白可以口語，但不能省略字幕裡的任何條件」；提示第 10 條改為泛稱素材用泛稱的 key（與新檢查一致）。
   做完同樣的提示再跑三次並排
+  - 第 6 版三次（`.local/rules_video/three-runs-round2.md`）：第 1、2 次通過，第 3 次改寫後仍不通過（區域寫成 `sidebar@ sacrifice_zone`）。
+    規則錯誤：第 3 次漏掉「翻開所有牌」（待涵蓋檢查判斷）；頁尾條件三次的旁白都完整。
+    素材：代表牌三次都正確、shot 都有；第 2 次把三個區域多列成素材（細節問題 1 次）。
 - [ ] 2.9 自我檢查：`uv run ruff check .`、`uv run ruff format --check .`、`uv run pytest`、`uv run pytest -m external`，驗證：全部通過（external 的 OCR 項目除外）、CI 全綠，再改成 Ready for review
 
 ## Workflow follow-up
