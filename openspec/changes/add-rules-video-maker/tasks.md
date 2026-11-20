@@ -33,18 +33,20 @@
 - [x] 2.7 撰寫畫面狀態的單元測試（`test_frame_state.py`）：涵蓋「句內動作與畫面狀態」每個 scenario，驗證：測試存在且失敗
 - [x] 2.8 撰寫指令的測試（`backend/tests/rules_qa/test_video_commands.py`）：`check` 通過與失敗、`stills` 輸出張數與尺寸、沒有設定字型時的警告、字型檔不存在、驗證失敗時不輸出；`.ttc` 字型集合檔（index 0 可用、index 超出範圍）需要實際的微軟正黑體，寫在 `tests/integrations/video/test_fonts.py` 並加 `@pytest.mark.external` 在本機執行（MR 說明要附 `uv run pytest -m external` 結果），驗證：測試存在且失敗
 - [x] 2.9 實作 `integrations/video/` 的段資料模型與驗證、`main_with_sidebar` 與 `title_card`、《血與刃》風格資料、排版、時間軸（旁白長度由呼叫端提供）、畫面狀態與五種動作、靜態圖；`rules_qa/video_commands.py` 的 `check`、`stills`；`core/config.py` 與 `.env.example` 加上 `VIDEO_FONT_REGULAR`、`VIDEO_FONT_BOLD`、`VIDEO_FONT_INDEX`（@ 立倫）；新增 Pillow、numpy，驗證：2.4–2.8 全部通過
-- [ ] 2.10 手寫《血與刃》步驟三的 `video.json`（只放本機），在實際的盤面圖上精確量測區域座標，輸出靜態圖，與手做版同一時間點的畫面並排比對、調整風格數值，驗證：**交給永傑確認對照圖**（已知差異排除：進度條只有一段、字型不同、暗刃不移動、飛入改彈出、背景為漸層）
-  - 進度（2026-11-20）：`video.json` 已寫好（3 段、4 句、7 個素材），盤面四個區域已在實際盤面圖上量測；輸出 25 張靜態圖、對照圖 `out/sheet.png`、與手做版並排的 `out/compare.png`（都在 `backend/.local/rules_video/`）。依並排比對調整了字幕、章節標籤、標題、紅色標籤的字級與位置，側欄圖片改成靠上對齊。等永傑確認。
-- [ ] 2.11 自我檢查：`uv run ruff check .`、`uv run ruff format --check .`、`uv run pytest`，驗證：全部通過、CI 全綠，再改成 Ready for review
-  - 本機（2026-11-20）：ruff check、ruff format --check 通過；`uv run pytest` 1379 passed；`uv run pytest -m external` 11 passed、9 errors（都是 OCR，本機 `.env` 缺 `OCR_DI_ENDPOINT`，與本 MR 無關；本 MR 的 2 個字型測試通過）。待 CI。
+- [x] 2.10 手寫《血與刃》步驟三的 `video.json`（只放本機），在實際的盤面圖上精確量測區域座標，輸出靜態圖，與手做版同一時間點的畫面並排比對、調整風格數值，驗證：**交給永傑確認對照圖**（已知差異排除：進度條只有一段、字型不同、暗刃不移動、飛入改彈出、背景為漸層）
+  - 進度（2026-11-20）：`video.json` 已寫好（3 段、4 句、7 個素材），盤面四個區域已在實際盤面圖上量測；輸出 25 張靜態圖、對照圖 `out/sheet.png`、與手做版並排的 `out/compare.png`（都在 `backend/.local/rules_video/`）。依並排比對調整了字幕、章節標籤、標題、紅色標籤的字級與位置，側欄圖片改成靠上對齊。
+  - 永傑確認對照圖 OK（2026-11-20）。
+- [x] 2.11 自我檢查：`uv run ruff check .`、`uv run ruff format --check .`、`uv run pytest`，驗證：全部通過、CI 全綠，再改成 Ready for review
+  - 本機（2026-11-20）：ruff check、ruff format --check 通過；`uv run pytest` 1379 passed；`uv run pytest -m external` 11 passed、9 errors（都是 OCR，本機 `.env` 缺 `OCR_DI_ENDPOINT`，與本 MR 無關；本 MR 的 2 個字型測試通過）。#71 CI 全綠。
 
 ## 3. MR 2：`integrations/tts`（可與 MR 1 平行）
 
-- [ ] 3.1 永傑開 Draft MR 2，AI 從 `specs/media-integrations` 的「文字轉語音」整理分組情境表格，驗證：Draft MR 已存在
-- [ ] 3.2 撰寫 fake、空白文字、缺少設定、無法使用、429 重試的單元測試（Azure 的 HTTP 回應用手寫的 fake transport，不用 mock 套件），驗證：測試存在且失敗
-- [ ] 3.3 撰寫 Azure 實際合成的 external 測試，缺少金鑰時直接失敗並說明缺哪個設定，驗證：`uv run pytest` 不執行它
-- [ ] 3.4 實作介面、fake、Azure 實作與 factory；`core/config.py` 與 `.env.example` 加上 `TTS_PROVIDER`、`TTS_REGION`、`TTS_API_KEY`、`TTS_VOICE`（@ 立倫），驗證：3.2 通過；本機 `uv run pytest -m external` 的結果寫進 MR 說明
-- [ ] 3.5 自我檢查（同 2.11），驗證：全部通過、CI 全綠，再改成 Ready for review
+- [x] 3.1 永傑開 Draft MR 2，AI 從 `specs/media-integrations` 的「文字轉語音」整理分組情境表格，驗證：Draft MR 已存在
+- [x] 3.2 撰寫 fake、空白文字、缺少設定、無法使用、429 重試的單元測試（Azure 的 HTTP 回應用手寫的 fake transport，不用 mock 套件），驗證：測試存在且失敗
+- [x] 3.3 撰寫 Azure 實際合成的 external 測試，缺少金鑰時直接失敗並說明缺哪個設定，驗證：`uv run pytest` 不執行它
+- [x] 3.4 實作介面、fake、Azure 實作與 factory；`core/config.py` 與 `.env.example` 加上 `TTS_PROVIDER`、`TTS_REGION`、`TTS_API_KEY`、`TTS_VOICE`（@ 立倫），驗證：3.2 通過；本機 `uv run pytest -m external` 的結果寫進 MR 說明
+- [x] 3.5 自我檢查（同 2.11），驗證：全部通過、CI 全綠，再改成 Ready for review
+  - 結果（2026-11-20）：Draft MR #72（分支 `feature/integrations-tts`，從 dev 開，不改 openspec）；`uv run pytest` 1344 passed；`uv run pytest -m external` 10 passed、9 errors（OCR，本機缺 `OCR_DI_ENDPOINT`，與本 MR 無關；TTS 實際合成通過）；CI 全綠；httpx 移到正式依賴。
 
 ## 4. MR 3（1b）：TTS 時間軸、編碼、背景音樂、混音（MR 1、MR 2 合併後）
 
