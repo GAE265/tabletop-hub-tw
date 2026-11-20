@@ -110,7 +110,7 @@ uv run python -m app.domains.rules_qa.video_commands compare <AI 草稿> <手寫
 
 **D8 測試。**
 - 單元測試（不連 LLM）：用 `FakeLLMProvider` 照腳本回傳 JSON。涵蓋：正常產生、改寫一次後通過、改寫後仍不通過、LLM 無法使用、各項檢查、草稿模式、比對、指令。
-- 外部服務測試（`external`）：用自行編寫的假規則書頁面，實際呼叫 LLM，確認輸出能通過檢查。需要 `.env` 的 `LLM_*`。
+- **不寫外部服務測試**：AGENTS.md 7.6 規定只有 `integrations/` 的測試可以需要金鑰，產生流程在 `rules_qa`，測試一律用 `FakeLLMProvider`。LLM 介面本身的外部服務測試已在 `integrations/llm`。實際呼叫 LLM 改由 tasks 2.8 的本機驗收負責（2026-11-21 修正）。
 - 《血與刃》的實際產生與比對是本機的驗收步驟（tasks），不寫成自動測試，因為不能提交規則書內容。
 
 **D9 一個 MR。** 草稿模式、比對、AI 產生、指令都屬於「AI 產生段資料並比對」這一件事，用一個 MR，分成 docs、test、feat 三個 commit。分支 `feature/rules_qa-video-script`。2026-11-21 決定從 #75 的分支往下接，#75 合併後再把 dev 合併進來。
