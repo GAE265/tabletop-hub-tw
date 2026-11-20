@@ -21,7 +21,7 @@ from tests.integrations.video.support import (
     segment,
     write_game,
 )
-from tests.rules_qa.video_script_support import llm_output, write_inputs
+from tests.rules_qa.video_script_support import coverage_output, llm_output, write_inputs
 
 Run = Callable[..., tuple[int, str, str]]
 
@@ -270,3 +270,62 @@ def test_draft_with_reference_pages(
     code = main(args, settings=make_settings(), llm=llm)
     assert code == 0, capsys.readouterr().err
     assert "Red Knight" in llm.calls[0].kwargs["input"]
+
+
+# --- coverage（規則涵蓋檢查）---
+
+
+def test_coverage_writes_files(
+    tmp_path: Path, make_settings: Callable[..., Settings], capsys: pytest.CaptureFixture[str]
+) -> None:
+    folder = write_inputs(write_game(tmp_path / "game", base_data()))
+    llm = FakeLLMProvider(json_outputs=[coverage_output()])
+    args = ["coverage", str(folder), "--pages", "rulebook/en-005.txt"]
+    code = main(args, settings=make_settings(), llm=llm)
+    assert code == 0, capsys.readouterr().err
+    assert (folder / "coverage.json").is_file()
+    assert "沒有發現問題" in (folder / "coverage.md").read_text(encoding="utf-8")
+
+
+def test_coverage_llm_unavailable(
+    tmp_path: Path, make_settings: Callable[..., Settings], capsys: pytest.CaptureFixture[str]
+) -> None:
+    folder = write_inputs(write_game(tmp_path / "game", base_data()))
+    llm = FakeLLMProvider(json_outputs=[LLMUnavailable("連不上")])
+    args = ["coverage", str(folder), "--pages", "rulebook/en-005.txt"]
+    code = main(args, settings=make_settings(), llm=llm)
+    assert code != 0
+    assert "LLM" in capsys.readouterr().err
+    assert not (folder / "coverage.json").exists()
+
+
+def test_coverage_missing_inputs_does_not_call_llm(
+    tmp_path: Path, make_settings: Callable[..., Settings], capsys: pytest.CaptureFixture[str]
+) -> None:
+    folder = write_inputs(tmp_path / "empty")  # 沒有 video.json
+    llm = FakeLLMProvider(json_outputs=[])
+    args = ["coverage", str(folder), "--pages", "rulebook/en-005.txt"]
+    assert main(args, settings=make_settings(), llm=llm) != 0
+    game = write_game(tmp_path / "game", base_data())  # 沒有頁面檔
+    args = ["coverage", str(game), "--pages", "rulebook/en-005.txt"]
+    assert main(args, settings=make_settings(), llm=llm) != 0
+    assert llm.calls == []
+    capsys.readouterr()
+
+
+def test_compare_includes_coverage_section(
+    tmp_path: Path, make_settings: Callable[..., Settings], capsys: pytest.CaptureFixture[str]
+) -> None:
+    ai = write_inputs(write_game(tmp_path / "ai", base_data()))
+    write_game(tmp_path / "hand", base_data())
+    compare = ["compare", str(ai), str(tmp_path / "hand")]
+    assert main(compare, settings=make_settings()) == 0
+    assert "未做規則涵蓋檢查" in (ai / "compare.md").read_text(encoding="utf-8")
+
+    llm = FakeLLMProvider(json_outputs=[coverage_output()])
+    coverage = ["coverage", str(ai), "--pages", "rulebook/en-005.txt"]
+    assert main(coverage, settings=make_settings(), llm=llm) == 0
+    assert main(compare, settings=make_settings()) == 0
+    report = (ai / "compare.md").read_text(encoding="utf-8")
+    assert "規則陳述檢查" in report and "僅供參考" in report
+    capsys.readouterr()

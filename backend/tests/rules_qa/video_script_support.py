@@ -149,3 +149,22 @@ def write_inputs(folder: Path) -> Path:
     (folder / "rulebook" / "en-003.txt").write_text(FAKE_REFERENCE_PAGE, encoding="utf-8")
     (folder / "terms.json").write_text(json.dumps(TERMS, ensure_ascii=False), encoding="utf-8")
     return folder
+
+
+def coverage_rule(
+    rule_id: str = "R1",
+    narration: tuple[str, list[str], str | None] = ("complete", ["b1"], None),
+    subtitle: tuple[str, list[str], str | None] = ("complete", ["b1"], None),
+    source: str = "Shuffle the played cards face down, then reveal them together.",
+) -> dict[str, Any]:
+    """涵蓋檢查 LLM 回傳的一條規則：(狀態, 句子編號, 缺少的部分)。"""
+    return {
+        "rule_id": rule_id,
+        "source": source,
+        "narration": {"status": narration[0], "beat_keys": narration[1], "missing": narration[2]},
+        "subtitle": {"status": subtitle[0], "beat_keys": subtitle[1], "missing": subtitle[2]},
+    }
+
+
+def coverage_output(rules: list[dict[str, Any]] | None = None, problems=None) -> dict[str, Any]:
+    return {"rules": rules if rules is not None else [coverage_rule()], "problems": problems or []}
