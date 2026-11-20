@@ -18,8 +18,8 @@
 | 揪團月曆 | `prototypes/groups/groups_proto_page.dart`（路由 `/proto/groups`） | 月曆每天顯示團數，點日期列出當天揪團；依開團主篩選；入口「我要揪團」 |
 | 揪團詳細 | `prototypes/groups/group_detail_proto_page.dart`（從月曆列表點進去；也可以直接開網址 `/groups/<揪團 id>`，首頁行程的揪團列連到這裡） | 揪團資訊、成員與候補名單、報名／候補／退出／編輯／取消 |
 | 開團／編輯表單 | `prototypes/groups/group_form_proto_page.dart`（從月曆或詳細頁進入） | 建立或修改揪團 |
-| 通知列表 | 無（直接做正式頁面 `pages/group_notifications_page.dart`，路由 `/groups/notifications`） | 成團、解散、候補正取的站內通知（add-groups-notifications） |
-| 通知鈴鐺 | 無（`pages/widgets/notification_bell.dart`，放在導覽列） | 顯示未讀數，點下前往通知列表 |
+| 通知列表 | 無（直接做正式元件 `pages/widgets/group_notifications_list.dart`，放在通知頁 `/notifications` 的「揪團」分頁） | 成團、解散、候補正取的站內通知（add-groups-notifications；add-booking-notifications 改成分頁） |
+| 通知鈴鐺 | 無（移到 `lib/app/notifications/notification_bell.dart`，放在導覽列） | 顯示揪團與訂位的未讀數總和，點下前往 `/notifications` |
 
 正式頁面的路由（例如 `/groups`、`/groups/:id`）由永傑在做正式頁面時決定（tasks.md 4.x）。
 
@@ -92,9 +92,11 @@
 
 ### 頁面：通知鈴鐺與通知列表
 
+鈴鐺與通知頁 `/notifications` 在 `lib/app/notifications/`，同時有揪團與訂位（add-booking-notifications）。通知頁分「揪團」「訂位」兩個分頁，分頁標題顯示各自的未讀數；只有訂位有未讀時預設開「訂位」。訂位分頁見 `booking` 的 `BookingNotificationsList`。
+
 | 元件 | 類型 | 按下／輸入後做什麼 | `state/` 方法 | 後端 API |
 |---|---|---|---|---|
-| 通知鈴鐺 | 按鈕（平板與桌機在頂部導覽列，手機在頂部窄列） | 顯示未讀數（0 不顯示、超過 99 顯示「99+」），點下前往 `/groups/notifications`。進入應用時查一次，之後每 60 秒查一次；查詢失敗只顯示鈴鐺 | `groupUnreadCountProvider`、`unreadBadgeLabel(count)` | `GET /api/v1/group-notifications?page_size=1`（讀 `unread_count`） |
+| 通知鈴鐺 | 按鈕（平板與桌機在頂部導覽列，手機在頂部窄列） | 顯示揪團與訂位未讀數的總和（0 不顯示、超過 99 顯示「99+」），點下前往 `/notifications`。兩邊各自在進入應用時查一次，之後每 60 秒查一次；一邊失敗只算另一邊，兩邊都失敗只顯示鈴鐺 | `totalUnreadCountProvider`（`groupUnreadCountProvider` 加 `bookingUnreadCountProvider`）、`unreadBadgeLabel(count)` | `GET /api/v1/group-notifications?page_size=1`、`GET /api/v1/booking-notifications?page_size=1`（讀 `unread_count`） |
 | 通知 | 清單，新的在前 | 一句說明＋揪團時間＋通知時間；未讀的底色較深、右側有圓點、文字加粗 | `groupNotificationsProvider`；文字 `notificationText(n)` | `GET /api/v1/group-notifications` |
 | 通知項目 | 點擊 | 未讀的先標成已讀、鈴鐺少 1，然後進入揪團詳細；標成已讀失敗時仍然進入，該則維持未讀 | `open(notification)` | `PATCH /api/v1/group-notifications/{id}`，`{"read": true}` |
 | 捲到底 | 捲動 | 還有下一頁時自動載入 | `loadMore()`；`hasMore` | 同上，帶 `page` |

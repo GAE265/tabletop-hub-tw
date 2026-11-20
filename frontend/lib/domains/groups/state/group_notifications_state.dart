@@ -2,23 +2,14 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/notifications/notification_poll.dart';
 import '../data/group_notification.dart';
 import '../data/groups_repository.dart';
 import 'current_user.dart';
 import 'group_clock.dart';
 
+export '../../../core/notifications/notification_poll.dart';
 export 'group_labels.dart' show notificationText;
-
-/// 鈴鐺重新查詢未讀數的間隔（add-groups-notifications D5）。
-final notificationPollIntervalProvider = Provider<Duration>(
-  (ref) => const Duration(seconds: 60),
-);
-
-/// 鈴鐺上的文字：沒有未讀（或查詢失敗）時為 null，超過 99 顯示「99+」。
-String? unreadBadgeLabel(int? count) {
-  if (count == null || count <= 0) return null;
-  return count > 99 ? '99+' : '$count';
-}
 
 /// 目前使用者的未讀通知數；查詢失敗時為 null（鈴鐺不顯示數字，也不跳錯誤）。
 ///

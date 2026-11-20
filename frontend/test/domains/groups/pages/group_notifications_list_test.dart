@@ -1,15 +1,10 @@
-// 通知鈴鐺與通知列表頁（spec：add-groups-notifications 的 groups-notifications-page）。
+// 揪團通知列表（spec：add-groups-notifications 的 groups-notifications-page，
+// 由 add-booking-notifications 改成 /notifications 的「揪團」分頁）。
+// 鈴鐺的測試移到 test/app/notifications_test.dart（鈴鐺改成合併揪團與訂位）。
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:go_router/go_router.dart';
-import 'package:tabletop_hub/app/theme/app_theme.dart';
 import 'package:tabletop_hub/core/api/api_exception.dart';
-import 'package:tabletop_hub/domains/groups/data/groups_repository.dart';
-import 'package:tabletop_hub/domains/groups/pages/group_notifications_page.dart';
-import 'package:tabletop_hub/domains/groups/pages/widgets/notification_bell.dart';
-import 'package:tabletop_hub/domains/groups/state/current_user.dart';
-import 'package:tabletop_hub/domains/groups/state/group_clock.dart';
+import 'package:tabletop_hub/domains/groups/pages/widgets/group_notifications_list.dart';
 
 import '../../../support/fakes.dart';
 import '../support.dart';
@@ -17,108 +12,13 @@ import 'page_support.dart';
 
 const failure = ApiException(code: 'SERVER_ERROR', message: '伺服器忙碌中');
 
-/// 首頁放鈴鐺，`/groups/notifications` 是通知列表頁。
-Future<GoRouter> pumpWithRouter(
-  WidgetTester tester,
-  FakeGroupsRepository repo, {
-  String location = '/',
-}) async {
-  setScreenSize(tester, const Size(400, 900));
-  final router = GoRouter(
-    initialLocation: location,
-    routes: [
-      GoRoute(
-        path: '/',
-        builder: (context, state) => const Scaffold(
-          body: Center(child: NotificationBell(key: Key('bell'))),
-        ),
-      ),
-      GoRoute(
-        path: '/groups/notifications',
-        builder: (context, state) => const GroupNotificationsPage(),
-      ),
-    ],
-  );
-  addTearDown(router.dispose);
-  await tester.pumpWidget(
-    ProviderScope(
-      overrides: [
-        groupsRepositoryProvider.overrideWithValue(repo),
-        groupClockProvider.overrideWithValue(FixedOffsetClock(nowUtc)),
-        currentUserIdProvider.overrideWithValue('u-player'),
-      ],
-      child: MaterialApp.router(
-        theme: buildAppTheme(const FakeAppFonts()),
-        routerConfig: router,
-      ),
-    ),
-  );
-  await tester.pump();
-  await tester.pump();
-  return router;
-}
-
-FakeGroupsRepository repoWithUnread(int count) => FakeGroupsRepository()
-  ..notifications = [
-    for (var i = count; i >= 1; i--) fakeNotification(id: 'n-$i'),
-  ];
-
-Finder badgeText(String text) => find.descendant(
-  of: find.byKey(const Key('bell')),
-  matching: find.text(text),
-);
+/// 通知頁的「揪團」分頁只放列表，這裡用 Scaffold 包住。
+const listPage = Scaffold(body: GroupNotificationsList());
 
 void main() {
-  group('通知鈴鐺', () {
-    testWidgets('有未讀：顯示數字', (tester) async {
-      await pumpWithRouter(tester, repoWithUnread(3));
-      expect(badgeText('3'), findsOneWidget);
-    });
-
-    testWidgets('超過 99：顯示 99+', (tester) async {
-      await pumpWithRouter(tester, repoWithUnread(120));
-      expect(badgeText('99+'), findsOneWidget);
-    });
-
-    testWidgets('沒有未讀：不顯示數字', (tester) async {
-      await pumpWithRouter(tester, repoWithUnread(0));
-      expect(find.byKey(const Key('bell')), findsOneWidget);
-      expect(find.byKey(const Key('notification-bell-count')), findsNothing);
-    });
-
-    testWidgets('查詢失敗：鈴鐺照常顯示、沒有數字、不跳錯誤', (tester) async {
-      final repo = FakeGroupsRepository()..notificationsError = failure;
-      await pumpWithRouter(tester, repo);
-      expect(find.byKey(const Key('bell')), findsOneWidget);
-      expect(find.byKey(const Key('notification-bell-count')), findsNothing);
-      expect(find.text('伺服器忙碌中'), findsNothing);
-    });
-
-    testWidgets('每 60 秒重新查詢', (tester) async {
-      final repo = repoWithUnread(1);
-      await pumpWithRouter(tester, repo);
-      expect(badgeText('1'), findsOneWidget);
-
-      repo.notifications = [fakeNotification(id: 'n-2'), ...repo.notifications];
-      await tester.pump(const Duration(seconds: 59));
-      expect(badgeText('1'), findsOneWidget);
-      await tester.pump(const Duration(seconds: 1));
-      await tester.pump();
-      expect(badgeText('2'), findsOneWidget);
-    });
-
-    testWidgets('點鈴鐺：前往通知列表頁', (tester) async {
-      final router = await pumpWithRouter(tester, repoWithUnread(1));
-      await tester.tap(find.byKey(const Key('bell')));
-      await tester.pumpAndSettle();
-      expect(router.state.uri.path, '/groups/notifications');
-      expect(find.byKey(const Key('group-notifications-page')), findsOneWidget);
-    });
-  });
-
   group('通知列表頁', () {
     Future<void> pumpPage(WidgetTester tester, FakeGroupsRepository repo) =>
-        pumpGroupsWidget(tester, const GroupNotificationsPage(), repo: repo);
+        pumpGroupsWidget(tester, listPage, repo: repo);
 
     testWidgets('三種通知的文字、揪團時間與通知時間', (tester) async {
       final repo = FakeGroupsRepository()
@@ -208,7 +108,7 @@ void main() {
     testWidgets('載入中', (tester) async {
       await pumpGroupsWidget(
         tester,
-        const GroupNotificationsPage(),
+        listPage,
         repo: FakeGroupsRepository(),
         settle: false,
       );

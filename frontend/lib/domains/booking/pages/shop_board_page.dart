@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -5,12 +7,15 @@ import '../../../app/theme/app_spacing.dart';
 import '../../../core/dev/state/dev_user_state.dart';
 import '../../../core/layout/breakpoints.dart';
 import '../data/booking.dart';
+import '../state/booking_overtime.dart';
 import '../state/booking_state.dart';
 import 'widgets/booking_widgets.dart';
 import 'widgets/seating_plan.dart';
 
 /// 店家看板正式頁面：店家人員看自己店家某一天的座位圖與訂位，辦理客人到店、離店結帳、取消
 /// （`/booking/board`）。管理員要先選店家。
+///
+/// 已入座且超過結束時間的訂位標示「已超時」，每分鐘重新計算（add-booking-notifications D5）。
 class ShopBoardPage extends ConsumerStatefulWidget {
   const ShopBoardPage({super.key});
 
@@ -21,6 +26,9 @@ class ShopBoardPage extends ConsumerStatefulWidget {
 class _ShopBoardPageState extends ConsumerState<ShopBoardPage> {
   String? _shopId;
   late DateTime _date;
+
+  /// 每分鐘重畫一次，讓超時標示跟著時間更新（不重新查詢）。
+  Timer? _minuteTimer;
 
   BookingNotifier get _n => ref.read(bookingProvider.notifier);
 
@@ -35,13 +43,22 @@ class _ShopBoardPageState extends ConsumerState<ShopBoardPage> {
   @override
   void initState() {
     super.initState();
-    final now = taipeiNow();
+    final now = ref.read(bookingClockProvider)().add(taipeiOffset);
     _date = DateTime(now.year, now.month, now.day);
+    _minuteTimer = Timer.periodic(const Duration(minutes: 1), (_) {
+      if (mounted) setState(() {});
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!_allowed) return;
       if (ref.read(bookingProvider).shops.isEmpty) await _n.loadShops();
       await _search();
     });
+  }
+
+  @override
+  void dispose() {
+    _minuteTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _search() async {
@@ -103,6 +120,7 @@ class _ShopBoardPageState extends ConsumerState<ShopBoardPage> {
       );
     }
 
+    final now = ref.read(bookingClockProvider)();
     final isAdmin = user?.role == 'admin';
     final wide = context.screenSize != ScreenSize.mobile;
     final shopId = _shopId ?? user?.shopId;
@@ -127,6 +145,7 @@ class _ShopBoardPageState extends ConsumerState<ShopBoardPage> {
               key: Key('board-card-${b.id}'),
               booking: b,
               shopName: null,
+              overtimeMinutes: overtimeMinutes(b.status, b.endAt, now),
               actions: [
                 if (b.status == 'confirmed') ...[
                   TextButton(
@@ -225,13 +244,13 @@ class _ShopBoardPageState extends ConsumerState<ShopBoardPage> {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(child: _seatingCard(state)),
+              Expanded(child: _seatingCard(state, now)),
               const SizedBox(width: AppSpacing.large),
               Expanded(child: Column(children: list)),
             ],
           )
         else ...[
-          _seatingCard(state),
+          _seatingCard(state, now),
           const SizedBox(height: AppSpacing.medium),
           ...list,
         ],
@@ -240,10 +259,14 @@ class _ShopBoardPageState extends ConsumerState<ShopBoardPage> {
   }
 
   /// 座位圖卡片：日期跟著看板，錯誤由上方的錯誤訊息顯示。
-  Widget _seatingCard(BookingState state) {
+  Widget _seatingCard(BookingState state, DateTime now) {
     final Widget content;
     if (state.seatingPlan.isNotEmpty) {
-      content = SeatingPlanView(plans: state.seatingPlan, staffView: true);
+      content = SeatingPlanView(
+        plans: state.seatingPlan,
+        staffView: true,
+        now: now,
+      );
     } else if (state.loading) {
       content = const Padding(
         padding: EdgeInsets.all(AppSpacing.large),
