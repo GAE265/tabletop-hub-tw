@@ -7,6 +7,8 @@ import 'package:tabletop_hub/app/navigation.dart';
 import 'package:tabletop_hub/app/shell.dart';
 import 'package:tabletop_hub/app/theme/app_theme.dart';
 import 'package:tabletop_hub/core/config/app_config.dart';
+import 'package:tabletop_hub/core/dev/data/dev_user.dart';
+import 'package:tabletop_hub/core/dev/state/dev_user_state.dart';
 import 'package:tabletop_hub/domains/booking/data/booking_repository.dart';
 import 'package:tabletop_hub/domains/groups/data/groups_repository.dart';
 
@@ -26,6 +28,7 @@ Future<GoRouter> pumpShell(
   WidgetTester tester, {
   String location = '/',
   Size size = const Size(400, 900),
+  DevUser? user,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
@@ -45,6 +48,7 @@ Future<GoRouter> pumpShell(
             '/matches/m-1',
             '/groups',
             '/notifications',
+            '/rules-ingest',
             '/games-advisor',
             '/rules',
             '/rules/1',
@@ -62,6 +66,8 @@ Future<GoRouter> pumpShell(
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
+        // 指定目前身分（add-rules-ingest-page：管理員才有「匯入」）
+        if (user != null) currentDevUserProvider.overrideWithValue(user),
         // 鈴鐺查詢揪團與訂位的未讀數，用假的 repository
         // （add-groups-notifications、add-booking-notifications）
         groupsRepositoryProvider.overrideWithValue(FakeGroupsRepository()),
@@ -230,5 +236,43 @@ void main() {
         expect(isSelected(tester, key), isFalse, reason: key);
       }
     });
+  });
+
+  group('管理員才有的「匯入」（add-rules-ingest-page）', () {
+    const admin = DevUser(id: 'u-admin', displayName: '測試管理員', role: 'admin');
+    const player = DevUser(id: 'u-player', displayName: '測試玩家', role: 'player');
+    const staff = DevUser(
+      id: 'u-staff',
+      displayName: '測試店家人員',
+      role: 'shop_staff',
+      shopId: 's-b',
+    );
+    const key = Key('shell-nav-rules-ingest');
+
+    for (final size in [const Size(400, 900), const Size(1280, 800)]) {
+      testWidgets('管理員（寬度 ${size.width.toInt()}）：有「匯入」，點下前往 /rules-ingest', (
+        tester,
+      ) async {
+        final router = await pumpShell(tester, size: size, user: admin);
+        expect(find.byKey(key), findsOneWidget);
+        await tester.tap(find.byKey(key));
+        await tester.pumpAndSettle();
+        expect(router.state.uri.path, '/rules-ingest');
+        expect(isSelected(tester, 'shell-nav-rules-ingest'), isTrue);
+        for (final other in navKeys) {
+          expect(isSelected(tester, other), isFalse, reason: other);
+        }
+      });
+    }
+
+    for (final user in [player, staff, null]) {
+      testWidgets('${user?.role ?? '沒有身分'}：沒有「匯入」，其他項目不變', (tester) async {
+        await pumpShell(tester, user: user);
+        expect(find.byKey(key), findsNothing);
+        for (final other in navKeys) {
+          expect(find.byKey(Key(other)), findsOneWidget, reason: other);
+        }
+      });
+    }
   });
 }

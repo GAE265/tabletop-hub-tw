@@ -6,7 +6,9 @@ import 'package:tabletop_hub/app/app.dart';
 import 'package:tabletop_hub/app/theme/app_fonts.dart';
 import 'package:tabletop_hub/core/config/app_config.dart';
 import 'package:tabletop_hub/core/platform/lesson_video_player.dart';
+import 'package:tabletop_hub/core/dev/data/dev_user.dart';
 import 'package:tabletop_hub/core/dev/data/dev_users_repository.dart';
+import 'package:tabletop_hub/core/dev/state/dev_user_state.dart';
 import 'package:tabletop_hub/domains/booking/data/booking_repository.dart';
 import 'package:tabletop_hub/domains/groups/data/groups_repository.dart';
 import 'package:tabletop_hub/domains/games_advisor/data/advisor_repository.dart';
@@ -21,10 +23,13 @@ Future<void> pumpApp(
   WidgetTester tester, {
   required bool showPrototypes,
   bool dev = false,
+  DevUser? user,
 }) async {
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
+        // 指定目前身分（add-rules-ingest-page：只有管理員能用的頁面）
+        if (user != null) currentDevUserProvider.overrideWithValue(user),
         appConfigProvider.overrideWithValue(
           AppConfig(
             apiBaseUrl: 'http://api.test',
