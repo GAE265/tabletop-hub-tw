@@ -21,6 +21,11 @@ class AudioClip:
 
 
 class TTSProvider(ABC):
+    @property
+    def cache_name(self) -> str:
+        """這種 TTS 的識別名稱，旁白快取用：不同種類（例如靜音的 fake 與 Azure）的音檔不能混用。"""
+        return type(self).__name__
+
     @abstractmethod
     def synthesize(self, text: str, voice: str | None = None) -> AudioClip:
         """把一句旁白轉成語音。voice 沒給時用設定的預設聲音；空白文字拋 ValueError。"""
