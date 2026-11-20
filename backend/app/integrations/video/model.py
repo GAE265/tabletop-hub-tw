@@ -284,6 +284,10 @@ def parse_video(raw: Any, base_dir: Path) -> Video:
     version = data.get("format_version")
     if version != FORMAT_VERSION:
         p.error("video.json", f"不認得的 format_version：{version!r}（本版為 {FORMAT_VERSION}）")
+    # 頂層欄位要在下面的「有錯就拋出」之前解析，錯誤才會一起回報
+    game_key = p.text(data, "game_key", "video.json")
+    title = p.text(data, "title", "video.json")
+    voice = p.optional_text(data, "voice", "video.json") or DEFAULT_VOICE
 
     chapters = _parse_chapters(p, data)
     assets = _parse_assets(p, data, base_dir)
@@ -305,9 +309,9 @@ def parse_video(raw: Any, base_dir: Path) -> Video:
         raise VideoDataError(p.errors)
     return Video(
         format_version=FORMAT_VERSION,
-        game_key=p.text(data, "game_key", "video.json"),
-        title=p.text(data, "title", "video.json"),
-        voice=p.optional_text(data, "voice", "video.json") or DEFAULT_VOICE,
+        game_key=game_key,
+        title=title,
+        voice=voice,
         chapters=tuple(chapters),
         assets=assets,
         segments=tuple(segments),

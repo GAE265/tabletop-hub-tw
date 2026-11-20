@@ -223,6 +223,29 @@ def test_absolute_time_rejected(tmp_path: Path, mutate) -> None:
     assert "自動計算" in _errors(tmp_path, data)
 
 
+@pytest.mark.parametrize("field", ["game_key", "title"])
+def test_missing_top_level_field_rejected(tmp_path: Path, field: str) -> None:
+    data = base_data()
+    del data[field]
+    message = _errors(tmp_path, data)
+    assert f"缺少 {field}" in message
+
+
+@pytest.mark.parametrize(
+    "field, value",
+    [("game_key", ""), ("title", "   "), ("voice", ""), ("voice", 123)],
+)
+def test_invalid_top_level_field_rejected(tmp_path: Path, field: str, value: object) -> None:
+    data = base_data()
+    data[field] = value
+    assert f"{field} 必須是非空字串" in _errors(tmp_path, data)
+
+
+def test_voice_defaults(tmp_path: Path) -> None:
+    video = _load(tmp_path, base_data())
+    assert video.voice == "zh-TW-YunJheNeural"
+
+
 def test_missing_asset_file_rejected(tmp_path: Path) -> None:
     write_game(tmp_path, base_data())
     (tmp_path / "assets" / "blue.png").unlink()

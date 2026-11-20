@@ -13,6 +13,10 @@
 - **WHEN** 某段只填 `main` 槽位（一個 `asset`）、一句、`source_pages`
 - **THEN** 載入成功，`template` 為 `main_with_sidebar`，其他欄位使用預設值
 
+#### Scenario: 缺少頂層欄位
+- **WHEN** `video.json` 沒有 `game_key` 或 `title`，或它們是空白，或 `voice` 不是非空字串
+- **THEN** 載入失敗，說明是哪個欄位；沒寫 `voice` 時使用 `zh-TW-YunJheNeural`
+
 #### Scenario: 引用不存在的素材
 - **WHEN** 槽位或項的 `asset_key` 不在 `assets` 中
 - **THEN** 載入失敗，訊息包含 `segment_key`、槽位名稱與找不到的 `asset_key`
