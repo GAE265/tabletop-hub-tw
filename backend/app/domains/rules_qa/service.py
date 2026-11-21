@@ -3,6 +3,7 @@
 不 import FastAPI（AGENTS.md 4.2）；錯誤一律拋 AppError，由錯誤處理器轉成統一格式。
 """
 
+import copy
 import logging
 import uuid
 from collections.abc import Callable, Iterator, Sequence
@@ -41,6 +42,8 @@ from app.domains.rules_qa.schemas import (
     RulesLessonItem,
     RulesLessonList,
     RulesLessonOut,
+    VideoAssetOut,
+    VideoAssetUpdate,
     VideoDraftOut,
     VideoJobList,
     VideoJobOut,
@@ -51,9 +54,18 @@ from app.domains.rules_qa.schemas import (
     VideoProjectCreate,
     VideoProjectList,
     VideoProjectOut,
+    VideoReadinessOut,
     VideoRequest,
     VideoTermsIn,
     VideoTermsOut,
+)
+from app.domains.rules_qa.video_assets import (
+    PhotoRejected,
+    find_asset,
+    new_photo_file,
+    normalize_photo,
+    photo_key,
+    readiness,
 )
 from app.domains.rules_qa.video_coverage import report_from_dict
 from app.domains.rules_qa.video_draft import (
@@ -71,6 +83,8 @@ from app.integrations.embedding import EmbeddingError, EmbeddingProvider
 from app.integrations.llm import LLMProvider
 from app.integrations.llm.errors import LLMConversationNotFound, LLMError, LLMUnavailable
 from app.integrations.llm.types import LLMResponse
+from app.integrations.storage.base import FileStorage
+from app.integrations.storage.errors import FileNotFound, StorageError
 
 logger = logging.getLogger(__name__)
 
@@ -805,4 +819,161 @@ def _draft_coverage(state: DraftState) -> DraftCoverageOut:
         hints=[
             CoverageHintOut(rule_id=r.rule_id, source=r.source) for r in report.rules if r.is_hint
         ],
+    )
+
+
+# --------------------------------------------------------------------------- 素材（MR 7）
+
+
+class VideoAssetStore(VideoDraftStore, Protocol):
+    def transaction(self) -> AbstractContextManager[None]: ...
+    def save_video(
+        self, project_id: uuid.UUID, *, expected_version: int, video: dict[str, Any]
+    ) -> bool: ...
+
+
+ASSET_CONFLICT_MESSAGE = "專案剛被修改（例如草稿重新產生），請重新整理後再試一次"
+
+
+class VideoAssetsService:
+    """素材照片、方向、區域、缺什麼（add-rules-video-mobile design.md D13）。
+
+    照片檔放在存放介面；段資料記檔名。寫入段資料的條件是 video_version 沒變（和草稿工作一樣），
+    所以草稿工作進行中上傳照片時，是草稿工作寫入失敗，照片保留。
+    """
+
+    def __init__(
+        self, drafts: VideoAssetStore, projects: VideoProjectStore, storage: FileStorage
+    ) -> None:
+        self._drafts = drafts
+        self._projects = projects
+        self._storage = storage
+
+    def upload_photo(
+        self, user: CurrentUser, project_id: uuid.UUID, asset_key: str, data: bytes
+    ) -> VideoAssetOut:
+        state = self._state(user, project_id)
+        video, asset = self._asset(state, asset_key)
+        try:
+            content, ext, content_type = normalize_photo(data)
+        except PhotoRejected as exc:
+            raise AppError(422, exc.code, exc.message) from exc
+        old_file = asset.get("file")
+        file = new_photo_file(asset_key, ext)
+        self._put(photo_key(project_id, file), content, content_type)
+        asset["file"] = file
+        # 新照片已經轉正；區域座標保留（同一張牌的版面通常相同），由手機頁提示重新確認
+        asset["orientation"] = 0
+        if not self._save(project_id, state.video_version, video):
+            self._storage.delete(photo_key(project_id, file))
+            raise AppError(409, "RULES_VIDEO_CONFLICT", ASSET_CONFLICT_MESSAGE)
+        if old_file and old_file != file:
+            self._delete(photo_key(project_id, old_file))
+        return _asset_out(asset, state.video_version + 1)
+
+    def read_photo(
+        self, user: CurrentUser, project_id: uuid.UUID, asset_key: str
+    ) -> tuple[bytes, str]:
+        state = self._state(user, project_id)
+        _, asset = self._asset(state, asset_key)
+        file = asset.get("file")
+        if not file:
+            raise AppError(404, "RULES_VIDEO_PHOTO_NOT_FOUND", "這個素材還沒有照片")
+        try:
+            data = self._storage.get(photo_key(project_id, file))
+        except FileNotFound as exc:
+            raise AppError(404, "RULES_VIDEO_PHOTO_NOT_FOUND", "找不到這個素材的照片") from exc
+        except StorageError as exc:
+            raise AppError(503, "RULES_VIDEO_STORAGE_UNAVAILABLE", STORAGE_DOWN_MESSAGE) from exc
+        ext = file.rsplit(".", 1)[-1].lower()
+        return data, "image/png" if ext == "png" else "image/jpeg"
+
+    def get_asset(self, user: CurrentUser, project_id: uuid.UUID, asset_key: str) -> VideoAssetOut:
+        state = self._state(user, project_id)
+        _, asset = self._asset(state, asset_key)
+        return _asset_out(asset, state.video_version)
+
+    def update_asset(
+        self, user: CurrentUser, project_id: uuid.UUID, asset_key: str, body: VideoAssetUpdate
+    ) -> VideoAssetOut:
+        state = self._state(user, project_id)
+        video, asset = self._asset(state, asset_key)
+        regions = asset.setdefault("regions", {})
+        if body.regions is not None:
+            unknown = sorted(set(body.regions) - set(regions))
+            if unknown:
+                raise AppError(
+                    422,
+                    "RULES_VIDEO_REGION_UNKNOWN",
+                    f"草稿沒有這些區域：{'、'.join(unknown)}",
+                    {"unknown": unknown},
+                )
+        if body.orientation is not None and body.orientation != asset.get("orientation", 0):
+            asset["orientation"] = body.orientation
+            # 座標以套用方向之後的圖為準，方向變了舊座標就不對
+            if body.regions is None:
+                for name in regions:
+                    regions[name] = None
+        for name, box in (body.regions or {}).items():
+            regions[name] = box
+        if not self._save(project_id, state.video_version, video):
+            raise AppError(409, "RULES_VIDEO_CONFLICT", ASSET_CONFLICT_MESSAGE)
+        return _asset_out(asset, state.video_version + 1)
+
+    def readiness(self, user: CurrentUser, project_id: uuid.UUID) -> VideoReadinessOut:
+        state = self._state(user, project_id)
+        return VideoReadinessOut.model_validate(readiness(state.video or {}))
+
+    def _state(self, user: CurrentUser, project_id: uuid.UUID) -> DraftState:
+        require_role(user, "shop_staff", "admin")
+        record = self._projects.get(project_id)
+        if record is None or not _can_access(user, record):
+            raise _project_not_found()
+        state = self._drafts.get_state(project_id)
+        assert state is not None
+        if state.video is None:
+            raise AppError(404, "RULES_VIDEO_DRAFT_NOT_FOUND", "這個專案還沒有草稿")
+        return state
+
+    @staticmethod
+    def _asset(state: DraftState, asset_key: str) -> tuple[dict[str, Any], dict[str, Any]]:
+        """回傳（段資料的複本、其中的這個素材）；改複本再寫回，失敗時原本的不受影響。"""
+        video = copy.deepcopy(state.video or {})
+        asset = find_asset(video, asset_key)
+        if asset is None:
+            raise AppError(404, "RULES_VIDEO_ASSET_NOT_FOUND", f"草稿沒有這個素材：{asset_key}")
+        return video, asset
+
+    def _save(self, project_id: uuid.UUID, version: int, video: dict[str, Any]) -> bool:
+        with self._drafts.transaction():
+            return self._drafts.save_video(project_id, expected_version=version, video=video)
+
+    def _put(self, key: str, data: bytes, content_type: str) -> None:
+        try:
+            self._storage.put(key, data, content_type)
+        except StorageError as exc:
+            raise AppError(503, "RULES_VIDEO_STORAGE_UNAVAILABLE", STORAGE_DOWN_MESSAGE) from exc
+
+    def _delete(self, key: str) -> None:
+        """刪舊照片失敗不影響這次上傳（只留下用不到的檔案），記 log。"""
+        try:
+            self._storage.delete(key)
+        except StorageError:
+            logger.warning("刪除舊的素材照片失敗：%s", key, exc_info=True)
+
+
+STORAGE_DOWN_MESSAGE = "照片存放空間暫時無法使用，請稍後再試"
+
+
+def _asset_out(asset: dict[str, Any], version: int) -> VideoAssetOut:
+    return VideoAssetOut(
+        asset_key=asset["asset_key"],
+        kind=asset.get("kind", "flat_photo"),
+        priority=asset.get("priority", "must"),
+        reason=asset.get("reason", ""),
+        shot=asset.get("shot"),
+        has_photo=bool(asset.get("file")),
+        orientation=asset.get("orientation", 0),
+        regions=dict(asset.get("regions") or {}),
+        video_version=version,
     )

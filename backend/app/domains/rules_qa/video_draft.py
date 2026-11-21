@@ -3,7 +3,8 @@
 1. 讀專案：店員編輯後的頁面文字（不讀 games_manual）、用語對照表；記下 video_version。
 2. generate_script：照 1c 的規則（自動清理、檢查、改寫一次）。
 3. 涵蓋檢查：只用編輯後的本章頁文字；失敗或回空清單時，草稿照樣存，coverage 記 not_done。
-4. 一個交易寫入草稿；條件是 video_version 沒變，變了就失敗、不覆寫。
+4. 沿用舊草稿同一個 asset_key 的照片、方向、區域座標（MR 7；涵蓋檢查不需要照片，所以在檢查之後）。
+5. 一個交易寫入草稿；條件是 video_version 沒變，變了就失敗、不覆寫。
 任何一步失敗，原本的草稿都不變。LLM 的逾時用 LLM_TIMEOUT_SECONDS（每次呼叫）加 SDK 的重試。
 """
 
@@ -19,6 +20,7 @@ from app.domains.rules_qa.repository import (
     VideoDraftRepository,
     VideoTermsRepository,
 )
+from app.domains.rules_qa.video_assets import carry_over_assets
 from app.domains.rules_qa.video_coverage import check_coverage
 from app.domains.rules_qa.video_jobs import JobContext, JobFailed
 from app.domains.rules_qa.video_script import (
@@ -99,6 +101,7 @@ class DraftJobHandler:
             ctx.report(0.7, "規則涵蓋檢查")
             coverage = self._coverage(data, base_dir, chapter)
             coverage["text_hash"] = narration_text_hash(data)
+        kept_photos = carry_over_assets(state.video, data)
 
         ctx.report(0.95, "儲存草稿")
         with ctx.session_factory() as session:
@@ -120,6 +123,7 @@ class DraftJobHandler:
             "beats": sum(len(s.get("beats", [])) for s in data.get("segments", [])),
             "assets": len(assets),
             "pending_photos": sum(1 for a in assets if not a.get("file")),
+            "kept_photos": kept_photos,
             "cleanup": [asdict(record) for record in cleanup],
             "coverage": coverage["status"],
             "terms": terms_status(terms_raw),

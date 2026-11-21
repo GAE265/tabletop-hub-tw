@@ -32,6 +32,7 @@ from app.domains.shops.router import router as shops_router
 from app.integrations.embedding import EmbeddingConfig, EmbeddingProvider, get_embedding_provider
 from app.integrations.llm import LLMProvider, get_llm_provider
 from app.integrations.ocr.factory import get_vision_provider
+from app.integrations.storage.factory import StorageConfig, get_file_storage
 
 API_PREFIX = "/api/v1"
 
@@ -108,6 +109,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.session_factory = create_session_factory(engine)
     # LLM_PROVIDER、GAMES_ADVISOR_EMBEDDING_* 設錯時在啟動就明確報錯
     app.state.llm = get_llm_provider(settings.llm_provider, settings)
+    # 檔案存放（規則影片的素材照片與影片；add-rules-video-mobile MR 7）。設定錯誤時啟動就報錯
+    app.state.storage = get_file_storage(
+        StorageConfig(
+            provider=settings.storage_provider,
+            local_dir=settings.storage_local_dir,
+            public_base_url=settings.storage_public_base_url,
+            connection_string=settings.storage_connection_string,
+            container=settings.storage_container,
+        )
+    )
     # 規則影片工作的處理函式（kind → 函式）；草稿、產生影片、修改的處理函式依序在這裡註冊
     app.state.rules_video_job_handlers = {"draft": DraftJobHandler(app.state.llm)}
     app.state.rules_video_runner = None

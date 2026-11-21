@@ -540,3 +540,17 @@ class VideoDraftRepository(SessionRepository):
             )
         )
         return result.rowcount == 1
+
+    def save_video(
+        self, project_id: uuid.UUID, *, expected_version: int, video: dict[str, Any]
+    ) -> bool:
+        """只改段資料（例如素材照片、方向、區域；涵蓋檢查不動）。條件同 save_draft。"""
+        result = self.session.execute(
+            update(RulesQaVideoProject)
+            .where(
+                RulesQaVideoProject.id == project_id,
+                RulesQaVideoProject.video_version == expected_version,
+            )
+            .values(video=video, video_version=expected_version + 1, updated_at=func.now())
+        )
+        return result.rowcount == 1

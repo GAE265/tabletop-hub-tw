@@ -298,3 +298,78 @@ class VideoDraftOut(BaseModel):
     # 頁面文字在草稿產生後被改過
     pages_stale: bool
     pages_stale_message: str | None
+
+
+# --------------------------------------------------------------------------- 素材（MR 7）
+
+# 照片需要順時針轉幾度才會擺正
+Orientation = Literal[0, 90, 180, 270]
+
+
+def _check_box(name: str, box: list[float] | None) -> None:
+    """區域座標 [x, y, w, h]：0–1 的相對比例，以套用方向之後的圖為準。"""
+    if box is None:
+        return
+    if len(box) != 4:
+        raise ValueError(f"區域 {name} 必須是 [x, y, w, h] 四個數字")
+    x, y, w, h = box
+    if x < 0 or y < 0 or w <= 0 or h <= 0 or x + w > 1 + 1e-9 or y + h > 1 + 1e-9:
+        raise ValueError(f"區域 {name} 超出 0–1 的範圍：{box}")
+
+
+class VideoAssetUpdate(BaseModel):
+    """改方向或區域（沒給的欄位不變）。區域給 null 代表改回待量測。
+
+    只改方向、沒有同時給區域時，所有區域改回待量測（座標是以套用方向之後的圖為準）。
+    """
+
+    orientation: Orientation | None = None
+    regions: dict[str, list[float] | None] | None = None
+
+    @model_validator(mode="after")
+    def _regions_in_range(self) -> "VideoAssetUpdate":
+        for name, box in (self.regions or {}).items():
+            _check_box(name, box)
+        return self
+
+
+class VideoAssetOut(BaseModel):
+    asset_key: str
+    kind: str
+    priority: str
+    reason: str
+    shot: str | None
+    has_photo: bool
+    orientation: int
+    # 區域名稱 → [x, y, w, h]；null＝待量測
+    regions: dict[str, list[float] | None]
+    # 寫入後的段資料版本
+    video_version: int
+
+
+class MissingPhotoOut(BaseModel):
+    asset_key: str
+    # must＝必拍、optional＝選拍（選拍沒有照片也會擋住產生影片，第 1 階段的限制）
+    priority: str
+    reason: str
+    shot: str | None
+
+
+class MissingRegionOut(BaseModel):
+    asset_key: str
+    region: str
+
+
+class UnsupportedAssetOut(BaseModel):
+    asset_key: str
+    kind: str
+    message: str
+
+
+class VideoReadinessOut(BaseModel):
+    """產生影片前還缺什麼；三個清單都是空的才 ready。"""
+
+    ready: bool
+    missing_photos: list[MissingPhotoOut]
+    missing_regions: list[MissingRegionOut]
+    unsupported: list[UnsupportedAssetOut]

@@ -3,7 +3,7 @@
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, Request, status
+from fastapi import APIRouter, Depends, File, Query, Request, Response, UploadFile, status
 from sqlalchemy.orm import Session
 
 from app.core.auth import CurrentUser, get_current_user
@@ -24,6 +24,8 @@ from app.domains.rules_qa.schemas import (
     MessageResponse,
     RulesLessonList,
     RulesLessonOut,
+    VideoAssetOut,
+    VideoAssetUpdate,
     VideoDraftOut,
     VideoJobCreate,
     VideoJobList,
@@ -34,18 +36,21 @@ from app.domains.rules_qa.schemas import (
     VideoProjectCreate,
     VideoProjectList,
     VideoProjectOut,
+    VideoReadinessOut,
     VideoRequest,
     VideoTermsIn,
     VideoTermsOut,
 )
 from app.domains.rules_qa.service import (
     RulesQaService,
+    VideoAssetsService,
     VideoDraftService,
     VideoJobService,
     VideoPagesService,
     VideoProjectService,
     VideoTermsService,
 )
+from app.domains.rules_qa.video_assets import MAX_PHOTO_BYTES
 
 router = APIRouter(prefix="/rules-lessons", tags=["rules_qa"])
 
@@ -276,3 +281,69 @@ def get_video_draft(
 ) -> VideoDraftOut:
     """草稿：每段的句子、素材清單、涵蓋檢查摘要、用語對照表狀態、是否依舊文字產生。"""
     return service.get(user, project_id)
+
+
+# --------------------------------------------------------------------------- 素材
+
+
+def get_video_assets_service(
+    request: Request, session: Annotated[Session, Depends(get_session)]
+) -> VideoAssetsService:
+    """存放介面用後端啟動時建立的（main.py 的 app.state.storage）；測試是 FakeFileStorage。"""
+    return VideoAssetsService(
+        VideoDraftRepository(session), VideoProjectRepository(session), request.app.state.storage
+    )
+
+
+VideoAssetsServiceDep = Annotated[VideoAssetsService, Depends(get_video_assets_service)]
+
+
+@videos_router.put("/{project_id}/assets/{asset_key}/photo", response_model=VideoAssetOut)
+def upload_video_asset_photo(
+    project_id: uuid.UUID,
+    asset_key: str,
+    file: Annotated[UploadFile, File()],
+    user: CurrentUserDep,
+    service: VideoAssetsServiceDep,
+) -> VideoAssetOut:
+    """上傳或換一張素材照片（JPEG、PNG，最多 15 MB；依 EXIF 轉正）。方向改回 0，區域座標保留。"""
+    # 有界讀取：只多讀一個位元組，讓 service 辨識超過上限
+    data = file.file.read(MAX_PHOTO_BYTES + 1)
+    return service.upload_photo(user, project_id, asset_key, data)
+
+
+@videos_router.get("/{project_id}/assets/{asset_key}/photo")
+def read_video_asset_photo(
+    project_id: uuid.UUID, asset_key: str, user: CurrentUserDep, service: VideoAssetsServiceDep
+) -> Response:
+    """素材照片的圖檔（帶身分讀取，權限同專案）。"""
+    data, content_type = service.read_photo(user, project_id, asset_key)
+    return Response(content=data, media_type=content_type)
+
+
+@videos_router.get("/{project_id}/assets/{asset_key}", response_model=VideoAssetOut)
+def get_video_asset(
+    project_id: uuid.UUID, asset_key: str, user: CurrentUserDep, service: VideoAssetsServiceDep
+) -> VideoAssetOut:
+    """一個素材的方向、區域座標、有沒有照片。"""
+    return service.get_asset(user, project_id, asset_key)
+
+
+@videos_router.patch("/{project_id}/assets/{asset_key}", response_model=VideoAssetOut)
+def update_video_asset(
+    project_id: uuid.UUID,
+    asset_key: str,
+    body: VideoAssetUpdate,
+    user: CurrentUserDep,
+    service: VideoAssetsServiceDep,
+) -> VideoAssetOut:
+    """改方向或區域座標；只改方向時區域改回待量測。"""
+    return service.update_asset(user, project_id, asset_key, body)
+
+
+@videos_router.get("/{project_id}/readiness", response_model=VideoReadinessOut)
+def get_video_readiness(
+    project_id: uuid.UUID, user: CurrentUserDep, service: VideoAssetsServiceDep
+) -> VideoReadinessOut:
+    """產生影片前還缺什麼：沒有照片的素材、沒有座標的區域、本版不支援的繪製素材。"""
+    return service.readiness(user, project_id)
