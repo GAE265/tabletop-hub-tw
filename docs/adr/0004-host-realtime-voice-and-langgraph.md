@@ -6,7 +6,7 @@ status: proposed
 
 AI 語音主持（`host`）用阿里雲的即時語音模型當主持人的聲音。這份 ADR 記四個連在一起的決定。
 
-**1. 即時語音不走 `integrations/llm` 現有的介面。** AGENTS.md §4.2 規定 LLM 一律透過 `integrations/llm` 呼叫。現有的 `respond()` 是同步的一問一答，每次只呼叫模型 1 次。即時語音要一條長時間開著的連線，同時收玩家的聲音、播主持人的聲音，還要能中途插話與停播，`respond()` 做不到。所以在 `integrations/` 另開一個管連線從開到關的介面，一樣有 `fake` 與 `cloud` 兩種實作，用 `.env` 的 `HOST_REALTIME_PROVIDER` 切換。`host` 不直接 import 阿里雲的 SDK。難題轉交的「思考模型」仍走 `integrations/llm`，沒有偏離。
+**1. 即時語音不走 `integrations/llm` 現有的介面。** AGENTS.md §4.2 規定 LLM 一律透過 `integrations/llm` 呼叫。現有的 `respond()` 是同步的一問一答，每次只呼叫模型 1 次。即時語音要一條長時間開著的連線，同時收玩家的聲音、播主持人的聲音，還要能中途插話與停播，`respond()` 做不到。所以在 `integrations/realtime_voice/` 另開一個管連線從開到關的介面，一樣有 `fake` 與 `cloud` 兩種實作，用 `.env` 的 `HOST_REALTIME_PROVIDER` 切換。`host` 不直接 import 阿里雲的 SDK。難題轉交的「思考模型」仍走 `integrations/llm`，沒有偏離。
 
 **2. 聲音經後端轉送（手機 ⇄ 後端 ⇄ 阿里雲），不讓瀏覽器直連。** 後端要隨時能插話，也要看得到主持人在做什麼：換階段時交規則要點、處理按鍵、查規則、轉交思考模型與等待的計時、丟掉晚到的舊答案。直連的話，這些都要經過手機網頁轉送，前端 `state/` 要扛一半的主持邏輯，金鑰也要另外換成短效的。轉送那一段用非同步寫；查規則與思考模型丟到另一條執行緒，跑現有的同步程式。資料庫存取仍照 §4.4 用同步寫法。
 
@@ -21,7 +21,7 @@ AI 語音主持（`host`）用阿里雲的即時語音模型當主持人的聲�
 | 等待的計時、連線的維持與重連 | 否，屬於轉送那一段 |
 | 30 分鐘後清掉、一人一場、權限 | 否，屬於 `host` 的 `service` |
 
-圖放在 `backend/app/domains/host/`，是 §4.1 列的五種檔案以外的一個新檔案，由 `service` 呼叫。它不放 `integrations/`：LangGraph 不連任何外部服務，而且圖知道這款遊戲的階段，`integrations/` 不能知道任何 domain 的事。不使用 LangChain 的模型包裝，圖要叫模型時只走 `integrations/llm`。
+圖放在 `backend/app/domains/host/`，由 `service` 呼叫。`host` 在 §4.1 列的五種檔案以外多三個新檔案：圖、轉送聲音與計時的非同步程式、主持的內容（固定台詞、規則要點、門檻常數）；它不建資料表，所以沒有 `repository.py` 與 `models.py`。它不放 `integrations/`：LangGraph 不連任何外部服務，而且圖知道這款遊戲的階段，`integrations/` 不能知道任何 domain 的事。不使用 LangChain 的模型包裝，圖要叫模型時只走 `integrations/llm`。
 
 **4. 帶流程由程式決定，不由 LLM 決定。** 這和 ADR 0002（games_advisor 的追問與推薦由 LLM 依對話規則決定）相反。主持要照規則書的固定順序走，階段不能跳、不能自己往前推。試聽時讓語音模型自己記流程，它被打斷後會編新內容，還會自己把流程往前推。所以第幾回合、哪個階段、每個階段要說到哪幾條規則，都由程式照整局記憶決定，再交給語音模型說出來。圖裡只有「思考模型」節點會叫 LLM。語音模型仍自己決定要不要呼叫工具；玩家說的話是不是語音指令，還要再過一道程式的文字核對。
 
@@ -35,7 +35,7 @@ AI 語音主持（`host`）用阿里雲的即時語音模型當主持人的聲�
 
 ## Consequences
 
-- `integrations/` 多一個即時語音的共用區，AGENTS.md §3 還沒有列它的擁有者，要由組員決定並更新 AGENTS.md。這一段偏離 §4.2「LLM 一律透過 `integrations/llm`」的字面，需要 `integrations/llm` 的擁有者（瑋鋐）同意。
+- `integrations/realtime_voice/` 是新的共用區，AGENTS.md §3 還沒有列它的擁有者。建議由立倫擁有（目前只有 `host` 用），要由組員決定並更新 AGENTS.md。這一段偏離 §4.2「LLM 一律透過 `integrations/llm`」的字面，需要 `integrations/llm` 的擁有者（瑋鋐）同意。
 - `backend/pyproject.toml` 加 `langgraph>=1.2.22,<2`，連帶安裝 16 個套件；現有套件的版本不變（在設定檔的暫存副本試過解析）。其中 `langsmith` 的追蹤功能不開，不註冊它的服務。
 - 流程圖畫的是「後端怎麼處理一件事」，不是遊戲的階段。走到哪個階段要從整局記憶讀。
 - 整局記憶只在一台後端的記憶體裡。後端重啟就消失；首版後端固定一台，要多台時得把記憶搬到別的地方。

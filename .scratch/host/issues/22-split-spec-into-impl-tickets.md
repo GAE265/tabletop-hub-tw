@@ -26,3 +26,4 @@ Map: [AI 語音主持](../map.md)
 5. 每張附什麼：spec 對應的段落、要改的檔案、相依的 ticket。
 
 ## Comments
+- 2026-11-22：「[寫 spec.md](21-write-spec.md)」已結案，這張的相依全部結案。[`spec.md`](../spec.md) 第 13、14 節列了要動的檔案與要改的別人的地方；每張情境表格的編號（F、C、V、P、T、Q、M、K、A、W、U）可以直接當成實作 ticket 的驗收項目。

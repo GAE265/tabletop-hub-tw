@@ -1,7 +1,7 @@
 # 寫 spec.md
 
 Type: task
-Status: open
+Status: resolved
 Blocked by: 10, 11, 13, 23
 Map: [AI 語音主持](../map.md)
 
@@ -92,6 +92,28 @@ Map: [AI 語音主持](../map.md)
 - 規則書原文、錄音、金鑰與真實的資源名稱都不進 spec（AGENTS.md §2 第 1、2 點）。
 - 寫之前先看一次 `origin/dev`，確認 `integrations/llm`、`rules_qa`、`core/`、前後端的套件設定有沒有新的改動。
 
+## Answer
+
+2026-11-22 立倫確認。
+
+- 交付物：[`spec.md`](../spec.md)，16 節。每條規則標了出處；情境表格 9 組共 126 行，都用 fake。
+- 預設做法第 1 到 16 點（第 4 點已移出）：立倫 2026-11-21 確認。其中四點的字句照後來的決定改過，見 Comments。
+- 這張新定的細節 23 項（spec 第 16 節，N-01 到 N-23）：立倫 2026-11-22 全部同意。影響後面最多的幾項：
+  - 端點三個：開主持、列出自己保留的主持、拿一次性通行碼（接著主持與切換接話方式共用）。結束主持只走 WebSocket。
+  - 語音模型的工具八個：查規則、轉交思考模型、五個語音指令、不回應。
+  - 轉交思考模型時，後端自己再查一次規則片段。
+  - 「自動進下一個節點」與「被打斷的那一段」都靠裝置回報播完。
+  - 即時語音的整合層放 `integrations/realtime_voice/`，建議由立倫擁有；`host` 多三個新檔案。
+  - 參考畫面的元件照設計稿 v2；不顯示逐字稿，夜晚倒數不顯示數字。
+- ADR 0004 草稿已補上整合層的資料夾與三個新檔案，仍是 `status: proposed`。
+- 沒有新增術語。
+
+留給後面的事：
+
+- 立倫要做的：ADR 0004 請瑋鋐與組員同意；請組員在 AGENTS.md §3 加上 `integrations/realtime_voice/` 的擁有者；動 `rules_qa` 前先在群組跟永傑說。
+- 實作時要確認的：`integrations/llm` 的工廠能不能指定模型（`HOST_THINKING_MODEL`）；阿里雲的事件帶不帶得出「工具請求屬於哪一句話」（spec 第 5.2 節）。
+- 接回 `dev` 時 `GLOSSARY.md` 會衝突，兩區都留。
+
 ## Comments
 
 - 2026-11-20：開這張時看過 `origin/dev`（`a4b32bf`）。`feature/host` 開出之後，`dev` 多了 `groups` 的通知功能與桌遊範例資料；沒有動到 AGENTS.md、`GLOSSARY.md`、`integrations/`、`core/`、`matches`、`rules_qa`，也沒有動前後端的套件設定。「[向新善、永傑、瑋鋐確認戰績欄位與規則全文的問題](16-ask-owners-about-matches-and-rules-text.md)」問到的三項 `matches` 改動還沒進 `dev`；主持人不讀 `matches`，所以不影響 spec。 `dev` 另外在 `backend/app/main.py` 與 `frontend/lib/app/router.dart` 各加了幾行（`groups` 的路由）；`host` 之後掛路由會改到同樣的檔案，接回 `dev` 時留意。
@@ -143,3 +165,20 @@ Map: [AI 語音主持](../map.md)
   - ADR 草稿在 `docs/adr/0004-host-realtime-voice-and-langgraph.md`。整合層的即時語音介面放哪個資料夾定了之後，回頭補進 ADR 第 1 段。
   - 情境表格要有：每件事各跑一次圖之後記憶對不對（下一步、上一步、暫停、繼續、結束、查規則、不是指令）；兩件事同時到時依序處理；重新連線後交回的內容；150 秒訊息帶的現況；最近 5 題只留 5 題；30 分鐘後記憶被清掉。
   - 手動檢查（預設做法第 14 點）加：150 秒那則訊息帶現況後，主持人有沒有開口。
+- 2026-11-21：開工。前提核對過（`Blocked by` 四張的 Answer、地圖標了「已由…更正」的行、`origin/dev`），沒有不成立的。預設做法有四點的字句已被後來的決定改掉，列給立倫確認時用改過的版本：
+  - 第 1 點：每 150 秒那則訊息要帶一句現況（「[選哪個 Agent 框架、它負責什麼](10-agent-framework-choice.md)」第 4 節）。
+  - 第 2 點：原本寫「主持人不另外開口」。那張第 4 節定的是每次重新連線後主持人說一句「回到第 N 回合的某階段」，照那張。
+  - 第 5 點：多兩種情況（「繼續」時重講、被閒聊切斷後自動重講最多 2 次），出自「[玩家怎麼和主持人說話](11-how-players-talk-to-host.md)」。
+  - 第 15 點：demo 改用筆電開網頁，本機網址不需要 HTTPS；HTTPS 只是手機實測的前置條件。
+- 2026-11-21：看過 `origin/dev`（`cc8c194`，分岔點仍是 `9295fbe`）。和上次看的 `6847b5f` 相比：
+  - `rules_qa` 多了規則影片的專案與背景工作（`service.py`、`repository.py` 各多兩百多行）。問答的部分沒變：`send_message`、`SEARCH_LIMIT = 6`、`search_chunks`、`has_chunks`、409 `RULES_QA_NOT_READY` 都在。加「只檢索」方法時會改到同一個檔案，接回 `dev` 後再寫。
+  - `core/config.py` 只多規則影片的設定。`backend/pyproject.toml`、`frontend/pubspec.yaml`、`integrations/llm`、`integrations/embedding`、`matches`、AGENTS.md（1.11）都沒動。
+  - `integrations/` 現在有 `tts/`、`storage/`、`video/`（永傑，規則影片用的文字轉語音）。即時語音的介面不能放 `tts/`，資料夾名稱要避開。
+  - `backend/app/main.py` 又多了幾行路由。試算接回 `dev`，仍然只有 `GLOSSARY.md` 衝突。
+  - `web_socket_channel` 在 `frontend/pubspec.lock` 仍是間接相依，預設做法第 8 點成立。
+- 2026-11-21：立倫確認預設做法（第 1 到 16 點，第 4 點已移出），用上面改過的四點。另外指定參考畫面參考設計稿 [v2](../prototypes/ui-mockups/v2/README.md)。
+- 2026-11-21：[`spec.md`](../spec.md) 第一版草稿寫完，第 1 到 15 節都有。還沒結案，剩三件事：
+  - 第 16 節列了 23 項標「新」的細節（N-01 到 N-23），之前沒有 ticket 決定過，等立倫看過。
+  - ADR 0004 第 1 段要補整合層的資料夾（N-19 定了才補）；它寫的「一個新檔案」和 spec 第 13.1 節的三個不一致（N-17）。
+  - `integrations/llm` 的工廠現在只讀 `LLM_MODEL`，沒有讓呼叫端指定模型的參數。`HOST_THINKING_MODEL` 要怎麼接，spec 第 13.2 節寫成實作時確認。
+- 2026-11-22：立倫看過 spec 第 16 節，23 項全部同意。ADR 0004 草稿照 N-17、N-19 補上。結案。
