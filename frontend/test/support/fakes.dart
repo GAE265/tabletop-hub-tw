@@ -21,6 +21,8 @@ import 'package:tabletop_hub/core/dev/data/dev_users_repository.dart';
 import 'package:tabletop_hub/core/platform/lesson_video_player.dart';
 import 'package:tabletop_hub/domains/rules_qa/data/rules_qa_models.dart';
 import 'package:tabletop_hub/domains/rules_qa/data/rules_qa_repository.dart';
+import 'package:tabletop_hub/domains/rules_qa/data/video_studio_models.dart';
+import 'package:tabletop_hub/domains/rules_qa/data/video_studio_repository.dart';
 import 'package:tabletop_hub/domains/booking/data/booking.dart';
 import 'package:tabletop_hub/domains/booking/data/booking_notification.dart';
 import 'package:tabletop_hub/domains/booking/data/booking_repository.dart';
@@ -1595,3 +1597,142 @@ class FakeShopsRepository implements ShopsRepository {
     return List.of(choices);
   }
 }
+
+/// 在記憶體中運作的 VideoStudioRepository（規則影片生產器 1d，MR 6）。
+///
+/// [jobSequence]：之後每次 [getJob] 依序回傳的狀態（最後一個會一直重複），
+/// 用來模擬工作從 queued → running → succeeded／failed。
+class FakeVideoStudioRepository implements VideoStudioRepository {
+  FakeVideoStudioRepository({
+    List<VideoProject>? projects,
+    List<VideoGameOption>? games,
+    Map<String, VideoPages>? pages,
+    Map<String, VideoDraft>? drafts,
+  }) : projects = projects ?? [],
+       games = games ?? [],
+       pages = pages ?? {},
+       drafts = drafts ?? {};
+
+  List<VideoProject> projects;
+  List<VideoGameOption> games;
+  Map<String, VideoPages> pages;
+  Map<String, VideoDraft> drafts;
+
+  /// 各方法丟出的錯誤（有值就丟）。
+  Object? listError;
+  Object? createError;
+  Object? savePagesError;
+  Object? startDraftError;
+  Object? draftError;
+
+  /// 專案最近一個工作（[latestJob] 回傳）。
+  final latestJobs = <String, VideoJob>{};
+
+  /// [getJob] 依序回傳的狀態。
+  List<VideoJob> jobSequence = [];
+  int _jobIndex = 0;
+
+  final created = <VideoProjectCreate>[];
+  final savedPages = <(String, VideoPagesUpdate)>[];
+  final startedDrafts = <String>[];
+  final polledJobs = <String>[];
+
+  @override
+  Future<List<VideoProject>> listProjects() async {
+    if (listError != null) throw listError!;
+    return projects;
+  }
+
+  @override
+  Future<List<VideoGameOption>> listGames() async => games;
+
+  @override
+  Future<VideoProject> createProject(VideoProjectCreate input) async {
+    created.add(input);
+    if (createError != null) throw createError!;
+    final project = sampleVideoProject(
+      id: 'p-new',
+      gameId: input.gameId,
+      chapterNumber: input.chapterNumber,
+      chapterTitle: input.chapterTitle,
+    );
+    projects = [project, ...projects];
+    return project;
+  }
+
+  @override
+  Future<VideoProject> getProject(String projectId) async =>
+      projects.firstWhere((p) => p.id == projectId);
+
+  @override
+  Future<VideoPages> getPages(String projectId) async => pages[projectId]!;
+
+  @override
+  Future<VideoPages> savePages(String projectId, VideoPagesUpdate input) async {
+    savedPages.add((projectId, input));
+    if (savePagesError != null) throw savePagesError!;
+    return pages[projectId]!;
+  }
+
+  @override
+  Future<VideoJob> startDraft(String projectId) async {
+    startedDrafts.add(projectId);
+    if (startDraftError != null) throw startDraftError!;
+    return sampleVideoJob(projectId: projectId, status: VideoJobStatus.queued);
+  }
+
+  @override
+  Future<VideoJob> getJob(String projectId, String jobId) async {
+    polledJobs.add(jobId);
+    final job = jobSequence[_jobIndex.clamp(0, jobSequence.length - 1)];
+    if (_jobIndex < jobSequence.length - 1) _jobIndex++;
+    return job;
+  }
+
+  @override
+  Future<VideoJob?> latestJob(String projectId) async => latestJobs[projectId];
+
+  @override
+  Future<VideoDraft?> getDraft(String projectId) async {
+    if (draftError != null) throw draftError!;
+    return drafts[projectId];
+  }
+}
+
+VideoProject sampleVideoProject({
+  String id = 'p1',
+  int gameId = 1,
+  String gameName = '假遊戲',
+  int chapterNumber = 11,
+  String chapterTitle = '步驟三',
+  String step = 'pages',
+}) => VideoProject(
+  id: id,
+  gameId: gameId,
+  gameName: gameName,
+  shopId: 's1',
+  createdBy: 'u1',
+  chapterNumber: chapterNumber,
+  chapterTitle: chapterTitle,
+  step: step,
+  createdAt: DateTime.utc(2026, 11, 21),
+  updatedAt: DateTime.utc(2026, 11, 21),
+);
+
+VideoJob sampleVideoJob({
+  String id = 'j1',
+  String projectId = 'p1',
+  VideoJobStatus status = VideoJobStatus.queued,
+  double progress = 0,
+  String? message,
+  String? error,
+}) => VideoJob(
+  id: id,
+  projectId: projectId,
+  kind: 'draft',
+  status: status,
+  progress: progress,
+  message: message,
+  error: error,
+  createdAt: DateTime.utc(2026, 11, 21),
+);
