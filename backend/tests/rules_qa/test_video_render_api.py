@@ -290,6 +290,11 @@ def test_read_render(api, ready, rules_db, storage, tmp_path):
     assert data["total_seconds"] == job.result["total_seconds"]
     assert sorted(data["reencoded"]) == ["s1", "s2"] and data["reused"] == []
     assert data["estimated"] is True and data["finished_at"]
+    # 段清單（看影片頁點一段跳到那個時間點）：段的順序、開始秒數、第一句字幕
+    segments = data["segments"]
+    assert [s["segment_key"] for s in segments] == ["s1", "s2"]
+    assert 0 <= segments[0]["start_seconds"] < segments[1]["start_seconds"] < data["total_seconds"]
+    assert segments[0]["title"] == "把打出的牌蓋著洗在一起，然後同時翻開。"
     video = api.get(f"{URL}/{ready}/render/video")
     assert video.status_code == 200
     assert video.headers["content-type"] == "video/mp4"
