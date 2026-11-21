@@ -480,3 +480,43 @@ def test_without_pages_skips_coverage(tmp_path: Path, run: Run) -> None:
     assert code == 0
     assert "略過涵蓋檢查" in out
     assert len(llm.calls) == 1
+
+
+# --- 本機驗收（tasks 3.3）發現的問題 ---
+
+
+def test_missing_segment_key_in_json_is_filled(tmp_path: Path, run: Run) -> None:
+    # 真的 LLM 在 segment_json 裡省略了 segment_key（外層的 segment_key 有寫）
+    folder = _game(tmp_path)
+    new = _gold_to_red(_video(folder))
+    entry = _entry(new, ["highlights"])
+    body = json.loads(entry["segment_json"])
+    del body["segment_key"]
+    entry["segment_json"] = json.dumps(body)
+    llm = FakeLLMProvider(json_outputs=[_revise(entry)])
+    code, _, err = run("revise", str(folder), REQUEST, llm=llm)
+    assert code == 0, err
+    assert len(llm.calls) == 1
+    assert segment(_video(folder), "s1")["highlights"][0]["style"] == "red"
+
+
+def test_invalid_alternative_triggers_rewrite(tmp_path: Path, run: Run) -> None:
+    # 替代做法在產生時就檢查，存進 pending.json 的一定能套用
+    folder = _game(tmp_path)
+    data = _video(folder)
+    bad = copy.deepcopy(segment(data, "s1"))
+    bad["beats"][0]["narration"] = "每次都洗牌。"
+    good = copy.deepcopy(segment(data, "s1"))
+    good["beats"][1]["cues"][1] = {"at": 1.0, "do": "flip", "target": "main.c1"}
+    llm = FakeLLMProvider(
+        json_outputs=[
+            _unsupported(_alternative("壞的", bad)),
+            _unsupported(_alternative("改成翻牌", good)),
+        ]
+    )
+    code, out, err = run("revise", str(folder), "讓牌旋轉", llm=llm)
+    assert code == 0, err
+    assert len(llm.calls) == 2
+    assert "次" in llm.calls[1].kwargs["input"]
+    assert "改成翻牌" in out and "壞的" not in out
+    assert run("revise", str(folder), "--choose", "1", llm=FakeLLMProvider(json_outputs=[]))[0] == 0
