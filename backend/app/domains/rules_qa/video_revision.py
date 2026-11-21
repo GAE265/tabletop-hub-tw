@@ -6,6 +6,7 @@
 """
 
 import copy
+import dataclasses
 import json
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -232,10 +233,10 @@ def propose(
             return Ambiguous(raw.get("reason") or "", candidates)
         if kind == "unsupported" and raw.get("alternatives"):
             # 替代做法在產生時就檢查，存進 pending.json 的一定能套用（本機驗收發現）
-            errors = _check_alternatives(folder, data, raw, terms)
-            if errors:
+            kept, errors = _usable_alternatives(folder, data, raw, terms, last=attempt == 1)
+            if kept is None:
                 continue
-            return _unsupported(raw, request, [])
+            return _unsupported(kept, request, [])
         if kind != "revise":
             errors = [_unexpected_kind(kind, only_segment)]
             continue
@@ -271,7 +272,8 @@ def _ask_alternatives(
     outputs: list[dict[str, Any]],
     context: tuple[Path, dict[str, Any], list[Term]],
 ) -> Unsupported:
-    prompt = (
+    folder, data, terms = context
+    base = (
         llm_input
         + "\n\n=== 上一次的輸出 ===\n"
         + json.dumps(previous, ensure_ascii=False)
@@ -280,29 +282,48 @@ def _ask_alternatives(
             actions="、".join(actions), limit=MAX_ALTERNATIVES, supported="、".join(ACTIONS)
         )
     )
-    raw = llm.generate_json(instructions=INSTRUCTIONS, input=prompt, schema=SCHEMA)
-    outputs.append(raw)
-    if raw.get("kind") != "unsupported" or not raw.get("alternatives"):
-        raise RevisionRejected(
-            [f"用了不支援的動作（{'、'.join(actions)}），且沒有取得替代做法"], outputs
-        )
-    folder, data, terms = context
-    errors = _check_alternatives(folder, data, raw, terms)
-    if errors:
-        raise RevisionRejected(errors, outputs)
-    return _unsupported(raw, request, actions)
+    errors: list[str] = []
+    for attempt in range(2):  # 替代做法不通過檢查或沒有實際變動時，改寫一次
+        prompt = base
+        if attempt:
+            prompt += "\n\n" + video_prompts.rewrite_request(errors, outputs[-1])
+        raw = llm.generate_json(instructions=INSTRUCTIONS, input=prompt, schema=SCHEMA)
+        outputs.append(raw)
+        if raw.get("kind") != "unsupported" or not raw.get("alternatives"):
+            errors = [f"用了不支援的動作（{'、'.join(actions)}），請提出替代做法"]
+            continue
+        kept, errors = _usable_alternatives(folder, data, raw, terms, last=attempt == 1)
+        if kept is not None:
+            return _unsupported(kept, request, actions)
+    raise RevisionRejected(errors, outputs)
 
 
-def _check_alternatives(
-    folder: Path, data: dict[str, Any], raw: dict[str, Any], terms: list[Term]
-) -> list[str]:
-    errors = []
+def _usable_alternatives(
+    folder: Path, data: dict[str, Any], raw: dict[str, Any], terms: list[Term], *, last: bool
+) -> tuple[dict[str, Any] | None, list[str]]:
+    """檢查替代做法。回傳 (可以列出的替代做法, 錯誤)；需要改寫或失敗時第一項是 None。
+
+    不通過檢查：改寫一次。套用後和原本完全相同（例如只加了預設值）：視為無效，改寫一次；
+    改寫後仍無效就不列出，全部無效時失敗（2026-11-21 永傑決定）。
+    """
+    errors, noop, kept = [], [], []
     for alt in raw["alternatives"][:MAX_ALTERNATIVES]:
         entries, problems = _entries(alt.get("segments", []))
         if not problems:
             problems = check_entries(folder, data, entries, terms)
-        errors += [f"替代做法「{alt.get('title')}」：{p}" for p in problems]
-    return errors
+        title = alt.get("title")
+        errors += [f"替代做法「{title}」：{p}" for p in problems]
+        if not problems and not any(e.changed for e in entries):
+            noop.append(f"替代做法「{title}」套用後和原本的內容完全相同，不算替代做法")
+        elif not problems:
+            kept.append(alt)
+    if errors:
+        return None, errors
+    if noop and not last:
+        return None, noop
+    if not kept:
+        return None, [*noop, "沒有有效的替代做法"]
+    return {**raw, "alternatives": kept}, []
 
 
 def _unsupported(raw: dict[str, Any], request: str, actions: list[str]) -> Unsupported:
@@ -426,9 +447,39 @@ def check_entries(
             for word in term.avoid:
                 if word in text:
                     errors.append(f"{where}用了「{word}」，請改用「{term.zh}」：{text}")
-    for entry in entries:
-        entry.changed = diff_categories(originals[entry.segment_key], entry.segment)
+    compute_changes(folder, data, entries)
     return errors
+
+
+def compute_changes(folder: Path, data: dict[str, Any], entries: list[Entry]) -> None:
+    """算出每段的欄位差異（entry.changed）。
+
+    用解析後的段資料比較，預設值會被補齊：例如只多寫了 "anim": "pop"（預設值）不算改了 cues。
+    解析失敗時退回比較原始 JSON。
+    """
+    old = _normalized(data, folder)
+    new = _normalized(replace_segments(data, entries), folder)
+    originals = {s["segment_key"]: s for s in data["segments"]}
+    for entry in entries:
+        key = entry.segment_key
+        if old is not None and new is not None and key in old and key in new:
+            entry.changed = diff_categories(old[key], new[key])
+        else:
+            entry.changed = diff_categories(originals[key], entry.segment)
+
+
+def _normalized(data: dict[str, Any], folder: Path) -> dict[str, dict[str, Any]] | None:
+    try:
+        video = parse_video(data, folder, draft=True)
+    except VideoDataError:
+        return None
+    result = {}
+    for segment in video.segments:
+        plain = dataclasses.asdict(segment)
+        for name in NOT_VISUAL:
+            plain.pop(name, None)
+        result[segment.segment_key] = plain
+    return result
 
 
 def _is_formal(data: dict[str, Any], folder: Path) -> bool:
@@ -512,9 +563,9 @@ def apply_entries(
 
     at = (now or datetime.now(UTC)).strftime("%Y-%m-%dT%H:%M:%SZ")
     replaced: dict[str, dict[str, Any]] = {}
+    compute_changes(folder, data, entries)
     for entry in entries:
         old = originals[entry.segment_key]
-        entry.changed = diff_categories(old, entry.segment)
         new = copy.deepcopy(entry.segment)
         new["state"] = {
             k: v for k, v in (old.get("state") or {}).items() if k != "content_hash"
