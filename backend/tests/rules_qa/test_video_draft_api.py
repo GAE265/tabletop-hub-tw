@@ -81,9 +81,9 @@ def test_second_job_while_running_is_409(api, as_shop_staff, project):
     assert response.status_code == 409 and _code(response) == "RULES_VIDEO_JOB_RUNNING"
 
 
-@pytest.mark.parametrize("body", [{"kind": "render"}, {"kind": "revise"}, {"kind": "x"}, {}])
+@pytest.mark.parametrize("body", [{"kind": "revise"}, {"kind": "x"}, {}])
 def test_unsupported_kind_is_422(api, as_shop_staff, project, body):
-    # render、revise 的建立在之後的 MR 才開放
+    # revise 的建立在之後的 MR 才開放（render 在 MR 9 開放，見 test_video_render_api.py）
     assert api.post(f"{URL}/{project}/jobs", json=body).status_code == 422
 
 
