@@ -22,8 +22,8 @@
 
 - [x] 3.1 撰寫測試（`FakeLLMProvider`）：只取代列出的段、不能改 key 或增刪段、檢查不通過改寫一次、備份、`--dry-run` 與 `--apply`、未被要求修改的欄位、超過 2 段的提醒、目標不明確與 `--segment`、修改紀錄與 `changed`、`render` 後更新狀態、超出能力（LLM 回報與五種以外的動作）、`--choose`、寫入後的涵蓋檢查警告、LLM 無法使用，驗證：測試存在且失敗
 - [x] 3.2 實作 `video_revision.py`、指示與 schema、`video_commands revise`，驗證：3.1 通過
-- [ ] 3.3 用《血與刃》步驟三實際修改：至少一個一般修改（例如「情況二的紅框改成金框」）、一個超出能力的要求，驗證：**交給永傑看修改結果、只重做的段、修改紀錄與需求紀錄**
-  - 本機結果（2026-11-21，副本 `.local/rules_video_revise/`）：「情況二的紅框改成金框」dry-run → apply 只改 s2 的 highlights，render 只重新編碼 1 段；「白薔薇旋轉著飛進白薔薇區」判為超出能力、記到 requests.json，`--choose 1` 套用成功。驗收中發現兩個問題（segment_json 省略 segment_key、替代做法要在產生時檢查），已先寫測試再修正。等永傑看結果
+- [x] 3.3 用《血與刃》步驟三實際修改：至少一個一般修改（例如「情況二的紅框改成金框」）、一個超出能力的要求，驗證：**交給永傑看修改結果、只重做的段、修改紀錄與需求紀錄**
+  - 本機結果（2026-11-21，副本 `.local/rules_video_revise/`）：「情況二的紅框改成金框」dry-run → apply 只改 s2 的 highlights，render 只重新編碼 1 段；「白薔薇旋轉著飛進白薔薇區」判為超出能力、記到 requests.json，`--choose 1` 套用成功。驗收中發現兩個問題（segment_json 省略 segment_key、替代做法要在產生時檢查），已先寫測試再修正。永傑看過結果，合格（2026-11-21）
 - [ ] 3.4 自我檢查與 MR 說明，驗證：全部通過、CI 全綠
 
 ## Workflow follow-up
