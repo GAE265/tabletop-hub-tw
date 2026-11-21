@@ -233,6 +233,8 @@ def test_w09_and_w10_commands_over_the_real_socket(
 
         # W-09
         websocket.send_json({"type": "command", "action": "next"})
+        # 階段 1 的規則要點還沒播完就換階段，所以先收到停播，再收到新的現況
+        assert websocket.receive_json() == {"type": "flush"}
         state = websocket.receive_json()
         assert state["type"] == "state"
         assert state["phase_number"] == 2

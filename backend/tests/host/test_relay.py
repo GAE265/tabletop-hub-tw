@@ -255,6 +255,7 @@ def test_w11_pause_while_host_is_speaking_sends_flush_then_state() -> None:
         await rig.press("next")
         await rig.host_starts()
         before = len(device.messages)
+        cancels = rig.count_action("cancel_response")
 
         await rig.press("pause")
 
@@ -262,7 +263,8 @@ def test_w11_pause_while_host_is_speaking_sends_flush_then_state() -> None:
         assert [m["type"] for m in after] == ["flush", "state"]
         assert after[1]["paused"] is True
         assert after[1]["pause_reason"] == "command"
-        assert rig.count_action("cancel_response") == 1
+        # 取消主持人正在產生的回答（前面按下一步時已經取消過舊階段的那一段，所以看增加的次數）
+        assert rig.count_action("cancel_response") == cancels + 1
 
     run(scenario)
 
@@ -374,11 +376,12 @@ def test_t03_talk_down_cancels_the_host_and_flushes() -> None:
         device = await rig.connect()
         await rig.press("next")
         await rig.host_starts()
+        cancels = rig.count_action("cancel_response")
 
         await rig.device_sends(type="talk", state="down")
 
         assert rig.count_action("press_talk") == 1
-        assert rig.count_action("cancel_response") == 1
+        assert rig.count_action("cancel_response") == cancels + 1
         assert device.json()[-1] == {"type": "flush"}
         # 被按鍵打斷不自動重講；那一段留著等「繼續」
         assert rig.conn.speech_requests.count(rule_points(1, 2)) == 1
@@ -817,6 +820,8 @@ def test_host_replying_to_something_else_voids_the_waiting_question() -> None:
         rig = Rig(thinking=thinking)
         rig.advance_to(2, 2)
         device = await rig.connect()
+        # 連上時那句接回流程的話先說完，之後主持人再開口才是它自己要說的
+        await rig.host_finishes()
         await rig.tool("ask_thinking_model", question=QUESTION)
         await rig.hears("算了", speech_id="s2")
 

@@ -63,6 +63,9 @@ class _Session:
     idle_since: datetime
     # 什麼時候結束的；進行中是 None
     ended_at: datetime | None = None
+    # 現在連著的那支裝置：代表它的記號，以及把它請走的函式（參數是錯誤碼）
+    device_token: object | None = None
+    kick: Callable[[str], None] | None = None
 
 
 class HostService:
@@ -136,6 +139,33 @@ class HostService:
                 raise HostTicketInvalid
             del self._tickets[ticket]
             return found
+
+    def attach_device(self, session_id: uuid.UUID, kick: Callable[[str], None]) -> object:
+        """一支裝置連上了。同一場主持同一時間只連一支：先連的那支會被請走（D13 §5）。
+
+        kick 會在別的執行緒被呼叫，參數是要送給那支裝置的錯誤碼。回傳代表這支裝置的記號。
+        """
+        with self._lock:
+            session = self._get(session_id)
+            previous = session.kick
+            token = object()
+            session.device_token = token
+            session.kick = kick
+            session.connected = True
+        if previous is not None:
+            previous("HOST_SESSION_TAKEN_OVER")
+        return token
+
+    def detach_device(self, session_id: uuid.UUID, token: object) -> None:
+        """一支裝置離開了。已經被別支取代、或這場主持已經清掉，就不做事。"""
+        with self._lock:
+            session = self._sessions.get(session_id)
+            if session is None or session.device_token is not token:
+                return
+            session.device_token = None
+            session.kick = None
+            session.connected = False
+            session.idle_since = self._clock()
 
     def device_connected(self, session_id: uuid.UUID) -> None:
         with self._lock:
@@ -221,7 +251,9 @@ class HostService:
 
     def _remove(self, session_id: uuid.UUID) -> None:
         """清掉一場主持，連圖裡的整局記憶與還沒用的通行碼一起。"""
-        self._sessions.pop(session_id, None)
+        session = self._sessions.pop(session_id, None)
+        if session is not None and session.kick is not None:
+            session.kick("HOST_SESSION_NOT_FOUND")
         for key in [key for key, t in self._tickets.items() if t.session_id == session_id]:
             del self._tickets[key]
         self.graph.delete(str(session_id))
