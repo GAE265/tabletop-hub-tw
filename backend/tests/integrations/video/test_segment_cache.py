@@ -79,11 +79,20 @@ def test_replaced_asset_file_reencodes_segments_using_it(tmp_path: Path) -> None
     assert _encode(tmp_path, data) == ["s1"]
 
 
-def test_narration_length_change_reencodes_timed_segments(tmp_path: Path) -> None:
+def test_narration_length_change_reencodes_only_that_segment(tmp_path: Path) -> None:
     data = _with_sidebar_text(base_data())
     _encode(tmp_path, data)
-    # b1 變長：s1 的時間變了；進度條依全片長度，同一章的 s2 也要重做（第 1 階段的限制）
-    assert _encode(tmp_path, data, {"b1": 4.0}) == ["s1", "s2"]
+    # b1 變長：只有 s1 的時間變了。第 1 階段的預期是 ["s1", "s2"]（每段都畫了全片進度條）；
+    # 第 2 階段把進度條改成串接後才疊上去，s2 不再受全片長度影響
+    # （add-rules-video-revision design.md D1，依 AGENTS.md 7.5 在 MR 說明寫明理由）
+    assert _encode(tmp_path, data, {"b1": 4.0}) == ["s1"]
+
+
+def test_later_segment_length_change_keeps_earlier_cache(tmp_path: Path) -> None:
+    data = _with_sidebar_text(base_data())
+    _encode(tmp_path, data)
+    # 最後一段的句子變長：全片總長變了，前面的段仍沿用快取
+    assert _encode(tmp_path, data, {"b3": 5.0}) == ["s2"]
 
 
 # --- #75 審核延後的項目（tasks 4.14）：清舊快取不能刪到別段 ---
