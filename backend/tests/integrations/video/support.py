@@ -146,13 +146,27 @@ def write_game(
 
 FAKE_FFMPEG_OK = r"""
 import sys
-# 假 ffmpeg：讀完標準輸入（逐格畫面），在最後一個參數的路徑寫一個假檔案；記下參數方便測試檢查
-data = sys.stdin.buffer.read() if not sys.stdin.isatty() else b""
+# 假 ffmpeg：分塊讀完標準輸入（逐格畫面，只累計位元組數，不整個放進記憶體），
+# 在最後一個參數的路徑寫一個假檔案；記下參數方便測試檢查。
+# FAIL_ON 不是空字串時，參數裡有它就先寫一點內容到輸出檔、再以 1 結束（模擬寫到一半失敗）
+FAIL_ON = "__FAIL_ON__"
+total = 0
+if not sys.stdin.isatty():
+    while True:
+        chunk = sys.stdin.buffer.read(1 << 20)
+        if not chunk:
+            break
+        total += len(chunk)
 args = sys.argv[1:]
-with open(args[-1], "wb") as f:
-    f.write(b"fake-media " + str(len(data)).encode())
 with open(__file__ + ".log", "a", encoding="utf-8") as log:
     log.write(" ".join(args) + "\n")
+if FAIL_ON and FAIL_ON in args:
+    with open(args[-1], "wb") as f:
+        f.write(b"partial")
+    print("fake failure on " + FAIL_ON, file=sys.stderr)
+    sys.exit(1)
+with open(args[-1], "wb") as f:
+    f.write(b"fake-media " + str(total).encode())
 """
 
 FAKE_FFMPEG_FAIL = """
@@ -165,13 +179,21 @@ sys.exit(1)
 """
 
 
-def fake_ffmpeg(folder: Path, *, fail: bool = False) -> list[str]:
-    """回傳可以當 ffmpeg 指令使用的命令（python 直譯器＋手寫的假指令稿）。"""
+def fake_ffmpeg(folder: Path, *, fail: bool = False, fail_on: str = "") -> list[str]:
+    """回傳可以當 ffmpeg 指令使用的命令（python 直譯器＋手寫的假指令稿）。
+
+    fail：一開始就失敗；fail_on：參數裡有這個字串時才失敗（例如 "concat" 只讓串接失敗）。
+    """
     import sys
 
     folder.mkdir(parents=True, exist_ok=True)
-    script = folder / ("fake_ffmpeg_fail.py" if fail else "fake_ffmpeg.py")
-    script.write_text(FAKE_FFMPEG_FAIL if fail else FAKE_FFMPEG_OK, encoding="utf-8")
+    if fail:
+        script = folder / "fake_ffmpeg_fail.py"
+        script.write_text(FAKE_FFMPEG_FAIL, encoding="utf-8")
+    else:
+        name = f"fake_ffmpeg_{fail_on.strip('-')}.py" if fail_on else "fake_ffmpeg.py"
+        script = folder / name
+        script.write_text(FAKE_FFMPEG_OK.replace("__FAIL_ON__", fail_on), encoding="utf-8")
     return [sys.executable, str(script)]
 
 

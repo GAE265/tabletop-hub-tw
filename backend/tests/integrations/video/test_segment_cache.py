@@ -84,3 +84,23 @@ def test_narration_length_change_reencodes_timed_segments(tmp_path: Path) -> Non
     _encode(tmp_path, data)
     # b1 變長：s1 的時間變了；進度條依全片長度，同一章的 s2 也要重做（第 1 階段的限制）
     assert _encode(tmp_path, data, {"b1": 4.0}) == ["s1", "s2"]
+
+
+# --- #75 審核延後的項目（tasks 4.14）：清舊快取不能刪到別段 ---
+
+
+def test_prefix_keys_do_not_delete_each_other(tmp_path: Path) -> None:
+    data = _with_sidebar_text(base_data())
+    segment(data, "s2")["segment_key"] = "s1_2"  # 「s1」是「s1_2」的開頭
+    assert _encode(tmp_path, data) == ["s1", "s1_2"]
+    segment(data, "s1")["slots"]["main_title"]["text"] = "Case 1 changed"
+    # 只重做 s1；s1_2 的快取還在（_encode 會確認每段的影片檔都存在）
+    assert _encode(tmp_path, data) == ["s1"]
+
+
+def test_keys_with_same_safe_name_keep_own_cache(tmp_path: Path) -> None:
+    data = _with_sidebar_text(base_data())
+    segment(data, "s1")["segment_key"] = "s/1"
+    segment(data, "s2")["segment_key"] = "s-1"  # 轉成檔名後都是 s-1
+    assert _encode(tmp_path, data) == ["s/1", "s-1"]
+    assert _encode(tmp_path, data) == []
