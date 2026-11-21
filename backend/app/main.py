@@ -17,6 +17,8 @@ from app.domains.health.router import router as health_router
 from app.domains.matches.router import router as matches_router
 from app.domains.rules_ingest.router import router as rules_ingest_router
 from app.domains.rules_qa.router import router as rules_qa_router
+from app.domains.rules_qa.router import videos_router as rules_qa_videos_router
+from app.domains.rules_qa.video_jobs import JobRunner, recover_interrupted_jobs
 from app.domains.shops.router import router as shops_router
 from app.integrations.embedding import EmbeddingConfig, get_embedding_provider
 from app.integrations.llm import get_llm_provider
@@ -30,13 +32,30 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     engine = create_db_engine(settings.database_url)
 
     @asynccontextmanager
-    async def lifespan(_: FastAPI) -> AsyncIterator[None]:
-        yield
-        engine.dispose()
+    async def lifespan(application: FastAPI) -> AsyncIterator[None]:
+        # 規則影片的背景工作（add-rules-video-mobile design.md D2）：先把中斷的工作標為失敗，
+        # 再開執行緒；關閉時停止
+        runner = None
+        if settings.rules_video_worker:
+            recover_interrupted_jobs(application.state.session_factory)
+            runner = JobRunner(
+                application.state.session_factory, application.state.rules_video_job_handlers
+            )
+            runner.start()
+        application.state.rules_video_runner = runner
+        try:
+            yield
+        finally:
+            if runner is not None:
+                runner.stop()
+            engine.dispose()
 
     app = FastAPI(title="遊任有娛 tabletop-hub-tw", lifespan=lifespan)
     app.state.settings = settings
     app.state.session_factory = create_session_factory(engine)
+    # 規則影片工作的處理函式（kind → 函式）；MR 4、MR 8、MR 10 依序註冊
+    app.state.rules_video_job_handlers = {}
+    app.state.rules_video_runner = None
     # LLM_PROVIDER、GAMES_ADVISOR_EMBEDDING_* 設錯時在啟動就明確報錯
     app.state.llm = get_llm_provider(settings.llm_provider, settings)
     app.state.vision = get_vision_provider(settings.ocr_provider, settings)
@@ -82,6 +101,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(games_advisor_router, prefix=API_PREFIX)
     app.include_router(rules_ingest_router, prefix=API_PREFIX)
     app.include_router(rules_qa_router, prefix=API_PREFIX)
+    app.include_router(rules_qa_videos_router, prefix=API_PREFIX)
     app.include_router(matches_router, prefix=API_PREFIX)
     app.include_router(shops_router, prefix=API_PREFIX)
 

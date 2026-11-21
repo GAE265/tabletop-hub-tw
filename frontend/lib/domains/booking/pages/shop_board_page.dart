@@ -94,6 +94,36 @@ class _ShopBoardPageState extends ConsumerState<ShopBoardPage> {
     if (ok && mounted) await _n.setStatus(b.id, 'cancelled');
   }
 
+  /// 在座位圖上點了一張桌：先顯示定位與換桌資訊請使用者確認，按確認才送請求。
+  /// 按「先不要」或關掉視窗只關閉確認視窗，仍停留在選桌模式，可改選別的桌子。
+  Future<void> _changeTable(Booking b, SeatGroup seat) async {
+    final current = b.tableCodes.isEmpty ? '無' : b.tableCodes.join('、');
+    final ok = await confirmBookingAction(
+      context,
+      title: '確定要換桌嗎？',
+      content:
+          '訂位代碼 ${b.reservationCode}\n'
+          '${formatBookingRange(b.startAt, b.endAt)}\n'
+          '定位：$current\n'
+          '換桌：${seat.table.tableCode}',
+      confirmLabel: '確認換桌',
+    );
+    if (!ok || !mounted) return;
+    await _n.changeTable(b.id, [seat.table.id]);
+    // 換桌失敗時保留錯誤訊息，不重新整理；成功才重查座位圖
+    if (mounted && !ref.read(bookingProvider).isError) await _search();
+  }
+
+  /// 換桌中的那筆訂位。
+  Booking? _changeTarget(BookingState state) {
+    final id = state.changeTableFor;
+    if (id == null) return null;
+    for (final b in state.board) {
+      if (b.id == id) return b;
+    }
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(bookingProvider);
@@ -152,6 +182,11 @@ class _ShopBoardPageState extends ConsumerState<ShopBoardPage> {
                     key: Key('board-cancel-${b.id}'),
                     onPressed: act(() => _cancel(b)),
                     child: const Text('取消'),
+                  ),
+                  OutlinedButton(
+                    key: Key('board-change-table-${b.id}'),
+                    onPressed: act(() => _n.startChangeTable(b.id)),
+                    child: const Text('換桌'),
                   ),
                   FilledButton(
                     key: Key('board-seated-${b.id}'),
@@ -260,12 +295,22 @@ class _ShopBoardPageState extends ConsumerState<ShopBoardPage> {
 
   /// 座位圖卡片：日期跟著看板，錯誤由上方的錯誤訊息顯示。
   Widget _seatingCard(BookingState state, DateTime now) {
+    final changeFor = _changeTarget(state);
+    final selecting = state.changeTableFor != null;
     final Widget content;
     if (state.seatingPlan.isNotEmpty) {
       content = SeatingPlanView(
         plans: state.seatingPlan,
         staffView: true,
         now: now,
+        selecting: selecting,
+        onTapTable: selecting
+            ? (seat) {
+                if (changeFor != null && !state.loading) {
+                  _changeTable(changeFor, seat);
+                }
+              }
+            : null,
       );
     } else if (state.loading) {
       content = const Padding(
@@ -288,6 +333,10 @@ class _ShopBoardPageState extends ConsumerState<ShopBoardPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('座位圖', style: Theme.of(context).textTheme.titleMedium),
+            if (selecting) ...[
+              const SizedBox(height: AppSpacing.small),
+              _changeTableHint(),
+            ],
             const SizedBox(height: AppSpacing.small),
             content,
           ],
@@ -295,4 +344,22 @@ class _ShopBoardPageState extends ConsumerState<ShopBoardPage> {
       ),
     );
   }
+
+  /// 選桌模式中的提示列：告訴使用者要選桌，並提供離開選桌模式的按鈕。
+  Widget _changeTableHint() => Row(
+    key: const Key('board-change-table-hint'),
+    children: [
+      Expanded(
+        child: Text(
+          '請在座位圖點選要換到的桌子',
+          style: Theme.of(context).textTheme.bodyMedium,
+        ),
+      ),
+      TextButton(
+        key: const Key('board-change-table-cancel'),
+        onPressed: _n.cancelChangeTable,
+        child: const Text('取消選桌'),
+      ),
+    ],
+  );
 }
