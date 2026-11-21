@@ -422,3 +422,50 @@ class VideoTermsRepository(SessionRepository):
                 set_={"terms": terms, "updated_by": updated_by, "updated_at": func.now()},
             )
         )
+
+
+# --------------------------------------------------------------------------- 規則書頁面文字
+
+
+@dataclass(frozen=True)
+class PagesRecord:
+    chapter_pages: list[int]
+    reference_pages: list[int]
+    page_texts: dict[str, Any]
+    pages_version: int
+
+
+class VideoPagesRepository(SessionRepository):
+    """rules_qa_video_projects 的頁面文字欄位（add-rules-video-mobile design.md D11）。"""
+
+    def get(self, project_id: uuid.UUID) -> PagesRecord | None:
+        row = self.session.execute(
+            select(
+                RulesQaVideoProject.chapter_pages,
+                RulesQaVideoProject.reference_pages,
+                RulesQaVideoProject.page_texts,
+                RulesQaVideoProject.pages_version,
+            ).where(RulesQaVideoProject.id == project_id)
+        ).one_or_none()
+        return None if row is None else PagesRecord(list(row[0]), list(row[1]), row[2], row[3])
+
+    def save(
+        self,
+        project_id: uuid.UUID,
+        *,
+        chapter_pages: list[int],
+        reference_pages: list[int],
+        page_texts: dict[str, Any],
+    ) -> None:
+        """整份取代；版本加 1、更新專案的修改時間。"""
+        self.session.execute(
+            update(RulesQaVideoProject)
+            .where(RulesQaVideoProject.id == project_id)
+            .values(
+                chapter_pages=chapter_pages,
+                reference_pages=reference_pages,
+                page_texts=page_texts,
+                pages_version=RulesQaVideoProject.pages_version + 1,
+                updated_at=func.now(),
+            )
+        )

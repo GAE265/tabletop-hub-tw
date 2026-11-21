@@ -17,21 +17,27 @@ from app.domains.rules_qa.repository import (
     ActiveJobExists,
     ChunkHit,
     LessonSummary,
+    PagesRecord,
     VideoJobRecord,
     VideoProjectRecord,
     VideoRecord,
     VideoTermsRecord,
 )
 from app.domains.rules_qa.schemas import (
+    ChangedLineOut,
     Citation,
     MessageRequest,
     MessageResponse,
+    RemovedBlockOut,
     RulesLessonItem,
     RulesLessonList,
     RulesLessonOut,
     VideoJobList,
     VideoJobOut,
     VideoOut,
+    VideoPageOut,
+    VideoPagesIn,
+    VideoPagesOut,
     VideoProjectCreate,
     VideoProjectList,
     VideoProjectOut,
@@ -40,6 +46,7 @@ from app.domains.rules_qa.schemas import (
     VideoTermsOut,
 )
 from app.domains.rules_qa.video_jobs import JOB_TIMEOUT_MINUTES, TIMEOUT_MESSAGE
+from app.domains.rules_qa.video_pages import page_diff, text_hash
 from app.domains.rules_qa.video_script import term_conflicts
 from app.domains.rules_qa.youtube import parse_youtube_id
 from app.integrations.embedding import EmbeddingError, EmbeddingProvider
@@ -532,3 +539,116 @@ class VideoTermsService:
             updated_by=record.updated_by,
             updated_at=record.updated_at,
         )
+
+
+# --------------------------------------------------------------------------- 規則書頁面文字
+
+
+class VideoPagesStore(Protocol):
+    def transaction(self) -> AbstractContextManager[None]: ...
+    def get(self, project_id: uuid.UUID) -> PagesRecord | None: ...
+    def save(
+        self,
+        project_id: uuid.UUID,
+        *,
+        chapter_pages: list[int],
+        reference_pages: list[int],
+        page_texts: dict[str, Any],
+    ) -> None: ...
+
+
+class VideoPagesService:
+    """選本章頁與參考頁、編輯文字（add-rules-video-mobile design.md D11）。
+
+    原文從 rules_ingest 的 games_manual 讀（read_pages 是它的 service 函式）；
+    編輯後的文字存在專案上，不改 games_manual。
+    """
+
+    def __init__(
+        self,
+        pages: VideoPagesStore,
+        projects: VideoProjectStore,
+        read_pages: Callable[[int], list[tuple[int, str]]],
+    ) -> None:
+        self._pages = pages
+        self._projects = projects
+        self._read_pages = read_pages
+
+    def get(self, user: CurrentUser, project_id: uuid.UUID) -> VideoPagesOut:
+        project = self._project(user, project_id)
+        record = self._pages.get(project_id)
+        assert record is not None
+        return _pages_out(record, dict(self._read_pages(project.game_id)))
+
+    def replace(
+        self, user: CurrentUser, project_id: uuid.UUID, body: VideoPagesIn
+    ) -> VideoPagesOut:
+        project = self._project(user, project_id)
+        manual = dict(self._read_pages(project.game_id))
+        selected = [*body.chapter_pages, *body.reference_pages]
+        missing = sorted(set(selected) - set(manual))
+        if missing:
+            listed = "、".join(str(p) for p in missing)
+            raise AppError(
+                422,
+                "RULES_VIDEO_PAGES_MISSING",
+                f"規則書還沒有這幾頁，請先上傳：{listed}",
+                {"missing": missing},
+            )
+        texts = {page: body.texts.get(page, manual[page]) for page in selected}
+        if not any(texts[page].strip() for page in body.chapter_pages):
+            raise AppError(
+                422, "RULES_VIDEO_PAGES_EMPTY", "本章頁的文字全部是空白，沒有東西可以產生草稿"
+            )
+        page_texts = {
+            str(page): {"text": texts[page], "original_hash": text_hash(manual[page])}
+            for page in selected
+        }
+        with self._pages.transaction():
+            self._pages.save(
+                project_id,
+                chapter_pages=body.chapter_pages,
+                reference_pages=body.reference_pages,
+                page_texts=page_texts,
+            )
+        return self.get(user, project_id)
+
+    def _project(self, user: CurrentUser, project_id: uuid.UUID) -> VideoProjectRecord:
+        require_role(user, "shop_staff", "admin")
+        record = self._projects.get(project_id)
+        if record is None or not _can_access(user, record):
+            raise _project_not_found()
+        return record
+
+
+def _pages_out(record: PagesRecord, manual: dict[int, str]) -> VideoPagesOut:
+    roles = [(p, "chapter") for p in record.chapter_pages]
+    roles += [(p, "reference") for p in record.reference_pages]
+    pages = []
+    for page, role in roles:
+        saved = record.page_texts.get(str(page), {})
+        original = manual.get(page)
+        edited = saved.get("text", original or "")
+        diff = page_diff(original or "", edited)
+        changed_original = original is None or text_hash(original) != saved.get("original_hash")
+        pages.append(
+            VideoPageOut(
+                page=page,
+                role=role,
+                original=original,
+                text=edited,
+                original_changed=changed_original,
+                removed=[RemovedBlockOut(lines=b.lines) for b in diff.removed],
+                changed=[
+                    ChangedLineOut(original=c.original, edited=c.edited, similarity=c.similarity)
+                    for c in diff.changed
+                ],
+            )
+        )
+    return VideoPagesOut(
+        available_pages=sorted(manual),
+        chapter_pages=record.chapter_pages,
+        reference_pages=record.reference_pages,
+        pages_version=record.pages_version,
+        pages=pages,
+    )

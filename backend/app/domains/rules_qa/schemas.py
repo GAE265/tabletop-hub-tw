@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, Field, StringConstraints
+from pydantic import BaseModel, Field, StringConstraints, model_validator
 
 from app.domains.rules_qa.video_script import TERMS_MAX, TermIn
 
@@ -155,3 +155,62 @@ class VideoTermsOut(BaseModel):
     terms: list[VideoTermOut]
     updated_by: uuid.UUID
     updated_at: datetime
+
+
+# --------------------------------------------------------------------------- 規則書頁面文字
+
+PAGES_MAX = 20
+PAGE_TEXT_MAX_CHARS = 10000
+PageNumber = Annotated[int, Field(ge=1)]
+
+
+class VideoPagesIn(BaseModel):
+    """選頁與編輯後的文字（整份取代）；沒給文字的頁用原文（design.md D11）。"""
+
+    chapter_pages: Annotated[list[PageNumber], Field(min_length=1, max_length=PAGES_MAX)]
+    reference_pages: Annotated[list[PageNumber], Field(max_length=PAGES_MAX)] = []
+    texts: dict[int, Annotated[str, Field(max_length=PAGE_TEXT_MAX_CHARS)]] = {}
+
+    @model_validator(mode="after")
+    def _check_pages(self) -> "VideoPagesIn":
+        if len(set(self.chapter_pages)) != len(self.chapter_pages):
+            raise ValueError("本章頁不能重複")
+        if len(set(self.reference_pages)) != len(self.reference_pages):
+            raise ValueError("參考頁不能重複")
+        overlap = sorted(set(self.chapter_pages) & set(self.reference_pages))
+        if overlap:
+            raise ValueError(f"本章頁與參考頁不能重疊：{overlap}")
+        extra = sorted(set(self.texts) - set(self.chapter_pages) - set(self.reference_pages))
+        if extra:
+            raise ValueError(f"texts 只能有選了的頁：{extra}")
+        return self
+
+
+class RemovedBlockOut(BaseModel):
+    lines: list[str]
+
+
+class ChangedLineOut(BaseModel):
+    original: str
+    edited: str
+    similarity: float
+
+
+class VideoPageOut(BaseModel):
+    page: int
+    role: Literal["chapter", "reference"]
+    # games_manual 目前的原文；那一頁被刪掉時為 null
+    original: str | None
+    text: str
+    # 開始編輯後，原文被重新上傳過（或被刪掉）
+    original_changed: bool
+    removed: list[RemovedBlockOut]
+    changed: list[ChangedLineOut]
+
+
+class VideoPagesOut(BaseModel):
+    available_pages: list[int]
+    chapter_pages: list[int]
+    reference_pages: list[int]
+    pages_version: int
+    pages: list[VideoPageOut]
