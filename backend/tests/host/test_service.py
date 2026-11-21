@@ -135,6 +135,7 @@ def test_list_only_shows_my_own_even_for_admin(service: HostService):
 
 def test_list_shows_current_position(service: HostService):
     view, _ = open_session(service)
+    # 開場 → 開局準備 → 夜晚第一步 → 夜晚第二步 → 第 1 回合階段 1：按 4 次下一步
     for event in (
         HostEvent.connected(),
         HostEvent.command("next"),
@@ -147,7 +148,7 @@ def test_list_shows_current_position(service: HostService):
     assert (listed.snapshot.step, listed.snapshot.turn_number, listed.snapshot.phase_number) == (
         "turn",
         1,
-        2,
+        1,
     )
 
 
