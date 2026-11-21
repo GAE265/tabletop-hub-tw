@@ -5,6 +5,7 @@
 """
 
 import uuid
+from collections.abc import Collection
 from typing import Any, Protocol
 
 from app.core.auth import CurrentUser, require_role
@@ -17,6 +18,7 @@ from app.domains.shops.schemas import ShopCreatedOut
 class ShopGamesRepositoryProtocol(Protocol):
     def transaction(self) -> Any: ...
     def list_games(self, shop_id: uuid.UUID) -> list[ShopGameItem]: ...
+    def games_in_stock(self, shop_id: uuid.UUID, game_ids: Collection[int]) -> set[int]: ...
     def add(self, shop_id: uuid.UUID, game_id: int) -> ShopGameItem: ...
     def remove(self, shop_id: uuid.UUID, game_id: int) -> bool: ...
 
@@ -108,10 +110,22 @@ class ShopsService:
                 404, "SHOP_GAME_NOT_FOUND", "這間店的庫存沒有這款桌遊", {"game_id": game_id}
             )
 
+    def games_in_stock(self, shop_id: uuid.UUID, game_ids: Collection[int]) -> set[int]:
+        """game_ids 裡面，這間店的庫存有的那些。店家不存在拋 404 SHOP_NOT_FOUND。
+
+        給其他 domain 用（桌遊推薦的「這間店沒有這款」提示）。不限角色：店裡有哪些桌遊不是秘密。
+        game_ids 是空的也會確認店家存在。
+        """
+        self._require_shop(shop_id)
+        return self._shop_games.games_in_stock(shop_id, game_ids)
+
+    def _require_shop(self, shop_id: uuid.UUID) -> None:
+        if self._shops.get_shop(shop_id) is None:
+            raise AppError(404, "SHOP_NOT_FOUND", "找不到這間店家", {"shop_id": str(shop_id)})
+
     def _require_access(self, user: CurrentUser, shop_id: uuid.UUID) -> None:
         """先看角色，再看店家存在，最後看店員是不是這間店的人（管理員不限）。"""
         require_role(user, "shop_staff", "admin")
-        if self._shops.get_shop(shop_id) is None:
-            raise AppError(404, "SHOP_NOT_FOUND", "找不到這間店家", {"shop_id": str(shop_id)})
+        self._require_shop(shop_id)
         if user.role == "shop_staff" and self._users.get_shop_id(user.id) != shop_id:
             raise PermissionDenied(details={"shop_id": str(shop_id)})

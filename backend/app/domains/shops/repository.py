@@ -5,6 +5,7 @@
 """
 
 import uuid
+from collections.abc import Collection
 from dataclasses import dataclass
 
 from sqlalchemy import delete, insert, select
@@ -35,6 +36,17 @@ class ShopGamesRepository(SessionRepository):
             .order_by(ShopGame.created_at, ShopGame.id)
         )
         return [ShopGameItem(game_id, name) for game_id, name in rows]
+
+    def games_in_stock(self, shop_id: uuid.UUID, game_ids: Collection[int]) -> set[int]:
+        """game_ids 裡面，這間店的庫存有的那些。"""
+        if not game_ids:
+            return set()
+        rows = self.session.scalars(
+            select(ShopGame.game_id).where(
+                ShopGame.shop_id == shop_id, ShopGame.game_id.in_(game_ids)
+            )
+        )
+        return set(rows)
 
     def add(self, shop_id: uuid.UUID, game_id: int) -> ShopGameItem:
         """加入一款桌遊；這間店已經有就拋出 ShopGameAlreadyExists。呼叫端要用 transaction()。"""
