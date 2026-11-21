@@ -20,6 +20,7 @@ from app.domains.rules_qa.repository import (
     VideoJobRecord,
     VideoProjectRecord,
     VideoRecord,
+    VideoTermsRecord,
 )
 from app.domains.rules_qa.schemas import (
     Citation,
@@ -35,8 +36,11 @@ from app.domains.rules_qa.schemas import (
     VideoProjectList,
     VideoProjectOut,
     VideoRequest,
+    VideoTermsIn,
+    VideoTermsOut,
 )
 from app.domains.rules_qa.video_jobs import JOB_TIMEOUT_MINUTES, TIMEOUT_MESSAGE
+from app.domains.rules_qa.video_script import term_conflicts
 from app.domains.rules_qa.youtube import parse_youtube_id
 from app.integrations.embedding import EmbeddingError, EmbeddingProvider
 from app.integrations.llm import LLMProvider
@@ -455,3 +459,61 @@ class VideoJobService:
 
 def _job_out(record: VideoJobRecord) -> VideoJobOut:
     return VideoJobOut.model_validate(record, from_attributes=True)
+
+
+# --------------------------------------------------------------------------- 規則影片的用語對照表
+
+
+class VideoTermsStore(Protocol):
+    def transaction(self) -> AbstractContextManager[None]: ...
+    def get(self, game_id: int) -> VideoTermsRecord | None: ...
+    def replace(self, game_id: int, terms: list[dict[str, Any]], updated_by: uuid.UUID) -> None: ...
+
+
+class VideoTermsService:
+    """每款遊戲一份的用語對照表：管理員上傳、店家人員可看（add-rules-video-mobile D4）。"""
+
+    def __init__(self, terms: VideoTermsStore, games: GameNames) -> None:
+        self._terms = terms
+        self._games = games
+
+    def replace(self, user: CurrentUser, game_id: int, body: VideoTermsIn) -> VideoTermsOut:
+        require_role(user, "admin")
+        self._check_game(game_id)
+        conflicts = term_conflicts([entry.to_term() for entry in body.terms])
+        if conflicts:
+            duplicate = any(c.kind == "duplicate_en" for c in conflicts)
+            raise AppError(
+                422,
+                "RULES_VIDEO_TERMS_DUPLICATE"
+                if duplicate
+                else "RULES_VIDEO_TERMS_CATEGORY_CONFLICT",
+                "；".join(c.message for c in conflicts),
+                {"problems": [{"kind": c.kind, "message": c.message} for c in conflicts]},
+            )
+        with self._terms.transaction():
+            self._terms.replace(
+                game_id, [entry.model_dump() for entry in body.terms], updated_by=user.id
+            )
+        return self._out(game_id)
+
+    def get(self, user: CurrentUser, game_id: int) -> VideoTermsOut:
+        require_role(user, "shop_staff", "admin")
+        self._check_game(game_id)
+        return self._out(game_id)
+
+    def _check_game(self, game_id: int) -> None:
+        if self._games.game_name(game_id) is None:
+            raise _game_not_found(game_id)
+
+    def _out(self, game_id: int) -> VideoTermsOut:
+        record = self._terms.get(game_id)
+        if record is None:
+            # 從未上傳 ≠ 上傳了空表（design.md D4）
+            raise AppError(404, "RULES_VIDEO_TERMS_NOT_FOUND", "這款遊戲還沒有上傳用語對照表")
+        return VideoTermsOut(
+            game_id=record.game_id,
+            terms=record.terms,
+            updated_by=record.updated_by,
+            updated_at=record.updated_at,
+        )

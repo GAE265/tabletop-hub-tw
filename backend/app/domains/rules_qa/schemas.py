@@ -6,6 +6,8 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field, StringConstraints
 
+from app.domains.rules_qa.video_script import TERMS_MAX, TermIn
+
 # 問題去掉前後空白後 1–500 字
 MESSAGE_MAX_CHARS = 500
 
@@ -129,3 +131,27 @@ class VideoJobOut(BaseModel):
 class VideoJobList(BaseModel):
     items: list[VideoJobOut]
     total: int
+
+
+# --------------------------------------------------------------------------- 規則影片的用語對照表
+
+
+class VideoTermsIn(BaseModel):
+    """上傳的對照表：整份取代。每筆的規則與命令列的 terms.json 共用（design.md D4）。"""
+
+    terms: Annotated[list[TermIn], Field(max_length=TERMS_MAX)]
+
+
+class VideoTermOut(BaseModel):
+    en: str
+    zh: str
+    key: str | None
+    avoid: list[str]
+    category: Literal["generic", "single"] | None
+
+
+class VideoTermsOut(BaseModel):
+    game_id: int
+    terms: list[VideoTermOut]
+    updated_by: uuid.UUID
+    updated_at: datetime

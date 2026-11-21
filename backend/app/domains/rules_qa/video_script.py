@@ -10,7 +10,9 @@ import re
 import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any, Literal
+
+from pydantic import BaseModel, Field, StringConstraints, TypeAdapter, ValidationError
 
 from app.domains.rules_qa import video_prompts
 from app.integrations.llm import LLMProvider
@@ -94,7 +96,7 @@ def load_pages(folder: Path, names: list[str]) -> list[RulebookPage]:
 
 
 def load_terms(path: Path) -> list[Term]:
-    """讀取用語對照表：[{en, zh, key?, avoid?}]。"""
+    """讀取本機的用語對照表 terms.json；規則與 API 共用（parse_terms、term_conflicts）。"""
     if not path.is_file():
         raise ScriptInputError(f"找不到用語對照表：{path.name}")
     try:
@@ -103,32 +105,96 @@ def load_terms(path: Path) -> list[Term]:
         raise ScriptInputError(f"{path.name} 不是合法的 JSON：{exc}") from exc
     if not isinstance(raw, list):
         raise ScriptInputError(f"{path.name} 必須是陣列")
-    terms = []
-    for i, entry in enumerate(raw):
-        if not isinstance(entry, dict) or not all(
-            isinstance(entry.get(k), str) and entry.get(k) for k in ("en", "zh")
-        ):
-            raise ScriptInputError(f"{path.name} 第 {i + 1} 筆必須有非空的 en 與 zh")
-        avoid = entry.get("avoid", [])
-        if not isinstance(avoid, list) or not all(isinstance(a, str) for a in avoid):
-            raise ScriptInputError(f"{path.name} 第 {i + 1} 筆的 avoid 必須是字串陣列")
-        category = entry.get("category")
-        if category not in (None, *TERM_CATEGORIES):
-            raise ScriptInputError(
-                f"{path.name} 第 {i + 1} 筆的 category 必須是 "
-                f"{'、'.join(TERM_CATEGORIES)} 之一（generic＝泛稱、single＝單一種牌）"
-            )
-        key = entry.get("key")
-        terms.append(
-            Term(
-                entry["en"],
-                entry["zh"],
-                key if isinstance(key, str) else None,
-                tuple(avoid),
-                category,
-            )
-        )
+    if len(raw) > TERMS_MAX:
+        raise ScriptInputError(f"{path.name} 最多 {TERMS_MAX} 筆，目前 {len(raw)} 筆")
+    try:
+        entries = _TERM_LIST.validate_python(raw)
+    except ValidationError as exc:
+        problems = []
+        for error in exc.errors():
+            index, *where = error["loc"]
+            field_name = ".".join(str(part) for part in where) or "整筆"
+            problems.append(f"第 {int(index) + 1} 筆的 {field_name}：{error['msg']}")
+        raise ScriptInputError(
+            f"{path.name} 格式錯誤（category 只能是 generic＝泛稱、single＝單一種牌）："
+            + "；".join(problems)
+        ) from exc
+    terms = [entry.to_term() for entry in entries]
+    conflicts = term_conflicts(terms)
+    if conflicts:
+        raise ScriptInputError(f"{path.name}：" + "；".join(c.message for c in conflicts))
     return terms
+
+
+# --------------------------------------------------------------------------- 用語對照表的共用規則
+# 命令列（load_terms）與 API（PUT /games/{id}/video-terms）用同一份規則
+# （add-rules-video-mobile design.md D4）。
+
+TERMS_MAX = 500
+TERM_TEXT_MAX = 100
+TermText = Annotated[
+    str, StringConstraints(strip_whitespace=True, min_length=1, max_length=TERM_TEXT_MAX)
+]
+
+
+class TermIn(BaseModel):
+    """對照表的一筆。avoid 不允許空字串：空字串會比對到所有文字。"""
+
+    en: TermText
+    zh: TermText
+    key: TermText | None = None
+    avoid: list[TermText] = Field(default_factory=list)
+    category: Literal["generic", "single"] | None = None
+
+    def to_term(self) -> Term:
+        return Term(self.en, self.zh, self.key, tuple(self.avoid), self.category)
+
+
+_TERM_LIST = TypeAdapter(list[TermIn])
+
+
+@dataclass(frozen=True)
+class TermConflict:
+    kind: str  # duplicate_en | category_conflict
+    message: str
+
+
+def term_conflicts(terms: list[Term]) -> list[TermConflict]:
+    """en 不能重複；同一個 key 的 category 必須一致。都是去掉前後空白、不分大小寫後比對。
+
+    key 可以重複：規則書常用兩個英文名稱指同一個區域，例如 White Rose placement area 與
+    Sanctuary 都對到 white_rose_zone。只有兩筆都填了 category 才比較。
+    """
+    conflicts: list[TermConflict] = []
+    by_en: dict[str, list[int]] = {}
+    for number, term in enumerate(terms, start=1):
+        by_en.setdefault(term.en.strip().casefold(), []).append(number)
+    for numbers in by_en.values():
+        if len(numbers) > 1:
+            listed = "、".join(str(n) for n in numbers)
+            conflicts.append(
+                TermConflict(
+                    "duplicate_en",
+                    f"en 重複：「{terms[numbers[0] - 1].en}」（第 {listed} 筆）",
+                )
+            )
+    by_key: dict[str, list[tuple[int, Term]]] = {}
+    for number, term in enumerate(terms, start=1):
+        if term.key:
+            by_key.setdefault(term.key.strip().casefold(), []).append((number, term))
+    for entries in by_key.values():
+        categories = {t.category for _, t in entries if t.category is not None}
+        if len(categories) > 1:
+            listed = "、".join(
+                f"第 {n} 筆 {t.category}" for n, t in entries if t.category is not None
+            )
+            conflicts.append(
+                TermConflict(
+                    "category_conflict",
+                    f"key {entries[0][1].key} 的 category 不一致：{listed}",
+                )
+            )
+    return conflicts
 
 
 def build_input(request: ScriptRequest) -> str:
