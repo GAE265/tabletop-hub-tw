@@ -7,6 +7,7 @@ import 'package:tabletop_hub/app/theme/app_theme.dart';
 import 'package:tabletop_hub/core/dev/data/dev_user.dart';
 import 'package:tabletop_hub/core/dev/state/dev_user_state.dart';
 import 'package:tabletop_hub/core/platform/image_picker.dart';
+import 'package:tabletop_hub/core/platform/video_file_player.dart';
 import 'package:tabletop_hub/domains/rules_qa/data/video_studio_repository.dart';
 import 'package:tabletop_hub/domains/rules_qa/pages/video_routes.dart';
 import 'package:tabletop_hub/domains/rules_qa/state/video_job_state.dart';
@@ -31,6 +32,7 @@ Future<Harness> pumpVideo(
   Duration pollInterval = Duration.zero,
   bool settle = true,
   FakeImagePicker? picker,
+  FakeVideoFilePlayer? player,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
@@ -54,6 +56,9 @@ Future<Harness> pumpVideo(
         videoJobPollIntervalProvider.overrideWithValue(pollInterval),
         currentDevUserProvider.overrideWithValue(user),
         imagePickerProvider.overrideWithValue(picker ?? FakeImagePicker()),
+        videoFilePlayerProvider.overrideWithValue(
+          player ?? FakeVideoFilePlayer(),
+        ),
       ],
       child: MaterialApp.router(
         theme: buildAppTheme(const FakeAppFonts()),

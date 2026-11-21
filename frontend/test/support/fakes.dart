@@ -19,6 +19,7 @@ import 'package:tabletop_hub/core/dev/data/dev_user.dart';
 import 'package:tabletop_hub/core/dev/data/dev_users_repository.dart';
 
 import 'package:tabletop_hub/core/platform/lesson_video_player.dart';
+import 'package:tabletop_hub/core/platform/video_file_player.dart';
 import 'package:tabletop_hub/domains/rules_qa/data/rules_qa_models.dart';
 import 'package:tabletop_hub/domains/rules_qa/data/rules_qa_repository.dart';
 import 'package:tabletop_hub/domains/rules_qa/data/video_studio_models.dart';
@@ -1797,9 +1798,13 @@ class FakeVideoStudioRepository implements VideoStudioRepository {
   @override
   Future<VideoRender?> getRender(String projectId) async => renders[projectId];
 
+  Object? renderVideoError;
+
   @override
-  Future<Uint8List> getRenderVideo(String projectId) async =>
-      renderVideos[projectId]!;
+  Future<Uint8List> getRenderVideo(String projectId) async {
+    if (renderVideoError != null) throw renderVideoError!;
+    return renderVideos[projectId]!;
+  }
 
   @override
   Future<VideoReadiness> getReadiness(String projectId) async =>
@@ -1844,3 +1849,67 @@ VideoJob sampleVideoJob({
   error: error,
   createdAt: DateTime.utc(2026, 11, 21),
 );
+
+/// 不載入播放套件的影片播放器：顯示收到幾個位元組，記下跳到哪些時間點（MR 10）。
+class FakeVideoFilePlayer implements VideoFilePlayer {
+  final seeks = <Duration>[];
+
+  @override
+  Widget build(
+    BuildContext context, {
+    required Uint8List bytes,
+    required VideoSeekController seek,
+  }) {
+    return ListenableBuilder(
+      listenable: seek,
+      builder: (context, _) {
+        final target = seek.target;
+        if (target != null && (seeks.isEmpty || seeks.last != target)) {
+          seeks.add(target);
+        }
+        return ColoredBox(
+          key: const Key('fake-video-file-player'),
+          color: Colors.black,
+          child: Center(child: Text('影片：${bytes.length} 位元組')),
+        );
+      },
+    );
+  }
+}
+
+/// 手寫的播放狀態：play／pause／seekTo 只記錄並改狀態。
+class FakeVideoPlayback extends ChangeNotifier implements VideoPlayback {
+  FakeVideoPlayback({
+    this.duration = const Duration(seconds: 42),
+    this.position = Duration.zero,
+  });
+
+  @override
+  final Duration duration;
+  @override
+  Duration position;
+  @override
+  bool isPlaying = false;
+  final calls = <String>[];
+
+  @override
+  Future<void> play() async {
+    calls.add('play');
+    isPlaying = true;
+    notifyListeners();
+  }
+
+  @override
+  Future<void> pause() async {
+    calls.add('pause');
+    isPlaying = false;
+    notifyListeners();
+  }
+
+  @override
+  Future<void> seekTo(Duration target) async {
+    calls.add('seek ${target.inMilliseconds}');
+    position = target;
+    notifyListeners();
+  }
+}

@@ -1,7 +1,10 @@
 // 規則影片：產生影片頁、選拍略過、步驟（add-rules-video-mobile MR 10，design.md D16 與外觀決定）。
-// 看影片的播放頁要新增播放套件，另外處理。
+// 看影片頁用 FakeVideoFilePlayer，不載入 video_player 套件。
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:tabletop_hub/core/api/api_exception.dart';
 import 'package:tabletop_hub/domains/rules_qa/data/video_studio_models.dart';
 
 import '../../../support/fakes.dart';
@@ -328,6 +331,93 @@ void main() {
         repo: renderRepo(step: 'done'),
       );
       expect(find.text('完成'), findsOneWidget);
+    });
+  });
+  group('看影片', () {
+    const withSegments = VideoRender(
+      jobId: 'j9',
+      videoPath: '/api/v1/rules-videos/p1/render/video',
+      totalSeconds: 42.5,
+      reencoded: ['s1', 's2'],
+      reused: [],
+      skippedAssets: [],
+      estimated: false,
+      warnings: [],
+      segments: [
+        RenderSegment(segmentKey: 's1', startSeconds: 0.15, title: '先洗牌'),
+        RenderSegment(segmentKey: 's2', startSeconds: 12.4, title: '輪到下一位'),
+      ],
+    );
+
+    FakeVideoStudioRepository watchRepo() =>
+        renderRepo(step: 'done', render: withSegments)
+          ..renderVideos['p1'] = Uint8List.fromList(List.filled(2048, 1));
+
+    testWidgets('播放器寬度填滿、16:9；下載整支影片後播放', (tester) async {
+      await pumpVideo(tester, location: '/videos/p1/watch', repo: watchRepo());
+      expect(find.text('影片：2048 位元組'), findsOneWidget);
+      final size = tester.getSize(find.byKey(const Key('video-watch-player')));
+      expect(size.width, greaterThanOrEqualTo(360));
+      expect(size.width / size.height, closeTo(16 / 9, 0.01));
+      expect(find.textContaining('42.5 秒'), findsOneWidget);
+    });
+
+    testWidgets('段清單在播放器下方，點一段跳到那個時間點', (tester) async {
+      final player = FakeVideoFilePlayer();
+      await pumpVideo(
+        tester,
+        location: '/videos/p1/watch',
+        repo: watchRepo(),
+        player: player,
+      );
+      final list = find.byKey(const Key('video-watch-segment-s2'));
+      expect(
+        tester.getTopLeft(list).dy,
+        greaterThan(
+          tester.getBottomLeft(find.byKey(const Key('video-watch-player'))).dy,
+        ),
+      );
+      expect(find.text('輪到下一位'), findsOneWidget);
+      expect(find.text('0:12'), findsOneWidget);
+      await tapKey(tester, 'video-watch-segment-s2');
+      expect(player.seeks, [const Duration(milliseconds: 12400)]);
+    });
+
+    testWidgets('還沒有成品：提示先產生影片', (tester) async {
+      final h = await pumpVideo(
+        tester,
+        location: '/videos/p1/watch',
+        repo: renderRepo(step: 'render'),
+      );
+      expect(find.text('還沒有產生影片'), findsOneWidget);
+      await tapText(tester, '去產生影片');
+      expect(h.path, '/videos/p1/render');
+    });
+
+    testWidgets('下載影片失敗：顯示原因與「重試」', (tester) async {
+      final repo = renderRepo(step: 'done', render: withSegments)
+        ..renderVideoError = const ApiException(
+          code: 'NETWORK_ERROR',
+          message: '無法連線',
+        );
+      await pumpVideo(tester, location: '/videos/p1/watch', repo: repo);
+      expect(find.text('無法連線'), findsOneWidget);
+      repo
+        ..renderVideoError = null
+        ..renderVideos['p1'] = Uint8List.fromList([1, 2, 3]);
+      await tapText(tester, '重試');
+      expect(find.text('影片：3 位元組'), findsOneWidget);
+    });
+
+    testWidgets('完成後「看影片」進到看影片頁', (tester) async {
+      final h = await pumpVideo(
+        tester,
+        location: '/videos/p1',
+        repo: watchRepo(),
+      );
+      await tapKey(tester, 'video-next-step');
+      expect(h.path, '/videos/p1/watch');
+      expect(find.byKey(const Key('video-watch-page')), findsOneWidget);
     });
   });
 }
