@@ -65,7 +65,7 @@ def test_table_and_columns_have_chinese_comments(engine: Engine):
     inspector = inspect(engine)
     assert inspector.get_table_comment(TABLE)["text"]
     columns = {c["name"]: c for c in inspector.get_columns(TABLE)}
-    # 本章頁、參考頁、段資料等欄位等 MR 4 才加（design.md D1）
+    # 本章頁、參考頁、段資料等欄位由「頁面文字」「草稿工作」才加（design.md D1、D11）
     assert set(columns) == {
         "id",
         "game_id",

@@ -102,7 +102,7 @@ class RulesQaChunk(Base):
 class RulesQaVideoProject(Base):
     """規則影片專案（add-rules-video-mobile design.md D1）。
 
-    本章頁、參考頁、段資料等欄位等 MR 4 用到時再加；目前步驟（step）不存欄位，由狀態推出。
+    本章頁、參考頁、段資料等欄位由「頁面文字」「草稿工作」用到時再加；目前步驟（step）不存欄位，由狀態推出。
     """
 
     __tablename__ = "rules_qa_video_projects"
