@@ -1,8 +1,10 @@
 """規則教學與問答 API 的請求與回應格式（spec rules-qa）。"""
 
+import uuid
+from datetime import datetime
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, StringConstraints
+from pydantic import BaseModel, Field, StringConstraints
 
 # 問題去掉前後空白後 1–500 字
 MESSAGE_MAX_CHARS = 500
@@ -63,3 +65,39 @@ class MessageResponse(BaseModel):
     # 規則書中找不到答案時為 false，此時 citations 為空
     answerable: bool
     citations: list[Citation]
+
+
+# --------------------------------------------------------------------------- 規則影片專案
+
+# 章節標題去掉前後空白後 1–50 字（add-rules-video-mobile design.md D1）
+CHAPTER_TITLE_MAX_CHARS = 50
+ChapterTitle = Annotated[
+    str, StringConstraints(strip_whitespace=True, min_length=1, max_length=CHAPTER_TITLE_MAX_CHARS)
+]
+
+
+class VideoProjectCreate(BaseModel):
+    game_id: int
+    chapter_number: Annotated[int, Field(ge=1)]
+    chapter_title: ChapterTitle
+    # 店家人員不用填（用登入身分的店家，填別家店回 403）；管理員必填
+    shop_id: uuid.UUID | None = None
+
+
+class VideoProjectOut(BaseModel):
+    id: uuid.UUID
+    game_id: int
+    game_name: str
+    shop_id: uuid.UUID
+    created_by: uuid.UUID
+    chapter_number: int
+    chapter_title: str
+    # 目前步驟：不存欄位，由專案的狀態推出。MR 1 沒有其他狀態，固定是 pages（上傳規則書）
+    step: Literal["pages"]
+    created_at: datetime
+    updated_at: datetime
+
+
+class VideoProjectList(BaseModel):
+    items: list[VideoProjectOut]
+    total: int
