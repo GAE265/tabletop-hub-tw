@@ -555,23 +555,36 @@ def _print_changes(entries: list[revision.Entry]) -> None:
         print(f"提醒：這次改了 {len(entries)} 段，請確認每一段都是你要改的。")
 
 
+NO_COVERAGE = "這次沒有做規則涵蓋檢查"
+
+
 def _coverage_after(
     folder: Path, entries: list[revision.Entry], args: argparse.Namespace, lazy: _LazyLLM
 ) -> None:
-    """寫入後對被改的段跑涵蓋檢查：只顯示警告，不擋寫入（design.md D8）。"""
-    if not args.pages:
-        print("未指定 --pages，略過涵蓋檢查")
-        return
+    """寫入後對被改的段跑涵蓋檢查：只顯示警告，不擋寫入（design.md D8）。
+
+    沒有 --pages 時，沿用段資料 source_pages 記錄的頁面；找不齊就不做，並明確說沒有做。
+    """
+    pages = args.pages
+    if not pages:
+        pages, missing = revision.pages_from_source(folder, revision.read_video(folder))
+        if missing:
+            print(
+                f"{NO_COVERAGE}：未指定 --pages，且{'；'.join(missing)}。"
+                "要檢查請加上 --pages <頁面檔>"
+            )
+            return
+        print(f"未指定 --pages，沿用段資料 source_pages 記錄的頁面：{'、'.join(pages)}")
     beat_keys = {beat.get("beat_key") for e in entries for beat in e.segment.get("beats", []) or []}
     try:
         report = check_coverage(
-            lazy.get(), load_video(folder, draft=True), load_pages(folder, args.pages)
+            lazy.get(), load_video(folder, draft=True), load_pages(folder, pages)
         )
     except (LLMError, VideoDataError, ScriptInputError, KeyError, TypeError) as exc:
-        print(f"警告：涵蓋檢查沒有完成（不影響已寫入的修改）：{exc}")
+        print(f"{NO_COVERAGE}：檢查沒有完成（{exc}），不影響已寫入的修改")
         return
     if not report.is_valid:
-        print("警告：涵蓋檢查無效（LLM 沒有拆出任何規則），不影響已寫入的修改")
+        print(f"{NO_COVERAGE}：檢查無效（LLM 沒有拆出任何規則），不影響已寫入的修改")
         return
     warnings = revision.coverage_warnings(report, beat_keys)
     if not warnings:
