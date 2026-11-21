@@ -118,6 +118,14 @@ LLM 判斷修改要求超出版型能力時，`revise` SHALL 不寫入 `video.js
 - **WHEN** LLM 提出的替代做法不通過檢查（例如旁白用了「次」）
 - **THEN** 照「改寫一次」的規則要求 LLM 重新提出；存進 `pending.json` 的替代做法一定能用 `--choose` 套用（3.3 本機驗收發現）
 
+#### Scenario: 沒有實際變動的替代做法
+- **WHEN** 替代做法套用後和原本的內容完全相同（例如只加了預設值 `"anim": "pop"`；比較時補齊預設值）
+- **THEN** 視為無效，要求 LLM 改寫一次；改寫後仍無效的替代做法不列出，全部無效時結束代碼不為 0、不寫 `pending.json`（2026-11-21 永傑決定）
+
+#### Scenario: 預設值不算變動
+- **WHEN** 新內容只多寫了預設值
+- **THEN** 欄位差異與修改紀錄的 `changed` 不列出那個欄位
+
 #### Scenario: segment_json 省略了 segment_key
 - **WHEN** LLM 在 `segment_json` 裡沒寫 `segment_key`，外層有寫
 - **THEN** 用外層的 `segment_key` 補上；兩邊都有但不一樣時才算錯（3.3 本機驗收發現）

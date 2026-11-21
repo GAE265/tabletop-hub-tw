@@ -449,10 +449,8 @@ def _revise(args: argparse.Namespace, settings: Settings | None, llm: LLMProvide
         if args.apply:
             pending = revision.load_pending(folder, "proposal")
             entries = revision.entries_from_pending(pending["segments"])
-            data = revision.read_video(folder)
-            for entry in entries:  # 重新算出欄位差異，供輸出與修改紀錄使用
-                old = next(s for s in data["segments"] if s["segment_key"] == entry.segment_key)
-                entry.changed = revision.diff_categories(old, entry.segment)
+            # 重新算出欄位差異，供輸出與修改紀錄使用
+            revision.compute_changes(folder, revision.read_video(folder), entries)
             _print_changes(entries)
             return _write(folder, entries, pending["request"], "revision", args, lazy)
         if args.choose is not None:
