@@ -66,6 +66,9 @@ class ScriptRequest:
     voice: str | None = None
     # 參考頁：只供查牌名與分類（例如判斷代表牌），不可寫成旁白，也不可列在 source_pages
     reference_pages: list[RulebookPage] = field(default_factory=list)
+    # 整個遊戲一支影片的三格（video_scope.ScopeSlot）；None＝單章模式（命令列與舊的單章專案）。
+    # 整本模式時 pages 是三格用到的頁（source_pages 只能用這些頁）
+    scope: list[Any] | None = None
 
 
 # --------------------------------------------------------------------------- 輸入
@@ -198,8 +201,13 @@ def term_conflicts(terms: list[Term]) -> list[TermConflict]:
 
 
 def build_input(request: ScriptRequest) -> str:
+    header = (
+        ["範圍：整個遊戲（開局、走完一輪、獲勝方式三個章節）"]
+        if request.scope is not None
+        else [f"章節：第 {request.chapter_number} 章「{request.chapter_title}」"]
+    )
     lines = [
-        f"章節：第 {request.chapter_number} 章「{request.chapter_title}」",
+        *header,
         "",
         "用語對照表（英文 → 中文；key 是段資料中使用的名稱；泛稱或單一種牌；不要用的譯法）：",
     ]
@@ -212,6 +220,12 @@ def build_input(request: ScriptRequest) -> str:
         if term.avoid:
             line += f"（不要用：{'、'.join(term.avoid)}）"
         lines.append(line)
+    if request.scope is not None:
+        for slot in request.scope:
+            lines += ["", f"##### {slot.key}（{slot.title}）的原文片段 #####"]
+            for excerpt in slot.excerpts:
+                lines += [f"--- 規則書第 {excerpt.page} 頁 ---", excerpt.text]
+        return "\n".join(lines)
     for page in request.pages:
         lines += ["", f"=== 本章內容：規則書第 {page.page} 頁（{page.lang}）===", page.text]
     for page in request.reference_pages:
@@ -238,17 +252,18 @@ def generate_script(
     每次 LLM 輸出都先做格式小錯的自動清理（C1–C4），清了什麼記進 cleanup_log；清理後照樣檢查。
     """
     llm_input = build_input(request)
+    whole_game = request.scope is not None
+    instructions = (
+        video_prompts.WHOLE_GAME_INSTRUCTIONS if whole_game else video_prompts.INSTRUCTIONS
+    )
+    schema = video_prompts.WHOLE_GAME_SCHEMA if whole_game else video_prompts.SCRIPT_SCHEMA
     outputs: list[dict[str, Any]] = []
     errors: list[str] = []
     for attempt in range(2):
         prompt = llm_input
         if attempt:
             prompt += "\n\n" + video_prompts.rewrite_request(errors, outputs[-1])
-        raw = llm.generate_json(
-            instructions=video_prompts.INSTRUCTIONS,
-            input=prompt,
-            schema=video_prompts.SCRIPT_SCHEMA,
-        )
+        raw = llm.generate_json(instructions=instructions, input=prompt, schema=schema)
         outputs.append(raw)
         cleaned, records = clean_format(raw)
         if cleanup_log is not None:
@@ -357,17 +372,26 @@ def to_video_data(raw: dict[str, Any], request: ScriptRequest) -> dict[str, Any]
     """LLM 輸出 → video.json 的格式（草稿：照片待拍、區域待量測）。"""
     page_lang = {p.page: p.lang for p in request.pages}
     chapter_key = f"c{request.chapter_number}"
-    data: dict[str, Any] = {
-        "format_version": 1,
-        "game_key": request.game_key,
-        "title": request.title,
-        "chapters": [
+    if request.scope is not None:
+        # 整本：三個 chapter，依開局、走完一輪、獲勝方式的順序
+        chapters = [
+            {"chapter_key": slot.key, "number": number, "title": slot.title}
+            for number, slot in enumerate(request.scope, start=1)
+        ]
+    else:
+        chapters = [
             {
                 "chapter_key": chapter_key,
                 "number": request.chapter_number,
                 "title": request.chapter_title,
             }
-        ],
+        ]
+    order = {c["chapter_key"]: i for i, c in enumerate(chapters)}
+    data: dict[str, Any] = {
+        "format_version": 1,
+        "game_key": request.game_key,
+        "title": request.title,
+        "chapters": chapters,
         "assets": [],
         "segments": [],
     }
@@ -384,13 +408,21 @@ def to_video_data(raw: dict[str, Any], request: ScriptRequest) -> dict[str, Any]
         }
         if asset.get("shot"):
             entry["shot"] = asset["shot"]
+        if asset.get("label"):
+            entry["label"] = asset["label"]
         data["assets"].append(entry)
 
+    raw_segments = raw["segments"]
+    if request.scope is not None:
+        # 依三格的順序排好（同一格內維持原本的順序）；不認得的 chapter 排最後，交給檢查回報
+        raw_segments = sorted(raw_segments, key=lambda s: order.get(s.get("chapter"), len(order)))
     beat_number = 0
-    for raw_segment in raw["segments"]:
+    for raw_segment in raw_segments:
         segment: dict[str, Any] = {
             "segment_key": raw_segment["segment_key"],
-            "chapter_key": chapter_key,
+            "chapter_key": raw_segment.get("chapter", chapter_key)
+            if request.scope is not None
+            else chapter_key,
             "source_pages": [
                 {"lang": page_lang.get(page, "?"), "page": page}
                 for page in raw_segment["source_pages"]
@@ -488,6 +520,8 @@ def check_script(data: dict[str, Any], request: ScriptRequest, base_dir: Path) -
                     errors.append(f"{where}用了「{word}」，請改用「{term.zh}」：{text}")
 
     errors += _check_assets(data, request)
+    if request.scope is not None:
+        errors += _check_whole_game(data, request)
 
     chapter_pages = {p.page for p in request.pages}
     reference_pages = {p.page for p in request.reference_pages} - chapter_pages
@@ -507,6 +541,24 @@ def check_script(data: dict[str, Any], request: ScriptRequest, base_dir: Path) -
             listed = "、".join(str(p) for p in outside)
             errors.append(
                 f"段 {key} 的 source_pages 有輸入以外的頁碼：{listed}（只能用 {allowed}）"
+            )
+    return errors
+
+
+def _check_whole_game(data: dict[str, Any], request: ScriptRequest) -> list[str]:
+    """整本模式：素材只能實拍（繪製素材到了素材步驟會卡住店員，要在草稿就改掉）；三格都要有段。"""
+    errors = []
+    for asset in data.get("assets", []):
+        if asset.get("kind") != "flat_photo":
+            errors.append(
+                f"素材 {asset.get('asset_key')} 的 kind 是 {asset.get('kind')}："
+                "本版不支援繪製素材，kind 一律用 flat_photo（實拍），立體配件也是拍照"
+            )
+    used = {segment.get("chapter_key") for segment in data.get("segments", [])}
+    for slot in request.scope or []:
+        if slot.key not in used:
+            errors.append(
+                f"「{slot.title}」（chapter={slot.key}）沒有任何一段：三個章節都至少要有一段"
             )
     return errors
 

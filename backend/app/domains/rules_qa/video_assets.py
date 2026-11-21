@@ -75,6 +75,11 @@ def new_photo_file(asset_key: str, ext: str) -> str:
     return f"{asset_key}-{uuid.uuid4().hex[:8]}.{ext}"
 
 
+def asset_label(asset: dict[str, Any]) -> str:
+    """給店員看的素材名稱：中文名稱；舊的草稿沒有時用 reason（不用 asset_key 這類內部代號）。"""
+    return asset.get("label") or asset.get("reason") or "這個素材"
+
+
 def find_asset(video: dict[str, Any], asset_key: str) -> dict[str, Any] | None:
     for asset in video.get("assets", []):
         if asset.get("asset_key") == asset_key:
@@ -239,6 +244,7 @@ def readiness(video: dict[str, Any]) -> dict[str, Any]:
             missing_photos.append(
                 {
                     "asset_key": key,
+                    "label": asset_label(asset),
                     "priority": priority,
                     "reason": asset.get("reason", ""),
                     "shot": asset.get("shot"),

@@ -111,11 +111,18 @@ videos_router = APIRouter(prefix="/rules-videos", tags=["rules_qa"])
 
 
 def get_video_project_service(
-    session: Annotated[Session, Depends(get_session)],
+    request: Request, session: Annotated[Session, Depends(get_session)]
 ) -> VideoProjectService:
-    # 店家是共用表 booking_shops，由擁有者的 repository 查詢（AGENTS.md 4.2 共用資料表例外）
+    # 店家是共用表 booking_shops，由擁有者的 repository 查詢（AGENTS.md 4.2 共用資料表例外）；
+    # 規則書原文用 rules_ingest 的 service 函式讀（domain 之間只呼叫對方的 service）
+    manual = ManualPageRepository(session)
     return VideoProjectService(
-        VideoProjectRepository(session), RulesQaRepository(session), BookingRepository(session)
+        VideoProjectRepository(session),
+        RulesQaRepository(session),
+        BookingRepository(session),
+        read_pages=lambda game_id: read_manual_pages(manual, game_id),
+        pages=VideoPagesRepository(session),
+        drafts=get_video_job_service(request, session),
     )
 
 

@@ -79,11 +79,23 @@ ChapterTitle = Annotated[
 
 
 class VideoProjectCreate(BaseModel):
+    """建立專案。只給 game_id＝整個遊戲一支影片（店員的入口，建立後自動產生草稿）；
+    chapter_number 與 chapter_title 一起給＝舊的單章模式（命令列與既有資料）。只給一個回 422。
+    """
+
     game_id: int
-    chapter_number: Annotated[int, Field(ge=1)]
-    chapter_title: ChapterTitle
+    chapter_number: Annotated[int, Field(ge=1)] | None = None
+    chapter_title: ChapterTitle | None = None
     # 店家人員不用填（用登入身分的店家，填別家店回 403）；管理員必填
     shop_id: uuid.UUID | None = None
+
+    @model_validator(mode="after")
+    def _both_or_neither(self) -> "VideoProjectCreate":
+        if (self.chapter_number is None) != (self.chapter_title is None):
+            raise ValueError(
+                "chapter_number 與 chapter_title 要一起給（單章），或都不給（整個遊戲）"
+            )
+        return self
 
 
 class VideoProjectOut(BaseModel):
@@ -92,10 +104,14 @@ class VideoProjectOut(BaseModel):
     game_name: str
     shop_id: uuid.UUID
     created_by: uuid.UUID
-    chapter_number: int
-    chapter_title: str
+    # 舊的單章專案才有；整個遊戲一支影片時是 null
+    chapter_number: int | None
+    chapter_title: str | None
+    # 影片標題：整個遊戲是「〈遊戲〉 規則教學」；單章是章節標題
+    title: str
     # 目前步驟：不存欄位，由專案的狀態推出（design.md D1、D11）：
-    # pages＝還沒有草稿（上傳規則書、選頁、編輯文字）；draft＝有草稿、還沒拍照也沒略過；
+    # pages＝單章專案還沒有草稿（選頁、編輯文字）；draft＝整個遊戲在產生草稿，或有草稿、
+    # 還沒拍照也沒略過；
     # assets＝素材還沒齊；render＝齊了、還沒有成品；done＝有成功產生的影片（D15）
     step: Literal["pages", "draft", "assets", "render", "done"]
     created_at: datetime
@@ -235,12 +251,16 @@ class DraftBeatOut(BaseModel):
 
 class DraftSegmentOut(BaseModel):
     segment_key: str
+    # 屬於哪一格（setup／round／win）；單章專案是 c<章節編號>
+    chapter: str
     source_pages: list[int]
     beats: list[DraftBeatOut]
 
 
 class DraftAssetOut(BaseModel):
     asset_key: str
+    # 給店員看的中文名稱；舊的草稿沒有時是 null
+    label: str | None = None
     kind: str
     priority: str
     reason: str
@@ -277,14 +297,30 @@ class CoverageHintOut(BaseModel):
     source: str
 
 
-class DraftCoverageOut(BaseModel):
-    # done＝有結果；not_done＝沒做成（reason）；stale＝草稿在檢查後改過
-    status: Literal["done", "not_done", "stale"]
+class CoverageSlotOut(BaseModel):
+    """整個遊戲一支影片：一格（開局、走完一輪、獲勝方式）的涵蓋檢查。"""
+
+    slot: str
+    title: str
+    status: Literal["done", "not_done"]
     reason: str | None
     total_rules: int
     issues: list[CoverageIssueOut]
     problems: list[CoverageProblemOut]
     hints: list[CoverageHintOut]
+
+
+class DraftCoverageOut(BaseModel):
+    # done＝有結果；not_done＝沒做成（reason；整個遊戲時任一格沒做成）；stale＝草稿在檢查後改過
+    status: Literal["done", "not_done", "stale"]
+    reason: str | None
+    # 合計（整個遊戲時是三格加起來，rule_id 前面加格的 key，例如 round-R1）
+    total_rules: int
+    issues: list[CoverageIssueOut]
+    problems: list[CoverageProblemOut]
+    hints: list[CoverageHintOut]
+    # 依格的摘要；單章專案是空的
+    slots: list[CoverageSlotOut] = []
 
 
 class DraftTermsOut(BaseModel):
@@ -340,6 +376,8 @@ class VideoAssetUpdate(BaseModel):
 
 class VideoAssetOut(BaseModel):
     asset_key: str
+    # 給店員看的中文名稱；舊的草稿沒有時是 null
+    label: str | None = None
     kind: str
     priority: str
     reason: str
@@ -360,6 +398,9 @@ class VideoAssetOut(BaseModel):
 
 class MissingPhotoOut(BaseModel):
     asset_key: str
+    # 給店員看的名稱（中文名稱；舊的草稿用 reason）
+    label: str = ""
+
     # must＝必拍、optional＝選拍（選拍沒有照片也會擋住產生影片，第 1 階段的限制）
     priority: str
     reason: str

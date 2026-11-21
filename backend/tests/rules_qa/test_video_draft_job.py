@@ -194,17 +194,23 @@ def test_project_changed_during_job_is_not_overwritten(factory, rules_db, projec
 
 
 @pytest.mark.parametrize(
-    "coverage, reason",
-    [(LLMUnavailable("連不上"), "連不上"), (coverage_output([]), "沒有拆出任何規則")],
+    "coverage, reason, detail",
+    [
+        # 整本範圍（2026-11-22 永傑決定）：店員看到的原因不含例外的內容，細節放 detail
+        (LLMUnavailable("連不上"), "AI 服務暫時無法使用", "連不上"),
+        (coverage_output([]), "沒有拆出任何規則", None),
+    ],
     ids=["llm_unavailable", "empty_rules"],
 )
-def test_coverage_not_done_still_saves_draft(factory, rules_db, project, coverage, reason):
+def test_coverage_not_done_still_saves_draft(factory, rules_db, project, coverage, reason, detail):
     llm = FakeLLMProvider(json_outputs=[llm_output(), coverage])
     row = job_row(rules_db, _run(factory, rules_db, project, llm))
     assert row.status == "succeeded" and row.result["coverage"] == "not_done"
     saved = project_row(rules_db, project)
     assert saved.video is not None and saved.video_version == 1
     assert saved.coverage["status"] == "not_done" and reason in saved.coverage["reason"]
+    if detail is not None:
+        assert "連不上" not in saved.coverage["reason"] and detail in saved.coverage["detail"]
     assert saved.coverage_version == 1
 
 

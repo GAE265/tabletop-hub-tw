@@ -161,10 +161,12 @@ def test_excluded_list_is_stored_but_not_shown(api, as_shop_staff, rules_db, gam
     stored = _classification(rules_db, project)
     assert stored["excluded"][0]["text"] == VARIANT_QUOTE and stored["excluded"][0]["reason"]
     assert [s["key"] for s in stored["slots"]] == ["setup", "round", "win"]
-    # 店員看得到的 API 都沒有排除清單
+    # 店員看得到的 API 都沒有排除清單與排除原因（/pages 本來就回傳整頁原文，所以比對原因與欄位）
+    reason = stored["excluded"][0]["reason"]
     for path in ("", "/draft", "/pages"):
-        assert VARIANT_QUOTE not in api.get(f"{URL}/{project}{path}").text
-        assert "excluded" not in api.get(f"{URL}/{project}{path}").text
+        body = api.get(f"{URL}/{project}{path}").text
+        assert reason not in body and "excluded" not in body
+    assert VARIANT_QUOTE not in api.get(f"{URL}/{project}/draft").text
 
 
 def test_coverage_summary_by_slot(api, as_shop_staff, rules_db, game):

@@ -35,11 +35,16 @@ NO_HANDLER_MESSAGE = "這種工作還沒有實作"
 
 
 class JobFailed(Exception):
-    """處理函式用來回報「店員看得懂的失敗原因」；訊息直接寫進工作的 error。"""
+    """處理函式用來回報「店員看得懂的失敗原因」；訊息直接寫進工作的 error。
 
-    def __init__(self, message: str) -> None:
+    detail 是給開發者看的細節（例如檢查沒過的每一條、內部代號），寫進 error_detail，
+    不在 API 回傳；店員看到的訊息不可出現段代號、highlight key 這類內部代號。
+    """
+
+    def __init__(self, message: str, detail: str | None = None) -> None:
         super().__init__(message)
         self.message = message
+        self.detail = detail
 
 
 @dataclass(frozen=True)
@@ -143,7 +148,8 @@ class JobRunner:
             result = handler(context)
         except JobFailed as exc:
             logger.info("規則影片工作 %s（%s）失敗：%s", job.id, job.kind, exc.message)
-            self._finish(job, error=exc.message, detail=None)
+            detail = exc.detail[:ERROR_DETAIL_MAX_CHARS] if exc.detail else None
+            self._finish(job, error=exc.message, detail=detail)
         except Exception as exc:
             logger.exception("規則影片工作 %s（%s）發生未預期的錯誤", job.id, job.kind)
             detail = f"{type(exc).__name__}: {exc}"[:ERROR_DETAIL_MAX_CHARS]

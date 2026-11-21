@@ -109,7 +109,12 @@ class RulesQaVideoProject(Base):
     __table_args__ = (
         CheckConstraint("chapter_number >= 1", name="ck_rules_qa_video_projects_chapter_number"),
         Index("ix_rules_qa_video_projects_shop_updated", "shop_id", "updated_at"),
-        {"comment": "規則影片專案：店員用手機產出規則影片的工作空間，一個專案一章"},
+        {
+            "comment": (
+                "規則影片專案：店員用手機產出規則影片的工作空間，"
+                "一個專案一支影片（整個遊戲；舊資料是一章）"
+            )
+        },
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -132,10 +137,15 @@ class RulesQaVideoProject(Base):
     created_by: Mapped[uuid.UUID] = mapped_column(
         Uuid, ForeignKey("auth_users.id"), comment="建立專案的使用者（店家人員或管理員）"
     )
-    chapter_number: Mapped[int] = mapped_column(
-        Integer, comment="章節編號，例如《血與刃》步驟三是第 11 章；從 1 開始"
+    chapter_number: Mapped[int | None] = mapped_column(
+        Integer,
+        comment=(
+            "章節編號（舊的單章專案），例如《血與刃》步驟三是第 11 章；空值代表整個遊戲一支影片"
+        ),
     )
-    chapter_title: Mapped[str] = mapped_column(Text, comment="章節標題，例如「步驟三」；1 到 50 字")
+    chapter_title: Mapped[str | None] = mapped_column(
+        Text, comment="章節標題（舊的單章專案），1 到 50 字；空值代表整個遊戲一支影片"
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), comment="建立專案的時間"
     )
@@ -148,12 +158,12 @@ class RulesQaVideoProject(Base):
     chapter_pages: Mapped[list[int]] = mapped_column(
         ARRAY(Integer),
         server_default="{}",
-        comment="本章用規則書的哪幾頁（games_manual 的頁碼）；空陣列代表還沒選",
+        comment="這支影片用到的頁（整個遊戲時預設全選）；空陣列代表還沒選",
     )
     reference_pages: Mapped[list[int]] = mapped_column(
         ARRAY(Integer),
         server_default="{}",
-        comment="參考頁：只查牌名與分類，不可寫成旁白；空陣列代表沒有參考頁",
+        comment="參考頁（舊的單章專案用）；整個遊戲一支影片時一律是空陣列",
     )
     page_texts: Mapped[dict[str, Any]] = mapped_column(
         JSONB,
@@ -181,6 +191,15 @@ class RulesQaVideoProject(Base):
     )
     draft_pages_version: Mapped[int | None] = mapped_column(
         Integer, comment="草稿用的是哪一版頁面文字；空值代表還沒有草稿"
+    )
+    # 整個遊戲一支影片：AI 分三格的結果（含店員看不到的排除清單）
+    classification: Mapped[dict[str, Any] | None] = mapped_column(
+        JSONB,
+        comment=(
+            "AI 把規則書分成三格的結果：slots（開局、走完一輪、獲勝方式各自引用的原文片段）、"
+            "excluded（不講的片段與原因，店員看不到）、dropped（引用不到原文而沒採用的）；"
+            "空值代表舊的單章專案或還沒分類"
+        ),
     )
 
 

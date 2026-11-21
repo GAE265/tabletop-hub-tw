@@ -31,6 +31,7 @@ from app.domains.rules_qa.schemas import (
     CoverageHintOut,
     CoverageIssueOut,
     CoverageProblemOut,
+    CoverageSlotOut,
     DraftAssetOut,
     DraftBeatOut,
     DraftCoverageOut,
@@ -62,6 +63,7 @@ from app.domains.rules_qa.schemas import (
 )
 from app.domains.rules_qa.video_assets import (
     PhotoRejected,
+    asset_label,
     find_asset,
     is_skipped,
     new_photo_file,
@@ -73,6 +75,7 @@ from app.domains.rules_qa.video_assets import (
 )
 from app.domains.rules_qa.video_coverage import report_from_dict
 from app.domains.rules_qa.video_draft import (
+    DRAFT_NO_RULEBOOK_MESSAGE,
     DRAFT_PAGES_NOT_SET_MESSAGE,
     PAGES_STALE_HINT,
     TERMS_MISSING_HINT,
@@ -361,19 +364,56 @@ def _project_not_found() -> AppError:
     return AppError(404, "RULES_VIDEO_PROJECT_NOT_FOUND", "找不到這個影片專案")
 
 
-class VideoProjectService:
-    """規則影片專案（add-rules-video-mobile design.md D1）。"""
+class ProjectPagesWriter(Protocol):
+    def save(
+        self,
+        project_id: uuid.UUID,
+        *,
+        chapter_pages: list[int],
+        reference_pages: list[int],
+        page_texts: dict[str, Any],
+    ) -> None: ...
 
-    def __init__(self, projects: VideoProjectStore, games: GameNames, shops: ShopLookup) -> None:
+
+class DraftStarter(Protocol):
+    def create(self, user: CurrentUser, project_id: uuid.UUID, kind: str) -> VideoJobOut: ...
+
+
+class VideoProjectService:
+    """規則影片專案（add-rules-video-mobile design.md D1；整個遊戲一支影片見整本範圍）。
+
+    只給遊戲時：這支影片用到的頁預設是規則書的全部頁，建立後自動開始產生草稿
+    （頁面文字那一步不在店員流程裡；OCR 錯字由管理員匯入時處理，2026-11-22 永傑決定）。
+    """
+
+    def __init__(
+        self,
+        projects: VideoProjectStore,
+        games: GameNames,
+        shops: ShopLookup,
+        read_pages: Callable[[int], list[tuple[int, str]]] | None = None,
+        pages: ProjectPagesWriter | None = None,
+        drafts: DraftStarter | None = None,
+    ) -> None:
         self._projects = projects
         self._games = games
         self._shops = shops
+        self._read_pages = read_pages
+        self._pages = pages
+        self._drafts = drafts
 
     def create(self, user: CurrentUser, body: VideoProjectCreate) -> VideoProjectOut:
         require_role(user, "shop_staff", "admin")
         shop_id = self._shop_for(user, body.shop_id)
         if self._games.game_name(body.game_id) is None:
             raise _game_not_found(body.game_id)
+        whole_game = body.chapter_number is None
+        manual: list[tuple[int, str]] = []
+        if whole_game:
+            assert self._read_pages is not None
+            manual = sorted((p, t) for p, t in self._read_pages(body.game_id) if t.strip())
+            if not manual:
+                raise AppError(422, "RULES_VIDEO_NO_RULEBOOK", DRAFT_NO_RULEBOOK_MESSAGE)
         with self._projects.transaction():
             project_id = self._projects.create(
                 game_id=body.game_id,
@@ -382,7 +422,21 @@ class VideoProjectService:
                 chapter_number=body.chapter_number,
                 chapter_title=body.chapter_title,
             )
-            record = self._projects.get(project_id)
+            if whole_game:
+                assert self._pages is not None
+                self._pages.save(
+                    project_id,
+                    chapter_pages=[page for page, _ in manual],
+                    reference_pages=[],
+                    page_texts={
+                        str(page): {"text": text, "original_hash": text_hash(text)}
+                        for page, text in manual
+                    },
+                )
+        if whole_game:
+            assert self._drafts is not None
+            self._drafts.create(user, project_id, "draft")
+        record = self._projects.get(project_id)
         assert record is not None
         return _project_out(record)
 
@@ -430,7 +484,8 @@ def _step(record: VideoProjectRecord) -> str:
     """
     video = record.video
     if video is None:
-        return "pages"
+        # 整個遊戲：建立時就開始產生草稿；單章：要先選頁
+        return "draft" if record.chapter_number is None else "pages"
     if record.has_render:
         return "done"
     if readiness(video)["ready"]:
@@ -449,6 +504,7 @@ def _project_out(record: VideoProjectRecord) -> VideoProjectOut:
         created_by=record.created_by,
         chapter_number=record.chapter_number,
         chapter_title=record.chapter_title,
+        title=record.chapter_title or f"{record.game_name} 規則教學",
         step=_step(record),
         created_at=record.created_at,
         updated_at=record.updated_at,
@@ -786,6 +842,7 @@ class VideoDraftService:
 def _draft_segment(segment: dict[str, Any]) -> DraftSegmentOut:
     return DraftSegmentOut(
         segment_key=segment["segment_key"],
+        chapter=segment.get("chapter_key", ""),
         source_pages=[p["page"] for p in segment.get("source_pages", [])],
         beats=[
             DraftBeatOut(
@@ -802,6 +859,7 @@ def _draft_asset(asset: dict[str, Any]) -> DraftAssetOut:
     reason = asset.get("reason", "")
     return DraftAssetOut(
         asset_key=asset["asset_key"],
+        label=asset.get("label"),
         kind=asset.get("kind", "flat_photo"),
         priority=asset.get("priority", "must"),
         reason=reason,
@@ -815,6 +873,8 @@ def _draft_asset(asset: dict[str, Any]) -> DraftAssetOut:
 
 def _draft_coverage(state: DraftState) -> DraftCoverageOut:
     coverage = state.coverage or {"status": "not_done", "reason": "還沒有做規則涵蓋檢查"}
+    if "slots" in coverage:
+        return _slot_coverage(coverage, state)
     if coverage.get("status") != "done":
         return DraftCoverageOut(
             status="not_done",
@@ -825,35 +885,101 @@ def _draft_coverage(state: DraftState) -> DraftCoverageOut:
             hints=[],
         )
     report = report_from_dict(coverage["report"])
+    issues, problems, hints = _report_parts(report)
     # 只有旁白或字幕變了才算過期；只改素材（照片、區域）不算
     stale = coverage.get("text_hash") != narration_text_hash(state.video or {})
     return DraftCoverageOut(
         status="stale" if stale else "done",
-        reason="旁白或字幕在涵蓋檢查之後改過，結果可能過期" if stale else None,
+        reason=STALE_COVERAGE_REASON if stale else None,
         total_rules=len(report.rules),
-        issues=[
-            CoverageIssueOut(
-                rule_id=r.rule_id,
-                category=r.category,
-                source=r.source,
-                narration_status=r.narration.status,
-                narration_missing=r.narration.missing,
-                subtitle_status=r.subtitle.status,
-                subtitle_missing=r.subtitle.missing,
-                narration_shorter=r.narration_shorter,
+        issues=issues,
+        problems=problems,
+        hints=hints,
+    )
+
+
+STALE_COVERAGE_REASON = "旁白或字幕在涵蓋檢查之後改過，結果可能過期"
+
+
+def _report_parts(
+    report: Any, prefix: str = ""
+) -> tuple[list[CoverageIssueOut], list[CoverageProblemOut], list[CoverageHintOut]]:
+    issues = [
+        CoverageIssueOut(
+            rule_id=prefix + r.rule_id,
+            category=r.category,
+            source=r.source,
+            narration_status=r.narration.status,
+            narration_missing=r.narration.missing,
+            subtitle_status=r.subtitle.status,
+            subtitle_missing=r.subtitle.missing,
+            narration_shorter=r.narration_shorter,
+        )
+        for r in report.rules
+        if not r.is_hint and r.has_issue
+    ]
+    problems = [
+        CoverageProblemOut(
+            beat_key=p.beat_key, track=p.track, kind=p.kind, text=p.text, reason=p.reason
+        )
+        for p in report.problems
+    ]
+    hints = [
+        CoverageHintOut(rule_id=prefix + r.rule_id, source=r.source)
+        for r in report.rules
+        if r.is_hint
+    ]
+    return issues, problems, hints
+
+
+def _slot_coverage(coverage: dict[str, Any], state: DraftState) -> DraftCoverageOut:
+    """整個遊戲：每一格一份涵蓋檢查；合計把三格加起來（rule_id 前面加格的 key）。"""
+    slots: list[CoverageSlotOut] = []
+    for slot in coverage["slots"]:
+        if slot.get("status") != "done":
+            slots.append(
+                CoverageSlotOut(
+                    slot=slot["key"],
+                    title=slot["title"],
+                    status="not_done",
+                    reason=slot.get("reason"),
+                    total_rules=0,
+                    issues=[],
+                    problems=[],
+                    hints=[],
+                )
             )
-            for r in report.rules
-            if not r.is_hint and r.has_issue
-        ],
-        problems=[
-            CoverageProblemOut(
-                beat_key=p.beat_key, track=p.track, kind=p.kind, text=p.text, reason=p.reason
+            continue
+        report = report_from_dict(slot["report"])
+        issues, problems, hints = _report_parts(report, prefix=f"{slot['key']}-")
+        slots.append(
+            CoverageSlotOut(
+                slot=slot["key"],
+                title=slot["title"],
+                status="done",
+                reason=None,
+                total_rules=len(report.rules),
+                issues=issues,
+                problems=problems,
+                hints=hints,
             )
-            for p in report.problems
-        ],
-        hints=[
-            CoverageHintOut(rule_id=r.rule_id, source=r.source) for r in report.rules if r.is_hint
-        ],
+        )
+    stale = coverage.get("text_hash") != narration_text_hash(state.video or {})
+    not_done = [s.title for s in slots if s.status == "not_done"]
+    if stale:
+        status, reason = "stale", STALE_COVERAGE_REASON
+    elif not_done:
+        status, reason = "not_done", f"「{'、'.join(not_done)}」的涵蓋檢查沒有完成"
+    else:
+        status, reason = "done", None
+    return DraftCoverageOut(
+        status=status,
+        reason=reason,
+        total_rules=sum(s.total_rules for s in slots),
+        issues=[i for s in slots for i in s.issues],
+        problems=[p for s in slots for p in s.problems],
+        hints=[h for s in slots for h in s.hints],
+        slots=slots,
     )
 
 
@@ -892,7 +1018,7 @@ class VideoAssetsService:
         try:
             content, ext, content_type = normalize_photo(data)
         except PhotoRejected as exc:
-            raise AppError(422, exc.code, exc.message) from exc
+            raise AppError(422, exc.code, f"「{asset_label(asset)}」：{exc.message}") from exc
         old_file = asset.get("file")
         file = new_photo_file(asset_key, ext)
         self._put(photo_key(project_id, file), content, content_type)
@@ -913,7 +1039,9 @@ class VideoAssetsService:
         _, asset = self._asset(state, asset_key)
         file = asset.get("file")
         if not file:
-            raise AppError(404, "RULES_VIDEO_PHOTO_NOT_FOUND", "這個素材還沒有照片")
+            raise AppError(
+                404, "RULES_VIDEO_PHOTO_NOT_FOUND", f"「{asset_label(asset)}」還沒有照片"
+            )
         try:
             data = self._storage.get(photo_key(project_id, file))
         except FileNotFound as exc:
@@ -940,7 +1068,7 @@ class VideoAssetsService:
                 raise AppError(
                     422,
                     "RULES_VIDEO_REGION_UNKNOWN",
-                    f"草稿沒有這些區域：{'、'.join(unknown)}",
+                    f"「{asset_label(asset)}」沒有這些區域：{'、'.join(unknown)}",
                     {"unknown": unknown},
                 )
         if body.orientation is not None and body.orientation != asset.get("orientation", 0):
@@ -963,14 +1091,17 @@ class VideoAssetsService:
     @staticmethod
     def _check_skip(video: dict[str, Any], asset: dict[str, Any]) -> None:
         """只有選拍可以略過；略過後某段的主畫面會空掉就不能略過（2026-11-22 永傑決定）。"""
+        label = asset_label(asset)
         if asset.get("priority") != "optional":
-            raise AppError(422, "RULES_VIDEO_SKIP_NOT_OPTIONAL", "必拍的素材不能略過")
+            raise AppError(
+                422, "RULES_VIDEO_SKIP_NOT_OPTIONAL", f"「{label}」是必拍的素材，不能略過"
+            )
         _, blocked = skip_impact(video, asset["asset_key"])
         if blocked:
             raise AppError(
                 422,
                 "RULES_VIDEO_SKIP_BLOCKED",
-                skip_blocked_message(blocked),
+                f"「{label}」：{skip_blocked_message(blocked)}",
                 {"segments": blocked},
             )
 
@@ -995,7 +1126,9 @@ class VideoAssetsService:
         video = copy.deepcopy(state.video or {})
         asset = find_asset(video, asset_key)
         if asset is None:
-            raise AppError(404, "RULES_VIDEO_ASSET_NOT_FOUND", f"草稿沒有這個素材：{asset_key}")
+            raise AppError(
+                404, "RULES_VIDEO_ASSET_NOT_FOUND", "草稿沒有這個素材，請重新整理素材清單"
+            )
         return video, asset
 
     def _save(self, project_id: uuid.UUID, version: int, video: dict[str, Any]) -> bool:
@@ -1024,6 +1157,7 @@ def _asset_out(asset: dict[str, Any], version: int, video: dict[str, Any]) -> Vi
     affected, blocked = skip_impact(video, asset["asset_key"]) if optional else ([], [])
     return VideoAssetOut(
         asset_key=asset["asset_key"],
+        label=asset.get("label"),
         kind=asset.get("kind", "flat_photo"),
         priority=asset.get("priority", "must"),
         reason=asset.get("reason", ""),

@@ -94,7 +94,15 @@ def slot_coverage(
     rule_id: str = "R1", beat: str = "1-0", status: str = "complete", missing: str | None = None
 ) -> dict:
     """某一格的涵蓋檢查回傳（一條規則）。"""
-    return coverage_output([coverage_rule(rule_id, narration=(status, [beat], missing))])
+    return coverage_output(
+        [
+            coverage_rule(
+                rule_id,
+                narration=(status, [beat], missing),
+                subtitle=("complete", [beat], None),
+            )
+        ]
+    )
 
 
 def whole_game_llm_outputs(*, coverage: list[dict] | None = None) -> list[dict[str, Any]]:

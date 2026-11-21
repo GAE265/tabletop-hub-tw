@@ -55,6 +55,8 @@ RENDER_TIMEOUT_MESSAGE = "影片輸出超過時間沒有完成，已停止；請
 RENDER_TTS_MESSAGE = "旁白合成失敗（語音服務暫時無法使用），請稍後再試；已合成的旁白會保留"
 RENDER_STORAGE_MESSAGE = "影片存放空間暫時無法使用，請稍後再試"
 RENDER_SETUP_MESSAGE = "產生影片的設定有誤，請通知管理員"
+RENDER_DATA_MESSAGE = "段資料有問題，無法產生影片；請重新產生草稿，若一直發生請通知管理員"
+RENDER_LAYOUT_MESSAGE = "有一段的文字或圖片放不下畫面，請重新產生草稿；若一直發生請通知管理員"
 
 
 @dataclass(frozen=True)
@@ -152,7 +154,8 @@ class RenderJobHandler:
         try:
             video = load_video(folder)
         except VideoDataError as exc:
-            raise JobFailed(f"段資料有問題，無法輸出：{exc}") from exc
+            # 錯誤列出段代號、highlight key 等內部代號：只放 error_detail
+            raise JobFailed(RENDER_DATA_MESSAGE, detail=str(exc)) from exc
         fonts, tts, estimated = self._tools()
 
         ffmpeg = Ffmpeg(
@@ -172,17 +175,17 @@ class RenderJobHandler:
                 on_progress=lambda progress, message: ctx.report(0.05 + 0.85 * progress, message),
             )
         except LayoutError as exc:
-            raise JobFailed(f"排版失敗：{exc}") from exc
+            raise JobFailed(RENDER_LAYOUT_MESSAGE, detail=str(exc)) from exc
         except VideoTimeoutError as exc:
             logger.warning("產生影片逾時（專案 %s）：%s", ctx.project_id, exc)
-            raise JobFailed(RENDER_TIMEOUT_MESSAGE) from exc
+            raise JobFailed(RENDER_TIMEOUT_MESSAGE, detail=str(exc)) from exc
         except VideoRenderError as exc:
             # 店員看得懂的說明；ffmpeg 的細節記 log 給管理員
             logger.warning("產生影片失敗（專案 %s）：%s", ctx.project_id, exc)
-            raise JobFailed(RENDER_FAILED_MESSAGE) from exc
+            raise JobFailed(RENDER_FAILED_MESSAGE, detail=str(exc)) from exc
         except TTSError as exc:
             logger.warning("旁白合成失敗（專案 %s）：%s", ctx.project_id, exc)
-            raise JobFailed(RENDER_TTS_MESSAGE) from exc
+            raise JobFailed(RENDER_TTS_MESSAGE, detail=str(exc)) from exc
 
         ctx.report(0.95, "儲存影片")
         key = f"rules_videos/{ctx.project_id}/renders/{ctx.job_id}.mp4"

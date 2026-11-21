@@ -398,7 +398,8 @@ def test_cannot_skip_when_segment_relies_on_it(api, as_shop_staff, rules_db, pro
     assert detail["skip_blocked_segments"] == [2]
     response = api.patch(f"{URL}/{project}/assets/red", json={"skipped": True})
     assert response.status_code == 422 and _code(response) == "RULES_VIDEO_SKIP_BLOCKED"
-    assert response.json()["error"]["message"] == "第 2 段只靠這張，不能略過"
+    # 整本範圍（2026-11-22 永傑決定）：素材頁的錯誤要指出是哪一個素材（舊草稿沒有名稱時用 reason）
+    assert response.json()["error"]["message"] == "「要認得紅牌」：第 2 段只靠這張，不能略過"
     assert response.json()["error"]["details"] == {"segments": [2]}
     missing = api.get(f"{URL}/{project}/readiness").json()["missing_photos"]
     red = next(m for m in missing if m["asset_key"] == "red")

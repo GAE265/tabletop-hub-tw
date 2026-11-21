@@ -162,8 +162,9 @@ class VideoProjectRecord:
     game_name: str
     shop_id: uuid.UUID
     created_by: uuid.UUID
-    chapter_number: int
-    chapter_title: str
+    # 舊的單章專案才有；整個遊戲一支影片時是 None
+    chapter_number: int | None
+    chapter_title: str | None
     created_at: datetime
     updated_at: datetime
     has_draft: bool = False
@@ -215,8 +216,8 @@ class VideoProjectRepository(SessionRepository):
         game_id: int,
         shop_id: uuid.UUID,
         created_by: uuid.UUID,
-        chapter_number: int,
-        chapter_title: str,
+        chapter_number: int | None,
+        chapter_title: str | None,
     ) -> uuid.UUID:
         project = RulesQaVideoProject(
             game_id=game_id,
@@ -510,8 +511,9 @@ class VideoPagesRepository(SessionRepository):
 @dataclass(frozen=True)
 class DraftState:
     game_id: int
-    chapter_number: int
-    chapter_title: str
+    # 整個遊戲一支影片時是 None
+    chapter_number: int | None
+    chapter_title: str | None
     chapter_pages: list[int]
     reference_pages: list[int]
     page_texts: dict[str, Any]
@@ -553,8 +555,12 @@ class VideoDraftRepository(SessionRepository):
         video: dict[str, Any],
         coverage: dict[str, Any],
         pages_version: int,
+        classification: dict[str, Any] | None = None,
     ) -> bool:
-        """video_version 還是 expected_version 才寫入；回傳是否寫入（沒寫入代表專案被改過）。"""
+        """video_version 還是 expected_version 才寫入；回傳是否寫入（沒寫入代表專案被改過）。
+
+        classification：整個遊戲一支影片的分類結果（含排除清單）；單章專案是 None。
+        """
         result = self.session.execute(
             update(RulesQaVideoProject)
             .where(
@@ -567,6 +573,7 @@ class VideoDraftRepository(SessionRepository):
                 coverage=coverage,
                 coverage_version=expected_version + 1,
                 draft_pages_version=pages_version,
+                classification=classification,
                 updated_at=func.now(),
             )
         )
