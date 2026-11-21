@@ -146,8 +146,9 @@ def test_pipeline_overlays_progress_after_concat(tmp_path: Path) -> None:
     overlay = next(i for i, c in enumerate(calls) if "overlay=" in c)
     mix = next(i for i, c in enumerate(calls) if "sidechaincompress" in c or "loudnorm" in c)
     assert concat < overlay < mix
-    # 疊加的輸入是串接好的影片，輸出是無聲版；混音用的是疊好進度條的無聲版
-    assert str(result.joined) in calls[overlay] and str(result.silent) in calls[overlay]
+    # 疊加的輸入是串接好的影片，輸出是無聲版（先寫暫存檔再改名）；混音用的是疊好進度條的無聲版
+    temporary = result.silent.with_name("silent.tmp.mp4")
+    assert str(result.joined) in calls[overlay] and str(temporary) in calls[overlay]
     assert str(result.silent) in calls[mix]
     # 逐格送進去的進度條：總格數 × 進度條大小 × RGBA
     timeline_frames = sum(
