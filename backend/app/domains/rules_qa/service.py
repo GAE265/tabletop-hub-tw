@@ -14,8 +14,10 @@ from app.core.errors import AppError, PermissionDenied
 from app.domains.rules_qa import prompts
 from app.domains.rules_qa.chunking import split_pages
 from app.domains.rules_qa.repository import (
+    ActiveJobExists,
     ChunkHit,
     LessonSummary,
+    VideoJobRecord,
     VideoProjectRecord,
     VideoRecord,
 )
@@ -26,12 +28,15 @@ from app.domains.rules_qa.schemas import (
     RulesLessonItem,
     RulesLessonList,
     RulesLessonOut,
+    VideoJobList,
+    VideoJobOut,
     VideoOut,
     VideoProjectCreate,
     VideoProjectList,
     VideoProjectOut,
     VideoRequest,
 )
+from app.domains.rules_qa.video_jobs import JOB_TIMEOUT_MINUTES, TIMEOUT_MESSAGE
 from app.domains.rules_qa.youtube import parse_youtube_id
 from app.integrations.embedding import EmbeddingError, EmbeddingProvider
 from app.integrations.llm import LLMProvider
@@ -369,3 +374,84 @@ def _project_out(record: VideoProjectRecord) -> VideoProjectOut:
         created_at=record.created_at,
         updated_at=record.updated_at,
     )
+
+
+# --------------------------------------------------------------------------- 規則影片的非同步工作
+
+
+class VideoJobStore(Protocol):
+    def transaction(self) -> AbstractContextManager[None]: ...
+    def create(self, *, project_id: uuid.UUID, kind: str, created_by: uuid.UUID) -> uuid.UUID: ...
+    def active_job_id(self, project_id: uuid.UUID) -> uuid.UUID | None: ...
+    def expire_stale(self, project_id: uuid.UUID, minutes: int, error: str) -> int: ...
+    def get(self, job_id: uuid.UUID) -> VideoJobRecord | None: ...
+    def list_for_project(
+        self, project_id: uuid.UUID, offset: int, limit: int
+    ) -> tuple[list[VideoJobRecord], int]: ...
+
+
+class VideoJobService:
+    """建立與查詢規則影片的工作（add-rules-video-mobile design.md D2）。
+
+    建立工作的 API 在 MR 4（草稿）、MR 8（影片）、MR 10（修改）；權限同影片專案。
+    """
+
+    def __init__(
+        self,
+        jobs: VideoJobStore,
+        projects: VideoProjectStore,
+        *,
+        notify: Callable[[], None] | None = None,
+    ) -> None:
+        self._jobs = jobs
+        self._projects = projects
+        self._notify = notify
+
+    def create(self, user: CurrentUser, project_id: uuid.UUID, kind: str) -> VideoJobOut:
+        require_role(user, "shop_staff", "admin")
+        self._project(user, project_id)
+        # 卡死的工作的出口：running 超過上限的先標為逾時，才不會一直擋住新工作
+        with self._jobs.transaction():
+            self._jobs.expire_stale(project_id, JOB_TIMEOUT_MINUTES, TIMEOUT_MESSAGE)
+        try:
+            with self._jobs.transaction():
+                job_id = self._jobs.create(project_id=project_id, kind=kind, created_by=user.id)
+        except ActiveJobExists:
+            active = self._jobs.active_job_id(project_id)
+            raise AppError(
+                409,
+                "RULES_VIDEO_JOB_RUNNING",
+                "這個專案已經有進行中的工作，請等它完成",
+                {"job_id": str(active) if active else None},
+            ) from None
+        if self._notify is not None:
+            self._notify()
+        record = self._jobs.get(job_id)
+        assert record is not None
+        return _job_out(record)
+
+    def get(self, user: CurrentUser, project_id: uuid.UUID, job_id: uuid.UUID) -> VideoJobOut:
+        require_role(user, "shop_staff", "admin")
+        self._project(user, project_id)
+        record = self._jobs.get(job_id)
+        if record is None or record.project_id != project_id:
+            raise AppError(404, "RULES_VIDEO_JOB_NOT_FOUND", "找不到這個工作")
+        return _job_out(record)
+
+    def list(
+        self, user: CurrentUser, project_id: uuid.UUID, page: int, page_size: int
+    ) -> VideoJobList:
+        require_role(user, "shop_staff", "admin")
+        self._project(user, project_id)
+        records, total = self._jobs.list_for_project(project_id, (page - 1) * page_size, page_size)
+        return VideoJobList(items=[_job_out(r) for r in records], total=total)
+
+    def _project(self, user: CurrentUser, project_id: uuid.UUID) -> VideoProjectRecord:
+        record = self._projects.get(project_id)
+        if record is None or not _can_access(user, record):
+            raise _project_not_found()
+        return record
+
+
+def _job_out(record: VideoJobRecord) -> VideoJobOut:
+    return VideoJobOut.model_validate(record, from_attributes=True)

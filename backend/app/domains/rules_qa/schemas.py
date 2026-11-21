@@ -2,7 +2,7 @@
 
 import uuid
 from datetime import datetime
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field, StringConstraints
 
@@ -100,4 +100,32 @@ class VideoProjectOut(BaseModel):
 
 class VideoProjectList(BaseModel):
     items: list[VideoProjectOut]
+    total: int
+
+
+# --------------------------------------------------------------------------- 規則影片的非同步工作
+
+JobKind = Literal["draft", "render", "revise"]
+JobStatus = Literal["queued", "running", "succeeded", "failed"]
+
+
+class VideoJobOut(BaseModel):
+    """工作的狀態。error 給店員看；給開發者看的 error_detail 不在 API 回傳。"""
+
+    id: uuid.UUID
+    project_id: uuid.UUID
+    kind: JobKind
+    status: JobStatus
+    progress: float
+    message: str | None
+    error: str | None
+    result: dict[str, Any] | None
+    created_by: uuid.UUID
+    created_at: datetime
+    started_at: datetime | None
+    finished_at: datetime | None
+
+
+class VideoJobList(BaseModel):
+    items: list[VideoJobOut]
     total: int
