@@ -17,7 +17,12 @@ from app.domains.rules_qa.video_revision import INSTRUCTIONS
 from app.integrations.llm.errors import LLMUnavailable
 from app.integrations.llm.fake import FakeLLMProvider
 from tests.integrations.video.support import base_data, fake_ffmpeg, segment, write_game
-from tests.rules_qa.video_script_support import coverage_output, coverage_rule, write_inputs
+from tests.rules_qa.video_script_support import (
+    FAKE_PAGE,
+    coverage_output,
+    coverage_rule,
+    write_inputs,
+)
 
 Run = Callable[..., tuple[int, str, str]]
 
@@ -471,13 +476,67 @@ def test_coverage_failure_only_warns(tmp_path: Path, run: Run) -> None:
 
 
 def test_without_pages_skips_coverage(tmp_path: Path, run: Run) -> None:
+    # 假資料的 s2 記的是第 6 頁，rulebook/ 只有第 5 頁：找不齊就不做，明確說沒有做
+    # （2026-11-21 永傑要求：原本只印「略過涵蓋檢查」，改成明確印出「這次沒有做規則涵蓋檢查」）
     folder = _game(tmp_path)
     data = _video(folder)
     llm = FakeLLMProvider(json_outputs=[_revise(_entry(_gold_to_red(data), ["highlights"]))])
     code, out, _ = run("revise", str(folder), REQUEST, llm=llm)
     assert code == 0
-    assert "略過涵蓋檢查" in out
+    assert "這次沒有做規則涵蓋檢查" in out
+    assert "第 6 頁" in out  # 說明缺哪一頁
     assert len(llm.calls) == 1
+
+
+def _same_page_data() -> dict[str, Any]:
+    """兩段的 source_pages 都是第 5 頁（rulebook/en-005.txt 存在）。"""
+    data = base_data()
+    segment(data, "s2")["source_pages"] = [{"lang": "en", "page": 5}]
+    return data
+
+
+def test_without_pages_uses_source_pages(tmp_path: Path, run: Run) -> None:
+    folder = _game(tmp_path, _same_page_data())
+    data = _video(folder)
+    related = coverage_rule(narration=("incomplete", ["b1"], "同時翻開"))
+    llm = FakeLLMProvider(
+        json_outputs=[
+            _revise(_entry(_gold_to_red(data), ["highlights"])),
+            coverage_output([related]),
+        ]
+    )
+    code, out, err = run("revise", str(folder), REQUEST, llm=llm)
+    assert code == 0, err
+    assert len(llm.calls) == 2  # 沿用頁面做了涵蓋檢查，不用店員再給 --pages
+    assert FAKE_PAGE.splitlines()[0] in llm.calls[1].kwargs["input"]
+    assert "source_pages" in out and "en-005.txt" in out
+    assert "同時翻開" in out
+    assert "這次沒有做規則涵蓋檢查" not in out
+
+
+def test_draft_folder_uses_rulebook_in_parent(tmp_path: Path, run: Run) -> None:
+    # 草稿資料夾（例如 <資料夾>/draft/）的規則書在上一層的 rulebook/
+    parent = write_inputs(tmp_path / "game")
+    draft = write_game(parent / "draft", _same_page_data())
+    data = _video(draft)
+    llm = FakeLLMProvider(
+        json_outputs=[_revise(_entry(_gold_to_red(data), ["highlights"])), coverage_output()]
+    )
+    code, out, err = run("revise", str(draft), REQUEST, llm=llm)
+    assert code == 0, err
+    assert len(llm.calls) == 2
+    assert "en-005.txt" in out
+
+
+def test_coverage_failure_says_not_done(tmp_path: Path, run: Run) -> None:
+    folder = _game(tmp_path)
+    data = _video(folder)
+    llm = FakeLLMProvider(
+        json_outputs=[_revise(_entry(_gold_to_red(data), ["highlights"])), coverage_output([])]
+    )
+    code, out, _ = run("revise", str(folder), REQUEST, "--pages", "rulebook/en-005.txt", llm=llm)
+    assert code == 0
+    assert "這次沒有做規則涵蓋檢查" in out
 
 
 # --- 本機驗收（tasks 3.3）發現的問題 ---
