@@ -47,8 +47,9 @@ def test_admin_uploads(api, as_admin: CurrentUser, game):
     assert response.status_code == 200, response.text
     data = response.json()
     assert data["game_id"] == game
+    # 回傳時每筆都補齊 5 個欄位：沒填的 avoid 是空陣列、category 是 null
     assert data["terms"] == [
-        RED,
+        {**RED, "avoid": []},
         {**ZONE, "category": None},
         {**KNIGHTS, "avoid": []},
     ]
