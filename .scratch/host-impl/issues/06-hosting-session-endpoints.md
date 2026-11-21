@@ -1,6 +1,6 @@
 # 06：三個一般請求的端點、權限、30 分鐘清除
 
-Status: ready-for-agent
+Status: resolved
 Blocked by: 03
 Spec: [spec](../../host/spec.md) §2、§11
 MR: [#68](https://github.com/GAE265/tabletop-hub-tw/pull/68)
@@ -33,11 +33,18 @@ MR: [#68](https://github.com/GAE265/tabletop-hub-tw/pull/68)
 
 ## 驗收條件
 
-- [ ] 先 commit 會失敗的測試，再 commit 功能（AGENTS.md §7.2）
-- [ ] spec §11.6 的 A-01 到 A-18 每一行都有測試而且通過
-- [ ] spec §9 的 M-08、M-09 有測試而且通過
-- [ ] 「沒有權限」的測試用 `as_player`、`as_shop_staff`、`as_admin`（AGENTS.md §4.5）
-- [ ] `service` 沒有 import FastAPI；`router` 沒有商業邏輯（AGENTS.md §4.2）
-- [ ] 沒有新增 migration
-- [ ] AGENTS.md §2 第 7 點的後端三項檢查通過
-- [ ] 做完的最後一個 commit 把本檔的 `Status` 改成 `resolved`
+- [x] 先 commit 會失敗的測試，再 commit 功能（AGENTS.md §7.2）
+- [x] spec §11.6 的 A-01 到 A-18 每一行都有測試而且通過
+- [x] spec §9 的 M-08、M-09 有測試而且通過
+- [x] 「沒有權限」的測試用 `as_player`、`as_shop_staff`、`as_admin`（AGENTS.md §4.5）
+- [x] `service` 沒有 import FastAPI；`router` 沒有商業邏輯（AGENTS.md §4.2）
+- [x] 沒有新增 migration
+- [x] AGENTS.md §2 第 7 點的後端三項檢查通過
+- [x] 做完的最後一個 commit 把本檔的 `Status` 改成 `resolved`
+
+## Comments
+
+- 2026-11-22：做完，沒有新增 migration。
+- 2026-11-22：改了一個自己剛寫的測試（AGENTS.md §7.5 要寫理由）：`test_service` 的 `test_list_shows_current_position` 期望值數錯了。從開場按 4 次下一步，會經過開局準備、夜晚第一步、夜晚第二步，到第 1 回合階段 1；原本寫成階段 2。同一張的 API 測試（A-08）算的是對的。
+- 2026-11-22：切換接話方式的做法：拿通行碼時帶了不同的 `turn_taking_mode`，回應裡的 `session` 先給新的值，通行碼記著它；真的切換發生在裝置用這張通行碼連上的時候。所以別人拿不到通行碼，也就改不了（A-13）。
+- 2026-11-22：`main.py` 多了主持的接線（查規則接 `rules_qa` 的只檢索方法、思考模型接 `integrations/llm`）。寫在 `main.py` 是為了讓 `host` 不必 import `rules_qa` 的 `repository`（AGENTS.md §4.2）。
