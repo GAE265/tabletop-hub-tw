@@ -375,6 +375,8 @@ def test_q12_two_requests_at_once_are_handled_one_by_one() -> None:
         "ask:StateChanged",
         "ask:ToolOutput",
         "ask:StateChanged",
+        # 回答也算一段（spec §6.1）：還沒播完就換階段，要先停掉
+        "next:Flush",
         "next:StateChanged",
         "next:Speak",
     ]

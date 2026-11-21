@@ -35,6 +35,8 @@ PauseReason = Literal["command", "page_hidden", "chatter"]
 QuestionKind = Literal["lookup", "thinking"]
 # 《血與刃的白薔薇》在 BoardGameGeek 的編號；games.bgg_id 有唯一限制，用它找這款遊戲
 WHITE_ROSE_BGG_ID = 400566
+# 同一段被閒聊切斷後，最多自動重講幾次；再被切斷就進入主持暫停（spec §6.5）
+MAX_AUTO_REPLAYS = 2
 # 整局記憶只留最近幾題（spec §8.2）
 RECENT_QUESTIONS_LIMIT = 5
 
@@ -117,11 +119,20 @@ class HostEvent:
     question_id: int | None = None
     answer: str | None = None
     chunks: tuple["FoundChunk", ...] | None = None
+    turn_taking_mode: str | None = None
 
     @staticmethod
-    def connected() -> "HostEvent":
-        """裝置連上了。這場主持還沒開場就交出開場台詞。"""
-        return HostEvent("connected")
+    def connected(turn_taking_mode: str | None = None) -> "HostEvent":
+        """裝置連上了。這場主持還沒開場就交出開場台詞；開場過了就是重新連線，只接回流程。
+
+        turn_taking_mode 有帶而且和現在不同，就是切換接話方式。
+        """
+        return HostEvent("connected", turn_taking_mode=turn_taking_mode)
+
+    @staticmethod
+    def page_hidden() -> "HostEvent":
+        """頁面被切走或鎖屏。"""
+        return HostEvent("page_hidden")
 
     @staticmethod
     def command(action: Action) -> "HostEvent":
@@ -139,9 +150,12 @@ class HostEvent:
         return HostEvent("playback_done", segment_id=segment_id)
 
     @staticmethod
-    def chatter() -> "HostEvent":
-        """閒聊：模型呼叫了「不回應」工具，或那句話被判定成不是在跟主持人說話。"""
-        return HostEvent("chatter")
+    def chatter(cut_segment_id: int | None = None) -> "HostEvent":
+        """閒聊：模型呼叫了「不回應」工具，或那句話被判定成不是在跟主持人說話。
+
+        cut_segment_id 是主持人因此被切斷的那一段；主持人沒在說話就不帶。
+        """
+        return HostEvent("chatter", segment_id=cut_segment_id)
 
     @staticmethod
     def ask(question: str, *, kind: QuestionKind) -> "HostEvent":
@@ -195,8 +209,9 @@ class Speak:
     """請主持人說一段內容。text 是要交給語音模型的文字。"""
 
     segment_id: int
-    # line：固定台詞（code 是 spec §4.1 的代號）；rule_points：規則要點
-    kind: Literal["line", "rule_points"]
+    # line：固定台詞（code 是 spec §4.1 的代號）；rule_points：規則要點；
+    # answer：重新交出一題規則問題的回答（問題與查到的片段，或思考模型的答案）
+    kind: Literal["line", "rule_points", "answer"]
     text: str
     code: str | None = None
     phase_number: int | None = None
@@ -233,6 +248,8 @@ class ToolOutput:
     # 為假時只把結果記進對話，不請主持人接著回答
     respond: bool = True
     chunks: tuple[FoundChunk, ...] = ()
+    # 這個回答被記成「正在說、還沒播完的那一段」時的編號；沒有記就是 None
+    segment_id: int | None = None
 
 
 @dataclass(frozen=True)
@@ -471,8 +488,13 @@ def _line_segment(code: str, *, auto_advance: bool = False) -> dict[str, Any]:
     }
 
 
-def _speak(memory: HostMemory, segment: dict[str, Any], run: _Run) -> dict[str, Any]:
-    """替這一段編號、請主持人說，並記成「正在說、還沒播完的那一段」。回傳要寫回記憶的欄位。"""
+def _speak(
+    memory: HostMemory, segment: dict[str, Any], run: _Run, *, track: bool = True
+) -> dict[str, Any]:
+    """替這一段編號、請主持人說。回傳要寫回記憶的欄位。
+
+    track 為真時記成「正在說、還沒播完的那一段」；接回流程那一句很短，不記。
+    """
     segment_id = memory["segment_seq"] + 1
     numbered = {**segment, "id": segment_id}
     run.emit(
@@ -485,7 +507,45 @@ def _speak(memory: HostMemory, segment: dict[str, Any], run: _Run) -> dict[str, 
             version=numbered["version"],
         )
     )
+    if not track:
+        return {"segment_seq": segment_id}
     return {"segment": numbered, "segment_seq": segment_id}
+
+
+def _back_to_segment(memory: HostMemory) -> dict[str, Any]:
+    line = content.back_to_line(
+        step=memory["step"],
+        turn_number=memory["turn_number"],
+        phase_number=memory["phase_number"],
+    )
+    return {
+        "kind": "line",
+        "code": "back_to",
+        "text": content.verbatim_request(line),
+        "phase_number": None,
+        "version": None,
+        "auto_advance": False,
+    }
+
+
+def _answer_segment(question: str, output: str) -> dict[str, Any]:
+    """一題規則問題的回答。記的是問題與要交給主持人的內容，不是主持人說出口的字。"""
+    return {
+        "kind": "answer",
+        "code": None,
+        "text": f"玩家剛才問：「{question}」\n{output}",
+        "phase_number": None,
+        "version": None,
+        "auto_advance": False,
+    }
+
+
+def _enter_pause(state: HostMemory, reason: PauseReason, run: _Run) -> dict[str, Any]:
+    """進入主持暫停：主持人馬上停、不回話；那一段留著，「繼續」時重講（spec §6.2）。"""
+    updates: dict[str, Any] = {"paused": True, "pause_reason": reason}
+    run.emit(Flush())
+    _emit_state(state, updates, run)
+    return updates
 
 
 def _emit_state(memory: HostMemory, updates: dict[str, Any], run: _Run) -> None:
@@ -511,6 +571,7 @@ def _route_event(state: HostMemory) -> str:
         "connected": "connect",
         "voice_text": "verify_voice_command",
         "playback_done": "playback_done",
+        "page_hidden": "pause",
         "chatter": "chatter",
         "ask": "begin_question",
         "think": "thinking_model",
@@ -534,12 +595,36 @@ def _route_command(state: HostMemory) -> str:
 
 
 def _connect(state: HostMemory, config: RunnableConfig) -> dict[str, Any]:
-    """裝置連上。還沒開場就交出開場台詞。"""
+    """裝置連上。還沒開場就交出開場台詞；開場過了就是重新連線，主持人只說接回流程那一句。"""
     run = _run_of(config)
-    if state["opened"]:
-        return {}
-    updates: dict[str, Any] = {"opened": True}
-    updates.update(_speak(state, _node_segment(("opening", None, None)), run))
+    updates: dict[str, Any] = {}
+    mode = state["event"]["turn_taking_mode"]
+    if mode is not None and mode != state["turn_taking_mode"]:
+        updates["turn_taking_mode"] = mode
+    if not state["opened"]:
+        updates["opened"] = True
+        if "turn_taking_mode" in updates:
+            _emit_state(state, updates, run)
+        updates.update(_speak(state, _node_segment(("opening", None, None)), run))
+        return updates
+    if state["open_question"] is not None:
+        # 舊連線上的工具請求已經不在了，還在等的題目作廢
+        updates["open_question"] = None
+    if state["step"] == "ended":
+        # ✅ 接著主持：回到結束前的節點，狀態變回進行中（spec §2.1）
+        updates.update(
+            step=state["step_before_end"] or "opening",
+            step_before_end=None,
+            winner=None,
+            segment=None,
+            replay_count=0,
+        )
+    if updates:
+        _emit_state(state, updates, run)
+    merged: HostMemory = {**state, **updates}  # type: ignore[typeddict-item]
+    if not merged["paused"]:
+        # 不重講那個階段；玩家說「繼續」才重講（D10 §4）
+        updates.update(_speak(merged, _back_to_segment(merged), run, track=False))
     return updates
 
 
@@ -555,9 +640,12 @@ def _verify_voice_command(state: HostMemory, config: RunnableConfig) -> dict[str
 
 
 def _playback_done(state: HostMemory) -> dict[str, Any]:
-    """裝置回報播完：清掉那一段；開場與夜晚兩步播完就自動進下一個節點。"""
+    """裝置回報播完：清掉那一段；開場與夜晚兩步播完就自動進下一個節點。
+
+    主持暫停中不清也不往下走：那一段留到「繼續」時重講（spec §3.1）。
+    """
     segment = state["segment"]
-    if segment is None or segment["id"] != state["event"]["segment_id"]:
+    if state["paused"] or segment is None or segment["id"] != state["event"]["segment_id"]:
         return {"command": None}
     updates: dict[str, Any] = {"segment": None, "replay_count": 0, "command": None}
     if segment["auto_advance"] and state["step"] in _AUTO_ADVANCE_STEPS:
@@ -585,8 +673,11 @@ def _change_step(state: HostMemory, config: RunnableConfig) -> dict[str, Any]:
         "turn_number": turn_number,
         "phase_number": phase_number,
         "replay_count": 0,
+        # 主持暫停中換節點：照做，暫停解除，被打斷的那一段作廢（spec §3.2）
+        "paused": False,
+        "pause_reason": None,
     }
-    if state["segment"] is not None:
+    if state["segment"] is not None and not state["paused"]:
         # 舊節點的那一段還沒播完：先停掉，換了節點那一段就作廢
         run.emit(Flush())
     _emit_state(state, updates, run)
@@ -595,22 +686,28 @@ def _change_step(state: HostMemory, config: RunnableConfig) -> dict[str, Any]:
 
 
 def _pause(state: HostMemory, config: RunnableConfig) -> dict[str, Any]:
-    """進入主持暫停。已結束或已經在暫停中就不動。"""
-    run = _run_of(config)
+    """進入主持暫停：指令、按鍵，或頁面被切走。已結束或已經在暫停中就不動。"""
     if state["step"] == "ended" or state["paused"]:
         return {}
-    updates: dict[str, Any] = {"paused": True, "pause_reason": "command"}
-    _emit_state(state, updates, run)
-    return updates
+    reason: PauseReason = "page_hidden" if state["event"]["type"] == "page_hidden" else "command"
+    return _enter_pause(state, reason, _run_of(config))
 
 
 def _resume(state: HostMemory, config: RunnableConfig) -> dict[str, Any]:
-    """繼續。已結束或不在暫停中就不動。"""
+    """繼續（spec §6.3）。有被打斷的那一段就從頭重講；沒有的話，暫停中只接回流程，否則不動。"""
     run = _run_of(config)
-    if state["step"] == "ended" or not state["paused"]:
+    if state["step"] == "ended":
         return {}
-    updates: dict[str, Any] = {"paused": False, "pause_reason": None}
-    _emit_state(state, updates, run)
+    updates: dict[str, Any] = {}
+    if state["paused"]:
+        updates.update(paused=False, pause_reason=None)
+        _emit_state(state, updates, run)
+    segment = state["segment"]
+    if segment is not None:
+        updates["replay_count"] = 0
+        updates.update(_speak(state, segment, run))
+    elif state["paused"]:
+        updates.update(_speak(state, _back_to_segment(state), run, track=False))
     return updates
 
 
@@ -643,9 +740,22 @@ def _end(state: HostMemory, winner: content.Winner | None, run: _Run) -> dict[st
     return updates
 
 
-def _chatter(state: HostMemory) -> dict[str, Any]:
-    """閒聊。不會作廢正在等的題目（spec §8.4）。"""
-    return {}
+def _chatter(state: HostMemory, config: RunnableConfig) -> dict[str, Any]:
+    """閒聊（spec §6.5）。不會作廢正在等的題目。
+
+    主持人沒在說話就不做事；那一段因此被切斷就自動重講，同一段最多 2 次，
+    再被切斷就進入主持暫停。
+    """
+    run = _run_of(config)
+    segment = state["segment"]
+    cut_segment_id = state["event"]["segment_id"]
+    if state["paused"] or segment is None or segment["id"] != cut_segment_id:
+        return {}
+    if state["replay_count"] >= MAX_AUTO_REPLAYS:
+        return _enter_pause(state, "chatter", run)
+    updates: dict[str, Any] = {"replay_count": state["replay_count"] + 1}
+    updates.update(_speak(state, segment, run))
+    return updates
 
 
 # --- 查規則與思考模型（spec §8） ---
@@ -707,6 +817,44 @@ def _found_chunks(chunks: Sequence[dict[str, Any]]) -> tuple[FoundChunk, ...]:
     return tuple(FoundChunk(page=chunk["page"], content=chunk["content"]) for chunk in chunks)
 
 
+_HELD_OUTPUT = "主持暫停中。這一題先不要回答，等玩家說「繼續」再說。"
+
+
+def _hand_over(
+    state: HostMemory,
+    run: _Run,
+    *,
+    open_question: dict[str, Any],
+    output: str,
+    chunks: Sequence[dict[str, Any]],
+) -> dict[str, Any]:
+    """把一題的結果交給主持人。回傳要寫回記憶的欄位。
+
+    問了之後才進入主持暫停：答案不唸，記成被打斷的那一段，「繼續」時才說。
+    其他情況照常交；沒有別的段落還沒播完時，這個回答就是「正在說的那一段」。
+    """
+    segment = _answer_segment(open_question["question"], output)
+    segment_id = state["segment_seq"] + 1
+    if state["paused"] and not open_question["asked_while_paused"]:
+        run.emit(ToolOutput(question_id=open_question["id"], output=_HELD_OUTPUT, respond=False))
+        return {"segment": {**segment, "id": segment_id}, "segment_seq": segment_id}
+    if state["segment"] is not None:
+        # 被問題打斷的那一段留著：答完只接回流程，玩家說「繼續」才重講（spec §6.4）
+        run.emit(
+            ToolOutput(question_id=open_question["id"], output=output, chunks=_found_chunks(chunks))
+        )
+        return {}
+    run.emit(
+        ToolOutput(
+            question_id=open_question["id"],
+            output=output,
+            chunks=_found_chunks(chunks),
+            segment_id=segment_id,
+        )
+    )
+    return {"segment": {**segment, "id": segment_id}, "segment_seq": segment_id}
+
+
 def _begin_question(state: HostMemory, config: RunnableConfig) -> dict[str, Any]:
     """替這一題編號，並讓現況顯示「正在查規則」。新的一題會取代還在等的舊題（spec §8.4）。"""
     run = _run_of(config)
@@ -719,6 +867,8 @@ def _begin_question(state: HostMemory, config: RunnableConfig) -> dict[str, Any]
             "kind": event["kind"],
             "question": event["question"],
             "chunks": [],
+            # 暫停中才問的照常回答；問了之後才暫停的，答案留到「繼續」（spec §6.2）
+            "asked_while_paused": state["paused"],
         },
     }
     if state["open_question"] is None:
@@ -746,10 +896,8 @@ def _deliver_answer(state: HostMemory, config: RunnableConfig) -> dict[str, Any]
         output = _answer_output(state, event["answer"])
     else:
         output = _give_up_output(state, chunks)
-    run.emit(
-        ToolOutput(question_id=open_question["id"], output=output, chunks=_found_chunks(chunks))
-    )
-    updates = {"open_question": None}
+    updates = _hand_over(state, run, open_question=open_question, output=output, chunks=chunks)
+    updates["open_question"] = None
     _emit_state(state, updates, run)
     run.outcome.result["delivered"] = True
     return updates
@@ -779,11 +927,13 @@ def _build_graph(rules_lookup: RulesLookup, thinking_model: LLMProvider | None) 
                 )
             )
             return updates
-        run.emit(
-            ToolOutput(
-                question_id=open_question["id"],
+        updates.update(
+            _hand_over(
+                state,
+                run,
+                open_question=open_question,
                 output=_lookup_output(state, chunks),
-                chunks=_found_chunks(chunks),
+                chunks=chunks,
             )
         )
         updates["open_question"] = None
@@ -829,6 +979,7 @@ def _build_graph(rules_lookup: RulesLookup, thinking_model: LLMProvider | None) 
             "connect": "connect",
             "verify_voice_command": "verify_voice_command",
             "playback_done": "playback_done",
+            "pause": "pause",
             "chatter": "chatter",
             "begin_question": "begin_question",
             "thinking_model": "thinking_model",
