@@ -6,7 +6,7 @@
 - 處理函式拋出例外不會讓執行緒停下：log 記下堆疊，工作標為失敗（error 給店員、
   error_detail 給開發者）。寫入結果本身又出錯時只記 log，那個工作留在 running，
   JOB_TIMEOUT_MINUTES 分鐘後建立新工作時被釋放。
-- 處理函式（MR 4、MR 8、MR 10）呼叫 LLM、TTS、ffmpeg 都必須自己設逾時，不能依賴
+- 處理函式（草稿、產生影片、修改）呼叫 LLM、TTS、ffmpeg 都必須自己設逾時，不能依賴
   JOB_TIMEOUT_MINUTES 的出口。
 - 已知限制：假設後端只有一個程序；伺服器重新啟動會中斷進行中的工作。
 """
@@ -84,7 +84,7 @@ class JobRunner:
         repository: RepositoryFactory = VideoJobRepository,
     ) -> None:
         self._session_factory = session_factory
-        # 不複製：之後註冊的處理函式（MR 4 起）也看得到
+        # 不複製：之後才註冊的處理函式也看得到
         self._handlers = handlers
         self._repository = repository
         self._wake = threading.Event()

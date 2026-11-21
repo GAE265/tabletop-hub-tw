@@ -105,7 +105,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app = FastAPI(title="遊任有娛 tabletop-hub-tw", lifespan=lifespan)
     app.state.settings = settings
     app.state.session_factory = create_session_factory(engine)
-    # 規則影片工作的處理函式（kind → 函式）；MR 4、MR 8、MR 10 依序註冊
+    # 規則影片工作的處理函式（kind → 函式）；草稿、產生影片、修改的處理函式依序在這裡註冊
     app.state.rules_video_job_handlers = {}
     app.state.rules_video_runner = None
     # LLM_PROVIDER、GAMES_ADVISOR_EMBEDDING_* 設錯時在啟動就明確報錯

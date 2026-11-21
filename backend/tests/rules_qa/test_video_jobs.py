@@ -2,7 +2,7 @@
 
 建立工作測 service；執行測 JobRunner.run_once()（不開執行緒，結果才確定）；
 只有「執行緒實際運作」與「啟動時的處理」會真的啟動後端，用輪流檢查、有上限的等待。
-處理函式一律用測試裡手寫的 FakeJobHandler（真正的處理函式在 MR 4、MR 8、MR 10）。
+處理函式一律用測試裡手寫的 FakeJobHandler（真正的處理函式隨草稿、產生影片、修改加上）。
 """
 
 import logging

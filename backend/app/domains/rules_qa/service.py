@@ -412,7 +412,7 @@ class VideoJobStore(Protocol):
 class VideoJobService:
     """建立與查詢規則影片的工作（add-rules-video-mobile design.md D2）。
 
-    建立工作的 API 在 MR 4（草稿）、MR 8（影片）、MR 10（修改）；權限同影片專案。
+    建立工作的 API 隨各種工作（草稿、產生影片、修改）加上；權限同影片專案。
     """
 
     def __init__(
