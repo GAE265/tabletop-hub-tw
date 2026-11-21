@@ -1,6 +1,6 @@
 # 01：接回 dev、套件與設定、即時語音的介面與 fake
 
-Status: ready-for-agent
+Status: resolved
 Blocked by: 無
 Spec: [spec](../../host/spec.md) §13.2、§13.3、§13.4
 MR: [#68](https://github.com/GAE265/tabletop-hub-tw/pull/68)
@@ -30,11 +30,11 @@ fake 要做到：測試照劇本送出 spec §13.3「呼叫端會收到的事」
 
 ## 驗收條件
 
-- [ ] `dev` 已接回，`GLOSSARY.md` 兩區都在
-- [ ] 先 commit 會失敗的測試，再 commit 功能（AGENTS.md §7.2）
-- [ ] fake 的測試：每一種事件都送得出來；每一個動作都記得到；「請主持人開口」被拒時回報原因
-- [ ] 設定的測試：預設是 `fake`；`cloud` 缺金鑰或 API Host 時啟動失敗
-- [ ] 整合層沒有 import `domains/` 的任何東西（AGENTS.md §4.2）
-- [ ] `.env.example` 只寫欄位名與說明（AGENTS.md §2 第 1 點）
-- [ ] AGENTS.md §2 第 7 點的後端三項檢查通過
-- [ ] 做完的最後一個 commit 把本檔的 `Status` 改成 `resolved`
+- [x] `dev` 已接回，`GLOSSARY.md` 兩區都在
+- [x] 先 commit 會失敗的測試，再 commit 功能（AGENTS.md §7.2）
+- [x] fake 的測試：每一種事件都送得出來；每一個動作都記得到；「請主持人開口」被拒時回報原因
+- [x] 設定的測試：預設是 `fake`；`cloud` 缺金鑰或 API Host 時啟動失敗
+- [x] 整合層沒有 import `domains/` 的任何東西（AGENTS.md §4.2）
+- [x] `.env.example` 只寫欄位名與說明（AGENTS.md §2 第 1 點）
+- [x] AGENTS.md §2 第 7 點的後端三項檢查通過
+- [x] 做完的最後一個 commit 把本檔的 `Status` 改成 `resolved`
