@@ -23,6 +23,7 @@ from app.domains.matches.router import router as matches_router
 from app.domains.rules_ingest.router import router as rules_ingest_router
 from app.domains.rules_qa.repository import ChunkHit, RulesQaRepository
 from app.domains.rules_qa.router import router as rules_qa_router
+from app.domains.rules_qa.router import video_terms_router as rules_qa_video_terms_router
 from app.domains.rules_qa.router import videos_router as rules_qa_videos_router
 from app.domains.rules_qa.service import RulesQaService
 from app.domains.rules_qa.video_jobs import JobRunner, recover_interrupted_jobs
@@ -161,6 +162,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(rules_ingest_router, prefix=API_PREFIX)
     app.include_router(rules_qa_router, prefix=API_PREFIX)
     app.include_router(rules_qa_videos_router, prefix=API_PREFIX)
+    app.include_router(rules_qa_video_terms_router, prefix=API_PREFIX)
     app.include_router(matches_router, prefix=API_PREFIX)
     app.include_router(host_router, prefix=API_PREFIX)
     app.include_router(shops_router, prefix=API_PREFIX)

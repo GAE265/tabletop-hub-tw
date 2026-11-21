@@ -21,6 +21,7 @@ from app.domains.rules_qa.models import (
     RulesQaVideo,
     RulesQaVideoJob,
     RulesQaVideoProject,
+    RulesQaVideoTerms,
 )
 
 
@@ -388,3 +389,36 @@ class VideoJobRepository(SessionRepository):
             .values(status="failed", error=error, finished_at=func.now())
         )
         return result.rowcount
+
+
+# --------------------------------------------------------------------------- 規則影片的用語對照表
+
+
+@dataclass(frozen=True)
+class VideoTermsRecord:
+    game_id: int
+    terms: list[dict[str, Any]]
+    updated_by: uuid.UUID
+    updated_at: datetime
+
+
+class VideoTermsRepository(SessionRepository):
+    """rules_qa_video_terms（add-rules-video-mobile design.md D4）。"""
+
+    def get(self, game_id: int) -> VideoTermsRecord | None:
+        row = self.session.get(RulesQaVideoTerms, game_id, populate_existing=True)
+        if row is None:
+            return None
+        return VideoTermsRecord(row.game_id, row.terms, row.updated_by, row.updated_at)
+
+    def replace(self, game_id: int, terms: list[dict[str, Any]], updated_by: uuid.UUID) -> None:
+        """整份取代；沒有就新增。"""
+        statement = pg_insert(RulesQaVideoTerms).values(
+            game_id=game_id, terms=terms, updated_by=updated_by
+        )
+        self.session.execute(
+            statement.on_conflict_do_update(
+                index_elements=[RulesQaVideoTerms.game_id],
+                set_={"terms": terms, "updated_by": updated_by, "updated_at": func.now()},
+            )
+        )

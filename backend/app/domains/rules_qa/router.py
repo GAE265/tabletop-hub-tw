@@ -13,6 +13,7 @@ from app.domains.rules_qa.repository import (
     RulesQaRepository,
     VideoJobRepository,
     VideoProjectRepository,
+    VideoTermsRepository,
 )
 from app.domains.rules_qa.schemas import (
     MessageRequest,
@@ -26,8 +27,15 @@ from app.domains.rules_qa.schemas import (
     VideoProjectList,
     VideoProjectOut,
     VideoRequest,
+    VideoTermsIn,
+    VideoTermsOut,
 )
-from app.domains.rules_qa.service import RulesQaService, VideoJobService, VideoProjectService
+from app.domains.rules_qa.service import (
+    RulesQaService,
+    VideoJobService,
+    VideoProjectService,
+    VideoTermsService,
+)
 
 router = APIRouter(prefix="/rules-lessons", tags=["rules_qa"])
 
@@ -156,3 +164,33 @@ def get_video_job(
 ) -> VideoJobOut:
     """一個工作的狀態、進度、說明、失敗原因與結果。"""
     return service.get(user, project_id, job_id)
+
+
+# --------------------------------------------------------------------------- 規則影片的用語對照表
+
+video_terms_router = APIRouter(prefix="/games/{game_id}/video-terms", tags=["rules_qa"])
+
+
+def get_video_terms_service(
+    session: Annotated[Session, Depends(get_session)],
+) -> VideoTermsService:
+    return VideoTermsService(VideoTermsRepository(session), RulesQaRepository(session))
+
+
+VideoTermsServiceDep = Annotated[VideoTermsService, Depends(get_video_terms_service)]
+
+
+@video_terms_router.put("", response_model=VideoTermsOut)
+def replace_video_terms(
+    game_id: int, body: VideoTermsIn, user: CurrentUserDep, service: VideoTermsServiceDep
+) -> VideoTermsOut:
+    """上傳這款遊戲的用語對照表（整份取代）。只限管理員；空陣列代表確認不使用對照表。"""
+    return service.replace(user, game_id, body)
+
+
+@video_terms_router.get("", response_model=VideoTermsOut)
+def get_video_terms(
+    game_id: int, user: CurrentUserDep, service: VideoTermsServiceDep
+) -> VideoTermsOut:
+    """這款遊戲的用語對照表；從未上傳回 404（與上傳空表不同）。"""
+    return service.get(user, game_id)
