@@ -46,8 +46,12 @@ class FakeThinkingModel(LLMProvider):
         self.error = error
         self.prompts: list[str] = []
         self.other_calls: list[str] = []
+        # 設定之後，generate 會等到 release 被 set 才回來（模擬思考模型想很久）
+        self.release: threading.Event | None = None
 
     def generate(self, prompt: str) -> str:
+        if self.release is not None:
+            self.release.wait(timeout=5)
         self.prompts.append(prompt)
         if self.error is not None:
             raise self.error
