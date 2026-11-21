@@ -15,6 +15,7 @@ from app.integrations.llm.types import JsonSchema
 from app.integrations.video.model import Video
 
 STATUS_LABELS = {"complete": "完整", "incomplete": "不完整", "missing": "未涵蓋"}
+CATEGORY_LABELS = {"condition": "條件", "action": "動作", "purpose": "目的說明"}
 TRACK_LABELS = {"narration": "旁白", "subtitle": "字幕"}
 KIND_LABELS = {"contradiction": "與原文相反", "not_in_rulebook": "規則書沒有的規則"}
 
@@ -31,7 +32,11 @@ INSTRUCTIONS = """你是桌遊規則教學影片的審稿者，負責檢查旁�
 3. 旁白可以比字幕短，但條件不能少；只要少了條件就是 incomplete。
 4. problems 列出與原文相反的句子（contradiction），或寫了原文沒有的規則的句子（not_in_rulebook），
    track 標出是旁白（narration）還是字幕（subtitle）。只是換句話說、口語化，不算問題。
-5. 只根據輸入的原文判斷，不憑記憶補充規則。"""
+5. 只根據輸入的原文判斷，不憑記憶補充規則。
+6. 每條規則標出 category：
+   - condition（條件）：決定什麼情況下做什麼，例如「如果沒有血刃牌」「直到一方獲勝或所有輪結束」。
+   - action（動作）：要做的事或結果，例如「移除所有幽魂牌」「翻開所有牌」。
+   - purpose（目的說明）：解釋為什麼這樣做，不影響怎麼玩，例如「讓人無法判斷誰打出哪張牌」。"""
 
 _TRACK = {
     "type": "object",
@@ -55,11 +60,15 @@ SCHEMA = JsonSchema(
                     "type": "object",
                     "properties": {
                         "rule_id": {"type": "string"},
+                        "category": {
+                            "type": "string",
+                            "enum": ["condition", "action", "purpose"],
+                        },
                         "source": {"type": "string"},
                         "narration": _TRACK,
                         "subtitle": _TRACK,
                     },
-                    "required": ["rule_id", "source", "narration", "subtitle"],
+                    "required": ["rule_id", "category", "source", "narration", "subtitle"],
                     "additionalProperties": False,
                 },
             },
@@ -99,14 +108,26 @@ class RuleCheck:
     narration: TrackCheck
     subtitle: TrackCheck
     unmatched_beats: list[str] = field(default_factory=list)
+    category: str = "condition"  # condition | action | purpose
+
+    @property
+    def is_hint(self) -> bool:
+        """目的說明：另列為提示，不算漏講（2026-11-21 永傑決定）。"""
+        return self.category == "purpose"
 
     @property
     def narration_shorter(self) -> bool:
-        """字幕完整、旁白卻不完整或沒講到：旁白比字幕少條件。"""
-        return self.subtitle.status == "complete" and self.narration.status != "complete"
+        """字幕完整、旁白卻不完整或沒講到：旁白比字幕少條件（目的說明除外）。"""
+        return (
+            not self.is_hint
+            and self.subtitle.status == "complete"
+            and self.narration.status != "complete"
+        )
 
     @property
     def has_issue(self) -> bool:
+        if self.is_hint:
+            return bool(self.unmatched_beats)
         return (
             self.narration.status != "complete"
             or self.subtitle.status != "complete"
@@ -176,7 +197,16 @@ def _to_report(raw: dict[str, Any], known: set[str]) -> CoverageReport:
     for entry in raw["rules"]:
         narration, subtitle = _track(entry["narration"]), _track(entry["subtitle"])
         unmatched = sorted({k for k in narration.beat_keys + subtitle.beat_keys if k not in known})
-        rules.append(RuleCheck(entry["rule_id"], entry["source"], narration, subtitle, unmatched))
+        rules.append(
+            RuleCheck(
+                entry["rule_id"],
+                entry["source"],
+                narration,
+                subtitle,
+                unmatched,
+                entry.get("category", "condition"),
+            )
+        )
     problems = [
         Problem(
             beat_key=p["beat_key"],
@@ -211,18 +241,22 @@ def _markdown(report: CoverageReport) -> str:
         "由 LLM 把本章原文的每一條規則分別與旁白、字幕對照；可能漏報或誤報，判斷以人為準。",
         "",
     ]
+    hints = [rule for rule in report.rules if rule.is_hint]
     if not report.has_issues:
-        return "\n".join([*lines, "沒有發現問題。", ""])
+        return "\n".join([*lines, "沒有發現問題。", "", *_hint_lines(hints)])
 
-    lines += ["| 規則 | 原文 | 旁白 | 字幕 | 標記 |", "|---|---|---|---|---|"]
+    lines += ["| 規則 | 分類 | 原文 | 旁白 | 字幕 | 標記 |", "|---|---|---|---|---|---|"]
     for rule in report.rules:
+        if rule.is_hint:
+            continue
         marks = []
         if rule.narration_shorter:
             marks.append("**旁白比字幕少條件**")
         if rule.unmatched_beats:
             marks.append(f"無法對應的句子：{'、'.join(rule.unmatched_beats)}")
         lines.append(
-            f"| {rule.rule_id} | {_cell(rule.source)} | {_cell(_track_text(rule.narration))} "
+            f"| {rule.rule_id} | {CATEGORY_LABELS.get(rule.category, rule.category)} "
+            f"| {_cell(rule.source)} | {_cell(_track_text(rule.narration))} "
             f"| {_cell(_track_text(rule.subtitle))} | {'；'.join(marks) or ''} |"
         )
     if report.problems:
@@ -239,7 +273,28 @@ def _markdown(report: CoverageReport) -> str:
                 f"| {key} | {TRACK_LABELS.get(p.track, p.track)} | "
                 f"{KIND_LABELS.get(p.kind, p.kind)} | {_cell(p.text)} | {_cell(p.reason)} |"
             )
+    lines += ["", *_hint_lines(hints)]
     return "\n".join(lines) + "\n"
+
+
+def _hint_lines(hints: list[RuleCheck]) -> list[str]:
+    """目的說明另列為提示：不算漏講，但不隱藏。"""
+    if not hints:
+        return []
+    lines = [
+        "### 提示（目的說明，不算漏講）",
+        "",
+        "原文中解釋「為什麼這樣做」的句子。不影響怎麼玩，所以不算漏講；列出來供判斷要不要講。",
+        "",
+        "| 規則 | 原文 | 旁白 | 字幕 |",
+        "|---|---|---|---|",
+    ]
+    for rule in hints:
+        lines.append(
+            f"| {rule.rule_id} | {_cell(rule.source)} | {_cell(_track_text(rule.narration))} "
+            f"| {_cell(_track_text(rule.subtitle))} |"
+        )
+    return [*lines, ""]
 
 
 def markdown_from_json(text: str) -> str:
@@ -252,6 +307,7 @@ def markdown_from_json(text: str) -> str:
             TrackCheck(**r["narration"]),
             TrackCheck(**r["subtitle"]),
             r.get("unmatched_beats", []),
+            r.get("category", "condition"),
         )
         for r in raw["rules"]
     ]
