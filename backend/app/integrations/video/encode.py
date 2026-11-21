@@ -102,6 +102,7 @@ class EncodedSegment:
     segment_key: str
     path: Path
     reused: bool
+    content_hash: str = ""  # 段影片的完整內容雜湊（修改流程記在段的 state.content_hash）
 
 
 def encode_segments(
@@ -122,8 +123,8 @@ def encode_segments(
         # 或「轉成檔名後相同」（s/1 與 s-1）的段各有自己的檔名前綴，清舊快取時不會互刪（#75 審核）
         key_id = hashlib.sha256(key.encode()).hexdigest()[:8]
         prefix = f"{safe_file_part(key)}__{key_id}__"
-        content = segment_hash(video, timing, style, renderer)[:16]
-        path = folder / f"{prefix}{content}.mp4"
+        full_hash = segment_hash(video, timing, style, renderer)
+        path = folder / f"{prefix}{full_hash[:16]}.mp4"
         reused = path.is_file()
         if not reused:
             encoder.encode(timing, renderer, path)
@@ -132,7 +133,7 @@ def encode_segments(
             for old in folder.glob(f"{glob.escape(prefix)}*.mp4"):
                 if old != path and not old.name.endswith(".tmp.mp4"):
                     old.unlink()
-        results.append(EncodedSegment(key, path, reused))
+        results.append(EncodedSegment(key, path, reused, full_hash))
     return results
 
 
