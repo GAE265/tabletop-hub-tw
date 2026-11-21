@@ -22,6 +22,7 @@ void main() {
       PickedImage(name: 'sample.png', bytes: Uint8List.fromList([65, 66, 67])),
     );
     expect(page.content, '# title');
+    expect(page.chunkCount, 2);
     expect(adapter.requests.single.path, '/api/v1/games/1/manual-pages/1');
     expect(adapter.requests.single.method, 'PUT');
     expect(
@@ -48,6 +49,7 @@ void main() {
     final result = await HttpManualPagesRepository(dio).list(9);
     expect(result.ocrProvider, 'cloud');
     expect(result.items.single, const ManualPage(page: 1, content: ''));
+    expect(result.items.single.chunkCount, 0);
     expect(adapter.requests.single.path, '/api/v1/games/9/manual-pages');
   });
 

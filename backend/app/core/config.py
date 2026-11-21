@@ -67,7 +67,7 @@ class Settings(BaseSettings):
     storage_container: str | None = None
     # 允許跨來源呼叫 API 的前端網址，逗號分隔。預設是本機 Flutter Web 固定的 port；
     # 部署時必須改成實際的前端網址
-    cors_allow_origins: str = "http://localhost:5000"
+    cors_allow_origins: str = "http://100.123.189.49:8080"
 
     @property
     def cors_origins(self) -> list[str]:

@@ -85,7 +85,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('import-button')));
     await tester.pumpAndSettle();
-    expect(find.text('成功'), findsOneWidget);
+    expect(find.text('成功（索引 3 段）'), findsOneWidget);
     expect(repo.lists, [1]);
     await tester.scrollUntilVisible(
       find.text('OCR：cloud'),

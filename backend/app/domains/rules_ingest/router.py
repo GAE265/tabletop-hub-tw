@@ -9,6 +9,8 @@ from app.core.games.repository import GameRepository
 from app.domains.rules_ingest.repository import ManualPageRepository
 from app.domains.rules_ingest.schemas import ManualPageListOut, ManualPageOut
 from app.domains.rules_ingest.service import MAX_IMAGE_BYTES, ManualPagesService
+from app.domains.rules_qa.router import get_rules_qa_service
+from app.domains.rules_qa.service import RulesQaService
 from app.integrations.ocr.base import VisionProvider
 
 router = APIRouter(prefix="/games/{games_id}/manual-pages", tags=["rules_ingest"])
@@ -22,12 +24,14 @@ def get_service(
     request: Request,
     session: Annotated[Session, Depends(get_session)],
     vision: Annotated[VisionProvider, Depends(get_vision)],
+    qa_service: Annotated[RulesQaService, Depends(get_rules_qa_service)],
 ) -> ManualPagesService:
     return ManualPagesService(
         ManualPageRepository(session),
         GameRepository(session),
         vision,
         request.app.state.settings.ocr_provider,
+        reindex=qa_service.index_page,
     )
 
 

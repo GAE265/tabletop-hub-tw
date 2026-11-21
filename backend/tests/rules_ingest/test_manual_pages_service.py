@@ -56,10 +56,31 @@ class FakeRecordingVisionProvider(FakeVisionProvider):
         return super().generate_json(**kwargs)
 
 
-def make_service(replies=None, exists=True):
+class FakeReindex:
+    """取代 rules_qa 的索引回呼：記錄呼叫參數，可注入錯誤與回傳的段落數。"""
+
+    def __init__(self, count=1, error=None):
+        self.calls = []
+        self.count = count
+        self.error = error
+
+    def __call__(self, games_id, page, content):
+        self.calls.append((games_id, page, content))
+        if self.error is not None:
+            raise self.error
+        return self.count
+
+
+def make_service(replies=None, exists=True, reindex=None):
     pages = FakePagesRepository()
     vision = FakeRecordingVisionProvider(replies)
-    return ManualPagesService(pages, FakeGamesRepository(exists), vision, "fake")
+    return ManualPagesService(
+        pages,
+        FakeGamesRepository(exists),
+        vision,
+        "fake",
+        reindex=FakeReindex() if reindex is None else reindex,
+    )
 
 
 @pytest.mark.parametrize("user", [TEST_ADMIN, TEST_SHOP_STAFF])
@@ -67,7 +88,12 @@ def make_service(replies=None, exists=True):
 def test_import_transcribes_original_image_once(user, image):
     service = make_service([{"markdown": "# 標題"}])
     result = service.import_page(user, 1, 1, image)
-    assert result.model_dump() == {"games_id": 1, "page": 1, "content": "# 標題"}
+    assert result.model_dump() == {
+        "games_id": 1,
+        "page": 1,
+        "content": "# 標題",
+        "chunk_count": 1,
+    }
     assert service.pages.rows == {(1, 1): "# 標題"}
     assert service.vision.received_images == [image]
     assert len(service.vision.calls) == 1
@@ -131,6 +157,7 @@ def test_ocr_failure_preserves_old_content_and_hides_details(failure, code):
     assert "secret-key" not in error.value.message
     assert service.pages.rows == {(1, 1): "old"}
     assert service.pages.writes == []
+    assert service.reindex.calls == []
 
 
 @pytest.mark.parametrize("reply", [{}, {"markdown": 1}, {"markdown": "", "extra": True}])
@@ -147,6 +174,53 @@ def test_concurrent_game_deletion_is_not_found():
     with pytest.raises(AppError) as error:
         service.import_page(TEST_ADMIN, 1, 1, PNG)
     assert error.value.code == "GAME_NOT_FOUND"
+    assert service.reindex.calls == []
+
+
+def test_import_indexes_the_page_and_returns_chunk_count():
+    reindex = FakeReindex(count=3)
+    service = make_service([{"markdown": "# 標題"}], reindex=reindex)
+    result = service.import_page(TEST_ADMIN, 1, 7, PNG)
+    assert result.model_dump() == {
+        "games_id": 1,
+        "page": 7,
+        "content": "# 標題",
+        "chunk_count": 3,
+    }
+    assert reindex.calls == [(1, 7, "# 標題")]
+
+
+def test_blank_page_still_reindexes_and_reports_zero_chunks():
+    reindex = FakeReindex(count=0)
+    service = make_service([{"markdown": ""}], reindex=reindex)
+    result = service.import_page(TEST_ADMIN, 1, 4, PNG)
+    assert result.model_dump() == {
+        "games_id": 1,
+        "page": 4,
+        "content": "",
+        "chunk_count": 0,
+    }
+    assert reindex.calls == [(1, 4, "")]
+
+
+@pytest.mark.parametrize(
+    "failure",
+    [
+        AppError(503, "RULES_QA_UNAVAILABLE", "規則問答暫時無法使用，請稍後再試"),
+        RuntimeError("資料庫斷線"),
+    ],
+    ids=["app-error", "unexpected"],
+)
+def test_index_failure_keeps_page_and_reports_503(failure):
+    reindex = FakeReindex(error=failure)
+    service = make_service([{"markdown": "# 標題"}], reindex=reindex)
+    with pytest.raises(AppError) as error:
+        service.import_page(TEST_ADMIN, 1, 1, PNG)
+    assert error.value.status_code == 503
+    assert error.value.code == "RULES_QA_INDEX_FAILED"
+    assert "資料庫斷線" not in error.value.message
+    assert service.pages.rows == {(1, 1): "# 標題"}
+    assert reindex.calls == [(1, 1, "# 標題")]
 
 
 @pytest.mark.parametrize("rows", [{}, {(1, 3): "three", (2, 1): "other", (1, 1): ""}])

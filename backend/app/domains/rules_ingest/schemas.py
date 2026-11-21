@@ -7,6 +7,7 @@ class ManualPageOut(BaseModel):
     games_id: int
     page: int
     content: str
+    chunk_count: int
 
 
 class ManualPageItem(BaseModel):

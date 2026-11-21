@@ -126,6 +126,32 @@ class RulesQaRepository(SessionRepository):
                 ],
             )
 
+    def replace_page_chunks(
+        self,
+        game_id: int,
+        page: int,
+        chunks: Sequence[tuple[str, list[float]]],
+        embedding_model: str,
+    ) -> None:
+        """取代這款遊戲某一頁的段落（文字、向量）。空清單代表這一頁已無內容，只刪除舊段落。"""
+        self.session.execute(
+            delete(RulesQaChunk).where(RulesQaChunk.game_id == game_id, RulesQaChunk.page == page)
+        )
+        if chunks:
+            self.session.execute(
+                insert(RulesQaChunk),
+                [
+                    {
+                        "game_id": game_id,
+                        "page": page,
+                        "content": content,
+                        "embedding": embedding,
+                        "embedding_model": embedding_model,
+                    }
+                    for content, embedding in chunks
+                ],
+            )
+
     def search_chunks(
         self, game_id: int, vector: Sequence[float], embedding_model: str, limit: int
     ) -> list[ChunkHit]:

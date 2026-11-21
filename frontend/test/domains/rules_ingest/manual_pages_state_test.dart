@@ -92,6 +92,18 @@ void main() {
     ]);
   });
 
+  test('匯入結果帶回同一請求建立的索引段落數', () async {
+    final repo = FakeManualPagesRepository()..chunkCount = 7;
+    final picker = FakeImagePicker()..images = [image('a.png'), image('b.png')];
+    final container = containerFor(repo, picker);
+    final notifier = container.read(manualImportProvider.notifier)
+      ..selectGame(GameOption(id: 1, name: 'Test', englishName: 'test'));
+    await notifier.pickImages();
+    await notifier.importPages();
+    final results = container.read(manualImportProvider).results;
+    expect(results.map((r) => r.chunkCount), [7, 7]);
+  });
+
   test('匯入期間防止重送、改欄位與重選圖片，顯示當前進度', () async {
     final repo = FakeManualPagesRepository()..importGate = Completer<void>();
     final picker = FakeImagePicker()..images = [image('a.png'), image('b.png')];

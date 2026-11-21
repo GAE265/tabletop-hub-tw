@@ -8,6 +8,8 @@ from app.core.config import Settings
 from app.core.db import get_session
 from app.domains.rules_ingest.router import get_vision
 from app.domains.rules_ingest.service import MAX_IMAGE_BYTES
+from app.integrations.embedding import EmbeddingUnavailable
+from app.integrations.embedding.fake import FakeEmbeddingProvider
 from app.integrations.ocr.errors import (
     OCRError,
     OCRNotConfigured,
@@ -55,13 +57,30 @@ def stored(engine):
         )
 
 
+def stored_chunks(engine):
+    """rules_qa_chunks 目前的 (頁碼, 內容)，用來證明匯入的同一個請求內就做了索引。"""
+    with engine.connect() as connection:
+        return [
+            tuple(row)
+            for row in connection.execute(
+                text("SELECT page, content FROM rules_qa_chunks ORDER BY page")
+            )
+        ]
+
+
 @pytest.mark.usefixtures("as_admin")
 def test_upload_overwrite_and_readback(client, vision, api_engine):
-    for content in ["# 標題", ""]:
+    for content, chunk_count in [("# 標題", 1), ("", 0)]:
         response = client.put(URL + "/1", files={"file": ("page.png", PNG, "image/png")})
         assert response.status_code == 200
-        assert response.json() == {"games_id": 1, "page": 1, "content": content}
+        assert response.json() == {
+            "games_id": 1,
+            "page": 1,
+            "content": content,
+            "chunk_count": chunk_count,
+        }
         assert stored(api_engine) == {1: content}
+        assert stored_chunks(api_engine) == ([(1, content)] if content else [])
     assert client.get(URL).json() == {
         "items": [{"page": 1, "content": ""}],
         "total": 1,
@@ -147,6 +166,20 @@ def test_ocr_error_keeps_existing_page(app, client, vision, api_engine, failure,
 
 
 @pytest.mark.usefixtures("as_admin")
+def test_index_failure_keeps_page_and_reports_503(app, client, vision, api_engine):
+    app.state.rules_qa_embedding = FakeEmbeddingProvider(
+        dim=1, error=EmbeddingUnavailable("連不上 embedding 服務")
+    )
+    response = client.put(URL + "/1", files={"file": ("p.png", PNG)})
+    assert response.status_code == 503
+    assert response.json()["error"]["code"] == "RULES_QA_INDEX_FAILED"
+    assert "連不上" not in response.text
+    assert stored(api_engine) == {1: "# 標題"}
+    assert stored_chunks(api_engine) == []
+    assert len(vision.calls) == 1
+
+
+@pytest.mark.usefixtures("as_admin")
 def test_list_sorted_and_empty(client, vision, api_engine):
     assert client.get(URL).json() == {"items": [], "total": 0, "ocr_provider": "fake"}
     with api_engine.begin() as connection:
@@ -176,3 +209,4 @@ def test_openapi_documents_multipart_and_schemas(client):
     assert next(p for p in put["parameters"] if p["name"] == "page")["schema"]["minimum"] == 1
     assert "ManualPageOut" in schema["components"]["schemas"]
     assert "ManualPageListOut" in schema["components"]["schemas"]
+    assert "chunk_count" in schema["components"]["schemas"]["ManualPageOut"]["properties"]

@@ -8,8 +8,11 @@ part 'manual_page.g.dart';
 @freezed
 abstract class ManualPage with _$ManualPage {
   @JsonSerializable(fieldRename: FieldRename.snake)
-  const factory ManualPage({required int page, required String content}) =
-      _ManualPage;
+  const factory ManualPage({
+    required int page,
+    required String content,
+    @Default(0) int chunkCount,
+  }) = _ManualPage;
 
   factory ManualPage.fromJson(Map<String, dynamic> json) =>
       _$ManualPageFromJson(json);

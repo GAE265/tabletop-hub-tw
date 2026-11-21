@@ -151,7 +151,11 @@ class RulesIngestProtoPage extends ConsumerWidget {
                 for (final result in upload.results)
                   ListTile(
                     title: Text('第 ${result.page} 頁：${result.filename}'),
-                    subtitle: Text(result.success ? '成功' : result.error!),
+                    subtitle: Text(
+                      result.success
+                          ? '成功（索引 ${result.chunkCount} 段）'
+                          : result.error!,
+                    ),
                   ),
                 ElevatedButton(
                   key: const Key('read-pages-button'),

@@ -1,3 +1,6 @@
+import logging
+from collections.abc import Callable
+
 from app.core.auth import CurrentUser, require_role
 from app.core.errors import AppError
 from app.core.games.repository import GameRepository
@@ -7,6 +10,8 @@ from app.integrations.llm.types import JsonSchema
 from app.integrations.ocr.base import VisionProvider
 from app.integrations.ocr.errors import OCRError, OCROutputRejected, OCRUnavailable
 from app.integrations.ocr.images import image_mime
+
+logger = logging.getLogger(__name__)
 
 MAX_IMAGE_BYTES = 10 * 1024 * 1024
 TRANSCRIPTION_INSTRUCTIONS = (
@@ -31,11 +36,15 @@ class ManualPagesService:
         games: GameRepository,
         vision: VisionProvider,
         ocr_provider: str,
+        *,
+        reindex: Callable[[int, int, str], int],
     ) -> None:
         self.pages = pages
         self.games = games
         self.vision = vision
         self.ocr_provider = ocr_provider
+        # rules_qa 的 service.index_page：頁面入庫後立即重建該頁的檢索段落（AGENTS.md 4.2）
+        self.reindex = reindex
 
     def _check_game(self, games_id: int) -> None:
         if not self.games.game_exists(games_id):
@@ -76,7 +85,17 @@ class ManualPagesService:
                 self.pages.upsert_page(games_id, page, content)
         except GameNotFoundError as error:
             raise AppError(404, "GAME_NOT_FOUND", f"找不到桌遊 {games_id}") from error
-        return ManualPageOut(games_id=games_id, page=page, content=content)
+        try:
+            chunk_count = self.reindex(games_id, page, content)
+        except Exception as error:
+            # 頁面已入庫，只有索引失敗：不傳出外部例外文字，重新匯入這一頁即可重建。
+            logger.warning("規則書頁面索引失敗：games_id=%s page=%s", games_id, page)
+            raise AppError(
+                503,
+                "RULES_QA_INDEX_FAILED",
+                "頁面已入庫，但問答索引建立失敗，請重新匯入這一頁",
+            ) from error
+        return ManualPageOut(games_id=games_id, page=page, content=content, chunk_count=chunk_count)
 
     def list_pages(self, user: CurrentUser, games_id: int) -> ManualPageListOut:
         require_role(user, "shop_staff", "admin")

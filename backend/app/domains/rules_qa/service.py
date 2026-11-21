@@ -49,6 +49,13 @@ class RulesQaRepositoryProtocol(Protocol):
     def replace_chunks(
         self, game_id: int, chunks: Sequence[tuple[int, str, list[float]]], embedding_model: str
     ) -> None: ...
+    def replace_page_chunks(
+        self,
+        game_id: int,
+        page: int,
+        chunks: Sequence[tuple[str, list[float]]],
+        embedding_model: str,
+    ) -> None: ...
     def search_chunks(
         self, game_id: int, vector: Sequence[float], embedding_model: str, limit: int
     ) -> list[ChunkHit]: ...
@@ -171,6 +178,26 @@ class RulesQaService:
         with self._repo.transaction():
             self._repo.upsert_video(video)
         return _video_out(video)
+
+    # --- 單頁索引 ---
+
+    def index_page(self, game_id: int, page: int, content: str) -> int:
+        """重建某一頁的檢索段落，回傳段落數。
+
+        給 rules_ingest 在匯入規則書頁面後立即呼叫，前端不必再打另一個 API。
+        空白頁回傳 0 並刪除這一頁的舊段落。向量轉換放在交易外，避免網路呼叫掛住資料庫交易。
+        """
+        chunks = split_pages([(page, content)])
+        with _external_services():
+            vectors = self._embedding.embed([chunk.content for chunk in chunks]) if chunks else []
+        with self._repo.transaction():
+            self._repo.replace_page_chunks(
+                game_id,
+                page,
+                [(c.content, v) for c, v in zip(chunks, vectors, strict=True)],
+                self._embedding_model,
+            )
+        return len(chunks)
 
     # --- 規則問答 ---
 

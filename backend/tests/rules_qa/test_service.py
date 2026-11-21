@@ -358,3 +358,57 @@ def test_expired_conversation_is_404(repo, embedding):
 def test_every_role_can_ask(repo, embedding, user):
     llm = FakeLLMProvider(responses=[answer(ids=[1])])
     assert make_service(repo, embedding, llm).send_message(user, ROSE, message_in()).answer
+
+
+# --- index_page：規則書單頁匯入後立即重建該頁索引 ---
+
+# 兩段各 600 字，合併檢查會超過上限，因此切出 2 個段落（chunking.split_pages）
+LONG_A = "甲。" * 300
+LONG_B = "乙。" * 300
+
+
+def test_index_page_returns_chunk_count_and_stores_them(repo, embedding):
+    count = make_service(repo, embedding, FakeLLMProvider()).index_page(
+        ROSE, 7, f"{LONG_A}\n\n{LONG_B}"
+    )
+    assert count == 2
+    stored = [c for c in repo.chunks if (c.game_id, c.page) == (ROSE, 7)]
+    assert [c.content for c in stored] == [LONG_A, LONG_B]
+    assert {c.embedding_model for c in stored} == {"fake"}
+    assert all(len(c.embedding) == 3 for c in stored)
+
+
+def test_index_page_replaces_only_that_page(repo, embedding):
+    make_service(repo, embedding, FakeLLMProvider()).index_page(ROSE, 5, "新的第 5 頁內容。")
+    stored = {(c.game_id, c.page, c.content) for c in repo.chunks}
+    assert (ROSE, 5, "新的第 5 頁內容。") in stored
+    assert (ROSE, 5, "每個回合可以抽兩張牌。") not in stored
+    assert (ROSE, 5, "也可以改成打出一張牌。") not in stored
+    assert (ROSE, 3, "遊戲開始時每人拿五張牌。") in stored
+    assert (ROSE, 9, "結束時計算分數。") in stored
+    assert (MARCO, 2, "馬可波羅的回合流程。") in stored
+
+
+def test_index_page_twice_keeps_only_latest(repo, embedding):
+    service = make_service(repo, embedding, FakeLLMProvider())
+    service.index_page(MARCO, 8, "第一版")
+    service.index_page(MARCO, 8, "第二版")
+    stored = [c.content for c in repo.chunks if (c.game_id, c.page) == (MARCO, 8)]
+    assert stored == ["第二版"]
+
+
+def test_index_page_blank_page_clears_chunks_without_embedding(repo, embedding):
+    count = make_service(repo, embedding, FakeLLMProvider()).index_page(ROSE, 5, "")
+    assert count == 0
+    assert embedding.calls == []
+    assert [c for c in repo.chunks if (c.game_id, c.page) == (ROSE, 5)] == []
+    assert any(c.game_id == ROSE for c in repo.chunks)
+
+
+def test_index_page_embedding_failure_is_503_and_keeps_chunks(repo):
+    before = [(c.game_id, c.page, c.content) for c in repo.chunks]
+    embedding = FakeEmbeddingProvider(dim=3, error=EmbeddingUnavailable("連不上"))
+    with pytest.raises(AppError) as exc_info:
+        make_service(repo, embedding, FakeLLMProvider()).index_page(ROSE, 5, "新的第 5 頁內容。")
+    assert_app_error(exc_info, 503, "RULES_QA_UNAVAILABLE")
+    assert [(c.game_id, c.page, c.content) for c in repo.chunks] == before

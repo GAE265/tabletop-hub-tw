@@ -79,11 +79,13 @@ class PageImportResult {
     required this.page,
     required this.filename,
     this.content,
+    this.chunkCount = 0,
     this.error,
   });
   final int page;
   final String filename;
   final String? content;
+  final int chunkCount;
   final String? error;
   bool get success => error == null;
 }
@@ -270,6 +272,7 @@ class ManualImportNotifier extends Notifier<ManualImportState> {
             page: page,
             filename: image.name,
             content: output.content,
+            chunkCount: output.chunkCount,
           );
         } catch (error) {
           result = PageImportResult(

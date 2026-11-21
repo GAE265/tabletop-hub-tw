@@ -96,6 +96,17 @@ class FakeRulesQaRepository:
         for page, content, embedding in chunks:
             self.add_chunk(game_id, page, content, embedding, embedding_model)
 
+    def replace_page_chunks(
+        self,
+        game_id: int,
+        page: int,
+        chunks: Sequence[tuple[str, list[float]]],
+        embedding_model: str,
+    ) -> None:
+        self.chunks = [c for c in self.chunks if (c.game_id, c.page) != (game_id, page)]
+        for content, embedding in chunks:
+            self.add_chunk(game_id, page, content, embedding, embedding_model)
+
     def search_chunks(
         self, game_id: int, vector: Sequence[float], embedding_model: str, limit: int
     ) -> list[ChunkHit]:

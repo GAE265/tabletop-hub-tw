@@ -680,6 +680,7 @@ class FakeManualPagesRepository implements ManualPagesRepository {
   final rows = <int, String>{};
   final failures = <int, Object>{};
   final lists = <int>[];
+  int chunkCount = 3;
   String ocrProvider = 'fake';
   Object? listError;
   Completer<void>? importGate;
@@ -701,7 +702,7 @@ class FakeManualPagesRepository implements ManualPagesRepository {
       if (failures[page] != null) throw failures[page]!;
       final content = '# ${image.name}';
       rows[page] = content;
-      return ManualPage(page: page, content: content);
+      return ManualPage(page: page, content: content, chunkCount: chunkCount);
     } finally {
       active--;
     }
@@ -731,6 +732,7 @@ class FakeManualPagesAdapter implements HttpClientAdapter {
     'games_id': 1,
     'page': 1,
     'content': '# title',
+    'chunk_count': 2,
   };
 
   @override
