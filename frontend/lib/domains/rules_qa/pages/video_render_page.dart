@@ -6,6 +6,7 @@ import '../../../app/theme/app_spacing.dart';
 import '../../../core/api/api_exception.dart';
 import '../data/video_studio_models.dart';
 import '../state/video_assets_state.dart';
+import '../state/video_draft_state.dart';
 import '../state/video_job_state.dart';
 import '../state/video_render_state.dart';
 import 'widgets/video_studio_widgets.dart';
@@ -37,6 +38,7 @@ class _VideoRenderPageState extends ConsumerState<VideoRenderPage> {
   Widget build(BuildContext context) {
     final readiness = ref.watch(videoReadinessProvider(_id));
     final render = ref.watch(videoRenderProvider(_id));
+    final draft = ref.watch(videoDraftProvider(_id));
     final running = ref.watch(videoJobProvider(_id)).running;
     final ready = readiness.value?.ready ?? false;
     return Scaffold(
@@ -66,7 +68,14 @@ class _VideoRenderPageState extends ConsumerState<VideoRenderPage> {
               data: (r) => Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  VideoReadinessCard(readiness: r),
+                  VideoReadinessCard(
+                    readiness: r,
+                    names: {
+                      for (final a
+                          in draft.value?.assets ?? const <DraftAsset>[])
+                        a.assetKey: assetDisplayName(a),
+                    },
+                  ),
                   if (!r.ready)
                     Align(
                       alignment: Alignment.centerLeft,

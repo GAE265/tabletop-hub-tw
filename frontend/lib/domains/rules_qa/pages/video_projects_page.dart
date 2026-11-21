@@ -59,7 +59,7 @@ class VideoProjectsPage extends ConsumerWidget {
                         Text('還沒有專案', style: text.titleMedium),
                         const SizedBox(height: AppSpacing.small),
                         Text(
-                          '選一款遊戲的一章，把規則書做成教學影片',
+                          '選一款遊戲，把規則書做成一支教學影片',
                           textAlign: TextAlign.center,
                           style: text.bodyMedium,
                         ),
@@ -118,12 +118,7 @@ class _ProjectCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(project.gameName, style: text.titleMedium),
-                    const SizedBox(height: AppSpacing.xSmall),
-                    Text(
-                      '第 ${project.chapterNumber} 章　${project.chapterTitle}',
-                      style: text.bodyMedium,
-                    ),
+                    Text(project.title, style: text.titleMedium),
                     const SizedBox(height: AppSpacing.small),
                     Wrap(
                       spacing: AppSpacing.small,

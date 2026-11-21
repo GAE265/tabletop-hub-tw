@@ -11,8 +11,8 @@ import 'notice_banner.dart';
 
 /// 專案步驟（`step`）給店員看的名稱。
 String videoStepLabel(String step) => switch (step) {
-  'pages' => '選頁與編輯文字',
-  'draft' => '確認草稿',
+  'pages' => '選頁（舊）',
+  'draft' => '草稿',
   'assets' => '拍素材',
   'render' => '產生影片',
   'done' => '完成',
@@ -237,11 +237,18 @@ class VideoJobCard extends ConsumerWidget {
   );
 }
 
-/// 產生影片前還缺什麼（素材清單與產生影片頁共用）。
+/// 產生影片前還缺什麼（素材清單與產生影片頁共用）。素材用給店員看的名稱，不顯示 asset_key。
 class VideoReadinessCard extends StatelessWidget {
-  const VideoReadinessCard({required this.readiness, super.key});
+  const VideoReadinessCard({
+    required this.readiness,
+    this.names = const {},
+    super.key,
+  });
 
   final VideoReadiness readiness;
+
+  /// asset_key → 給店員看的名稱（從草稿的素材清單來）。
+  final Map<String, String> names;
 
   @override
   Widget build(BuildContext context) {
@@ -267,12 +274,13 @@ class VideoReadinessCard extends StatelessWidget {
             const SizedBox(height: AppSpacing.small),
             for (final photo in readiness.missingPhotos)
               Text(
-                '拍照：${photo.reason}（${photo.priority == 'must' ? '必拍' : '選拍'}）',
+                '拍照：${photo.label.isNotEmpty ? photo.label : photo.reason}'
+                '（${photo.priority == 'must' ? '必拍' : '選拍'}）',
                 style: text.bodyMedium,
               ),
             for (final region in readiness.missingRegions)
               Text(
-                '標區域：${region.assetKey} 的 ${region.region}',
+                '標區域：${names[region.assetKey] ?? '素材'}的「${region.region}」',
                 style: text.bodyMedium,
               ),
             for (final asset in readiness.unsupported)

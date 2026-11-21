@@ -21,12 +21,6 @@ abstract interface class VideoStudioRepository {
 
   Future<VideoProject> getProject(String projectId);
 
-  /// 可選的頁、選了的頁、每頁的原文與編輯後的文字、差異。
-  Future<VideoPages> getPages(String projectId);
-
-  /// 存選頁與編輯後的文字（整份取代；沒給文字的頁用原文）。
-  Future<VideoPages> savePages(String projectId, VideoPagesUpdate input);
-
   /// 建立草稿工作（202）。已有進行中的工作時拋 `RULES_VIDEO_JOB_RUNNING`（details.job_id）。
   Future<VideoJob> startDraft(String projectId);
 
@@ -117,24 +111,6 @@ class HttpVideoStudioRepository implements VideoStudioRepository {
     final response = await _dio.get<Map<String, dynamic>>('$_base/$projectId');
     return VideoProject.fromJson(response.data!);
   });
-
-  @override
-  Future<VideoPages> getPages(String projectId) => _guard(() async {
-    final response = await _dio.get<Map<String, dynamic>>(
-      '$_base/$projectId/pages',
-    );
-    return VideoPages.fromJson(response.data!);
-  });
-
-  @override
-  Future<VideoPages> savePages(String projectId, VideoPagesUpdate input) =>
-      _guard(() async {
-        final response = await _dio.put<Map<String, dynamic>>(
-          '$_base/$projectId/pages',
-          data: input.toJson(),
-        );
-        return VideoPages.fromJson(response.data!);
-      });
 
   @override
   Future<VideoJob> startDraft(String projectId) => _guard(() async {

@@ -9,7 +9,9 @@ part 'video_studio_models.g.dart';
 // ⚠️ 必須和後端 rules_qa 的 schemas 同步
 // （規格：openspec/changes/add-rules-video-mobile/specs/rules-video-studio/spec.md）。
 
-/// 影片專案（`GET /api/v1/rules-videos`）。`step`：pages＝還沒有草稿；draft＝有草稿。
+/// 影片專案（`GET /api/v1/rules-videos`）。整個遊戲一支影片（D17）時章節是 null。
+/// `step`：draft＝產生草稿中或有草稿、還沒拍照；assets＝素材還沒齊；render＝齊了、還沒有成品；
+/// done＝有成品；pages＝舊的單章專案還沒有草稿。
 @freezed
 abstract class VideoProject with _$VideoProject {
   @JsonSerializable(fieldRename: FieldRename.snake)
@@ -19,8 +21,10 @@ abstract class VideoProject with _$VideoProject {
     required String gameName,
     required String shopId,
     required String createdBy,
-    required int chapterNumber,
-    required String chapterTitle,
+    int? chapterNumber,
+    String? chapterTitle,
+    // 影片標題：整個遊戲是「〈遊戲〉 規則教學」
+    required String title,
     required String step,
     required DateTime createdAt,
     required DateTime updatedAt,
@@ -30,15 +34,11 @@ abstract class VideoProject with _$VideoProject {
       _$VideoProjectFromJson(json);
 }
 
-/// 建立專案。店員的店家用登入身分，不用填。
+/// 建立專案：只選遊戲（整個遊戲一支影片，建立後後端自動產生草稿）。店員的店家用登入身分。
 @freezed
 abstract class VideoProjectCreate with _$VideoProjectCreate {
   @JsonSerializable(fieldRename: FieldRename.snake)
-  const factory VideoProjectCreate({
-    required int gameId,
-    required int chapterNumber,
-    required String chapterTitle,
-  }) = _VideoProjectCreate;
+  const factory VideoProjectCreate({required int gameId}) = _VideoProjectCreate;
 
   factory VideoProjectCreate.fromJson(Map<String, dynamic> json) =>
       _$VideoProjectCreateFromJson(json);
@@ -53,76 +53,6 @@ abstract class VideoGameOption with _$VideoGameOption {
 
   factory VideoGameOption.fromJson(Map<String, dynamic> json) =>
       _$VideoGameOptionFromJson(json);
-}
-
-/// 店員刪掉的一段（原文有、編輯後沒有）。
-@freezed
-abstract class RemovedBlock with _$RemovedBlock {
-  const factory RemovedBlock({required List<String> lines}) = _RemovedBlock;
-
-  factory RemovedBlock.fromJson(Map<String, dynamic> json) =>
-      _$RemovedBlockFromJson(json);
-}
-
-/// 改過的一行（例如修正 OCR 錯字），附原文與編輯後。
-@freezed
-abstract class ChangedLine with _$ChangedLine {
-  const factory ChangedLine({
-    required String original,
-    required String edited,
-    required double similarity,
-  }) = _ChangedLine;
-
-  factory ChangedLine.fromJson(Map<String, dynamic> json) =>
-      _$ChangedLineFromJson(json);
-}
-
-/// 一頁的原文與編輯後的文字。`role`：chapter＝本章頁、reference＝參考頁。
-@freezed
-abstract class VideoPageText with _$VideoPageText {
-  @JsonSerializable(fieldRename: FieldRename.snake)
-  const factory VideoPageText({
-    required int page,
-    required String role,
-    String? original,
-    required String text,
-    required bool originalChanged,
-    required List<RemovedBlock> removed,
-    required List<ChangedLine> changed,
-  }) = _VideoPageText;
-
-  factory VideoPageText.fromJson(Map<String, dynamic> json) =>
-      _$VideoPageTextFromJson(json);
-}
-
-/// `GET /api/v1/rules-videos/{id}/pages`。
-@freezed
-abstract class VideoPages with _$VideoPages {
-  @JsonSerializable(fieldRename: FieldRename.snake)
-  const factory VideoPages({
-    required List<int> availablePages,
-    required List<int> chapterPages,
-    required List<int> referencePages,
-    required int pagesVersion,
-    required List<VideoPageText> pages,
-  }) = _VideoPages;
-
-  factory VideoPages.fromJson(Map<String, dynamic> json) =>
-      _$VideoPagesFromJson(json);
-}
-
-/// `PUT /api/v1/rules-videos/{id}/pages`：沒給文字的頁用原文。
-@freezed
-abstract class VideoPagesUpdate with _$VideoPagesUpdate {
-  @JsonSerializable(fieldRename: FieldRename.snake)
-  const factory VideoPagesUpdate({
-    required List<int> chapterPages,
-    required List<int> referencePages,
-    required Map<String, String> texts,
-  }) = _VideoPagesUpdate;
-
-  factory VideoPagesUpdate.fromJson(Map<String, dynamic> json) =>
-      _$VideoPagesUpdateFromJson(json);
 }
 
 /// 工作的狀態：queued＝等待、running＝處理中、succeeded＝完成、failed＝失敗。
@@ -174,6 +104,8 @@ abstract class DraftSegment with _$DraftSegment {
   @JsonSerializable(fieldRename: FieldRename.snake)
   const factory DraftSegment({
     required String segmentKey,
+    // 屬於哪一格：setup＝開局、round＝走完一輪、win＝獲勝方式
+    @Default('') String chapter,
     required List<int> sourcePages,
     required List<DraftBeat> beats,
   }) = _DraftSegment;
@@ -188,6 +120,8 @@ abstract class DraftAsset with _$DraftAsset {
   @JsonSerializable(fieldRename: FieldRename.snake)
   const factory DraftAsset({
     required String assetKey,
+    // 給店員看的中文名稱；舊的草稿沒有
+    String? label,
     required String kind,
     required String priority,
     required String reason,
@@ -246,7 +180,27 @@ abstract class CoverageHint with _$CoverageHint {
       _$CoverageHintFromJson(json);
 }
 
+/// 一格（開局、走完一輪、獲勝方式）的涵蓋檢查。`status`：done、not_done（附 reason）。
+@freezed
+abstract class CoverageSlot with _$CoverageSlot {
+  @JsonSerializable(fieldRename: FieldRename.snake)
+  const factory CoverageSlot({
+    required String slot,
+    required String title,
+    required String status,
+    String? reason,
+    required int totalRules,
+    required List<CoverageIssue> issues,
+    required List<CoverageProblem> problems,
+    required List<CoverageHint> hints,
+  }) = _CoverageSlot;
+
+  factory CoverageSlot.fromJson(Map<String, dynamic> json) =>
+      _$CoverageSlotFromJson(json);
+}
+
 /// 涵蓋檢查摘要。`status`：done、not_done（附 reason）、stale（旁白或字幕改過）。
+/// `slots`：依格的摘要（整個遊戲一支影片）；合計是三格加起來。
 @freezed
 abstract class DraftCoverage with _$DraftCoverage {
   @JsonSerializable(fieldRename: FieldRename.snake)
@@ -257,6 +211,7 @@ abstract class DraftCoverage with _$DraftCoverage {
     required List<CoverageIssue> issues,
     required List<CoverageProblem> problems,
     required List<CoverageHint> hints,
+    @Default([]) List<CoverageSlot> slots,
   }) = _DraftCoverage;
 
   factory DraftCoverage.fromJson(Map<String, dynamic> json) =>
@@ -299,6 +254,8 @@ abstract class VideoAsset with _$VideoAsset {
   @JsonSerializable(fieldRename: FieldRename.snake)
   const factory VideoAsset({
     required String assetKey,
+    // 給店員看的中文名稱；舊的草稿沒有
+    String? label,
     required String kind,
     required String priority,
     required String reason,
@@ -338,6 +295,8 @@ abstract class MissingPhoto with _$MissingPhoto {
   @JsonSerializable(fieldRename: FieldRename.snake)
   const factory MissingPhoto({
     required String assetKey,
+    // 給店員看的名稱（中文名稱；舊的草稿是 reason）
+    @Default('') String label,
     required String priority,
     required String reason,
     String? shot,

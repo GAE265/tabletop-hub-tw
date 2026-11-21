@@ -11,8 +11,8 @@ import '../state/video_job_state.dart';
 import 'widgets/notice_banner.dart';
 import 'widgets/video_studio_widgets.dart';
 
-/// 草稿確認（`/videos/:id/draft`，外觀決定見 design.md）：每段一張卡片，逐句勾選「已檢查」；
-/// 頁首直接顯示涵蓋檢查摘要與提示橫幅；出處頁可以點回去改文字。
+/// 草稿（`/videos/:id/draft`，design.md D17）：只顯示進度與結果摘要，不擋流程。
+/// 摘要是三格各幾段幾句、必拍與選拍各幾個，以及依格的涵蓋檢查（細節展開才看）。
 class VideoDraftPage extends ConsumerStatefulWidget {
   const VideoDraftPage({required this.projectId, super.key});
 
@@ -42,7 +42,7 @@ class _VideoDraftPageState extends ConsumerState<VideoDraftPage> {
     final jobCard = VideoJobCard(projectId: _id, showDone: false);
     return Scaffold(
       key: const Key('video-draft-page'),
-      appBar: AppBar(title: const Text('確認草稿')),
+      appBar: AppBar(title: const Text('草稿')),
       bottomNavigationBar: draft.value == null
           ? null
           : VideoBottomActions(
@@ -52,11 +52,11 @@ class _VideoDraftPageState extends ConsumerState<VideoDraftPage> {
                   onPressed: running ? null : _regenerate,
                   child: const Text('重新產生'),
                 ),
-                // 沒勾完也能確認（外觀決定）；勾選數只是提醒
+                // 不擋流程：涵蓋檢查有問題也可以往下（漏講的之後用修改補救）
                 FilledButton(
-                  key: const Key('video-draft-confirm'),
+                  key: const Key('video-draft-next'),
                   onPressed: () => context.go('/videos/$_id/assets'),
-                  child: const Text('確認草稿'),
+                  child: const Text('下一步：拍素材'),
                 ),
               ],
             ),
@@ -93,95 +93,44 @@ class _VideoDraftPageState extends ConsumerState<VideoDraftPage> {
                       textAlign: TextAlign.center,
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
-                    const SizedBox(height: AppSpacing.medium),
-                    FilledButton(
-                      onPressed: () => context.go('/videos/$_id/pages'),
-                      child: const Text('選頁與編輯文字'),
+                    const SizedBox(height: AppSpacing.small),
+                    Text(
+                      '建立專案後會自動產生；正在產生時上方會顯示進度',
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.bodySmall,
                     ),
+                    const SizedBox(height: AppSpacing.medium),
+                    if (!running)
+                      FilledButton(
+                        onPressed: _regenerate,
+                        child: const Text('產生草稿'),
+                      ),
                   ],
                 )
-              : _DraftView(projectId: _id, draft: value, jobCard: jobCard),
+              : ListView(
+                  padding: const EdgeInsets.all(AppSpacing.medium),
+                  children: [
+                    jobCard,
+                    ..._banners(value),
+                    _Summary(draft: value),
+                    const SizedBox(height: AppSpacing.medium),
+                    _CoverageBySlot(coverage: value.coverage),
+                  ],
+                ),
         ),
       ),
     );
   }
-}
 
-class _DraftView extends ConsumerWidget {
-  const _DraftView({
-    required this.projectId,
-    required this.draft,
-    required this.jobCard,
-  });
-
-  final String projectId;
-  final VideoDraft draft;
-  final Widget jobCard;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final checks = ref.watch(subtitleChecksProvider(projectId));
-    final (checked, total) = checkedCount(checks, draft);
+  List<Widget> _banners(VideoDraft draft) {
     final coverage = draft.coverage;
-    final text = Theme.of(context).textTheme;
-    return ListView(
-      padding: const EdgeInsets.all(AppSpacing.medium),
-      children: [
-        jobCard,
-        if (draft.terms.status == 'missing' && draft.terms.message != null)
-          _Banner(draft.terms.message!),
-        if (draft.pagesStale && draft.pagesStaleMessage != null)
-          _Banner(draft.pagesStaleMessage!),
-        if (coverage.status == 'stale')
-          _Banner(coverage.reason ?? '涵蓋檢查的結果可能過期'),
-        if (coverage.status == 'not_done')
-          _Banner('涵蓋檢查沒做成：${coverage.reason ?? '原因不明'}'),
-        if (coverage.status != 'not_done') ...[
-          _CoverageSummary(coverage: coverage),
-          const SizedBox(height: AppSpacing.medium),
-        ],
-        Padding(
-          key: const Key('video-check-count'),
-          padding: const EdgeInsets.only(bottom: AppSpacing.medium),
-          child: Text('已檢查 $checked／$total 句', style: text.titleSmall),
-        ),
-        for (final (i, segment) in draft.segments.indexed)
-          Padding(
-            padding: const EdgeInsets.only(bottom: AppSpacing.medium),
-            child: _SegmentCard(
-              projectId: projectId,
-              index: i,
-              segment: segment,
-              checks: checks,
-            ),
-          ),
-        if (draft.assets.isNotEmpty) ...[
-          const SizedBox(height: AppSpacing.small),
-          Text('需要的素材', style: text.titleMedium),
-          const SizedBox(height: AppSpacing.small),
-          Card(
-            child: Column(
-              children: [
-                for (final asset in draft.assets)
-                  ListTile(
-                    key: Key('video-asset-${asset.assetKey}'),
-                    title: Text(asset.reason),
-                    subtitle: asset.shot == null
-                        ? null
-                        : Text('拍攝說明：${asset.shot}'),
-                    trailing: PillBadge(
-                      label: asset.priority == 'required' ? '必拍' : '選拍',
-                      tone: asset.priority == 'required'
-                          ? PillTone.accent
-                          : PillTone.neutral,
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        ],
-      ],
-    );
+    return [
+      if (draft.terms.status == 'missing' && draft.terms.message != null)
+        _Banner(draft.terms.message!),
+      if (coverage.status == 'stale') _Banner(coverage.reason ?? '涵蓋檢查的結果可能過期'),
+      if (coverage.status == 'not_done' && coverage.slots.isEmpty)
+        _Banner('涵蓋檢查沒做成：${coverage.reason ?? '原因不明'}'),
+    ];
   }
 }
 
@@ -197,37 +146,81 @@ class _Banner extends StatelessWidget {
   );
 }
 
-/// 涵蓋檢查摘要：幾項問題（警告色）、幾項提示（一般色）；細節展開才看。
-class _CoverageSummary extends StatefulWidget {
-  const _CoverageSummary({required this.coverage});
+/// 結果摘要：三格各幾段幾句、必拍與選拍各幾個。
+class _Summary extends StatelessWidget {
+  const _Summary({required this.draft});
+
+  final VideoDraft draft;
+
+  @override
+  Widget build(BuildContext context) {
+    final summary = draftSummary(draft);
+    final text = Theme.of(context).textTheme;
+    return Card(
+      key: const Key('video-draft-summary'),
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.medium),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('草稿內容', style: text.titleSmall),
+            const SizedBox(height: AppSpacing.small),
+            for (final slot in summary.slots)
+              Padding(
+                padding: const EdgeInsets.only(bottom: AppSpacing.xSmall),
+                child: Text(
+                  '${slot.title}：${slot.segments} 段、${slot.beats} 句',
+                  style: text.bodyMedium,
+                ),
+              ),
+            const SizedBox(height: AppSpacing.small),
+            Text(
+              '素材：必拍 ${summary.mustAssets}、選拍 ${summary.optionalAssets}',
+              style: text.bodyMedium,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 涵蓋檢查依格的摘要（幾項問題、幾項提示）；細節展開才看。提示，不擋下。
+class _CoverageBySlot extends StatefulWidget {
+  const _CoverageBySlot({required this.coverage});
 
   final DraftCoverage coverage;
 
   @override
-  State<_CoverageSummary> createState() => _CoverageSummaryState();
+  State<_CoverageBySlot> createState() => _CoverageBySlotState();
 }
 
-class _CoverageSummaryState extends State<_CoverageSummary> {
+class _CoverageBySlotState extends State<_CoverageBySlot> {
   bool _expanded = false;
 
   @override
   Widget build(BuildContext context) {
     final coverage = widget.coverage;
     final text = Theme.of(context).textTheme;
-    final problems = coverage.issues.length + coverage.problems.length;
-    final hints = coverage.hints.length;
-    if (problems == 0 && hints == 0) {
-      return Card(
-        key: const Key('video-coverage-summary'),
-        child: ListTile(
-          leading: Icon(
-            Icons.check_circle_outline,
-            color: Theme.of(context).colorScheme.primary,
-          ),
-          title: const Text('涵蓋檢查沒有發現問題'),
-        ),
-      );
-    }
+    final scheme = Theme.of(context).colorScheme;
+    // 舊的單章草稿沒有依格的摘要：當成一格
+    final slots = coverage.slots.isNotEmpty
+        ? coverage.slots
+        : [
+            CoverageSlot(
+              slot: '',
+              title: '全部',
+              status: coverage.status == 'not_done' ? 'not_done' : 'done',
+              reason: coverage.reason,
+              totalRules: coverage.totalRules,
+              issues: coverage.issues,
+              problems: coverage.problems,
+              hints: coverage.hints,
+            ),
+          ];
+    final hasDetails = slots.any(
+      (s) => s.issues.isNotEmpty || s.problems.isNotEmpty || s.hints.isNotEmpty,
+    );
     return Card(
       key: const Key('video-coverage-summary'),
       child: Padding(
@@ -237,61 +230,51 @@ class _CoverageSummaryState extends State<_CoverageSummary> {
           children: [
             Row(
               children: [
-                Text('涵蓋檢查', style: text.titleSmall),
-                const SizedBox(width: AppSpacing.small),
-                Expanded(
-                  child: Wrap(
-                    spacing: AppSpacing.small,
-                    runSpacing: AppSpacing.xSmall,
-                    children: [
-                      if (problems > 0)
-                        PillBadge(
-                          label: '$problems 項問題',
-                          tone: PillTone.accent,
-                          icon: Icons.warning_amber_outlined,
-                        ),
-                      if (hints > 0)
-                        PillBadge(
-                          label: '$hints 項提示',
-                          tone: PillTone.neutral,
-                          icon: Icons.lightbulb_outline,
-                        ),
-                    ],
+                Expanded(child: Text('涵蓋檢查', style: text.titleSmall)),
+                if (hasDetails)
+                  TextButton(
+                    key: const Key('video-coverage-toggle'),
+                    onPressed: () => setState(() => _expanded = !_expanded),
+                    child: Text(_expanded ? '收起' : '看細節'),
                   ),
-                ),
-                TextButton(
-                  key: const Key('video-coverage-toggle'),
-                  onPressed: () => setState(() => _expanded = !_expanded),
-                  child: Text(_expanded ? '收起' : '看細節'),
-                ),
               ],
             ),
-            if (_expanded) ...[
-              for (final issue in coverage.issues)
-                _Detail(
-                  title: issue.source,
-                  lines: [
-                    if (issue.narrationMissing != null)
-                      '旁白缺少：${issue.narrationMissing}',
-                    if (issue.subtitleMissing != null)
-                      '字幕缺少：${issue.subtitleMissing}',
+            for (final slot in slots) ...[
+              Padding(
+                padding: const EdgeInsets.only(top: AppSpacing.xSmall),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(_slotLine(slot), style: text.bodyMedium),
+                    ),
+                    if (slot.issues.isNotEmpty || slot.problems.isNotEmpty)
+                      const PillBadge(label: '要看', tone: PillTone.accent),
                   ],
                 ),
-              for (final problem in coverage.problems)
-                _Detail(
-                  title: '「${problem.text}」',
-                  lines: [
-                    '${problem.track == 'subtitle' ? '字幕' : '旁白'}：'
-                        '${problem.reason}',
-                  ],
-                ),
-              if (coverage.hints.isNotEmpty) ...[
-                const SizedBox(height: AppSpacing.small),
-                Text('提示（目的說明）', style: text.labelLarge),
-                for (final hint in coverage.hints)
-                  Padding(
-                    padding: const EdgeInsets.only(top: AppSpacing.xSmall),
-                    child: Text(hint.source, style: text.bodyMedium),
+              ),
+              if (_expanded) ...[
+                for (final issue in slot.issues)
+                  _Detail(
+                    title: issue.source,
+                    lines: [
+                      if (issue.narrationMissing != null)
+                        '旁白缺少：${issue.narrationMissing}',
+                      if (issue.subtitleMissing != null)
+                        '字幕缺少：${issue.subtitleMissing}',
+                    ],
+                    color: scheme.error,
+                  ),
+                for (final problem in slot.problems)
+                  _Detail(
+                    title: '「${problem.text}」',
+                    lines: [problem.reason],
+                    color: scheme.error,
+                  ),
+                for (final hint in slot.hints)
+                  _Detail(
+                    title: hint.source,
+                    lines: const [],
+                    color: scheme.onSurfaceVariant,
                   ),
               ],
             ],
@@ -300,128 +283,48 @@ class _CoverageSummaryState extends State<_CoverageSummary> {
       ),
     );
   }
+
+  static String _slotLine(CoverageSlot slot) {
+    if (slot.status != 'done') {
+      return '${slot.title}：${slot.reason ?? '涵蓋檢查沒有完成'}';
+    }
+    final problems = slot.issues.length + slot.problems.length;
+    final hints = slot.hints.length;
+    if (problems == 0 && hints == 0) return '${slot.title}：沒有發現問題';
+    final parts = [
+      if (problems > 0) '$problems 項問題',
+      if (hints > 0) '$hints 項提示',
+    ];
+    return '${slot.title}：${parts.join('、')}';
+  }
 }
 
 class _Detail extends StatelessWidget {
-  const _Detail({required this.title, required this.lines});
+  const _Detail({
+    required this.title,
+    required this.lines,
+    required this.color,
+  });
 
   final String title;
   final List<String> lines;
+  final Color color;
 
   @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
     return Padding(
-      padding: const EdgeInsets.only(top: AppSpacing.small),
+      padding: const EdgeInsets.only(
+        top: AppSpacing.small,
+        left: AppSpacing.medium,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(title, style: text.bodyMedium),
           for (final line in lines)
-            Text(
-              line,
-              style: text.bodySmall!.copyWith(
-                color: Theme.of(context).colorScheme.error,
-              ),
-            ),
+            Text(line, style: text.bodySmall!.copyWith(color: color)),
         ],
-      ),
-    );
-  }
-}
-
-class _SegmentCard extends ConsumerWidget {
-  const _SegmentCard({
-    required this.projectId,
-    required this.index,
-    required this.segment,
-    required this.checks,
-  });
-
-  final String projectId;
-  final int index;
-  final DraftSegment segment;
-  final Set<String> checks;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final text = Theme.of(context).textTheme;
-    final scheme = Theme.of(context).colorScheme;
-    return Card(
-      key: Key('video-segment-${segment.segmentKey}'),
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.medium),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text('第 ${index + 1} 段', style: text.titleMedium),
-                ),
-                // 出處頁：點下回到那一頁改文字
-                Wrap(
-                  spacing: AppSpacing.xSmall,
-                  children: [
-                    for (final page in segment.sourcePages)
-                      ActionChip(
-                        label: Text('p.$page'),
-                        visualDensity: VisualDensity.compact,
-                        onPressed: () =>
-                            context.go('/videos/$projectId/pages?page=$page'),
-                      ),
-                  ],
-                ),
-              ],
-            ),
-            for (final beat in segment.beats)
-              Padding(
-                padding: const EdgeInsets.only(top: AppSpacing.small),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Checkbox(
-                      key: Key('video-beat-check-${beat.beatKey}'),
-                      value: checks.contains(beat.beatKey),
-                      onChanged: (_) => ref
-                          .read(subtitleChecksProvider(projectId).notifier)
-                          .toggle(beat.beatKey),
-                    ),
-                    const SizedBox(width: AppSpacing.small),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Text(beat.narration, style: text.bodyLarge),
-                          const SizedBox(height: AppSpacing.xSmall),
-                          DecoratedBox(
-                            decoration: BoxDecoration(
-                              color: scheme.surfaceContainerHighest,
-                              borderRadius: BorderRadius.circular(
-                                AppRadius.button,
-                              ),
-                            ),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: AppSpacing.small,
-                                vertical: AppSpacing.xSmall,
-                              ),
-                              child: Text(
-                                beat.subtitle,
-                                style: text.bodySmall!.copyWith(
-                                  color: scheme.onSurfaceVariant,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-          ],
-        ),
       ),
     );
   }

@@ -8,7 +8,8 @@ import '../state/video_projects_state.dart';
 import 'widgets/notice_banner.dart';
 import 'widgets/video_studio_widgets.dart';
 
-/// 建立影片專案（`/videos/new`）：選遊戲、章節編號、章節標題。
+/// 建立影片專案（`/videos/new`）：只選遊戲（整個遊戲一支影片，design.md D17）。
+/// 建立後後端自動開始產生草稿，畫面回到專案總覽看進度。
 class VideoProjectFormPage extends ConsumerStatefulWidget {
   const VideoProjectFormPage({super.key});
 
@@ -37,7 +38,7 @@ class _VideoProjectFormPageState extends ConsumerState<VideoProjectFormPage> {
     final form = ref.watch(videoProjectFormProvider);
     final notifier = ref.read(videoProjectFormProvider.notifier);
     final games = ref.watch(videoGameOptionsProvider);
-    final title = form.chapterTitle;
+    final text = Theme.of(context).textTheme;
     return Scaffold(
       key: const Key('video-project-form-page'),
       appBar: AppBar(title: const Text('新增影片專案')),
@@ -45,6 +46,11 @@ class _VideoProjectFormPageState extends ConsumerState<VideoProjectFormPage> {
         child: ListView(
           padding: const EdgeInsets.all(AppSpacing.medium),
           children: [
+            Text(
+              '選一款遊戲，AI 會從規則書整理出開局、走完一輪、獲勝方式，做成一支教學影片',
+              style: text.bodyMedium,
+            ),
+            const SizedBox(height: AppSpacing.medium),
             games.when(
               loading: () => const LinearProgressIndicator(),
               error: (error, _) => NoticeBanner(
@@ -70,33 +76,6 @@ class _VideoProjectFormPageState extends ConsumerState<VideoProjectFormPage> {
                 },
               ),
             ),
-            const SizedBox(height: AppSpacing.medium),
-            TextField(
-              key: const Key('video-project-chapter-number'),
-              keyboardType: TextInputType.number,
-              decoration: InputDecoration(
-                labelText: '章節編號',
-                helperText: '規則書目錄上的章節號碼',
-                errorText:
-                    form.chapterNumberInput.isNotEmpty &&
-                        form.chapterNumber == null
-                    ? '請填 1 以上的整數'
-                    : null,
-              ),
-              onChanged: notifier.setChapterNumber,
-            ),
-            const SizedBox(height: AppSpacing.medium),
-            TextField(
-              key: const Key('video-project-chapter-title'),
-              decoration: InputDecoration(
-                labelText: '章節標題',
-                counterText: '${title.length}／$videoChapterTitleMaxChars',
-                errorText: title.length > videoChapterTitleMaxChars
-                    ? '最多 $videoChapterTitleMaxChars 字'
-                    : null,
-              ),
-              onChanged: notifier.setChapterTitle,
-            ),
             if (form.error != null) ...[
               const SizedBox(height: AppSpacing.medium),
               NoticeBanner(text: form.error!, isError: true),
@@ -105,7 +84,7 @@ class _VideoProjectFormPageState extends ConsumerState<VideoProjectFormPage> {
             FilledButton(
               key: const Key('video-project-submit'),
               onPressed: form.canSubmit ? _submit : null,
-              child: Text(form.submitting ? '建立中…' : '建立'),
+              child: Text(form.submitting ? '建立中…' : '建立並產生草稿'),
             ),
           ],
         ),

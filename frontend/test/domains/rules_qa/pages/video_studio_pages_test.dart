@@ -468,13 +468,12 @@ void main() {
     });
 
     testWidgets('沒有「選頁與編輯文字」的路由', (tester) async {
-      final h = await pumpVideo(
+      await pumpVideo(
         tester,
         location: '/videos/p1/pages',
         repo: draftRepo(draftOf()),
       );
       expect(find.byKey(const Key('video-pages-page')), findsNothing);
-      expect(h.path, '/videos/p1/pages');
     });
   });
 }

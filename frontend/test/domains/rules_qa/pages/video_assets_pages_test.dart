@@ -20,6 +20,7 @@ const draftWithAssets = VideoDraft(
   assets: [
     DraftAsset(
       assetKey: 'board',
+      label: '圖板',
       kind: 'flat_photo',
       priority: 'must',
       reason: '說明圖板上的兩個區域',

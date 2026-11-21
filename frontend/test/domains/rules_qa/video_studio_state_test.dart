@@ -89,7 +89,7 @@ void main() {
       final repo = FakeVideoStudioRepository(projects: [sampleVideoProject()]);
       final container = makeContainer(repo);
       final projects = await container.read(videoProjectsProvider.future);
-      expect(projects.single.chapterTitle, '步驟三');
+      expect(projects.single.title, '假遊戲 規則教學');
     });
 
     test('沒有專案', () async {
@@ -129,15 +129,15 @@ void main() {
       final container = makeContainer(repo);
       expect(
         (await container.read(videoProjectProvider('p1').future)).step,
-        'pages',
+        'draft',
       );
-      repo.projects = [sampleVideoProject(step: 'draft')];
+      repo.projects = [sampleVideoProject(step: 'assets')];
       final notifier = container.read(videoJobProvider('p1').notifier);
       await notifier.startDraft();
       await notifier.finished;
       expect(
         (await container.read(videoProjectProvider('p1').future)).step,
-        'draft',
+        'assets',
       );
     });
   });
@@ -200,7 +200,7 @@ void main() {
       expect(container.read(provider).running, isFalse);
       expect(repo.polledJobs, isNotEmpty);
       final draft = await container.read(videoDraftProvider('p1').future);
-      expect(draft?.segments.single.segmentKey, 's1');
+      expect(draft?.segments.first.segmentKey, 's1');
     });
 
     test('工作失敗：顯示 error', () async {

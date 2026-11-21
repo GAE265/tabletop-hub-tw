@@ -111,7 +111,7 @@ class _VideoAssetPageState extends ConsumerState<VideoAssetPage> {
     final size = photo == null ? null : imageSizeOf(photo);
     return Scaffold(
       key: const Key('video-asset-page'),
-      appBar: AppBar(title: const Text('素材')),
+      appBar: AppBar(title: Text(asset?.label ?? '素材')),
       bottomNavigationBar: asset == null
           ? null
           : VideoBottomActions(

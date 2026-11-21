@@ -79,7 +79,13 @@ class VideoAssetsPage extends ConsumerWidget {
                       error: (error, _) => Text(
                         error is ApiException ? error.message : '讀不到還缺什麼',
                       ),
-                      data: (r) => VideoReadinessCard(readiness: r),
+                      data: (r) => VideoReadinessCard(
+                        readiness: r,
+                        names: {
+                          for (final a in value.assets)
+                            a.assetKey: assetDisplayName(a),
+                        },
+                      ),
                     ),
                     const SizedBox(height: AppSpacing.medium),
                     for (final asset in value.assets)
@@ -145,7 +151,7 @@ class _AssetTile extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      asset.reason,
+                      assetDisplayName(asset),
                       style: Theme.of(context).textTheme.titleSmall,
                     ),
                     if (asset.shot != null) ...[
