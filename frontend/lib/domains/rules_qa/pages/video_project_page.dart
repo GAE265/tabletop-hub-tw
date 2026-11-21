@@ -141,6 +141,9 @@ class _Overview extends ConsumerWidget {
                       1 when current >= 1 => () => context.go(
                         '/videos/$id/draft',
                       ),
+                      2 when current >= 1 => () => context.go(
+                        '/videos/$id/assets',
+                      ),
                       _ => null,
                     },
                   ),

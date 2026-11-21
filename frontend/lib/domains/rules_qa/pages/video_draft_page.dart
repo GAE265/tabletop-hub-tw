@@ -59,7 +59,7 @@ class _VideoDraftPageState extends ConsumerState<VideoDraftPage> {
                 // 沒勾完也能確認（外觀決定）；勾選數只是提醒
                 FilledButton(
                   key: const Key('video-draft-confirm'),
-                  onPressed: () => context.go('/videos/$_id'),
+                  onPressed: () => context.go('/videos/$_id/assets'),
                   child: const Text('確認草稿'),
                 ),
               ],

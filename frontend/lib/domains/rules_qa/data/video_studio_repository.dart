@@ -1,8 +1,11 @@
+import 'dart:typed_data';
+
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/api/api_client.dart';
 import '../../../core/api/api_exception.dart';
+import '../../../core/platform/image_picker.dart';
 import 'video_studio_models.dart';
 
 /// 規則影片生產器 1d 的 API（add-rules-video-mobile design.md D1、D2、D11）。
@@ -34,6 +37,29 @@ abstract interface class VideoStudioRepository {
 
   /// 草稿；還沒有草稿時是 null。
   Future<VideoDraft?> getDraft(String projectId);
+
+  /// 一個素材的方向、區域座標、有沒有照片（MR 7）。
+  Future<VideoAsset> getAsset(String projectId, String assetKey);
+
+  /// 上傳或換一張照片（JPEG、PNG，最多 15 MB）；後端依 EXIF 轉正，方向改回 0。
+  Future<VideoAsset> uploadPhoto(
+    String projectId,
+    String assetKey,
+    PickedImage image,
+  );
+
+  /// 照片的內容（帶身分讀取，見 design.md D13 待決 1）。
+  Future<Uint8List> getPhoto(String projectId, String assetKey);
+
+  /// 改方向或區域座標。
+  Future<VideoAsset> updateAsset(
+    String projectId,
+    String assetKey,
+    VideoAssetUpdate input,
+  );
+
+  /// 產生影片前還缺什麼。
+  Future<VideoReadiness> getReadiness(String projectId);
 }
 
 class HttpVideoStudioRepository implements VideoStudioRepository {
@@ -144,6 +170,61 @@ class HttpVideoStudioRepository implements VideoStudioRepository {
       rethrow;
     }
   }
+
+  @override
+  Future<VideoAsset> getAsset(String projectId, String assetKey) =>
+      _guard(() async {
+        final response = await _dio.get<Map<String, dynamic>>(
+          '$_base/$projectId/assets/$assetKey',
+        );
+        return VideoAsset.fromJson(response.data!);
+      });
+
+  @override
+  Future<VideoAsset> uploadPhoto(
+    String projectId,
+    String assetKey,
+    PickedImage image,
+  ) => _guard(() async {
+    final response = await _dio.put<Map<String, dynamic>>(
+      '$_base/$projectId/assets/$assetKey/photo',
+      data: FormData.fromMap({
+        'file': MultipartFile.fromBytes(image.bytes, filename: image.name),
+      }),
+    );
+    return VideoAsset.fromJson(response.data!);
+  });
+
+  @override
+  Future<Uint8List> getPhoto(String projectId, String assetKey) =>
+      _guard(() async {
+        final response = await _dio.get<List<int>>(
+          '$_base/$projectId/assets/$assetKey/photo',
+          options: Options(responseType: ResponseType.bytes),
+        );
+        return Uint8List.fromList(response.data!);
+      });
+
+  @override
+  Future<VideoAsset> updateAsset(
+    String projectId,
+    String assetKey,
+    VideoAssetUpdate input,
+  ) => _guard(() async {
+    final response = await _dio.patch<Map<String, dynamic>>(
+      '$_base/$projectId/assets/$assetKey',
+      data: input.toJson(),
+    );
+    return VideoAsset.fromJson(response.data!);
+  });
+
+  @override
+  Future<VideoReadiness> getReadiness(String projectId) => _guard(() async {
+    final response = await _dio.get<Map<String, dynamic>>(
+      '$_base/$projectId/readiness',
+    );
+    return VideoReadiness.fromJson(response.data!);
+  });
 
   Future<T> _guard<T>(Future<T> Function() call) async {
     try {

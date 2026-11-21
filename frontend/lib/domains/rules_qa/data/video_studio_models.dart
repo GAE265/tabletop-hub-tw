@@ -288,3 +288,94 @@ abstract class VideoDraft with _$VideoDraft {
   factory VideoDraft.fromJson(Map<String, dynamic> json) =>
       _$VideoDraftFromJson(json);
 }
+
+/// 一個素材的明細（`GET /api/v1/rules-videos/{id}/assets/{asset_key}`，MR 7）。
+/// `orientation`：照片需要順時針轉幾度才會擺正。`regions`：名稱 → [x, y, w, h]（0–1 的比例，
+/// 以套用方向之後的圖為準）；null＝待量測。
+@freezed
+abstract class VideoAsset with _$VideoAsset {
+  @JsonSerializable(fieldRename: FieldRename.snake)
+  const factory VideoAsset({
+    required String assetKey,
+    required String kind,
+    required String priority,
+    required String reason,
+    String? shot,
+    required bool hasPhoto,
+    required int orientation,
+    required Map<String, List<double>?> regions,
+    required int videoVersion,
+  }) = _VideoAsset;
+
+  factory VideoAsset.fromJson(Map<String, dynamic> json) =>
+      _$VideoAssetFromJson(json);
+}
+
+/// 改方向或區域；沒給的欄位不送。只改方向時，後端把區域改回待量測。
+@freezed
+abstract class VideoAssetUpdate with _$VideoAssetUpdate {
+  @JsonSerializable(fieldRename: FieldRename.snake, includeIfNull: false)
+  const factory VideoAssetUpdate({
+    int? orientation,
+    Map<String, List<double>?>? regions,
+  }) = _VideoAssetUpdate;
+
+  factory VideoAssetUpdate.fromJson(Map<String, dynamic> json) =>
+      _$VideoAssetUpdateFromJson(json);
+}
+
+/// 還沒有照片的素材。`priority`：must＝必拍、optional＝選拍（選拍也會擋住產生影片）。
+@freezed
+abstract class MissingPhoto with _$MissingPhoto {
+  @JsonSerializable(fieldRename: FieldRename.snake)
+  const factory MissingPhoto({
+    required String assetKey,
+    required String priority,
+    required String reason,
+    String? shot,
+  }) = _MissingPhoto;
+
+  factory MissingPhoto.fromJson(Map<String, dynamic> json) =>
+      _$MissingPhotoFromJson(json);
+}
+
+@freezed
+abstract class MissingRegion with _$MissingRegion {
+  @JsonSerializable(fieldRename: FieldRename.snake)
+  const factory MissingRegion({
+    required String assetKey,
+    required String region,
+  }) = _MissingRegion;
+
+  factory MissingRegion.fromJson(Map<String, dynamic> json) =>
+      _$MissingRegionFromJson(json);
+}
+
+/// 本版不支援的素材（繪製素材）。
+@freezed
+abstract class UnsupportedAsset with _$UnsupportedAsset {
+  @JsonSerializable(fieldRename: FieldRename.snake)
+  const factory UnsupportedAsset({
+    required String assetKey,
+    required String kind,
+    required String message,
+  }) = _UnsupportedAsset;
+
+  factory UnsupportedAsset.fromJson(Map<String, dynamic> json) =>
+      _$UnsupportedAssetFromJson(json);
+}
+
+/// 產生影片前還缺什麼（`GET /api/v1/rules-videos/{id}/readiness`）。
+@freezed
+abstract class VideoReadiness with _$VideoReadiness {
+  @JsonSerializable(fieldRename: FieldRename.snake)
+  const factory VideoReadiness({
+    required bool ready,
+    required List<MissingPhoto> missingPhotos,
+    required List<MissingRegion> missingRegions,
+    required List<UnsupportedAsset> unsupported,
+  }) = _VideoReadiness;
+
+  factory VideoReadiness.fromJson(Map<String, dynamic> json) =>
+      _$VideoReadinessFromJson(json);
+}
