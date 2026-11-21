@@ -392,6 +392,14 @@ class VideoReadinessOut(BaseModel):
 # --------------------------------------------------------------------------- 成品影片（MR 9）
 
 
+class RenderSegmentOut(BaseModel):
+    segment_key: str
+    # 這一段第一句開始的秒數（點一段跳到這裡）
+    start_seconds: float
+    # 第一句字幕，段清單上顯示
+    title: str
+
+
 class VideoRenderOut(BaseModel):
     """最近一次成功產生的影片。"""
 
@@ -407,4 +415,6 @@ class VideoRenderOut(BaseModel):
     # 沒有設定文字轉語音時，旁白靜音、時間為估計值
     estimated: bool
     warnings: list[str]
+    # 段清單；這個欄位加上之前產生的影片是空的
+    segments: list[RenderSegmentOut] = []
     finished_at: datetime | None

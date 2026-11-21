@@ -1067,6 +1067,7 @@ class VideoRenderService:
             skipped_assets=result.get("skipped_assets", []),
             estimated=result.get("estimated", False),
             warnings=result.get("warnings", []),
+            segments=result.get("segments", []),
             finished_at=job.finished_at,
         )
 

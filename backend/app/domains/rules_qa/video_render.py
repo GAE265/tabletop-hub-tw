@@ -10,6 +10,7 @@
 整個工作仍受 JobRunner 的 30 分鐘限制。
 """
 
+import csv
 import json
 import logging
 import uuid
@@ -97,6 +98,21 @@ def not_ready_message(report: dict[str, Any]) -> str:
     if report["unsupported"]:
         parts.append(f"{len(report['unsupported'])} 個本版不支援的繪製素材")
     return f"還不能產生影片：{'、'.join(parts)}"
+
+
+def segment_starts(timing_csv: Path) -> list[dict[str, Any]]:
+    """每段第一句的開始秒數與字幕（看影片頁的段清單）；沒有旁白的段（例如標題字卡）不列。"""
+    segments: dict[str, dict[str, Any]] = {}
+    with timing_csv.open(encoding="utf-8-sig", newline="") as f:
+        for row in csv.DictReader(f):
+            key = row["segment_key"]
+            if key not in segments:
+                segments[key] = {
+                    "segment_key": key,
+                    "start_seconds": float(row["start_sec"]),
+                    "title": row["subtitle"],
+                }
+    return list(segments.values())
 
 
 class RenderJobHandler:
@@ -187,6 +203,7 @@ class RenderJobHandler:
             "estimated": estimated,
             "warnings": list(result.warnings),
             "video_version": state.video_version,
+            "segments": segment_starts(result.timing_csv),
         }
 
     def _expand(self, folder: Path, project_id: uuid.UUID, video: dict[str, Any]) -> None:
