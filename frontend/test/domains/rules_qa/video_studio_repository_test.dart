@@ -228,4 +228,67 @@ void main() {
       expect(readiness.unsupported.single.message, '本版不支援');
     });
   });
+  group('產生影片（MR 10）', () {
+    test('產生影片：POST .../jobs，kind=render', () async {
+      final adapter = RecordingAdapter(
+        statusCode: 202,
+        body: jobJson.replaceFirst('"kind": "draft"', '"kind": "render"'),
+      );
+      final job = await makeRepository(adapter).startRender('p1');
+      expect(adapter.requests.single.path, '/api/v1/rules-videos/p1/jobs');
+      expect(jsonDecode(adapter.bodies.single!), {'kind': 'render'});
+      expect(job.kind, 'render');
+    });
+
+    test('成品：GET .../render', () async {
+      final adapter = RecordingAdapter(
+        body:
+            '{"job_id": "j9", "video_path": "/api/v1/rules-videos/p1/render/video", '
+            '"total_seconds": 42.5, "reencoded": ["s1"], "reused": ["s2"], '
+            '"skipped_assets": ["blue"], "estimated": true, "warnings": [], '
+            '"finished_at": "2026-11-22T00:00:00Z"}',
+      );
+      final render = await makeRepository(adapter).getRender('p1');
+      expect(adapter.requests.single.path, '/api/v1/rules-videos/p1/render');
+      expect(render!.totalSeconds, 42.5);
+      expect(render.reencoded, ['s1']);
+      expect(render.skippedAssets, ['blue']);
+    });
+
+    test('還沒有成品（404 RULES_VIDEO_RENDER_NOT_FOUND）回 null', () async {
+      final adapter = RecordingAdapter(
+        statusCode: 404,
+        body:
+            '{"error": {"code": "RULES_VIDEO_RENDER_NOT_FOUND", "message": "還沒有", '
+            '"details": {}}}',
+      );
+      expect(await makeRepository(adapter).getRender('p1'), isNull);
+    });
+
+    test('影片檔：GET .../render/video，回傳位元組', () async {
+      final adapter = RecordingAdapter(body: 'MP4DATA');
+      final bytes = await makeRepository(adapter).getRenderVideo('p1');
+      expect(
+        adapter.requests.single.path,
+        '/api/v1/rules-videos/p1/render/video',
+      );
+      expect(bytes, utf8.encode('MP4DATA'));
+    });
+
+    test('略過：PATCH 只送 skipped', () async {
+      final adapter = RecordingAdapter(
+        body:
+            '{"asset_key": "blue", "kind": "flat_photo", "priority": "optional", '
+            '"reason": "藍牌", "shot": null, "has_photo": false, "orientation": 0, '
+            '"regions": {}, "video_version": 2, "skipped": true, '
+            '"skip_affected_segments": [1], "skip_blocked_segments": []}',
+      );
+      final asset = await makeRepository(
+        adapter,
+      ).updateAsset('p1', 'blue', const VideoAssetUpdate(skipped: true));
+      expect(jsonDecode(adapter.bodies.single!), {'skipped': true});
+      expect(asset.skipped, isTrue);
+      expect(asset.skipAffectedSegments, [1]);
+    });
+  });
 }

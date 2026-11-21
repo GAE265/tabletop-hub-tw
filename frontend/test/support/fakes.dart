@@ -1770,9 +1770,36 @@ class FakeVideoStudioRepository implements VideoStudioRepository {
     return assets[key] = asset.copyWith(
       orientation: orientation ?? asset.orientation,
       regions: regions,
+      skipped: input.skipped ?? asset.skipped,
       videoVersion: asset.videoVersion + 1,
     );
   }
+
+  // --- 產生影片（MR 10） ---
+
+  /// 專案最近一次成功的成品；沒有的專案 getRender 拋 404。
+  final renders = <String, VideoRender>{};
+  final renderVideos = <String, Uint8List>{};
+  Object? startRenderError;
+  final startedRenders = <String>[];
+
+  @override
+  Future<VideoJob> startRender(String projectId) async {
+    startedRenders.add(projectId);
+    if (startRenderError != null) throw startRenderError!;
+    return sampleVideoJob(
+      projectId: projectId,
+      kind: 'render',
+      status: VideoJobStatus.queued,
+    );
+  }
+
+  @override
+  Future<VideoRender?> getRender(String projectId) async => renders[projectId];
+
+  @override
+  Future<Uint8List> getRenderVideo(String projectId) async =>
+      renderVideos[projectId]!;
 
   @override
   Future<VideoReadiness> getReadiness(String projectId) async =>
@@ -1802,6 +1829,7 @@ VideoProject sampleVideoProject({
 VideoJob sampleVideoJob({
   String id = 'j1',
   String projectId = 'p1',
+  String kind = 'draft',
   VideoJobStatus status = VideoJobStatus.queued,
   double progress = 0,
   String? message,
@@ -1809,7 +1837,7 @@ VideoJob sampleVideoJob({
 }) => VideoJob(
   id: id,
   projectId: projectId,
-  kind: 'draft',
+  kind: kind,
   status: status,
   progress: progress,
   message: message,
