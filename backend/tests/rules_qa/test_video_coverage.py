@@ -99,3 +99,45 @@ def test_unknown_beat_key_marked_unmatched(tmp_path: Path) -> None:
     _, report = _run(tmp_path, coverage_output([rule]))
     assert report.rules[0].unmatched_beats == ["b9"]
     assert "無法對應" in report.markdown()
+
+
+# --- 規則分類（2026-11-21 永傑決定）：條件、動作、目的說明 ---
+
+
+def test_schema_asks_for_category() -> None:
+    from app.domains.rules_qa.video_coverage import INSTRUCTIONS, SCHEMA
+
+    rule = SCHEMA.schema["properties"]["rules"]["items"]
+    assert rule["properties"]["category"]["enum"] == ["condition", "action", "purpose"]
+    assert "category" in rule["required"]
+    assert "目的說明" in INSTRUCTIONS
+
+
+def test_purpose_rule_is_a_hint_not_an_omission(tmp_path: Path) -> None:
+    purpose = coverage_rule(
+        rule_id="R2",
+        category="purpose",
+        source="so that nobody can tell who played which card.",
+        narration=("missing", [], "讓人無法判斷誰打出哪張牌"),
+        subtitle=("complete", ["b1"], None),
+    )
+    _, report = _run(tmp_path, coverage_output([coverage_rule(), purpose]))
+    checked = report.rules[1]
+    assert checked.has_issue is False
+    assert checked.narration_shorter is False
+    assert report.has_issues is False
+    markdown = report.markdown()
+    # 不隱藏：另列在「提示」，不算漏講
+    assert "提示" in markdown and "不算漏講" in markdown and purpose["source"] in markdown
+    assert "旁白比字幕少條件" not in markdown
+
+
+def test_category_shown_in_table(tmp_path: Path) -> None:
+    condition = coverage_rule(
+        rule_id="R3",
+        category="condition",
+        narration=("incomplete", ["b2"], "沒有血刃牌時"),
+        subtitle=("complete", ["b2"], None),
+    )
+    _, report = _run(tmp_path, coverage_output([condition]))
+    assert "| R3 | 條件 |" in report.markdown()

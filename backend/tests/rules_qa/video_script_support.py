@@ -156,10 +156,12 @@ def coverage_rule(
     narration: tuple[str, list[str], str | None] = ("complete", ["b1"], None),
     subtitle: tuple[str, list[str], str | None] = ("complete", ["b1"], None),
     source: str = "Shuffle the played cards face down, then reveal them together.",
+    category: str = "action",
 ) -> dict[str, Any]:
     """涵蓋檢查 LLM 回傳的一條規則：(狀態, 句子編號, 缺少的部分)。"""
     return {
         "rule_id": rule_id,
+        "category": category,
         "source": source,
         "narration": {"status": narration[0], "beat_keys": narration[1], "missing": narration[2]},
         "subtitle": {"status": subtitle[0], "beat_keys": subtitle[1], "missing": subtitle[2]},
