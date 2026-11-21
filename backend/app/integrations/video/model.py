@@ -56,7 +56,8 @@ class Asset:
     reason: str  # 觀眾必須從這個素材讀到什麼資訊
     file: str | None = None
     shot: str | None = None
-    regions: dict[str, Region] = field(default_factory=dict)
+    # 區域座標為 None 代表待量測（只有草稿模式允許）
+    regions: dict[str, Region | None] = field(default_factory=dict)
     orientation: int = 0
     usable: bool | None = None  # None：還沒確認
     quality: dict[str, Any] | None = None  # 預留給第 4 階段
@@ -262,8 +263,12 @@ class _Parser:
         return Region(x, y, w, h)
 
 
-def load_video(folder: Path | str) -> Video:
-    """載入資料夾內的 video.json 並驗證；有任何錯誤就拋 VideoDataError。"""
+def load_video(folder: Path | str, *, draft: bool = False) -> Video:
+    """載入資料夾內的 video.json 並驗證；有任何錯誤就拋 VideoDataError。
+
+    draft=True（草稿模式）允許還沒準備好的內容：照片檔待拍（file 為 null）、
+    區域座標待量測（null）、繪製素材。正式模式（輸出畫面）不允許，載入時列出缺什麼。
+    """
     folder = Path(folder)
     path = folder / "video.json"
     try:
@@ -272,10 +277,10 @@ def load_video(folder: Path | str) -> Video:
         raise VideoDataError([f"找不到段資料檔：{path}"]) from exc
     except json.JSONDecodeError as exc:
         raise VideoDataError([f"video.json 不是合法的 JSON：{exc}"]) from exc
-    return parse_video(raw, folder)
+    return parse_video(raw, folder, draft=draft)
 
 
-def parse_video(raw: Any, base_dir: Path) -> Video:
+def parse_video(raw: Any, base_dir: Path, *, draft: bool = False) -> Video:
     p = _Parser()
     data = p.obj(raw, "video.json") or {}
     p.fields(
@@ -292,7 +297,7 @@ def parse_video(raw: Any, base_dir: Path) -> Video:
     voice = p.optional_text(data, "voice", "video.json") or DEFAULT_VOICE
 
     chapters = _parse_chapters(p, data)
-    assets = _parse_assets(p, data, base_dir)
+    assets = _parse_assets(p, data, base_dir, draft)
     segments = [
         _parse_segment(p, raw_seg, i)
         for i, raw_seg in enumerate(p.items(data, "segments", "video.json"))
@@ -354,7 +359,9 @@ def _parse_chapters(p: _Parser, data: dict[str, Any]) -> list[Chapter]:
     return chapters
 
 
-def _parse_assets(p: _Parser, data: dict[str, Any], base_dir: Path) -> dict[str, Asset]:
+def _parse_assets(
+    p: _Parser, data: dict[str, Any], base_dir: Path, draft: bool
+) -> dict[str, Asset]:
     assets: dict[str, Asset] = {}
     keys: list[str] = []
     for i, raw in enumerate(p.items(data, "assets", "video.json")):
@@ -382,7 +389,8 @@ def _parse_assets(p: _Parser, data: dict[str, Any], base_dir: Path) -> dict[str,
         )
         kind = item.get("kind")
         if kind in RESERVED_ASSET_KINDS:
-            p.error(where, f"本版尚未支援的素材種類：{kind}")
+            if not draft:  # 草稿可以先列出來，輸出畫面時才需要支援
+                p.error(where, f"本版尚未支援的素材種類：{kind}")
         elif kind not in ASSET_KINDS:
             p.error(where, f"kind 必須是 {'、'.join(ASSET_KINDS)} 之一，收到 {kind!r}")
         orientation = item.get("orientation", 0)
@@ -393,19 +401,26 @@ def _parse_assets(p: _Parser, data: dict[str, Any], base_dir: Path) -> dict[str,
         if usable not in (None, True, False):
             p.error(where, "usable 必須是 null、true 或 false")
             usable = None
-        regions: dict[str, Region] = {}
+        regions: dict[str, Region | None] = {}
         raw_regions = item.get("regions", {})
         if not isinstance(raw_regions, dict):
             p.error(where, "regions 必須是物件")
         else:
             for name, box in raw_regions.items():
+                if box is None:
+                    if draft:
+                        regions[name] = None  # 待量測
+                    else:
+                        p.error(where, f"區域 {name} 待量測：還沒有座標")
+                    continue
                 region = p.box(box, where, f"區域 {name}")
                 if region is not None:
                     regions[name] = region
         file = p.optional_text(item, "file", where)
         if kind == "flat_photo":
             if file is None:
-                p.error(where, "flat_photo 素材必須有 file")
+                if not draft:  # 草稿可以待拍
+                    p.error(where, "待拍：還沒有照片檔（file）")
             elif not _inside_assets(base_dir, file):
                 p.error(where, f"素材檔案必須在 assets/ 內，不能用 .. 或絕對路徑：{file}")
             elif not (base_dir / "assets" / file).is_file():
@@ -816,7 +831,7 @@ def _validate_segment(
             continue
         slot = seg.slots[target.slot]
         region = assets[slot.asset_key or ""].regions[target.name or ""]
-        if region_in_crop(region, slot.crop) is None:
+        if region is not None and region_in_crop(region, slot.crop) is None:
             p.error(
                 where,
                 f"區域 {target.name} 不在槽位 {target.slot} 的 crop 範圍內，畫面上看不到",

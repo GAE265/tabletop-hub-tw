@@ -4,6 +4,10 @@
     uv run python -m app.domains.rules_qa.video_commands check  <資料夾>   # 只驗證段資料
     uv run python -m app.domains.rules_qa.video_commands stills <資料夾>   # 靜態圖與對照圖
     uv run python -m app.domains.rules_qa.video_commands render <資料夾>   # 完整影片
+    uv run python -m app.domains.rules_qa.video_commands draft <資料夾> \
+        --pages rulebook/en-005.txt --chapter-number 11 --chapter-title 步驟三 \
+        [--reference-pages rulebook/en-003.txt] [--assets-from video.json]  # AI 產生草稿
+    uv run python -m app.domains.rules_qa.video_commands compare <AI 草稿> <手寫>  # 逐項比對
 
 <資料夾> 內有 video.json 與 assets/，輸出寫到 <資料夾>/out/，旁白與段影片快取在 <資料夾>/cache/。
 check、stills 不連資料庫、不需要 ffmpeg 與金鑰，旁白長度用估計值（每 4 個字 1 秒）。
@@ -12,10 +16,25 @@ render 需要 ffmpeg（FFMPEG_PATH）；TTS 用 .env 的 TTS_PROVIDER，未設�
 """
 
 import argparse
+import json
 import sys
+from dataclasses import asdict
 from pathlib import Path
 
 from app.core.config import Settings, get_settings
+from app.domains.rules_qa.video_script import (
+    CLEANUP_RULES,
+    CleanupRecord,
+    ScriptInputError,
+    ScriptRejected,
+    ScriptRequest,
+    copy_assets_from,
+    generate_script,
+    load_pages,
+    load_terms,
+)
+from app.integrations.llm import LLMProvider, get_llm_provider
+from app.integrations.llm.errors import LLMError
 from app.integrations.tts import TTSConfig, TTSError, get_tts_provider
 from app.integrations.video import (
     DEFAULT_STYLE,
@@ -27,6 +46,7 @@ from app.integrations.video import (
     load_video,
     render_stills,
 )
+from app.integrations.video.compare import compare_videos
 from app.integrations.video.ffmpeg import Ffmpeg
 from app.integrations.video.pipeline import render_video
 
@@ -45,6 +65,33 @@ def _build_parser() -> argparse.ArgumentParser:
     ):
         command = commands.add_parser(name, help=help_text)
         command.add_argument("folder", type=Path, metavar="<資料夾>")
+    draft = commands.add_parser("draft", help="AI 從規則書頁面產生段資料草稿（寫到 draft/）")
+    draft.add_argument("folder", type=Path, metavar="<資料夾>")
+    draft.add_argument(
+        "--pages",
+        action="append",
+        required=True,
+        metavar="<頁面檔>",
+        help="規則書頁面文字（相對資料夾），檔名 <語言>-<頁碼>.txt；可指定多次",
+    )
+    draft.add_argument(
+        "--reference-pages",
+        action="append",
+        default=[],
+        metavar="<頁面檔>",
+        help="參考頁（相對資料夾）：只供查牌名與分類，不可寫成旁白；可指定多次",
+    )
+    draft.add_argument("--chapter-number", type=int, required=True)
+    draft.add_argument("--chapter-title", required=True)
+    draft.add_argument("--terms", default="terms.json", help="用語對照表（相對資料夾）")
+    draft.add_argument(
+        "--assets-from",
+        metavar="<video.json>",
+        help="從這份段資料借用同一個 asset_key 的照片檔與區域座標（相對資料夾）",
+    )
+    compare = commands.add_parser("compare", help="逐項比對兩份段資料，輸出 compare.md")
+    compare.add_argument("a", type=Path, metavar="<AI 草稿資料夾>")
+    compare.add_argument("b", type=Path, metavar="<手寫資料夾>")
     return parser
 
 
@@ -52,9 +99,14 @@ def main(
     argv: list[str] | None = None,
     settings: Settings | None = None,
     ffmpeg: list[str] | None = None,
+    llm: LLMProvider | None = None,
 ) -> int:
-    """ffmpeg 只給測試用：換成手寫的假 ffmpeg 指令；平常從 FFMPEG_PATH 讀。"""
+    """ffmpeg、llm 只給測試用：換成手寫的假 ffmpeg 與 FakeLLMProvider；平常從設定讀。"""
     args = _build_parser().parse_args(argv)
+    if args.command == "draft":
+        return _draft(args, settings or get_settings(), llm)
+    if args.command == "compare":
+        return _compare(args.a, args.b)
     try:
         video = load_video(args.folder)
     except VideoDataError as exc:
@@ -151,6 +203,128 @@ def _render(
     print(f"時間報表：{result.timing_csv}")
     print(f"報告：{result.report}")
     return EXIT_OK
+
+
+def _draft(args: argparse.Namespace, settings: Settings, llm: LLMProvider | None) -> int:
+    folder: Path = args.folder
+    try:
+        request = ScriptRequest(
+            chapter_number=args.chapter_number,
+            chapter_title=args.chapter_title,
+            pages=load_pages(folder, args.pages),
+            reference_pages=(
+                load_pages(folder, args.reference_pages) if args.reference_pages else []
+            ),
+            terms=load_terms(folder / args.terms),
+            **_game_identity(folder),
+        )
+    except ScriptInputError as exc:
+        print(f"輸入錯誤：{exc}", file=sys.stderr)
+        return EXIT_FAILED
+
+    draft_folder = folder / "draft"
+    try:
+        cleanups: list[CleanupRecord] = []
+        data = generate_script(
+            llm or get_llm_provider(settings.llm_provider, settings),
+            request,
+            draft_folder,
+            cleanup_log=cleanups,
+        )
+    except LLMError as exc:
+        print(f"LLM 暫時無法使用或拒絕輸出：{exc}", file=sys.stderr)
+        return EXIT_FAILED
+    except ScriptRejected as exc:
+        draft_folder.mkdir(parents=True, exist_ok=True)
+        for n, output in enumerate(exc.outputs, start=1):
+            _write_json(draft_folder / f"rejected-{n}.json", output)
+        print("AI 改寫一次後仍不通過檢查：", file=sys.stderr)
+        for error in exc.errors:
+            print(f"- {error}", file=sys.stderr)
+        print(f"兩次原始輸出存在 {draft_folder}/rejected-1.json、rejected-2.json", file=sys.stderr)
+        return EXIT_FAILED
+
+    draft_folder.mkdir(parents=True, exist_ok=True)
+    borrowed: list[str] = []
+    if args.assets_from:
+        hand = folder / args.assets_from
+        try:
+            borrowed = copy_assets_from(data, hand.parent, draft_folder)
+        except VideoDataError as exc:
+            print(f"借用照片與座標失敗（{hand}）：{exc}", file=sys.stderr)
+            return EXIT_FAILED
+    _write_json(draft_folder / "video.json", data)
+    (draft_folder / "cleanup.json").write_text(
+        json.dumps([asdict(r) for r in cleanups], ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    if cleanups:
+        print(f"自動清理了 {len(cleanups)} 處格式小錯（記在 cleanup.json）：")
+        for r in cleanups:
+            print(f"  {r.rule} {CLEANUP_RULES[r.rule]}：{r.where}「{r.before}」→「{r.after}」")
+
+    beats = sum(len(s["beats"]) for s in data["segments"])
+    pending = [a["asset_key"] for a in data["assets"] if a["file"] is None]
+    print(f"已產生草稿：{draft_folder / 'video.json'}（{len(data['segments'])} 段、{beats} 句）")
+    print(f"素材 {len(data['assets'])} 項：借用 {len(borrowed)} 項、待拍 {len(pending)} 項")
+    if pending:
+        print(f"待拍：{'、'.join(pending)}")
+    return EXIT_OK
+
+
+def _game_identity(folder: Path) -> dict[str, str | None]:
+    """草稿的 game_key、title、voice：沿用資料夾內手寫版的值；沒有手寫版就用資料夾名稱。"""
+    try:
+        raw = json.loads((folder / "video.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        raw = {}
+    return {
+        "game_key": raw.get("game_key") or folder.name,
+        "title": raw.get("title") or f"{folder.name} 規則教學",
+        "voice": raw.get("voice"),
+    }
+
+
+def _compare(a: Path, b: Path) -> int:
+    videos = []
+    for folder in (a, b):
+        try:
+            videos.append(load_video(folder, draft=True))
+        except VideoDataError as exc:
+            print(f"{folder} 的段資料有錯：{exc}", file=sys.stderr)
+            return EXIT_FAILED
+    report = compare_videos(videos[0], videos[1])
+    target = a / "compare.md"
+    target.write_text(report.markdown() + _cleanup_section(a), encoding="utf-8")
+    print(f"已輸出比對報告：{target}")
+    for category, counts in report.summary.items():
+        print(
+            f"  {category}：相同 {counts.same}、不同 {counts.different}、"
+            f"缺少 {counts.missing}、多出 {counts.extra}"
+        )
+    return EXIT_OK
+
+
+def _cleanup_section(folder: Path) -> str:
+    """比對報告的「自動清理」一節：AI 草稿產生時清了哪些格式小錯。"""
+    path = folder / "cleanup.json"
+    lines = ["", "## 自動清理", ""]
+    if not path.is_file():
+        return "\n".join([*lines, "沒有自動清理的紀錄（沒有 cleanup.json）。", ""])
+    records = json.loads(path.read_text(encoding="utf-8"))
+    if not records:
+        return "\n".join([*lines, "這份草稿沒有需要清理的格式小錯。", ""])
+    lines += ["| 規則 | 第幾次輸出 | 位置 | 清理前 | 清理後 |", "|---|---|---|---|---|"]
+    for r in records:
+        rule = f"{r['rule']} {CLEANUP_RULES.get(r['rule'], '')}"
+        lines.append(
+            f"| {rule} | {r['attempt']} | {r['where']} | `{r['before']}` | `{r['after']}` |"
+        )
+    return "\n".join(lines) + "\n"
+
+
+def _write_json(path: Path, data: dict) -> None:
+    path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
 if __name__ == "__main__":
