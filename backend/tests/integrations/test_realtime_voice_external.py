@@ -234,7 +234,8 @@ def test_spoken_question_calls_the_tool_and_tool_result_is_answered(
             assert tool.speech_id is not None
             assert tool.speech_id in {t.speech_id for t in finals}
             spoken = next(t for t in finals if t.speech_id == tool.speech_id)
-            assert "幾" in spoken.text
+            # 辨識文字是簡體字（轉成繁體是呼叫端的事），所以兩種寫法都接受
+            assert "几" in spoken.text or "幾" in spoken.text
 
             before = len(listener.of(HostUtteranceEnded))
             await connection.send_tool_result(

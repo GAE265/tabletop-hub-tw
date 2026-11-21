@@ -1,4 +1,5 @@
 from app.integrations.realtime_voice.base import RealtimeVoiceConnection, RealtimeVoiceProvider
+from app.integrations.realtime_voice.cloud import CloudRealtimeVoiceProvider
 from app.integrations.realtime_voice.errors import RealtimeVoiceError, RealtimeVoiceUnavailable
 from app.integrations.realtime_voice.factory import get_realtime_voice_provider
 from app.integrations.realtime_voice.fake import (
@@ -23,6 +24,7 @@ from app.integrations.realtime_voice.types import (
 )
 
 __all__ = [
+    "CloudRealtimeVoiceProvider",
     "ConnectionLost",
     "FakeRealtimeVoiceConnection",
     "FakeRealtimeVoiceProvider",
