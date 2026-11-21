@@ -7,7 +7,7 @@
 > 例外：OpenSpec 會在本檔中自動維護它自己的區塊（由組員執行 `openspec init`／`openspec update` 產生），該區塊內容不受此限，但區塊以外的內容一樣不得由 AI 修改。
 > 本檔所說的 MR（Merge Request）在 GitHub 介面上叫做 Pull request，兩者是同一件事。
 >
-> **版本：1.11（2026-11-17）**。每次修改本檔都要更新版本號，並在文末「修訂紀錄」加一行。
+> **版本：1.13（2026-11-22）**。每次修改本檔都要更新版本號，並在文末「修訂紀錄」加一行。
 
 ## 1. 專案概要
 
@@ -76,6 +76,7 @@ Domain 是依業務切出來的範圍（概念接近 DDD 的 bounded context）�
 | `backend/app/integrations/mqtt/`、`device/` | 新善 |
 | `frontend/lib/app/`（含主題）、`frontend/lib/core/` 的共用元件 | 永傑 |
 | `backend/app/integrations/tts/`、`integrations/storage/`、`integrations/video/` | 永傑 |
+| `backend/app/integrations/realtime_voice/` | 立倫 |
 
 
 共用資料表（規則見 4.2、4.4）：
@@ -473,6 +474,7 @@ scope 的寫法：
 
 | 版本 | 日期 | 修改內容 |
 |---|---|---|
+| 1.13 | 2026-11-22 | 第 3 節共用區新增 `integrations/realtime_voice/`，由立倫負責（AI 語音主持的即時語音使用） |
 | 1.11 | 2026-11-17 | 第 3 節共用區新增 `integrations/tts/`、`storage/`、`video/`，由永傑負責（規則影片生產器使用） |
 | 1.10 | 2026-11-17 | 4.4 新增規則：每張資料表、每個欄位都要用 SQLAlchemy 的 `comment=` 寫中文說明；Enum 的每個值都要寫中文註解；第 9 節規定 AI 產出的 MR 說明存在 `docs/mr_info/`，不 commit |
 | 1.9 | 2026-11-14 | 4.3 錯誤狀態碼新增 503（外部服務暫時無法使用） |
