@@ -231,6 +231,10 @@ def propose(
             candidates = [(c["segment_key"], c["reason"]) for c in raw.get("candidates", [])]
             return Ambiguous(raw.get("reason") or "", candidates)
         if kind == "unsupported" and raw.get("alternatives"):
+            # 替代做法在產生時就檢查，存進 pending.json 的一定能套用（本機驗收發現）
+            errors = _check_alternatives(folder, data, raw, terms)
+            if errors:
+                continue
             return _unsupported(raw, request, [])
         if kind != "revise":
             errors = [_unexpected_kind(kind, only_segment)]
@@ -241,7 +245,9 @@ def propose(
         actions = _unknown_actions(entries)
         if actions:
             # 用了五種以外的動作：走替代做法，不走改寫（design.md D2 第 4 步）
-            return _ask_alternatives(llm, llm_input, raw, request, actions, outputs)
+            return _ask_alternatives(
+                llm, llm_input, raw, request, actions, outputs, (folder, data, terms)
+            )
         errors = check_entries(folder, data, entries, terms, only_segment)
         if not errors:
             return Proposal(request, entries)
@@ -263,6 +269,7 @@ def _ask_alternatives(
     request: str,
     actions: list[str],
     outputs: list[dict[str, Any]],
+    context: tuple[Path, dict[str, Any], list[Term]],
 ) -> Unsupported:
     prompt = (
         llm_input
@@ -279,7 +286,23 @@ def _ask_alternatives(
         raise RevisionRejected(
             [f"用了不支援的動作（{'、'.join(actions)}），且沒有取得替代做法"], outputs
         )
+    folder, data, terms = context
+    errors = _check_alternatives(folder, data, raw, terms)
+    if errors:
+        raise RevisionRejected(errors, outputs)
     return _unsupported(raw, request, actions)
+
+
+def _check_alternatives(
+    folder: Path, data: dict[str, Any], raw: dict[str, Any], terms: list[Term]
+) -> list[str]:
+    errors = []
+    for alt in raw["alternatives"][:MAX_ALTERNATIVES]:
+        entries, problems = _entries(alt.get("segments", []))
+        if not problems:
+            problems = check_entries(folder, data, entries, terms)
+        errors += [f"替代做法「{alt.get('title')}」：{p}" for p in problems]
+    return errors
 
 
 def _unsupported(raw: dict[str, Any], request: str, actions: list[str]) -> Unsupported:
@@ -305,6 +328,9 @@ def _entries(raw_entries: list[dict[str, Any]]) -> tuple[list[Entry], list[str]]
             continue
         for name in NOT_VISUAL:
             segment.pop(name, None)
+        # LLM 有時在 segment_json 裡省略 segment_key（本機驗收發現）：用外層的補上；
+        # 兩邊都有但不一樣時，由 check_entries 報錯
+        segment.setdefault("segment_key", key)
         requested = [c for c in raw.get("requested", []) if c in CATEGORIES]
         entries.append(Entry(key, segment, requested, raw.get("summary", "")))
     return entries, errors

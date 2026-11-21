@@ -114,6 +114,14 @@ LLM 判斷修改要求超出版型能力時，`revise` SHALL 不寫入 `video.js
 - **WHEN** 修改要求是「讓牌旋轉著飛進盤面」（沒有旋轉動作），LLM 回報超出能力
 - **THEN** `video.json` 不變；印出替代做法；`requests.json` 多一筆需求
 
+#### Scenario: 替代做法在產生時就檢查
+- **WHEN** LLM 提出的替代做法不通過檢查（例如旁白用了「次」）
+- **THEN** 照「改寫一次」的規則要求 LLM 重新提出；存進 `pending.json` 的替代做法一定能用 `--choose` 套用（3.3 本機驗收發現）
+
+#### Scenario: segment_json 省略了 segment_key
+- **WHEN** LLM 在 `segment_json` 裡沒寫 `segment_key`，外層有寫
+- **THEN** 用外層的 `segment_key` 補上；兩邊都有但不一樣時才算錯（3.3 本機驗收發現）
+
 #### Scenario: 用了五種以外的動作
 - **WHEN** LLM 回「可以做」，但新內容的 `do` 是 `rotate`
 - **THEN** 不走改寫，改為再呼叫一次 LLM 取得替代做法；`requests.json` 記下不支援的動作 `rotate`；`video.json` 不變
