@@ -1,29 +1,42 @@
 """主持的圖（host spec §3、§5、§9；ADR 0004）。
 
-每件事（按鍵、語音指令、裝置回報播完）跑一次圖。整局記憶放 LangGraph 內建的記憶體儲存，
-一場主持一份。帶流程由程式決定：這裡的節點都是照規則跑的程式，不叫 LLM。
+每件事（按鍵、語音指令、裝置回報播完、查規則的請求）跑一次圖。整局記憶放 LangGraph 內建的
+記憶體儲存，一場主持一份。帶流程由程式決定：只有「思考模型」節點會叫 LLM，其他節點都是照規則
+跑的程式。圖往外只走兩條路：查規則找 rules_qa 的 service、思考模型走 integrations/llm。
 
 圖跑完交回「要做的事」的清單（Effect）。真的去做這些事（請主持人開口、送訊息給裝置）
 是轉送那一段的工作，這個檔案不碰連線。
 """
 
+import logging
 import threading
 import unicodedata
-from collections.abc import Callable
+import uuid
+from collections.abc import Callable, Sequence
 from dataclasses import asdict, dataclass, field
-from typing import Any, Literal, TypedDict
+from typing import Any, Literal, Protocol, TypedDict
 
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import END, START, StateGraph
 
 from app.domains.host import content
+from app.integrations.llm import LLMProvider
+
+logger = logging.getLogger(__name__)
 
 # 指令的動作。next：下一步；previous：上一步；pause：暫停；resume：繼續；end：結束
 Action = Literal["next", "previous", "pause", "resume", "end"]
 # 主持暫停的原因。command：語音指令或按鍵；page_hidden：頁面被切走或鎖屏；
 # chatter：同一段被閒聊切斷太多次
 PauseReason = Literal["command", "page_hidden", "chatter"]
+
+# 規則問題的種類。lookup：查規則片段，主持人自己回答；thinking：轉交思考模型
+QuestionKind = Literal["lookup", "thinking"]
+# 《血與刃的白薔薇》在 BoardGameGeek 的編號；games.bgg_id 有唯一限制，用它找這款遊戲
+WHITE_ROSE_BGG_ID = 400566
+# 整局記憶只留最近幾題（spec §8.2）
+RECENT_QUESTIONS_LIMIT = 5
 
 # 開場與夜晚兩步：那一段在裝置上播完之後，後端自己換到下一個節點（spec §3.1）
 _AUTO_ADVANCE_STEPS = ("opening", "night_1", "night_2")
@@ -99,6 +112,11 @@ class HostEvent:
     winner: content.Winner | None = None
     text: str | None = None
     segment_id: int | None = None
+    question: str | None = None
+    kind: QuestionKind | None = None
+    question_id: int | None = None
+    answer: str | None = None
+    chunks: tuple["FoundChunk", ...] | None = None
 
     @staticmethod
     def connected() -> "HostEvent":
@@ -119,6 +137,36 @@ class HostEvent:
     def playback_done(segment_id: int) -> "HostEvent":
         """裝置回報某一段播完了。"""
         return HostEvent("playback_done", segment_id=segment_id)
+
+    @staticmethod
+    def chatter() -> "HostEvent":
+        """閒聊：模型呼叫了「不回應」工具，或那句話被判定成不是在跟主持人說話。"""
+        return HostEvent("chatter")
+
+    @staticmethod
+    def ask(question: str, *, kind: QuestionKind) -> "HostEvent":
+        """玩家問規則。lookup 查完就交片段；thinking 查完片段後等思考模型的答案。"""
+        return HostEvent("ask", question=question, kind=kind)
+
+    @staticmethod
+    def think(question: str, chunks: Sequence["FoundChunk"]) -> "HostEvent":
+        """請思考模型回答。不屬於任何一場主持，用 HostGraph.think() 送。"""
+        return HostEvent("think", question=question, chunks=tuple(chunks))
+
+    @staticmethod
+    def answer_ready(question_id: int, answer: str) -> "HostEvent":
+        """思考模型的答案回來了。"""
+        return HostEvent("answer_ready", question_id=question_id, answer=answer)
+
+    @staticmethod
+    def give_up(question_id: int) -> "HostEvent":
+        """不等思考模型了（等太久或它回錯誤）：改交查到的片段。"""
+        return HostEvent("give_up", question_id=question_id)
+
+    @staticmethod
+    def drop_question() -> "HostEvent":
+        """等待中玩家說了別的話：舊題作廢。"""
+        return HostEvent("drop_question")
 
 
 # --- 交回去的事 ---
@@ -167,7 +215,83 @@ class StateChanged:
     snapshot: HostSnapshot
 
 
-Effect = Speak | Flush | StateChanged
+@dataclass(frozen=True)
+class FoundChunk:
+    """查到的一段規則原文。"""
+
+    page: int
+    content: str
+
+
+@dataclass(frozen=True)
+class ToolOutput:
+    """回給語音模型的工具結果（查規則的片段，或思考模型的答案）。"""
+
+    # 後端替那一題編的號
+    question_id: int
+    output: str
+    # 為假時只把結果記進對話，不請主持人接著回答
+    respond: bool = True
+    chunks: tuple[FoundChunk, ...] = ()
+
+
+@dataclass(frozen=True)
+class StartThinking:
+    """片段查好了，請轉送那一段在圖的外面呼叫 HostGraph.think()，並開始計時。"""
+
+    question_id: int
+    question: str
+    chunks: tuple[FoundChunk, ...]
+
+
+Effect = Speak | Flush | StateChanged | ToolOutput | StartThinking
+
+
+class RuleChunkLike(Protocol):
+    @property
+    def page(self) -> int: ...
+    @property
+    def content(self) -> str: ...
+
+
+# 用問題查規則片段。查不到、出錯都回空的清單，不丟例外
+RulesLookup = Callable[[str], Sequence[RuleChunkLike]]
+
+
+class WhiteRoseRules:
+    """查《血與刃的白薔薇》的規則片段（spec §8.2）。
+
+    find_game_id 用 games.bgg_id 找遊戲；search 是 rules_qa 的 service 只檢索的方法。
+    找不到遊戲、索引沒建好、embedding 失敗，一律當成空的結果，原因記進紀錄。
+    紀錄不寫玩家說的話（spec §13.5）。
+    """
+
+    def __init__(
+        self,
+        *,
+        find_game_id: Callable[[int], int | None],
+        search: Callable[[int, str], Sequence[RuleChunkLike]],
+    ) -> None:
+        self._find_game_id = find_game_id
+        self._search = search
+
+    def __call__(self, question: str) -> Sequence[RuleChunkLike]:
+        try:
+            game_id = self._find_game_id(WHITE_ROSE_BGG_ID)
+            if game_id is None:
+                logger.warning("查規則：找不到 bgg_id=%s 的遊戲，當成沒有結果", WHITE_ROSE_BGG_ID)
+                return []
+            chunks = self._search(game_id, question)
+        except Exception as exc:  # noqa: BLE001 查規則失敗不能讓主持停下來
+            logger.warning("查規則失敗，當成沒有結果：%s: %s", type(exc).__name__, exc)
+            return []
+        if not chunks:
+            logger.warning("查規則：遊戲 %s 沒有查到片段（索引可能還沒建好）", game_id)
+        return chunks
+
+
+def _no_rules(question: str) -> Sequence[RuleChunkLike]:
+    return []
 
 
 @dataclass
@@ -204,6 +328,9 @@ class HostMemory(TypedDict, total=False):
     segment_seq: int
     # 最近 5 題的問題與查到的頁碼
     recent_questions: list[dict[str, Any]]
+    # 後端替每一題編的號；正在等答案的那一題（沒有就是 None）
+    question_seq: int
+    open_question: dict[str, Any] | None
     # --- 每跑一次圖都會換掉的欄位 ---
     event: dict[str, Any]
     # 這次要執行的指令（核對通過的語音指令、按鍵、或自動進）
@@ -230,6 +357,8 @@ def _initial_memory(*, player_count: int, turn_taking_mode: str, voice: str) -> 
         replay_count=0,
         segment_seq=0,
         recent_questions=[],
+        question_seq=0,
+        open_question=None,
     )
 
 
@@ -244,7 +373,7 @@ def _snapshot(memory: HostMemory) -> HostSnapshot:
         phase_number=memory["phase_number"],
         paused=memory["paused"],
         pause_reason=memory["pause_reason"],
-        looking_up=False,
+        looking_up=memory["open_question"] is not None,
         winner=memory["winner"],
     )
 
@@ -382,6 +511,12 @@ def _route_event(state: HostMemory) -> str:
         "connected": "connect",
         "voice_text": "verify_voice_command",
         "playback_done": "playback_done",
+        "chatter": "chatter",
+        "ask": "begin_question",
+        "think": "thinking_model",
+        "answer_ready": "deliver_answer",
+        "give_up": "deliver_answer",
+        "drop_question": "deliver_answer",
     }[event_type]
 
 
@@ -508,7 +643,162 @@ def _end(state: HostMemory, winner: content.Winner | None, run: _Run) -> dict[st
     return updates
 
 
-def _build_graph() -> StateGraph:
+def _chatter(state: HostMemory) -> dict[str, Any]:
+    """閒聊。不會作廢正在等的題目（spec §8.4）。"""
+    return {}
+
+
+# --- 查規則與思考模型（spec §8） ---
+
+
+def _chunks_text(chunks: Sequence[dict[str, Any]]) -> str:
+    return "\n".join(f"[第 {chunk['page']} 頁] {chunk['content']}" for chunk in chunks)
+
+
+def _back_to_hint(state: HostMemory) -> str:
+    """答完規則問題補的那一句（spec §4.3 第 10 點）。已結束就不補。"""
+    if state["step"] == "ended":
+        return ""
+    line = content.back_to_line(
+        step=state["step"], turn_number=state["turn_number"], phase_number=state["phase_number"]
+    )
+    return f"\n答完之後補一句：「{line}」不要重講這個階段的內容。"
+
+
+def _lookup_output(state: HostMemory, chunks: Sequence[dict[str, Any]]) -> str:
+    not_found = content.fixed_line("answer_not_found")
+    if not chunks:
+        return f"沒有查到任何規則片段。請照唸：「{not_found}」" + _back_to_hint(state)
+    return (
+        f"查到的規則片段（共 {len(chunks)} 段）：\n{_chunks_text(chunks)}\n"
+        "請只根據上面的片段回答玩家，不要加片段裡沒有的規則。"
+        f"片段裡沒有答案就照唸：「{not_found}」" + _back_to_hint(state)
+    )
+
+
+def _answer_output(state: HostMemory, answer: str) -> str:
+    return f"思考模型的答案：\n{answer}\n請把這個答案用口語說給玩家聽，不要加別的規則。" + (
+        _back_to_hint(state)
+    )
+
+
+def _give_up_output(state: HostMemory, chunks: Sequence[dict[str, Any]]) -> str:
+    not_sure = content.fixed_line("not_sure")
+    if not chunks:
+        return _lookup_output(state, chunks)
+    return (
+        f"思考模型來不及回答。查到的規則片段（共 {len(chunks)} 段）：\n{_chunks_text(chunks)}\n"
+        f"請只根據上面的片段自己回答，最後補一句：「{not_sure}」" + _back_to_hint(state)
+    )
+
+
+def thinking_prompt(question: str, chunks: Sequence[dict[str, Any]]) -> str:
+    """交給思考模型的文字：問題與查到的片段都要帶。"""
+    found = _chunks_text(chunks) if chunks else "（沒有查到片段）"
+    return (
+        "你是桌遊《血與刃的白薔薇》的規則顧問。請只根據下面的規則片段回答玩家的問題，"
+        "用繁體中文、三句話以內、口語、直接給結論。片段裡沒有寫到的事不要猜，"
+        "直接說規則沒有寫到。不要解釋魔法之書的效果。\n\n"
+        f"規則片段：\n{found}\n\n玩家的問題：{question}"
+    )
+
+
+def _found_chunks(chunks: Sequence[dict[str, Any]]) -> tuple[FoundChunk, ...]:
+    return tuple(FoundChunk(page=chunk["page"], content=chunk["content"]) for chunk in chunks)
+
+
+def _begin_question(state: HostMemory, config: RunnableConfig) -> dict[str, Any]:
+    """替這一題編號，並讓現況顯示「正在查規則」。新的一題會取代還在等的舊題（spec §8.4）。"""
+    run = _run_of(config)
+    event = state["event"]
+    question_id = state["question_seq"] + 1
+    updates: dict[str, Any] = {
+        "question_seq": question_id,
+        "open_question": {
+            "id": question_id,
+            "kind": event["kind"],
+            "question": event["question"],
+            "chunks": [],
+        },
+    }
+    if state["open_question"] is None:
+        _emit_state(state, updates, run)
+    return updates
+
+
+def _deliver_answer(state: HostMemory, config: RunnableConfig) -> dict[str, Any]:
+    """思考模型的答案回來、放棄、或舊題作廢。只把最新那一題的結果交給主持人。"""
+    run = _run_of(config)
+    event = state["event"]
+    open_question = state["open_question"]
+    if event["type"] == "drop_question":
+        if open_question is None:
+            return {}
+        updates: dict[str, Any] = {"open_question": None}
+        _emit_state(state, updates, run)
+        return updates
+    if open_question is None or open_question["id"] != event["question_id"]:
+        # 已作廢或已放棄的題目：晚到的答案丟掉
+        run.outcome.result["delivered"] = False
+        return {}
+    chunks = open_question["chunks"]
+    if event["type"] == "answer_ready":
+        output = _answer_output(state, event["answer"])
+    else:
+        output = _give_up_output(state, chunks)
+    run.emit(
+        ToolOutput(question_id=open_question["id"], output=output, chunks=_found_chunks(chunks))
+    )
+    updates = {"open_question": None}
+    _emit_state(state, updates, run)
+    run.outcome.result["delivered"] = True
+    return updates
+
+
+def _build_graph(rules_lookup: RulesLookup, thinking_model: LLMProvider | None) -> StateGraph:
+    def lookup_rules(state: HostMemory, config: RunnableConfig) -> dict[str, Any]:
+        """查規則：呼叫 rules_qa 的只檢索方法，記下這一題的問題與頁碼。"""
+        run = _run_of(config)
+        open_question = state["open_question"]
+        assert open_question is not None
+        found = rules_lookup(open_question["question"])
+        chunks = [{"page": chunk.page, "content": chunk.content} for chunk in found]
+        recent = [
+            *state["recent_questions"],
+            {"question": open_question["question"], "pages": [chunk["page"] for chunk in chunks]},
+        ][-RECENT_QUESTIONS_LIMIT:]
+        updates: dict[str, Any] = {"recent_questions": recent}
+        if open_question["kind"] == "thinking":
+            # 片段先記著：思考模型來不及時要改交這些片段
+            updates["open_question"] = {**open_question, "chunks": chunks}
+            run.emit(
+                StartThinking(
+                    question_id=open_question["id"],
+                    question=open_question["question"],
+                    chunks=_found_chunks(chunks),
+                )
+            )
+            return updates
+        run.emit(
+            ToolOutput(
+                question_id=open_question["id"],
+                output=_lookup_output(state, chunks),
+                chunks=_found_chunks(chunks),
+            )
+        )
+        updates["open_question"] = None
+        _emit_state(state, updates, run)
+        return updates
+
+    def call_thinking_model(state: HostMemory, config: RunnableConfig) -> dict[str, Any]:
+        """思考模型：圖裡唯一叫 LLM 的節點，只經過 integrations/llm 的介面。"""
+        if thinking_model is None:
+            raise RuntimeError("沒有設定思考模型")
+        event = state["event"]
+        answer = thinking_model.generate(thinking_prompt(event["question"], event["chunks"] or []))
+        _run_of(config).outcome.result["answer"] = answer
+        return {}
+
     builder = StateGraph(HostMemory)
     builder.add_node("receive", _receive)
     builder.add_node("connect", _connect)
@@ -518,6 +808,11 @@ def _build_graph() -> StateGraph:
     builder.add_node("pause", _pause)
     builder.add_node("resume", _resume)
     builder.add_node("end_hosting", _end_hosting)
+    builder.add_node("chatter", _chatter)
+    builder.add_node("begin_question", _begin_question)
+    builder.add_node("lookup_rules", lookup_rules)
+    builder.add_node("thinking_model", call_thinking_model)
+    builder.add_node("deliver_answer", _deliver_answer)
 
     command_targets = {
         "change_step": "change_step",
@@ -534,12 +829,27 @@ def _build_graph() -> StateGraph:
             "connect": "connect",
             "verify_voice_command": "verify_voice_command",
             "playback_done": "playback_done",
+            "chatter": "chatter",
+            "begin_question": "begin_question",
+            "thinking_model": "thinking_model",
+            "deliver_answer": "deliver_answer",
             **command_targets,
         },
     )
     builder.add_conditional_edges("verify_voice_command", _route_command, command_targets)
     builder.add_conditional_edges("playback_done", _route_command, command_targets)
-    for node in ("connect", "change_step", "pause", "resume", "end_hosting"):
+    builder.add_edge("begin_question", "lookup_rules")
+    for node in (
+        "connect",
+        "change_step",
+        "pause",
+        "resume",
+        "end_hosting",
+        "chatter",
+        "lookup_rules",
+        "thinking_model",
+        "deliver_answer",
+    ):
         builder.add_edge(node, END)
     return builder
 
@@ -547,9 +857,16 @@ def _build_graph() -> StateGraph:
 class HostGraph:
     """主持的圖與每一場主持的整局記憶。整個後端共用一個。"""
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        rules_lookup: RulesLookup | None = None,
+        thinking_model: LLMProvider | None = None,
+    ) -> None:
         self._saver = InMemorySaver()
-        self._graph = _build_graph().compile(checkpointer=self._saver)
+        self._graph = _build_graph(rules_lookup or _no_rules, thinking_model).compile(
+            checkpointer=self._saver
+        )
         # 同一場主持一次只處理一件事，其他的排隊（spec §8.1）
         self._locks: dict[str, threading.Lock] = {}
         self._locks_guard = threading.Lock()
@@ -609,6 +926,23 @@ class HostGraph:
                 raise KeyError(session_id)
             self._graph.invoke({"event": asdict(event)}, self._config(session_id, run=run))
         return run.outcome
+
+    def think(self, question: str, chunks: Sequence[FoundChunk]) -> str:
+        """請思考模型回答一題，回傳答案文字；integrations/llm 的錯誤原樣往外丟。
+
+        這一步可能要等好幾秒，所以不屬於任何一場主持、不占那場主持的排隊：
+        等待中的暫停、下一步都能照常處理。答案回來後用 answer_ready 交回那場主持。
+        """
+        run = _Run(None)
+        thread_id = f"think:{uuid.uuid4()}"
+        try:
+            self._graph.invoke(
+                {"event": asdict(HostEvent.think(question, chunks))},
+                self._config(thread_id, run=run),
+            )
+        finally:
+            self._saver.delete_thread(thread_id)
+        return run.outcome.result["answer"]
 
     def _lock_for(self, session_id: str) -> threading.Lock:
         with self._locks_guard:
