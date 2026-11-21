@@ -16,6 +16,7 @@ from app.domains.rules_qa.chunking import split_pages
 from app.domains.rules_qa.repository import (
     ActiveJobExists,
     ChunkHit,
+    DraftState,
     LessonSummary,
     PagesRecord,
     VideoJobRecord,
@@ -26,12 +27,21 @@ from app.domains.rules_qa.repository import (
 from app.domains.rules_qa.schemas import (
     ChangedLineOut,
     Citation,
+    CoverageHintOut,
+    CoverageIssueOut,
+    CoverageProblemOut,
+    DraftAssetOut,
+    DraftBeatOut,
+    DraftCoverageOut,
+    DraftSegmentOut,
+    DraftTermsOut,
     MessageRequest,
     MessageResponse,
     RemovedBlockOut,
     RulesLessonItem,
     RulesLessonList,
     RulesLessonOut,
+    VideoDraftOut,
     VideoJobList,
     VideoJobOut,
     VideoOut,
@@ -45,9 +55,16 @@ from app.domains.rules_qa.schemas import (
     VideoTermsIn,
     VideoTermsOut,
 )
+from app.domains.rules_qa.video_coverage import report_from_dict
+from app.domains.rules_qa.video_draft import (
+    DRAFT_PAGES_NOT_SET_MESSAGE,
+    PAGES_STALE_HINT,
+    TERMS_MISSING_HINT,
+    terms_status,
+)
 from app.domains.rules_qa.video_jobs import JOB_TIMEOUT_MINUTES, TIMEOUT_MESSAGE
 from app.domains.rules_qa.video_pages import page_diff, text_hash
-from app.domains.rules_qa.video_script import term_conflicts
+from app.domains.rules_qa.video_script import REPRESENTATIVE, term_conflicts
 from app.domains.rules_qa.youtube import parse_youtube_id
 from app.integrations.embedding import EmbeddingError, EmbeddingProvider
 from app.integrations.llm import LLMProvider
@@ -396,7 +413,7 @@ def _project_out(record: VideoProjectRecord) -> VideoProjectOut:
         created_by=record.created_by,
         chapter_number=record.chapter_number,
         chapter_title=record.chapter_title,
-        step="pages",  # MR 1 沒有其他狀態（design.md D1）
+        step="draft" if record.has_draft else "pages",  # 由狀態推出（design.md D1、D11）
         created_at=record.created_at,
         updated_at=record.updated_at,
     )
@@ -651,4 +668,139 @@ def _pages_out(record: PagesRecord, manual: dict[int, str]) -> VideoPagesOut:
         reference_pages=record.reference_pages,
         pages_version=record.pages_version,
         pages=pages,
+    )
+
+
+# --------------------------------------------------------------------------- 草稿
+
+
+class VideoDraftStore(Protocol):
+    def get_state(self, project_id: uuid.UUID) -> DraftState | None: ...
+
+
+class TermsReader(Protocol):
+    def get(self, game_id: int) -> VideoTermsRecord | None: ...
+
+
+class VideoDraftService:
+    """建立草稿工作、查看草稿（add-rules-video-mobile design.md D11）。"""
+
+    def __init__(
+        self,
+        drafts: VideoDraftStore,
+        projects: VideoProjectStore,
+        terms: TermsReader,
+        jobs: VideoJobService,
+    ) -> None:
+        self._drafts = drafts
+        self._projects = projects
+        self._terms = terms
+        self._jobs = jobs
+
+    def start(self, user: CurrentUser, project_id: uuid.UUID) -> VideoJobOut:
+        state = self._state(user, project_id)
+        if not state.chapter_pages:
+            raise AppError(422, "RULES_VIDEO_PAGES_NOT_SET", DRAFT_PAGES_NOT_SET_MESSAGE)
+        return self._jobs.create(user, project_id, "draft")
+
+    def get(self, user: CurrentUser, project_id: uuid.UUID) -> VideoDraftOut:
+        state = self._state(user, project_id)
+        if state.video is None:
+            raise AppError(404, "RULES_VIDEO_DRAFT_NOT_FOUND", "這個專案還沒有草稿")
+        stored = self._terms.get(state.game_id)
+        status = terms_status(None if stored is None else stored.terms)
+        stale = state.draft_pages_version is not None and (
+            state.draft_pages_version != state.pages_version
+        )
+        return VideoDraftOut(
+            video_version=state.video_version,
+            segments=[_draft_segment(s) for s in state.video.get("segments", [])],
+            assets=[_draft_asset(a) for a in state.video.get("assets", [])],
+            coverage=_draft_coverage(state),
+            terms=DraftTermsOut(
+                status=status, message=TERMS_MISSING_HINT if status == "missing" else None
+            ),
+            pages_stale=stale,
+            pages_stale_message=PAGES_STALE_HINT if stale else None,
+        )
+
+    def _state(self, user: CurrentUser, project_id: uuid.UUID) -> DraftState:
+        require_role(user, "shop_staff", "admin")
+        record = self._projects.get(project_id)
+        if record is None or not _can_access(user, record):
+            raise _project_not_found()
+        state = self._drafts.get_state(project_id)
+        assert state is not None
+        return state
+
+
+def _draft_segment(segment: dict[str, Any]) -> DraftSegmentOut:
+    return DraftSegmentOut(
+        segment_key=segment["segment_key"],
+        source_pages=[p["page"] for p in segment.get("source_pages", [])],
+        beats=[
+            DraftBeatOut(
+                beat_key=b.get("beat_key", ""),
+                narration=b.get("narration", ""),
+                subtitle=b.get("subtitle", ""),
+            )
+            for b in segment.get("beats", [])
+        ],
+    )
+
+
+def _draft_asset(asset: dict[str, Any]) -> DraftAssetOut:
+    reason = asset.get("reason", "")
+    return DraftAssetOut(
+        asset_key=asset["asset_key"],
+        kind=asset.get("kind", "flat_photo"),
+        priority=asset.get("priority", "must"),
+        reason=reason,
+        shot=asset.get("shot"),
+        representative=REPRESENTATIVE in reason,
+        regions=list((asset.get("regions") or {}).keys()),
+        has_photo=bool(asset.get("file")),
+    )
+
+
+def _draft_coverage(state: DraftState) -> DraftCoverageOut:
+    coverage = state.coverage or {"status": "not_done", "reason": "還沒有做規則涵蓋檢查"}
+    if coverage.get("status") != "done":
+        return DraftCoverageOut(
+            status="not_done",
+            reason=coverage.get("reason"),
+            total_rules=0,
+            issues=[],
+            problems=[],
+            hints=[],
+        )
+    report = report_from_dict(coverage["report"])
+    stale = state.coverage_version != state.video_version
+    return DraftCoverageOut(
+        status="stale" if stale else "done",
+        reason="草稿在涵蓋檢查之後改過，結果可能過期" if stale else None,
+        total_rules=len(report.rules),
+        issues=[
+            CoverageIssueOut(
+                rule_id=r.rule_id,
+                category=r.category,
+                source=r.source,
+                narration_status=r.narration.status,
+                narration_missing=r.narration.missing,
+                subtitle_status=r.subtitle.status,
+                subtitle_missing=r.subtitle.missing,
+                narration_shorter=r.narration_shorter,
+            )
+            for r in report.rules
+            if not r.is_hint and r.has_issue
+        ],
+        problems=[
+            CoverageProblemOut(
+                beat_key=p.beat_key, track=p.track, kind=p.kind, text=p.text, reason=p.reason
+            )
+            for p in report.problems
+        ],
+        hints=[
+            CoverageHintOut(rule_id=r.rule_id, source=r.source) for r in report.rules if r.is_hint
+        ],
     )

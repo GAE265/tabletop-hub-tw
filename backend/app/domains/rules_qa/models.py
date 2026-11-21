@@ -165,6 +165,22 @@ class RulesQaVideoProject(Base):
         server_default="0",
         comment="頁面文字每存一次加 1；草稿記下自己用的是哪一版",
     )
+    # 草稿（design.md D11）：段資料以資料庫為正本
+    video: Mapped[dict[str, Any] | None] = mapped_column(
+        JSONB, comment="段資料正本（video.json 的內容）；空值代表還沒有草稿"
+    )
+    video_version: Mapped[int] = mapped_column(
+        Integer, server_default="0", comment="段資料每改一次加 1；寫入前比對，不同就不覆寫"
+    )
+    coverage: Mapped[dict[str, Any] | None] = mapped_column(
+        JSONB, comment="最近一次規則涵蓋檢查（done＋report 或 not_done＋reason）；空值代表還沒檢查"
+    )
+    coverage_version: Mapped[int | None] = mapped_column(
+        Integer, comment="涵蓋檢查是對哪一個 video_version 做的；空值代表還沒檢查"
+    )
+    draft_pages_version: Mapped[int | None] = mapped_column(
+        Integer, comment="草稿用的是哪一版頁面文字；空值代表還沒有草稿"
+    )
 
 
 # 工作種類與狀態；每個值的意思寫在 migration 0016 的欄位說明（add-rules-video-mobile design.md D2）

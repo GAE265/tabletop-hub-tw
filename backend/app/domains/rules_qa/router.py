@@ -13,6 +13,7 @@ from app.domains.rules_ingest.repository import ManualPageRepository
 from app.domains.rules_ingest.service import read_manual_pages
 from app.domains.rules_qa.repository import (
     RulesQaRepository,
+    VideoDraftRepository,
     VideoJobRepository,
     VideoPagesRepository,
     VideoProjectRepository,
@@ -23,6 +24,8 @@ from app.domains.rules_qa.schemas import (
     MessageResponse,
     RulesLessonList,
     RulesLessonOut,
+    VideoDraftOut,
+    VideoJobCreate,
     VideoJobList,
     VideoJobOut,
     VideoOut,
@@ -37,6 +40,7 @@ from app.domains.rules_qa.schemas import (
 )
 from app.domains.rules_qa.service import (
     RulesQaService,
+    VideoDraftService,
     VideoJobService,
     VideoPagesService,
     VideoProjectService,
@@ -234,3 +238,41 @@ def replace_video_pages(
 ) -> VideoPagesOut:
     """選本章頁與參考頁、存編輯後的文字（整份取代；沒給文字的頁用原文）。不改 games_manual。"""
     return service.replace(user, project_id, body)
+
+
+# --------------------------------------------------------------------------- 草稿
+
+
+def get_video_draft_service(
+    request: Request, session: Annotated[Session, Depends(get_session)]
+) -> VideoDraftService:
+    return VideoDraftService(
+        VideoDraftRepository(session),
+        VideoProjectRepository(session),
+        VideoTermsRepository(session),
+        get_video_job_service(request, session),
+    )
+
+
+VideoDraftServiceDep = Annotated[VideoDraftService, Depends(get_video_draft_service)]
+
+
+@videos_router.post(
+    "/{project_id}/jobs", response_model=VideoJobOut, status_code=status.HTTP_202_ACCEPTED
+)
+def create_video_job(
+    project_id: uuid.UUID,
+    body: VideoJobCreate,
+    user: CurrentUserDep,
+    service: VideoDraftServiceDep,
+) -> VideoJobOut:
+    """建立工作（本 MR 只有 kind=draft：依編輯後的頁面文字產生草稿）。回 202，之後查詢進度。"""
+    return service.start(user, project_id)
+
+
+@videos_router.get("/{project_id}/draft", response_model=VideoDraftOut)
+def get_video_draft(
+    project_id: uuid.UUID, user: CurrentUserDep, service: VideoDraftServiceDep
+) -> VideoDraftOut:
+    """草稿：每段的句子、素材清單、涵蓋檢查摘要、用語對照表狀態、是否依舊文字產生。"""
+    return service.get(user, project_id)

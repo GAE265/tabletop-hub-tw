@@ -166,6 +166,7 @@ class VideoProjectRecord:
     chapter_title: str
     created_at: datetime
     updated_at: datetime
+    has_draft: bool = False
 
 
 class VideoProjectRepository(SessionRepository):
@@ -188,6 +189,7 @@ class VideoProjectRepository(SessionRepository):
             chapter_title=project.chapter_title,
             created_at=project.created_at,
             updated_at=project.updated_at,
+            has_draft=project.video is not None,
         )
 
     def create(
@@ -469,3 +471,72 @@ class VideoPagesRepository(SessionRepository):
                 updated_at=func.now(),
             )
         )
+
+
+# --------------------------------------------------------------------------- 草稿
+
+
+@dataclass(frozen=True)
+class DraftState:
+    game_id: int
+    chapter_number: int
+    chapter_title: str
+    chapter_pages: list[int]
+    reference_pages: list[int]
+    page_texts: dict[str, Any]
+    pages_version: int
+    video: dict[str, Any] | None
+    video_version: int
+    coverage: dict[str, Any] | None
+    coverage_version: int | None
+    draft_pages_version: int | None
+
+
+class VideoDraftRepository(SessionRepository):
+    """rules_qa_video_projects 的草稿欄位（add-rules-video-mobile design.md D11）。"""
+
+    def get_state(self, project_id: uuid.UUID) -> DraftState | None:
+        project = self.session.get(RulesQaVideoProject, project_id, populate_existing=True)
+        if project is None:
+            return None
+        return DraftState(
+            game_id=project.game_id,
+            chapter_number=project.chapter_number,
+            chapter_title=project.chapter_title,
+            chapter_pages=list(project.chapter_pages),
+            reference_pages=list(project.reference_pages),
+            page_texts=project.page_texts,
+            pages_version=project.pages_version,
+            video=project.video,
+            video_version=project.video_version,
+            coverage=project.coverage,
+            coverage_version=project.coverage_version,
+            draft_pages_version=project.draft_pages_version,
+        )
+
+    def save_draft(
+        self,
+        project_id: uuid.UUID,
+        *,
+        expected_version: int,
+        video: dict[str, Any],
+        coverage: dict[str, Any],
+        pages_version: int,
+    ) -> bool:
+        """video_version 還是 expected_version 才寫入；回傳是否寫入（沒寫入代表專案被改過）。"""
+        result = self.session.execute(
+            update(RulesQaVideoProject)
+            .where(
+                RulesQaVideoProject.id == project_id,
+                RulesQaVideoProject.video_version == expected_version,
+            )
+            .values(
+                video=video,
+                video_version=expected_version + 1,
+                coverage=coverage,
+                coverage_version=expected_version + 1,
+                draft_pages_version=pages_version,
+                updated_at=func.now(),
+            )
+        )
+        return result.rowcount == 1

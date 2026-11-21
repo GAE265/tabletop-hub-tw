@@ -94,8 +94,9 @@ class VideoProjectOut(BaseModel):
     created_by: uuid.UUID
     chapter_number: int
     chapter_title: str
-    # 目前步驟：不存欄位，由專案的狀態推出。MR 1 沒有其他狀態，固定是 pages（上傳規則書）
-    step: Literal["pages"]
+    # 目前步驟：不存欄位，由專案的狀態推出（design.md D1、D11）：
+    # pages＝還沒有草稿（上傳規則書、選頁、編輯文字）；draft＝有草稿
+    step: Literal["pages", "draft"]
     created_at: datetime
     updated_at: datetime
 
@@ -214,3 +215,86 @@ class VideoPagesOut(BaseModel):
     reference_pages: list[int]
     pages_version: int
     pages: list[VideoPageOut]
+
+
+# --------------------------------------------------------------------------- 草稿
+
+
+class VideoJobCreate(BaseModel):
+    """建立工作。本 MR 只開放 draft；render、revise 在之後的 MR 加上。"""
+
+    kind: Literal["draft"]
+
+
+class DraftBeatOut(BaseModel):
+    beat_key: str
+    narration: str
+    subtitle: str
+
+
+class DraftSegmentOut(BaseModel):
+    segment_key: str
+    source_pages: list[int]
+    beats: list[DraftBeatOut]
+
+
+class DraftAssetOut(BaseModel):
+    asset_key: str
+    kind: str
+    priority: str
+    reason: str
+    shot: str | None
+    # 泛稱的素材：reason 寫了「代表牌」，店員可以換成同類的任一張牌
+    representative: bool
+    regions: list[str]
+    has_photo: bool
+
+
+class CoverageIssueOut(BaseModel):
+    rule_id: str
+    category: str
+    source: str
+    narration_status: str
+    narration_missing: str | None
+    subtitle_status: str
+    subtitle_missing: str | None
+    narration_shorter: bool
+
+
+class CoverageProblemOut(BaseModel):
+    beat_key: str
+    track: str
+    kind: str
+    text: str
+    reason: str
+
+
+class CoverageHintOut(BaseModel):
+    rule_id: str
+    source: str
+
+
+class DraftCoverageOut(BaseModel):
+    # done＝有結果；not_done＝沒做成（reason）；stale＝草稿在檢查後改過
+    status: Literal["done", "not_done", "stale"]
+    reason: str | None
+    total_rules: int
+    issues: list[CoverageIssueOut]
+    problems: list[CoverageProblemOut]
+    hints: list[CoverageHintOut]
+
+
+class DraftTermsOut(BaseModel):
+    status: Literal["used", "empty", "missing"]
+    message: str | None
+
+
+class VideoDraftOut(BaseModel):
+    video_version: int
+    segments: list[DraftSegmentOut]
+    assets: list[DraftAssetOut]
+    coverage: DraftCoverageOut
+    terms: DraftTermsOut
+    # 頁面文字在草稿產生後被改過
+    pages_stale: bool
+    pages_stale_message: str | None
