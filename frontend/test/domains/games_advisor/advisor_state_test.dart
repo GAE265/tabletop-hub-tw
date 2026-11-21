@@ -295,7 +295,7 @@ void main() {
     });
   });
 
-  group('帶著店家進頁面（spec §16）', () {
+  group('帶著店家進頁面（spec §19）', () {
     const shopId = 'c0000000-0000-4000-8000-000000000001';
 
     test('以 shop_id 進入後送兩則訊息：兩則請求都帶同一個 shop_id', () async {

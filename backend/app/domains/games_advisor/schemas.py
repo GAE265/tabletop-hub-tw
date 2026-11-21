@@ -353,7 +353,7 @@ class MessageRequest(BaseModel):
     # 上一則回應的 response_id；必填，新對話給 null。漏了這個欄位或給空字串回 422：
     # 漏送會讓 Agent 默默忘記前面的對話，寧可讓前端在開發時就看到錯誤
     previous_response_id: Annotated[str, StringConstraints(min_length=1)] | None
-    # 玩家是從哪間店進到推薦頁的；選填，沒帶或 null 就不標示庫存（spec §16）。不送給 LLM
+    # 玩家是從哪間店進到推薦頁的；選填，沒帶或 null 就不標示庫存（spec §19）。不送給 LLM
     shop_id: uuid.UUID | None = None
 
 
@@ -378,7 +378,7 @@ class AdvisorRecommendation(BaseModel):
     game: AdvisorGame
     reason: str
     excerpts: list[AdvisorExcerpt]
-    # 請求帶的那間店有沒有這款：true 有、false 沒有、null 請求沒帶 shop_id（spec §16）
+    # 請求帶的那間店有沒有這款：true 有、false 沒有、null 請求沒帶 shop_id（spec §19）
     in_stock: bool | None
 
 

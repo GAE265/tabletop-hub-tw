@@ -51,7 +51,7 @@ class RecommendationCard:
     game: dict[str, Any]
     reason: str
     excerpts: list[dict[str, Any]]
-    # 請求帶的那間店有沒有這款；沒帶店家是 None（spec §16）
+    # 請求帶的那間店有沒有這款；沒帶店家是 None（spec §19）
     in_stock: bool | None = None
 
 
@@ -107,7 +107,7 @@ class ConversationService:
     ) -> AdvisorReply:
         """處理一則玩家訊息。content 由 router 去掉前後空白。
 
-        shop_id 有值時，每張卡片標示那間店有沒有這款（spec §16）；這是程式查的，不經過 LLM。
+        shop_id 有值時，每張卡片標示那間店有沒有這款（spec §19）；這是程式查的，不經過 LLM。
 
         - 404 SHOP_NOT_FOUND：shop_id 的店家不存在，不呼叫 LLM。
         - 404 GAMES_ADVISOR_CONVERSATION_NOT_FOUND：對話過期或 id 錯。

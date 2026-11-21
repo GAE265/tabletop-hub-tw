@@ -449,7 +449,7 @@ def test_every_role_can_chat(user: CurrentUser) -> None:
     assert reply.reply == "請問幾個人？"
 
 
-# --- 店家有沒有這款桌遊（spec §16） ---
+# --- 店家有沒有這款桌遊（spec §19） ---
 
 SHOP = uuid.UUID("c0000000-0000-4000-8000-000000000001")
 MISSING_SHOP = uuid.UUID("c0000000-0000-4000-8000-0000000000ff")

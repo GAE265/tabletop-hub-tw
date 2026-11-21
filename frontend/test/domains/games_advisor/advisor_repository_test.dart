@@ -182,7 +182,7 @@ void main() {
     }
   });
 
-  group('店家有沒有這款桌遊（spec §16）', () {
+  group('店家有沒有這款桌遊（spec §19）', () {
     Map<String, dynamic> cardJson(String inStock) =>
         jsonDecode('''
 {

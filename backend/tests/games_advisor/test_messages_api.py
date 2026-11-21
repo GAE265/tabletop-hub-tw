@@ -326,7 +326,7 @@ def test_fixed_reply_on_first_message_has_null_id(
     assert response.json()["reply"] == REJECTED_REPLY
 
 
-# --- 店家有沒有這款桌遊（spec §16） ---
+# --- 店家有沒有這款桌遊（spec §19） ---
 
 SHOP = uuid.UUID("c0000000-0000-4000-8000-000000000001")
 MISSING_SHOP = uuid.UUID("c0000000-0000-4000-8000-0000000000ff")
