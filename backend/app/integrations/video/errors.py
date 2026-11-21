@@ -24,3 +24,7 @@ class FontConfigError(VideoError):
 
 class VideoRenderError(VideoError):
     """渲染或編碼失敗。"""
+
+
+class VideoTimeoutError(VideoRenderError):
+    """ffmpeg 超過 timeout_seconds 沒有完成，已結束子程序。"""

@@ -28,6 +28,7 @@ from app.domains.rules_qa.router import videos_router as rules_qa_videos_router
 from app.domains.rules_qa.service import RulesQaService
 from app.domains.rules_qa.video_draft import DraftJobHandler
 from app.domains.rules_qa.video_jobs import JobRunner, recover_interrupted_jobs
+from app.domains.rules_qa.video_render import RenderJobHandler
 from app.domains.shops.router import router as shops_router
 from app.integrations.embedding import EmbeddingConfig, EmbeddingProvider, get_embedding_provider
 from app.integrations.llm import LLMProvider, get_llm_provider
@@ -120,7 +121,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
     )
     # 規則影片工作的處理函式（kind → 函式）；草稿、產生影片、修改的處理函式依序在這裡註冊
-    app.state.rules_video_job_handlers = {"draft": DraftJobHandler(app.state.llm)}
+    app.state.rules_video_job_handlers = {
+        "draft": DraftJobHandler(app.state.llm),
+        "render": RenderJobHandler.from_settings(settings, app.state.storage),
+    }
     app.state.rules_video_runner = None
     app.state.vision = get_vision_provider(settings.ocr_provider, settings)
     app.state.games_advisor_embedding_config = EmbeddingConfig(

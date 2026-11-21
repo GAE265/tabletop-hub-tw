@@ -97,6 +97,9 @@ class Settings(BaseSettings):
     host_realtime_model: str = "qwen-audio-3.1-realtime-flash"
     # 主持人轉交難題用的思考模型部署名稱；沒填就用 llm_model
     host_thinking_model: str | None = None
+    # 產生影片的本機工作資料夾（展開段資料、照片、段影片與旁白快取；快取保留才能只重做改過的段）。
+    # 每個專案一個子資料夾；部署時改到持久的磁碟（add-rules-video-mobile MR 9）
+    rules_video_work_dir: str = str(REPO_ROOT / "backend" / ".local" / "rules_videos")
     # 允許跨來源呼叫 API 的前端網址，逗號分隔。預設是本機 Flutter Web 固定的 port；
     # 部署時必須改成實際的前端網址
     cors_allow_origins: str = "http://localhost:5000"

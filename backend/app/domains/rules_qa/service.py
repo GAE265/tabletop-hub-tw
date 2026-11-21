@@ -55,6 +55,7 @@ from app.domains.rules_qa.schemas import (
     VideoProjectList,
     VideoProjectOut,
     VideoReadinessOut,
+    VideoRenderOut,
     VideoRequest,
     VideoTermsIn,
     VideoTermsOut,
@@ -62,10 +63,13 @@ from app.domains.rules_qa.schemas import (
 from app.domains.rules_qa.video_assets import (
     PhotoRejected,
     find_asset,
+    is_skipped,
     new_photo_file,
     normalize_photo,
     photo_key,
     readiness,
+    skip_blocked_message,
+    skip_impact,
 )
 from app.domains.rules_qa.video_coverage import report_from_dict
 from app.domains.rules_qa.video_draft import (
@@ -419,6 +423,23 @@ def _can_access(user: CurrentUser, record: VideoProjectRecord) -> bool:
     return user.role == "admin" or record.shop_id == user.shop_id
 
 
+def _step(record: VideoProjectRecord) -> str:
+    """由狀態推出（design.md D1、D11、D15 實作決定）：
+    pages＝還沒有草稿；draft＝有草稿、還沒拍照也沒略過；assets＝素材還沒齊；
+    render＝齊了、還沒有成品；done＝有成功產生的影片。
+    """
+    video = record.video
+    if video is None:
+        return "pages"
+    if record.has_render:
+        return "done"
+    if readiness(video)["ready"]:
+        return "render"
+    if any(a.get("file") or is_skipped(a) for a in video.get("assets", [])):
+        return "assets"
+    return "draft"
+
+
 def _project_out(record: VideoProjectRecord) -> VideoProjectOut:
     return VideoProjectOut(
         id=record.id,
@@ -428,7 +449,7 @@ def _project_out(record: VideoProjectRecord) -> VideoProjectOut:
         created_by=record.created_by,
         chapter_number=record.chapter_number,
         chapter_title=record.chapter_title,
-        step="draft" if record.has_draft else "pages",  # 由狀態推出（design.md D1、D11）
+        step=_step(record),
         created_at=record.created_at,
         updated_at=record.updated_at,
     )
@@ -712,8 +733,21 @@ class VideoDraftService:
         self._terms = terms
         self._jobs = jobs
 
-    def start(self, user: CurrentUser, project_id: uuid.UUID) -> VideoJobOut:
+    def start(self, user: CurrentUser, project_id: uuid.UUID, kind: str = "draft") -> VideoJobOut:
         state = self._state(user, project_id)
+        if kind == "render":
+            # 產生影片：要有草稿、素材齊了（MR 9）
+            if state.video is None:
+                raise AppError(404, "RULES_VIDEO_DRAFT_NOT_FOUND", "這個專案還沒有草稿")
+            report = readiness(state.video)
+            if not report["ready"]:
+                raise AppError(
+                    422,
+                    "RULES_VIDEO_NOT_READY",
+                    "還不能產生影片，請先補齊素材",
+                    {k: v for k, v in report.items() if k != "ready"},
+                )
+            return self._jobs.create(user, project_id, "render")
         if not state.chapter_pages:
             raise AppError(422, "RULES_VIDEO_PAGES_NOT_SET", DRAFT_PAGES_NOT_SET_MESSAGE)
         return self._jobs.create(user, project_id, "draft")
@@ -775,6 +809,7 @@ def _draft_asset(asset: dict[str, Any]) -> DraftAssetOut:
         representative=REPRESENTATIVE in reason,
         regions=list((asset.get("regions") or {}).keys()),
         has_photo=bool(asset.get("file")),
+        skipped=is_skipped(asset),
     )
 
 
@@ -869,7 +904,7 @@ class VideoAssetsService:
             raise AppError(409, "RULES_VIDEO_CONFLICT", ASSET_CONFLICT_MESSAGE)
         if old_file and old_file != file:
             self._delete(photo_key(project_id, old_file))
-        return _asset_out(asset, state.video_version + 1)
+        return _asset_out(asset, state.video_version + 1, video)
 
     def read_photo(
         self, user: CurrentUser, project_id: uuid.UUID, asset_key: str
@@ -890,8 +925,8 @@ class VideoAssetsService:
 
     def get_asset(self, user: CurrentUser, project_id: uuid.UUID, asset_key: str) -> VideoAssetOut:
         state = self._state(user, project_id)
-        _, asset = self._asset(state, asset_key)
-        return _asset_out(asset, state.video_version)
+        video, asset = self._asset(state, asset_key)
+        return _asset_out(asset, state.video_version, video)
 
     def update_asset(
         self, user: CurrentUser, project_id: uuid.UUID, asset_key: str, body: VideoAssetUpdate
@@ -916,9 +951,28 @@ class VideoAssetsService:
                     regions[name] = None
         for name, box in (body.regions or {}).items():
             regions[name] = box
+        if body.skipped is True:
+            self._check_skip(video, asset)
+            asset["usable"] = False
+        elif body.skipped is False:
+            asset.pop("usable", None)
         if not self._save(project_id, state.video_version, video):
             raise AppError(409, "RULES_VIDEO_CONFLICT", ASSET_CONFLICT_MESSAGE)
-        return _asset_out(asset, state.video_version + 1)
+        return _asset_out(asset, state.video_version + 1, video)
+
+    @staticmethod
+    def _check_skip(video: dict[str, Any], asset: dict[str, Any]) -> None:
+        """只有選拍可以略過；略過後某段的主畫面會空掉就不能略過（2026-11-22 永傑決定）。"""
+        if asset.get("priority") != "optional":
+            raise AppError(422, "RULES_VIDEO_SKIP_NOT_OPTIONAL", "必拍的素材不能略過")
+        _, blocked = skip_impact(video, asset["asset_key"])
+        if blocked:
+            raise AppError(
+                422,
+                "RULES_VIDEO_SKIP_BLOCKED",
+                skip_blocked_message(blocked),
+                {"segments": blocked},
+            )
 
     def readiness(self, user: CurrentUser, project_id: uuid.UUID) -> VideoReadinessOut:
         state = self._state(user, project_id)
@@ -965,7 +1019,9 @@ class VideoAssetsService:
 STORAGE_DOWN_MESSAGE = "照片存放空間暫時無法使用，請稍後再試"
 
 
-def _asset_out(asset: dict[str, Any], version: int) -> VideoAssetOut:
+def _asset_out(asset: dict[str, Any], version: int, video: dict[str, Any]) -> VideoAssetOut:
+    optional = asset.get("priority") == "optional"
+    affected, blocked = skip_impact(video, asset["asset_key"]) if optional else ([], [])
     return VideoAssetOut(
         asset_key=asset["asset_key"],
         kind=asset.get("kind", "flat_photo"),
@@ -976,4 +1032,59 @@ def _asset_out(asset: dict[str, Any], version: int) -> VideoAssetOut:
         orientation=asset.get("orientation", 0),
         regions=dict(asset.get("regions") or {}),
         video_version=version,
+        skipped=is_skipped(asset),
+        skip_affected_segments=affected,
+        skip_blocked_segments=blocked,
     )
+
+
+# --------------------------------------------------------------------------- 成品影片（MR 9）
+
+
+class RenderJobsReader(Protocol):
+    def latest_succeeded(self, project_id: uuid.UUID, kind: str) -> VideoJobRecord | None: ...
+
+
+class VideoRenderService:
+    """最近一次成功產生的影片與影片檔（design.md D15）。"""
+
+    def __init__(
+        self, projects: VideoProjectStore, jobs: RenderJobsReader, storage: FileStorage
+    ) -> None:
+        self._projects = projects
+        self._jobs = jobs
+        self._storage = storage
+
+    def get(self, user: CurrentUser, project_id: uuid.UUID) -> VideoRenderOut:
+        job = self._latest(user, project_id)
+        result = job.result or {}
+        return VideoRenderOut(
+            job_id=job.id,
+            video_path=f"/api/v1/rules-videos/{project_id}/render/video",
+            total_seconds=result.get("total_seconds", 0),
+            reencoded=result.get("reencoded", []),
+            reused=result.get("reused", []),
+            skipped_assets=result.get("skipped_assets", []),
+            estimated=result.get("estimated", False),
+            warnings=result.get("warnings", []),
+            finished_at=job.finished_at,
+        )
+
+    def video(self, user: CurrentUser, project_id: uuid.UUID) -> bytes:
+        job = self._latest(user, project_id)
+        try:
+            return self._storage.get((job.result or {})["video_key"])
+        except (KeyError, FileNotFound) as exc:
+            raise AppError(404, "RULES_VIDEO_RENDER_NOT_FOUND", "找不到影片檔") from exc
+        except StorageError as exc:
+            raise AppError(503, "RULES_VIDEO_STORAGE_UNAVAILABLE", STORAGE_DOWN_MESSAGE) from exc
+
+    def _latest(self, user: CurrentUser, project_id: uuid.UUID) -> VideoJobRecord:
+        require_role(user, "shop_staff", "admin")
+        record = self._projects.get(project_id)
+        if record is None or not _can_access(user, record):
+            raise _project_not_found()
+        job = self._jobs.latest_succeeded(project_id, "render")
+        if job is None:
+            raise AppError(404, "RULES_VIDEO_RENDER_NOT_FOUND", "這個專案還沒有產生影片")
+        return job

@@ -37,6 +37,7 @@ from app.domains.rules_qa.schemas import (
     VideoProjectList,
     VideoProjectOut,
     VideoReadinessOut,
+    VideoRenderOut,
     VideoRequest,
     VideoTermsIn,
     VideoTermsOut,
@@ -48,6 +49,7 @@ from app.domains.rules_qa.service import (
     VideoJobService,
     VideoPagesService,
     VideoProjectService,
+    VideoRenderService,
     VideoTermsService,
 )
 from app.domains.rules_qa.video_assets import MAX_PHOTO_BYTES
@@ -271,8 +273,8 @@ def create_video_job(
     user: CurrentUserDep,
     service: VideoDraftServiceDep,
 ) -> VideoJobOut:
-    """建立工作（本 MR 只有 kind=draft：依編輯後的頁面文字產生草稿）。回 202，之後查詢進度。"""
-    return service.start(user, project_id)
+    """建立工作：draft＝依編輯後的頁面文字產生草稿；render＝產生影片（素材要齊）。回 202。"""
+    return service.start(user, project_id, body.kind)
 
 
 @videos_router.get("/{project_id}/draft", response_model=VideoDraftOut)
@@ -347,3 +349,33 @@ def get_video_readiness(
 ) -> VideoReadinessOut:
     """產生影片前還缺什麼：沒有照片的素材、沒有座標的區域、本版不支援的繪製素材。"""
     return service.readiness(user, project_id)
+
+
+# --------------------------------------------------------------------------- 成品影片
+
+
+def get_video_render_service(
+    request: Request, session: Annotated[Session, Depends(get_session)]
+) -> VideoRenderService:
+    return VideoRenderService(
+        VideoProjectRepository(session), VideoJobRepository(session), request.app.state.storage
+    )
+
+
+VideoRenderServiceDep = Annotated[VideoRenderService, Depends(get_video_render_service)]
+
+
+@videos_router.get("/{project_id}/render", response_model=VideoRenderOut)
+def get_video_render(
+    project_id: uuid.UUID, user: CurrentUserDep, service: VideoRenderServiceDep
+) -> VideoRenderOut:
+    """最近一次成功產生的影片：總長、重新編碼與沿用的段、略過的素材、產生時間。"""
+    return service.get(user, project_id)
+
+
+@videos_router.get("/{project_id}/render/video")
+def read_video_render(
+    project_id: uuid.UUID, user: CurrentUserDep, service: VideoRenderServiceDep
+) -> Response:
+    """影片檔（帶身分讀取，權限同專案；整支讀出，見 design.md D13 待決 1）。"""
+    return Response(content=service.video(user, project_id), media_type="video/mp4")

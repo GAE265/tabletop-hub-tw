@@ -5,6 +5,7 @@
 → 混音（旁白出現時壓低音樂）。
 """
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -36,6 +37,19 @@ PROGRESS_NOTE = (
 )
 
 
+# 進度回呼：(0–1 的進度, 目前在做什麼)
+ProgressCallback = Callable[[float, str], None]
+
+# 各步驟佔整體進度的區間：旁白（TTS 可能慢）、段影片（逐格編碼，最花時間）
+NARRATION_SPAN = (0.02, 0.2)
+SEGMENT_SPAN = (0.2, 0.85)
+
+
+def _span(span: tuple[float, float], done: int, total: int) -> float:
+    start, end = span
+    return start + (end - start) * done / max(total, 1)
+
+
 @dataclass(frozen=True)
 class RenderResult:
     video: Path
@@ -61,13 +75,22 @@ def render_video(
     encoder: SegmentEncoder | None = None,
     music_volume: float = DEFAULT_MUSIC_VOLUME,
     estimated: bool = False,
+    on_progress: ProgressCallback | None = None,
 ) -> RenderResult:
+    """on_progress(0–1 的進度, 目前在做什麼)：每一步開始前呼叫（產生影片的工作用來回報進度）。"""
+    report = on_progress or (lambda progress, message: None)
     cache_dir = cache_dir or video.base_dir / "cache"
+    report(0.0, "排版")
     library = AssetLibrary(video)
     layouts = layout_video(video, fonts, style, library)
     ffmpeg.check()
 
-    clips = prepare_narration(video, tts, cache_dir)
+    clips = prepare_narration(
+        video,
+        tts,
+        cache_dir,
+        on_clip=lambda i, n: report(_span(NARRATION_SPAN, i - 1, n), f"旁白 {i}／{n}"),
+    )
     timeline = build_timeline(video, lambda beat: clips[beat.beat_key].seconds, style)
     renderer = Renderer(video, timeline, layouts, fonts, style, library)
     segments = encode_segments(
@@ -77,12 +100,17 @@ def render_video(
         encoder or FfmpegSegmentEncoder(ffmpeg, style),
         cache_dir,
         style,
+        on_segment=lambda i, n, reused: report(
+            _span(SEGMENT_SPAN, i - 1, n), f"段影片 {i}／{n}" + ("（沿用）" if reused else "")
+        ),
     )
 
     out_dir.mkdir(parents=True, exist_ok=True)
     joined = cache_dir / "joined.mp4"
+    report(0.86, "串接段影片")
     _concat(ffmpeg, [s.path for s in segments], joined, cache_dir)
     silent = out_dir / "silent.mp4"
+    report(0.9, "疊上進度條")
     overlay_progress(ffmpeg, joined, silent, timeline, style)
 
     bgm = out_dir / "bgm.wav"
@@ -90,6 +118,7 @@ def render_video(
     bgm.write_bytes(to_wav(synthesize_bgm(timeline.total, starts)))
 
     final = out_dir / f"{safe_file_part(video.game_key)}.mp4"
+    report(0.95, "混音")
     _mix(ffmpeg, silent, bgm, _narration_entries(timeline, clips), final, timeline, music_volume)
 
     timing_csv = out_dir / "timing.csv"

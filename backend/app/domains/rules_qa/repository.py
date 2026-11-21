@@ -167,18 +167,33 @@ class VideoProjectRecord:
     created_at: datetime
     updated_at: datetime
     has_draft: bool = False
+    # 段資料（推出步驟用：有沒有照片、齊了沒）；沒有草稿時是 None
+    video: dict[str, Any] | None = None
+    # 有成功產生的影片（MR 9）
+    has_render: bool = False
 
 
 class VideoProjectRepository(SessionRepository):
     """rules_qa_video_projects（add-rules-video-mobile design.md D1）。遊戲名稱讀共用表 games。"""
 
     def _select(self):
-        return select(RulesQaVideoProject, Game.name).join(
+        has_render = (
+            exists()
+            .where(
+                RulesQaVideoJob.project_id == RulesQaVideoProject.id,
+                RulesQaVideoJob.kind == "render",
+                RulesQaVideoJob.status == "succeeded",
+            )
+            .correlate(RulesQaVideoProject)
+        )
+        return select(RulesQaVideoProject, Game.name, has_render.label("has_render")).join(
             Game, Game.id == RulesQaVideoProject.game_id
         )
 
     @staticmethod
-    def _record(project: RulesQaVideoProject, game_name: str) -> VideoProjectRecord:
+    def _record(
+        project: RulesQaVideoProject, game_name: str, has_render: bool = False
+    ) -> VideoProjectRecord:
         return VideoProjectRecord(
             id=project.id,
             game_id=project.game_id,
@@ -190,6 +205,8 @@ class VideoProjectRepository(SessionRepository):
             created_at=project.created_at,
             updated_at=project.updated_at,
             has_draft=project.video is not None,
+            video=project.video,
+            has_render=bool(has_render),
         )
 
     def create(
@@ -326,6 +343,20 @@ class VideoJobRepository(SessionRepository):
 
     def get(self, job_id: uuid.UUID) -> VideoJobRecord | None:
         job = self.session.get(RulesQaVideoJob, job_id, populate_existing=True)
+        return None if job is None else self._record(job)
+
+    def latest_succeeded(self, project_id: uuid.UUID, kind: str) -> VideoJobRecord | None:
+        """這個專案某種工作最近一次成功的（例如最近一次產生的影片）。"""
+        job = self.session.scalars(
+            select(RulesQaVideoJob)
+            .where(
+                RulesQaVideoJob.project_id == project_id,
+                RulesQaVideoJob.kind == kind,
+                RulesQaVideoJob.status == "succeeded",
+            )
+            .order_by(RulesQaVideoJob.finished_at.desc(), RulesQaVideoJob.id)
+            .limit(1)
+        ).first()
         return None if job is None else self._record(job)
 
     def list_for_project(
@@ -540,6 +571,14 @@ class VideoDraftRepository(SessionRepository):
             )
         )
         return result.rowcount == 1
+
+    def touch(self, project_id: uuid.UUID) -> None:
+        """記下最後一次動作的時間（Q1 的保留期限從這裡算），例如產生了影片。"""
+        self.session.execute(
+            update(RulesQaVideoProject)
+            .where(RulesQaVideoProject.id == project_id)
+            .values(updated_at=func.now())
+        )
 
     def save_video(
         self, project_id: uuid.UUID, *, expected_version: int, video: dict[str, Any]

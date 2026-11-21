@@ -95,8 +95,9 @@ class VideoProjectOut(BaseModel):
     chapter_number: int
     chapter_title: str
     # 目前步驟：不存欄位，由專案的狀態推出（design.md D1、D11）：
-    # pages＝還沒有草稿（上傳規則書、選頁、編輯文字）；draft＝有草稿
-    step: Literal["pages", "draft"]
+    # pages＝還沒有草稿（上傳規則書、選頁、編輯文字）；draft＝有草稿、還沒拍照也沒略過；
+    # assets＝素材還沒齊；render＝齊了、還沒有成品；done＝有成功產生的影片（D15）
+    step: Literal["pages", "draft", "assets", "render", "done"]
     created_at: datetime
     updated_at: datetime
 
@@ -221,9 +222,9 @@ class VideoPagesOut(BaseModel):
 
 
 class VideoJobCreate(BaseModel):
-    """建立工作。本 MR 只開放 draft；render、revise 在之後的 MR 加上。"""
+    """建立工作：draft＝產生草稿（MR 5）、render＝產生影片（MR 9）；revise 在之後的 MR 加上。"""
 
-    kind: Literal["draft"]
+    kind: Literal["draft", "render"]
 
 
 class DraftBeatOut(BaseModel):
@@ -248,6 +249,8 @@ class DraftAssetOut(BaseModel):
     representative: bool
     regions: list[str]
     has_photo: bool
+    # 店員略過的選拍素材（MR 9）
+    skipped: bool = False
 
 
 class CoverageIssueOut(BaseModel):
@@ -325,6 +328,8 @@ class VideoAssetUpdate(BaseModel):
 
     orientation: Orientation | None = None
     regions: dict[str, list[float] | None] | None = None
+    # 略過這個選拍素材（true）或取消略過（false）；必拍不能略過（MR 9）
+    skipped: bool | None = None
 
     @model_validator(mode="after")
     def _regions_in_range(self) -> "VideoAssetUpdate":
@@ -345,6 +350,12 @@ class VideoAssetOut(BaseModel):
     regions: dict[str, list[float] | None]
     # 寫入後的段資料版本
     video_version: int
+    # 店員略過這個選拍素材（MR 9）
+    skipped: bool = False
+    # 略過後會少一張圖的段（段號從 1 開始）；必拍是空的
+    skip_affected_segments: list[int] = []
+    # 只靠這張素材、所以不能略過的段；必拍是空的
+    skip_blocked_segments: list[int] = []
 
 
 class MissingPhotoOut(BaseModel):
@@ -353,6 +364,9 @@ class MissingPhotoOut(BaseModel):
     priority: str
     reason: str
     shot: str | None
+    # 選拍：略過後會少一張圖的段、只靠它而不能略過的段（MR 9）
+    skip_affected_segments: list[int] = []
+    skip_blocked_segments: list[int] = []
 
 
 class MissingRegionOut(BaseModel):
@@ -373,3 +387,24 @@ class VideoReadinessOut(BaseModel):
     missing_photos: list[MissingPhotoOut]
     missing_regions: list[MissingRegionOut]
     unsupported: list[UnsupportedAssetOut]
+
+
+# --------------------------------------------------------------------------- 成品影片（MR 9）
+
+
+class VideoRenderOut(BaseModel):
+    """最近一次成功產生的影片。"""
+
+    job_id: uuid.UUID
+    # 讀影片檔的路徑（帶身分讀取）
+    video_path: str
+    total_seconds: float
+    # 這次重新編碼的段、沿用快取的段
+    reencoded: list[str]
+    reused: list[str]
+    # 略過的選拍素材
+    skipped_assets: list[str]
+    # 沒有設定文字轉語音時，旁白靜音、時間為估計值
+    estimated: bool
+    warnings: list[str]
+    finished_at: datetime | None
