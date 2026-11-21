@@ -8,9 +8,9 @@
   - 結論（2026-11-21）：本機文字檔；用語對照表；產生到句內動作與區域名稱。
 - [x] 1.2 永傑確認本 change 的情境表格，驗證：確認後才開分支
   - 2026-11-21：永傑要求直接開工，視為確認。
-- [ ] 1.3 等 `add-rules-video-maker` 的 #75 合併，驗證：dev 上有 `integrations/video/pipeline.py`
+- [x] 1.3 等 `add-rules-video-maker` 的 #75 合併，驗證：dev 上有 `integrations/video/pipeline.py`（#75 已合併，dev 上有 `integrations/video/pipeline.py`）
   - 2026-11-21 決定：為了加快，本 MR 從 #75 的分支往下接，#75 合併後再把 dev 合併進來。
-- [ ] 1.4 永傑把《血與刃》規則書第 5 頁的文字存成 `backend/.local/rules_video/rulebook/en-005.txt`，並寫好 `terms.json`（至少涵蓋手寫版用到的牌名、區域與陣營），驗證：檔案存在且不出現在 `git status`
+- [x] 1.4 永傑把《血與刃》規則書第 5 頁的文字存成 `backend/.local/rules_video/rulebook/en-005.txt`，並寫好 `terms.json`（至少涵蓋手寫版用到的牌名、區域與陣營），驗證：檔案存在且不出現在 `git status`（`en-005.txt`、`terms.json` 在本機，不在 `git status`）
 
 ## 2. MR（分支 `feature/rules_qa-video-script`，從 #75 的分支往下接）
 
@@ -55,7 +55,7 @@
     換第二款遊戲或新頁面首次使用時，要重新看漏報與誤報。
   - 手寫版缺「存活的」花苞（原文 surviving Flower Bud cards）記為細節差異，先不改手寫版。
 - [x] 2.12 格式小錯自動清理 C1–C4（2026-11-21 永傑同意，獨立 commit）：清理紀錄寫進 `draft/cleanup.json` 與比對報告；清理後照樣檢查，其他錯誤照舊改寫
-- [ ] 2.9 自我檢查：`uv run ruff check .`、`uv run ruff format --check .`、`uv run pytest`、`uv run pytest -m external`，驗證：全部通過（external 的 OCR 項目除外）、CI 全綠，再改成 Ready for review
+- [x] 2.9 自我檢查：`uv run ruff check .`、`uv run ruff format --check .`、`uv run pytest`、`uv run pytest -m external`，驗證：全部通過（external 的 OCR 項目除外）、CI 全綠，再改成 Ready for review（#77 自我檢查通過、CI 全綠後合併）
 
 ## 3. MR 2：規則涵蓋檢查（分支 `feature/rules_qa-video-coverage`，從 1c 的分支切出）
 
@@ -64,7 +64,7 @@
 - [x] 3.1 第一個 commit：本節與 spec「規則涵蓋檢查」
 - [x] 3.2 撰寫涵蓋檢查與指令的測試（`FakeLLMProvider`），驗證：測試存在且失敗
 - [x] 3.3 實作 `coverage` 子指令與 `compare` 報告的「規則陳述檢查」一節，驗證：3.2 通過
-- [ ] 3.4 對兩輪共 6 次的草稿與手寫版各跑一次，抓到、漏掉、誤報分開列，驗證：**交給永傑判斷**（tasks 2.8 依此決定）
+- [x] 3.4 對兩輪共 6 次的草稿與手寫版各跑一次，抓到、漏掉、誤報分開列，驗證：**交給永傑判斷**（tasks 2.8 依此決定）（2026-11-21 永傑接受驗收結果，2.8 依此打勾）
   - 結果（2026-11-21，`.local/rules_video/coverage-eval.md`）：先前列出的 4 個規則錯誤全部抓到、漏掉 0；
     AI 草稿誤報 4 條（條件在前一句的 3 條、意思相同的 1 條）；手寫版沒有明確的誤報，
     另有「洗牌目的」（5 份都被標）與手寫版「存活的」花苞、頁尾三條未涵蓋，交給永傑判斷。
@@ -72,7 +72,7 @@
 - **已知限制**（2026-11-21 永傑決定先不處理）：條件寫在上一句、下一句接結果時（例如「沒有血刃牌時移除幽魂。」「存活的花苞放進犧牲區。」），
   涵蓋檢查可能把後一句標成「少了條件」。驗收中 4 條誤報有 3 條是這種情況。
 - [x] 3.7 #76 審核修正（alan，2026-11-21；永傑同意情境表格）：規則清單是空的時「檢查無效」並以失敗結束；報告一律寫「共檢查 N 條規則」並列出每一條；`draft` 成功時刪掉舊的 `coverage.json`、`coverage.md`；`coverage.json` 記下 `video.json` 的雜湊，`compare` 對不上時標示「已過期」，驗證：測試先失敗後通過
-- [ ] 3.5 自我檢查與 MR 說明，驗證：全部通過、CI 全綠
+- [x] 3.5 自我檢查與 MR 說明，驗證：全部通過、CI 全綠（#76 自我檢查通過、CI 全綠後合併）
 
 ## Workflow follow-up
 
