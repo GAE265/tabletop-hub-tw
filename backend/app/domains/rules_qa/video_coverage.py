@@ -5,6 +5,7 @@
 這是 AI 檢查 AI，可能漏報或誤報，報告只供參考。
 """
 
+import hashlib
 import json
 from dataclasses import asdict, dataclass, field
 from typing import Any
@@ -18,6 +19,9 @@ STATUS_LABELS = {"complete": "完整", "incomplete": "不完整", "missing": "�
 CATEGORY_LABELS = {"condition": "條件", "action": "動作", "purpose": "目的說明"}
 TRACK_LABELS = {"narration": "旁白", "subtitle": "字幕"}
 KIND_LABELS = {"contradiction": "與原文相反", "not_in_rulebook": "規則書沒有的規則"}
+INVALID_MESSAGE = (
+    "**檢查無效**：LLM 沒有拆出任何規則，無法判斷旁白與字幕是否完整，請重跑 coverage。"
+)
 
 INSTRUCTIONS = """你是桌遊規則教學影片的審稿者，負責檢查旁白與字幕有沒有完整、正確地講出規則。
 輸入有三部分：本章規則書原文、編號的旁白、編號的字幕。
@@ -149,6 +153,12 @@ class Problem:
 class CoverageReport:
     rules: list[RuleCheck]
     problems: list[Problem]
+    video_hash: str | None = None  # 檢查時 video.json 的 sha256；compare 用來判斷是否過期
+
+    @property
+    def is_valid(self) -> bool:
+        """LLM 一條規則都沒拆出來，代表檢查沒做成，不能當成「沒有問題」（#76 審核）。"""
+        return bool(self.rules)
 
     @property
     def has_issues(self) -> bool:
@@ -156,6 +166,7 @@ class CoverageReport:
 
     def to_json(self) -> str:
         data = {
+            "video_hash": self.video_hash,
             "rules": [asdict(r) | {"narration_shorter": r.narration_shorter} for r in self.rules],
             "problems": [asdict(p) for p in self.problems],
         }
@@ -241,9 +252,13 @@ def _markdown(report: CoverageReport) -> str:
         "由 LLM 把本章原文的每一條規則分別與旁白、字幕對照；可能漏報或誤報，判斷以人為準。",
         "",
     ]
+    if not report.is_valid:
+        return "\n".join([*lines, INVALID_MESSAGE, ""])
     hints = [rule for rule in report.rules if rule.is_hint]
+    # 沒有問題時也列出每一條規則，才看得出 LLM 拆了幾條、有沒有漏拆（#76 審核）
+    lines += [f"共檢查 {len(report.rules)} 條規則（目的說明 {len(hints)} 條另列為提示）。", ""]
     if not report.has_issues:
-        return "\n".join([*lines, "沒有發現問題。", "", *_hint_lines(hints)])
+        lines += ["沒有發現問題。", ""]
 
     lines += ["| 規則 | 分類 | 原文 | 旁白 | 字幕 | 標記 |", "|---|---|---|---|---|---|"]
     for rule in report.rules:
@@ -312,4 +327,14 @@ def markdown_from_json(text: str) -> str:
         for r in raw["rules"]
     ]
     problems = [Problem(**p) for p in raw["problems"]]
-    return CoverageReport(rules, problems).markdown()
+    return CoverageReport(rules, problems, raw.get("video_hash")).markdown()
+
+
+def video_hash(content: bytes) -> str:
+    """video.json 內容的 sha256：記在 coverage.json，compare 用來判斷檢查結果是否過期。"""
+    return hashlib.sha256(content).hexdigest()
+
+
+def stored_video_hash(text: str) -> str | None:
+    """coverage.json 記下的雜湊；第 1 版的 coverage.json 沒有這個欄位，回傳 None。"""
+    return json.loads(text).get("video_hash")

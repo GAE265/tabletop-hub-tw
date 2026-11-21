@@ -22,7 +22,12 @@ from dataclasses import asdict
 from pathlib import Path
 
 from app.core.config import Settings, get_settings
-from app.domains.rules_qa.video_coverage import check_coverage, markdown_from_json
+from app.domains.rules_qa.video_coverage import (
+    check_coverage,
+    markdown_from_json,
+    stored_video_hash,
+    video_hash,
+)
 from app.domains.rules_qa.video_script import (
     CLEANUP_RULES,
     CleanupRecord,
@@ -268,6 +273,9 @@ def _draft(args: argparse.Namespace, settings: Settings, llm: LLMProvider | None
             print(f"借用照片與座標失敗（{hand}）：{exc}", file=sys.stderr)
             return EXIT_FAILED
     _write_json(draft_folder / "video.json", data)
+    # 舊草稿的涵蓋檢查結果不適用新草稿（#76 審核）
+    for stale in ("coverage.json", "coverage.md"):
+        (draft_folder / stale).unlink(missing_ok=True)
     (draft_folder / "cleanup.json").write_text(
         json.dumps([asdict(r) for r in cleanups], ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
@@ -299,6 +307,12 @@ def _game_identity(folder: Path) -> dict[str, str | None]:
     }
 
 
+STALE_COVERAGE = (
+    "> **已過期**：草稿在規則涵蓋檢查之後有變動（或檢查結果沒有記下草稿的雜湊），"
+    "以下是舊草稿的結果，請重跑 coverage。\n\n"
+)
+
+
 def _compare(a: Path, b: Path) -> int:
     videos = []
     for folder in (a, b):
@@ -311,7 +325,10 @@ def _compare(a: Path, b: Path) -> int:
     target = a / "compare.md"
     coverage = a / "coverage.json"
     if coverage.is_file():
-        section = markdown_from_json(coverage.read_text(encoding="utf-8"))
+        text = coverage.read_text(encoding="utf-8")
+        section = markdown_from_json(text)
+        if stored_video_hash(text) != video_hash((a / "video.json").read_bytes()):
+            section = STALE_COVERAGE + section
     else:
         section = "## 規則陳述檢查\n\n未做規則涵蓋檢查（沒有 coverage.json）。\n"
     target.write_text(report.markdown() + _cleanup_section(a) + "\n" + section, encoding="utf-8")
@@ -345,6 +362,15 @@ def _coverage(args: argparse.Namespace, settings: Settings, llm: LLMProvider | N
     except (KeyError, TypeError) as exc:
         print(f"LLM 的輸出格式不符：{exc!r}", file=sys.stderr)
         return EXIT_FAILED
+    if not report.is_valid:
+        # 空的規則清單不是「沒有問題」：刪掉舊結果，免得 compare 附上舊的檢查（#76 審核）
+        (folder / "coverage.json").unlink(missing_ok=True)
+        (folder / "coverage.md").write_text(report.markdown(), encoding="utf-8")
+        print(
+            f"規則涵蓋檢查無效：LLM 沒有拆出任何規則（{folder / 'coverage.md'}）", file=sys.stderr
+        )
+        return EXIT_FAILED
+    report.video_hash = video_hash((folder / "video.json").read_bytes())
     (folder / "coverage.json").write_text(report.to_json(), encoding="utf-8")
     (folder / "coverage.md").write_text(report.markdown(), encoding="utf-8")
     shorter = sum(1 for r in report.rules if r.narration_shorter)

@@ -186,7 +186,19 @@ LLM 的每次輸出 SHALL 先自動清理四種格式小錯，清理後仍要通
 
 #### Scenario: 全部完整
 - **WHEN** 每條規則的旁白與字幕都完整，也沒有問題句
-- **THEN** 報告寫「沒有發現問題」
+- **THEN** 報告寫「共檢查 N 條規則」與「沒有發現問題」，並列出每一條規則與旁白、字幕的狀態，看得出 LLM 拆了幾條（#76 審核）
+
+#### Scenario: 規則清單是空的
+- **WHEN** LLM 一條規則都沒拆出來
+- **THEN** 結束代碼不為 0；`coverage.md` 寫「檢查無效」，不寫「沒有發現問題」；刪掉舊的 `coverage.json`（#76 審核）
+
+#### Scenario: 重新產生草稿
+- **WHEN** `draft` 成功產生新草稿
+- **THEN** 刪掉草稿資料夾裡舊的 `coverage.json` 與 `coverage.md`，`compare` 註明「未做規則涵蓋檢查」（#76 審核）
+
+#### Scenario: 檢查結果過期
+- **WHEN** `coverage` 之後草稿的 `video.json` 有變動（`coverage.json` 記下的雜湊對不上，或沒有記雜湊），再執行 `compare`
+- **THEN** 「規則陳述檢查」一節開頭標示「已過期」，請重跑 coverage；雜湊相同時不標示（#76 審核）
 
 #### Scenario: 只給原文、旁白與字幕
 - **WHEN** 執行 `coverage`
