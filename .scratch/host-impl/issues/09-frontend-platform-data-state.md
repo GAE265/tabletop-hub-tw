@@ -1,6 +1,6 @@
 # 09：前端的 core/platform 四個介面、data、state
 
-Status: ready-for-agent
+Status: resolved
 Blocked by: 01
 Spec: [spec](../../host/spec.md) §14.1、§14.2、§14.3、§14.5、§14.7
 MR: [#68](https://github.com/GAE265/tabletop-hub-tw/pull/68)
@@ -30,10 +30,10 @@ MR: [#68](https://github.com/GAE265/tabletop-hub-tw/pull/68)
 
 ## 驗收條件
 
-- [ ] 先 commit 會失敗的測試，再 commit 功能（AGENTS.md §7.2）
-- [ ] spec §14.7 的 U-01 到 U-20 每一行都有測試而且通過
-- [ ] 只能在網頁上用的程式都在 `core/platform/` 的介面後面，`domains/host/` 沒有直接 import 瀏覽器的 API（AGENTS.md §5.3）
-- [ ] 前端沒有任何阿里雲的設定與金鑰（AGENTS.md §5.3）
-- [ ] 沒有新增音訊套件
-- [ ] `flutter analyze`、`flutter test` 通過
-- [ ] 做完的最後一個 commit 把本檔的 `Status` 改成 `resolved`
+- [x] 先 commit 會失敗的測試，再 commit 功能（AGENTS.md §7.2）
+- [x] spec §14.7 的 U-01 到 U-20 每一行都有測試而且通過
+- [x] 只能在網頁上用的程式都在 `core/platform/` 的介面後面，`domains/host/` 沒有直接 import 瀏覽器的 API（AGENTS.md §5.3）
+- [x] 前端沒有任何阿里雲的設定與金鑰（AGENTS.md §5.3）
+- [x] 沒有新增音訊套件
+- [x] `flutter analyze`、`flutter test` 通過
+- [x] 做完的最後一個 commit 把本檔的 `Status` 改成 `resolved`
