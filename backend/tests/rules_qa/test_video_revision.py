@@ -520,3 +520,93 @@ def test_invalid_alternative_triggers_rewrite(tmp_path: Path, run: Run) -> None:
     assert "次" in llm.calls[1].kwargs["input"]
     assert "改成翻牌" in out and "壞的" not in out
     assert run("revise", str(folder), "--choose", "1", llm=FakeLLMProvider(json_outputs=[]))[0] == 0
+
+
+# --- 沒有實際變動的替代做法視為無效（2026-11-21 永傑決定）---
+
+
+def _noop(data: dict[str, Any]) -> dict[str, Any]:
+    """只加了預設值 anim: pop，套用後內容和原本完全相同（本機驗收時真的 LLM 給過這種替代做法）。"""
+    same = copy.deepcopy(segment(data, "s1"))
+    same["beats"][1]["cues"][1]["anim"] = "pop"
+    return same
+
+
+def _flip(data: dict[str, Any]) -> dict[str, Any]:
+    changed = copy.deepcopy(segment(data, "s1"))
+    changed["beats"][1]["cues"][1] = {"at": 1.0, "do": "flip", "target": "main.c1"}
+    return changed
+
+
+def test_default_value_is_not_a_change(tmp_path: Path, run: Run) -> None:
+    folder = _game(tmp_path)
+    data = _video(folder)
+    new = _gold_to_red(data)
+    new["beats"][1]["cues"][1]["anim"] = "pop"  # 預設值，畫面不變
+    llm = FakeLLMProvider(json_outputs=[_revise(_entry(new, ["highlights"]))])
+    code, out, err = run("revise", str(folder), REQUEST, llm=llm)
+    assert code == 0, err
+    assert segment(_video(folder), "s1")["revisions"][-1]["changed"] == ["highlights"]
+
+
+def test_noop_alternative_triggers_rewrite(tmp_path: Path, run: Run) -> None:
+    folder = _game(tmp_path)
+    data = _video(folder)
+    llm = FakeLLMProvider(
+        json_outputs=[
+            _unsupported(_alternative("只加預設值", _noop(data))),
+            _unsupported(_alternative("改成翻牌", _flip(data))),
+        ]
+    )
+    code, out, err = run("revise", str(folder), "讓牌旋轉", llm=llm)
+    assert code == 0, err
+    assert len(llm.calls) == 2
+    assert "完全相同" in llm.calls[1].kwargs["input"]
+    assert "改成翻牌" in out and "只加預設值" not in out
+
+
+def test_noop_alternative_after_rewrite_is_not_listed(tmp_path: Path, run: Run) -> None:
+    folder = _game(tmp_path)
+    data = _video(folder)
+    llm = FakeLLMProvider(
+        json_outputs=[
+            _unsupported(_alternative("只加預設值", _noop(data))),
+            _unsupported(
+                _alternative("還是沒變", _noop(data)), _alternative("改成翻牌", _flip(data))
+            ),
+        ]
+    )
+    code, out, err = run("revise", str(folder), "讓牌旋轉", llm=llm)
+    assert code == 0, err
+    assert "改成翻牌" in out and "還是沒變" not in out
+    pending = json.loads((folder / "revisions" / "pending.json").read_text(encoding="utf-8"))
+    assert [a["title"] for a in pending["alternatives"]] == ["改成翻牌"]
+
+
+def test_only_noop_alternatives_after_rewrite_fails(tmp_path: Path, run: Run) -> None:
+    folder = _game(tmp_path)
+    data = _video(folder)
+    noop = _unsupported(_alternative("只加預設值", _noop(data)))
+    llm = FakeLLMProvider(json_outputs=[noop, noop])
+    code, _, err = run("revise", str(folder), "讓牌旋轉", llm=llm)
+    assert code != 0
+    assert "沒有有效的替代做法" in err
+    assert not (folder / "revisions" / "pending.json").exists()
+
+
+def test_noop_alternative_for_unknown_action_triggers_rewrite(tmp_path: Path, run: Run) -> None:
+    folder = _game(tmp_path)
+    data = _video(folder)
+    rotate = copy.deepcopy(segment(data, "s1"))
+    rotate["beats"][1]["cues"][1] = {"at": 1.0, "do": "rotate", "target": "main.c1"}
+    llm = FakeLLMProvider(
+        json_outputs=[
+            _revise(_entry(rotate, ["cues"])),
+            _unsupported(_alternative("只加預設值", _noop(data))),
+            _unsupported(_alternative("改成翻牌", _flip(data))),
+        ]
+    )
+    code, out, err = run("revise", str(folder), "讓牌旋轉", llm=llm)
+    assert code == 0, err
+    assert len(llm.calls) == 3
+    assert "改成翻牌" in out and "只加預設值" not in out
