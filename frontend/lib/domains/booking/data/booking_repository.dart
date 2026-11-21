@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/api/api_client.dart';
 import '../../../core/api/api_exception.dart';
 import 'booking.dart';
+import 'booking_notification.dart';
 import 'shop.dart';
 
 abstract interface class BookingRepository {
@@ -31,6 +32,9 @@ abstract interface class BookingRepository {
   /// 修改時間／人數（[patch] 內放要改的欄位）或變更狀態（`{'status': ...}`）。
   Future<Booking> patch(int id, Map<String, dynamic> patch);
 
+  /// 換桌：送上新桌子 id 清單（[tableIds]），回傳換桌後的訂位。
+  Future<Booking> changeTables(int id, List<int> tableIds);
+
   Future<BookingPage> listMine({
     String? status,
     String? fromDate,
@@ -49,6 +53,15 @@ abstract interface class BookingRepository {
     String? to,
     int? floor,
   });
+
+  /// 目前使用者的訂位通知，新的在前（add-booking-notifications）。
+  Future<BookingNotificationPage> listNotifications({
+    int page = 1,
+    int pageSize = 20,
+  });
+
+  /// 把自己的一則通知標成已讀。
+  Future<BookingNotification> markNotificationRead(String id);
 }
 
 class HttpBookingRepository implements BookingRepository {
@@ -134,6 +147,15 @@ class HttpBookingRepository implements BookingRepository {
   });
 
   @override
+  Future<Booking> changeTables(int id, List<int> tableIds) => _call(() async {
+    final r = await _dio.put<Map<String, dynamic>>(
+      '/api/v1/bookings/$id/tables',
+      data: {'table_ids': tableIds},
+    );
+    return Booking.fromJson(r.data!);
+  });
+
+  @override
   Future<BookingPage> listMine({
     String? status,
     String? fromDate,
@@ -183,6 +205,28 @@ class HttpBookingRepository implements BookingRepository {
         SeatingPlan.fromJson(item as Map<String, dynamic>),
     ];
   });
+
+  @override
+  Future<BookingNotificationPage> listNotifications({
+    int page = 1,
+    int pageSize = 20,
+  }) => _call(() async {
+    final r = await _dio.get<Map<String, dynamic>>(
+      '/api/v1/booking-notifications',
+      queryParameters: {'page': page, 'page_size': pageSize},
+    );
+    return BookingNotificationPage.fromJson(r.data!);
+  });
+
+  @override
+  Future<BookingNotification> markNotificationRead(String id) =>
+      _call(() async {
+        final r = await _dio.patch<Map<String, dynamic>>(
+          '/api/v1/booking-notifications/$id',
+          data: {'read': true},
+        );
+        return BookingNotification.fromJson(r.data!);
+      });
 }
 
 final bookingRepositoryProvider = Provider<BookingRepository>(

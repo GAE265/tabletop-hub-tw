@@ -176,7 +176,7 @@ void main() {
       expect(find.text('到了 /booking/mine'), findsOneWidget);
     });
 
-    testWidgets('點揪團列前往揪團', (tester) async {
+    testWidgets('點揪團列前往該揪團的詳細頁', (tester) async {
       await pumpHome(
         tester,
         groups: FakeGroupsRepository(
@@ -184,7 +184,7 @@ void main() {
         ),
       );
       await tapKey(tester, 'home-upcoming-0');
-      expect(find.text('到了 /groups'), findsOneWidget);
+      expect(find.text('到了 /groups/g-1'), findsOneWidget);
     });
 
     testWidgets('載入中：行程區顯示載入指示，入口卡片照常顯示', (tester) async {

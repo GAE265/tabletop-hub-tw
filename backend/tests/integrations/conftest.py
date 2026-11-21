@@ -25,6 +25,8 @@ OCR_EXTERNAL_REQUIRED = (
     "LLM_API_KEY",
     "LLM_MODEL",
 )
+# 文字轉語音的外部服務測試（直連 Azure AI Speech）
+TTS_EXTERNAL_REQUIRED = ("TTS_REGION", "TTS_API_KEY")
 # 外部服務測試不連資料庫，給一個用不到的值，.env 沒有 DATABASE_URL 也能跑
 UNUSED_DB = "postgresql+psycopg://unused:unused@127.0.0.1:1/unused"
 
@@ -55,3 +57,8 @@ def external_settings(monkeypatch: pytest.MonkeyPatch) -> Settings:
 @pytest.fixture
 def ocr_external_settings(monkeypatch: pytest.MonkeyPatch) -> Settings:
     return _load_external_settings(monkeypatch, OCR_EXTERNAL_REQUIRED)
+
+
+@pytest.fixture
+def tts_external_settings(monkeypatch: pytest.MonkeyPatch) -> Settings:
+    return _load_external_settings(monkeypatch, TTS_EXTERNAL_REQUIRED)

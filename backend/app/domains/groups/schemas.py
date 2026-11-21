@@ -47,6 +47,8 @@ class GroupUpdate(BaseModel):
     description: str | None = Field(default=None, max_length=2000)
     # 只能取消；其他狀態不能由使用者設定
     status: Literal["cancelled"] | None = None
+    # 只能確定成團，不能取消成團（add-groups-notifications D1）
+    confirmed: Literal[True] | None = None
 
     @model_validator(mode="after")
     def _no_null_for_required(self) -> Self:
@@ -55,6 +57,8 @@ class GroupUpdate(BaseModel):
                 raise ValueError(f"{name} 不能是 null")
         if "status" in self.model_fields_set and self.status is None:
             raise ValueError("status 不能是 null")
+        if "confirmed" in self.model_fields_set and self.confirmed is None:
+            raise ValueError("confirmed 不能是 null")
         return self
 
 
@@ -90,6 +94,8 @@ class GroupResponse(BaseModel):
     waitlist_count: int
     remaining_slots: int
     my_status: MemberStatus | None
+    # 開團主確定成團的時間；null 代表還沒確定成團
+    confirmed_at: AwareDatetime | None
     created_at: AwareDatetime
 
 
@@ -115,3 +121,35 @@ class MemberResponse(BaseModel):
 class MemberListResponse(BaseModel):
     items: list[MemberResponse]
     total: int
+
+
+# --- 通知（add-groups-notifications）---
+
+NotificationType = Literal["group_confirmed", "group_cancelled", "waitlist_promoted"]
+
+
+class NotificationGroupRef(BaseModel):
+    id: uuid.UUID
+    title: str
+    start_at: AwareDatetime
+
+
+class NotificationResponse(BaseModel):
+    id: uuid.UUID
+    type: NotificationType
+    group: NotificationGroupRef
+    # null 代表未讀
+    read_at: AwareDatetime | None
+    created_at: AwareDatetime
+
+
+class NotificationListResponse(BaseModel):
+    items: list[NotificationResponse]
+    total: int
+    # 目前使用者全部未讀的數量，不受分頁影響
+    unread_count: int
+
+
+class NotificationUpdate(BaseModel):
+    # 只能標成已讀
+    read: Literal[True]

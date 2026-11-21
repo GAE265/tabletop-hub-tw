@@ -17,7 +17,7 @@ from app.core.db import SessionRepository
 from app.core.games.models import Game
 from app.domains.auth.models import AuthUser
 from app.domains.booking.models import BookingShop
-from app.domains.groups.models import Group, GroupGame, GroupMember
+from app.domains.groups.models import Group, GroupGame, GroupMember, GroupNotification
 
 
 @dataclass(frozen=True)
@@ -30,6 +30,7 @@ class GroupRecord:
     start_at: datetime
     end_at: datetime
     status: str
+    confirmed_at: datetime | None = None
 
 
 @dataclass(frozen=True)
@@ -58,6 +59,7 @@ class GroupView:
     waitlist_count: int
     my_status: str | None
     created_at: datetime
+    confirmed_at: datetime | None = None
     # 依選擇的順序
     games: tuple[GameItem, ...] = ()
 
@@ -67,6 +69,27 @@ class MemberRecord:
     user_id: uuid.UUID
     status: str
     joined_at: datetime
+
+
+@dataclass(frozen=True)
+class NotificationRecord:
+    """標成已讀前，service 判斷擁有者需要的欄位。"""
+
+    id: uuid.UUID
+    user_id: uuid.UUID
+
+
+@dataclass(frozen=True)
+class NotificationView:
+    """通知與揪團目前的名稱、開始時間。"""
+
+    id: uuid.UUID
+    type: str
+    group_id: uuid.UUID
+    group_title: str
+    group_start_at: datetime
+    read_at: datetime | None
+    created_at: datetime
 
 
 @dataclass(frozen=True)
@@ -150,6 +173,7 @@ class GroupsRepository(SessionRepository):
                 Group.start_at,
                 Group.end_at,
                 Group.status,
+                Group.confirmed_at,
             )
             .where(Group.id == group_id)
             .with_for_update()
@@ -189,10 +213,10 @@ class GroupsRepository(SessionRepository):
             )
         )
 
-    def promote_waitlisted(self, group_id: uuid.UUID, count: int) -> int:
-        """把最早報名的 count 位候補改成成員，回傳實際遞補的人數。"""
+    def promote_waitlisted(self, group_id: uuid.UUID, count: int) -> list[uuid.UUID]:
+        """把最早報名的 count 位候補改成成員，回傳被遞補的玩家（依報名先後）。"""
         if count <= 0:
-            return 0
+            return []
         ids = (
             select(GroupMember.id)
             .where(GroupMember.group_id == group_id, GroupMember.status == "waitlisted")
@@ -204,9 +228,22 @@ class GroupsRepository(SessionRepository):
             update(GroupMember)
             .where(GroupMember.id.in_(ids))
             .values(status="member")
-            .returning(GroupMember.id)
+            .returning(GroupMember.user_id, GroupMember.joined_at, GroupMember.id)
         )
-        return len(result.all())
+        rows = sorted(result.all(), key=lambda row: (row.joined_at, row.id))
+        return [row.user_id for row in rows]
+
+    def list_member_user_ids(
+        self, group_id: uuid.UUID, statuses: tuple[str, ...]
+    ) -> list[uuid.UUID]:
+        """依報名先後列出指定狀態（member、waitlisted）的玩家。"""
+        return list(
+            self.session.scalars(
+                select(GroupMember.user_id)
+                .where(GroupMember.group_id == group_id, GroupMember.status.in_(statuses))
+                .order_by(*_waitlist_order())
+            )
+        )
 
     def waitlist_position(self, group_id: uuid.UUID, user_id: uuid.UUID) -> int | None:
         ranked = (
@@ -261,6 +298,7 @@ class GroupsRepository(SessionRepository):
                 _count(Group.id, "waitlisted").label("waitlist_count"),
                 mine.label("my_status"),
                 Group.created_at,
+                Group.confirmed_at,
             )
             .join(BookingShop, BookingShop.id == Group.shop_id)
             .join(organizer, organizer.id == Group.organizer_id)
@@ -303,6 +341,80 @@ class GroupsRepository(SessionRepository):
             .limit(limit)
         )
         return self._to_views(rows), total
+
+    # --- 通知 ---
+
+    def add_notifications(
+        self,
+        group_id: uuid.UUID,
+        user_ids: list[uuid.UUID],
+        type_: str,
+        created_at: datetime,
+    ) -> None:
+        if user_ids:
+            self.session.execute(
+                insert(GroupNotification),
+                [
+                    {"user_id": u, "group_id": group_id, "type": type_, "created_at": created_at}
+                    for u in user_ids
+                ],
+            )
+
+    def list_notifications(
+        self, user_id: uuid.UUID, offset: int, limit: int
+    ) -> tuple[list[NotificationView], int, int]:
+        """回傳（這一頁的通知，總數，未讀數），新的在前。"""
+        mine = GroupNotification.user_id == user_id
+        total = self.session.scalar(select(func.count()).where(mine)) or 0
+        unread = (
+            self.session.scalar(
+                select(func.count()).where(mine, GroupNotification.read_at.is_(None))
+            )
+            or 0
+        )
+        rows = self.session.execute(
+            _notification_statement()
+            .where(mine)
+            .order_by(GroupNotification.created_at.desc(), GroupNotification.id.desc())
+            .offset(offset)
+            .limit(limit)
+        )
+        return [NotificationView(**row._mapping) for row in rows], total, unread
+
+    def find_notification(self, notification_id: uuid.UUID) -> NotificationRecord | None:
+        row = self.session.execute(
+            select(GroupNotification.id, GroupNotification.user_id).where(
+                GroupNotification.id == notification_id
+            )
+        ).one_or_none()
+        return None if row is None else NotificationRecord(**row._mapping)
+
+    def mark_read(self, notification_id: uuid.UUID, read_at: datetime) -> None:
+        """只在未讀時寫入，重複標成已讀不改時間。"""
+        self.session.execute(
+            update(GroupNotification)
+            .where(GroupNotification.id == notification_id, GroupNotification.read_at.is_(None))
+            .values(read_at=read_at)
+        )
+
+    def get_notification(self, notification_id: uuid.UUID) -> NotificationView | None:
+        row = self.session.execute(
+            _notification_statement().where(GroupNotification.id == notification_id)
+        ).one_or_none()
+        return None if row is None else NotificationView(**row._mapping)
+
+
+def _notification_statement() -> Select[Any]:
+    """通知加上揪團目前的名稱與開始時間。"""
+    return select(
+        GroupNotification.id,
+        GroupNotification.type,
+        GroupNotification.group_id,
+        Group.title.label("group_title"),
+        Group.start_at.label("group_start_at"),
+        GroupNotification.read_at,
+        GroupNotification.created_at,
+    ).join(Group, Group.id == GroupNotification.group_id)
 
 
 def _count_statement(group_id: uuid.UUID, status: str) -> Select[Any]:

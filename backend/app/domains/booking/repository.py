@@ -5,7 +5,7 @@ from datetime import date, datetime, timedelta
 from decimal import Decimal
 
 from psycopg.errors import ExclusionViolation
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import Select, delete, func, insert, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -17,6 +17,7 @@ from app.domains.booking.errors import TableConflict
 from app.domains.booking.models import (
     BookingBusinessHours,
     BookingClosingHours,
+    BookingNotification,
     BookingPricingRule,
     BookingReservation,
     BookingReservationLog,
@@ -28,6 +29,8 @@ from app.domains.booking.models import (
 from app.domains.booking.pricing import PricingRules
 from app.domains.booking.records import (
     BookingSummary,
+    NotificationRecord,
+    NotificationView,
     ReservationRecord,
     ShopRef,
     TableRef,
@@ -516,3 +519,102 @@ class BookingRepository(SessionRepository):
             )
 
         return results
+
+    # --- 通知（add-booking-notifications）---
+
+    def list_shop_staff_ids(self, shop_id: uuid.UUID) -> list[uuid.UUID]:
+        """該店所有店家人員的 id（讀共用表 auth_users，不改結構）。"""
+        return list(
+            self.session.scalars(
+                select(AuthUser.id)
+                .where(AuthUser.role == "shop_staff", AuthUser.shop_id == shop_id)
+                .order_by(AuthUser.id)
+            )
+        )
+
+    def add_notifications(
+        self,
+        reservation_id: int,
+        recipients: Sequence[tuple[uuid.UUID, str]],
+        created_at: datetime,
+    ) -> None:
+        """在目前的交易裡寫入通知；recipients 為（使用者 id，通知種類）。"""
+        if recipients:
+            self.session.execute(
+                insert(BookingNotification),
+                [
+                    {
+                        "user_id": user_id,
+                        "reservation_id": reservation_id,
+                        "type": type_,
+                        "created_at": created_at,
+                    }
+                    for user_id, type_ in recipients
+                ],
+            )
+
+    def list_notifications(
+        self, user_id: uuid.UUID, offset: int, limit: int
+    ) -> tuple[list[NotificationView], int, int]:
+        """回傳（這一頁的通知，總數，未讀數），新的在前。"""
+        mine = BookingNotification.user_id == user_id
+        total = self.session.scalar(select(func.count()).where(mine)) or 0
+        unread = (
+            self.session.scalar(
+                select(func.count()).where(mine, BookingNotification.read_at.is_(None))
+            )
+            or 0
+        )
+        rows = self.session.execute(
+            _notification_statement()
+            .where(mine)
+            .order_by(BookingNotification.created_at.desc(), BookingNotification.id.desc())
+            .offset(offset)
+            .limit(limit)
+        )
+        return [NotificationView(**row._mapping) for row in rows], total, unread
+
+    def find_notification(self, notification_id: uuid.UUID) -> NotificationRecord | None:
+        row = self.session.execute(
+            select(BookingNotification.id, BookingNotification.user_id).where(
+                BookingNotification.id == notification_id
+            )
+        ).one_or_none()
+        return None if row is None else NotificationRecord(**row._mapping)
+
+    def mark_read(self, notification_id: uuid.UUID, read_at: datetime) -> None:
+        """只在未讀時寫入，重複標成已讀不改時間。"""
+        self.session.execute(
+            update(BookingNotification)
+            .where(
+                BookingNotification.id == notification_id,
+                BookingNotification.read_at.is_(None),
+            )
+            .values(read_at=read_at)
+        )
+
+    def get_notification(self, notification_id: uuid.UUID) -> NotificationView | None:
+        row = self.session.execute(
+            _notification_statement().where(BookingNotification.id == notification_id)
+        ).one_or_none()
+        return None if row is None else NotificationView(**row._mapping)
+
+
+def _notification_statement() -> Select:
+    """通知加上訂位目前的代碼、店名、時間與人數。"""
+    return (
+        select(
+            BookingNotification.id,
+            BookingNotification.type,
+            BookingNotification.reservation_id,
+            BookingReservation.reservation_code,
+            BookingShop.name.label("shop_name"),
+            BookingReservation.start_at,
+            BookingReservation.end_at,
+            BookingReservation.party_size,
+            BookingNotification.read_at,
+            BookingNotification.created_at,
+        )
+        .join(BookingReservation, BookingReservation.id == BookingNotification.reservation_id)
+        .join(BookingShop, BookingShop.id == BookingReservation.shop_id)
+    )

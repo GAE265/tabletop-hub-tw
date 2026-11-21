@@ -17,10 +17,15 @@ from app.domains.groups.schemas import (
     GroupUpdate,
     JoinResponse,
     MemberListResponse,
+    NotificationListResponse,
+    NotificationResponse,
+    NotificationUpdate,
 )
 from app.domains.groups.service import GroupsService
 
 router = APIRouter(prefix="/groups", tags=["groups"])
+# 通知屬於目前使用者，不屬於某個揪團，所以不放在 /groups 底下（add-groups-notifications D4）
+notifications_router = APIRouter(prefix="/group-notifications", tags=["groups"])
 
 CurrentUserDep = Annotated[CurrentUser, Depends(get_current_user)]
 
@@ -93,3 +98,25 @@ def remove_member(
     """自己退出，或由開團主、管理員移除。成員離開後，候補第一位自動遞補。"""
     service.remove_member(user, group_id, user_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@notifications_router.get("", response_model=NotificationListResponse)
+def list_notifications(
+    user: CurrentUserDep,
+    service: ServiceDep,
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=100)] = 20,
+) -> NotificationListResponse:
+    """自己的通知，新的在前；附全部未讀數。"""
+    return service.list_notifications(user, page=page, page_size=page_size)
+
+
+@notifications_router.patch("/{notification_id}", response_model=NotificationResponse)
+def update_notification(
+    notification_id: uuid.UUID,
+    body: NotificationUpdate,
+    user: CurrentUserDep,
+    service: ServiceDep,
+) -> NotificationResponse:
+    """標成已讀（body 只接受 {"read": true}）。別人的通知回 404。"""
+    return service.mark_notification_read(user, notification_id)

@@ -17,27 +17,14 @@ class GroupsPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final selected = ref.watch(
-      groupsCalendarProvider.select((s) => s.selectedDate),
-    );
     const calendar = MonthCalendar(key: Key('groups-calendar'));
     const dayList = _DayList(key: Key('groups-day-list'));
     const padding = EdgeInsets.all(AppSpacing.medium);
 
     return Scaffold(
       key: const Key('groups-page'),
-      appBar: AppBar(
-        title: const Text('揪團'),
-        actions: [
-          TextButton.icon(
-            key: const Key('groups-create'),
-            onPressed: () => openGroupForm(context, ref, date: selected),
-            icon: const Icon(Icons.add),
-            label: const Text('我要開團'),
-          ),
-          const SizedBox(width: AppSpacing.small),
-        ],
-      ),
+      // 開團入口在當天列表裡（有揪團時在最下方，沒有時在空狀態），只有一個
+      appBar: AppBar(title: const Text('揪團')),
       body: switch (context.screenSize) {
         ScreenSize.mobile => const SingleChildScrollView(
           padding: padding,
@@ -128,7 +115,7 @@ class _DayList extends ConsumerWidget {
                     key: const Key('groups-empty-create'),
                     onPressed: () => openGroupForm(context, ref, date: date),
                     icon: const Icon(Icons.add),
-                    label: const Text('我要開團'),
+                    label: const Text('我要揪團'),
                   ),
                 ],
               ),
@@ -145,6 +132,13 @@ class _DayList extends ConsumerWidget {
                 ),
               ),
             ),
+          ),
+        if (groups.isNotEmpty)
+          OutlinedButton.icon(
+            key: const Key('groups-day-create'),
+            onPressed: () => openGroupForm(context, ref, date: date),
+            icon: const Icon(Icons.add),
+            label: const Text('我要揪團'),
           ),
       ],
     );

@@ -26,6 +26,18 @@ class GroupSlotBadge extends StatelessWidget {
   }
 }
 
+/// 「已成團」標籤：開放中且開團主已確定成團時顯示（add-groups-notifications）。
+class GroupConfirmedBadge extends StatelessWidget {
+  const GroupConfirmedBadge({super.key});
+
+  @override
+  Widget build(BuildContext context) => const PillBadge(
+    label: '已成團',
+    tone: PillTone.players,
+    icon: Icons.check_circle_outline,
+  );
+}
+
 /// 當日列表中的一筆揪團。
 class GroupCard extends ConsumerWidget {
   const GroupCard({required this.group, required this.onTap, super.key});
@@ -68,6 +80,7 @@ class GroupCard extends ConsumerWidget {
                   for (final game in group.games)
                     PillBadge(label: game.name, icon: Icons.casino_outlined),
                   if (fee != null) PillBadge(label: fee, tone: PillTone.accent),
+                  if (isConfirmedOpen(group)) const GroupConfirmedBadge(),
                 ],
               ),
               const SizedBox(height: AppSpacing.small),

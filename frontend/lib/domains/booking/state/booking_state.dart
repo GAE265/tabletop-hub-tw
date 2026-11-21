@@ -17,6 +17,7 @@ class BookingState {
     this.shops = const [],
     this.seatingPlan = const [],
     this.selectedTable,
+    this.changeTableFor,
   });
 
   final bool loading;
@@ -29,6 +30,9 @@ class BookingState {
   final List<SeatingPlan> seatingPlan;
   final TableInfo? selectedTable;
 
+  /// 正在換桌的訂位 id。null 表示不在換桌的選桌模式。
+  final int? changeTableFor;
+
   BookingState copyWith({
     bool? loading,
     String? message,
@@ -39,7 +43,9 @@ class BookingState {
     List<Shop>? shops,
     List<SeatingPlan>? seatingPlan,
     TableInfo? selectedTable,
+    int? changeTableFor,
     bool clearSelected = false,
+    bool clearChangeTable = false,
   }) => BookingState(
     loading: loading ?? this.loading,
     message: message ?? this.message,
@@ -50,6 +56,9 @@ class BookingState {
     shops: shops ?? this.shops,
     seatingPlan: seatingPlan ?? this.seatingPlan,
     selectedTable: clearSelected ? null : (selectedTable ?? this.selectedTable),
+    changeTableFor: clearChangeTable
+        ? null
+        : (changeTableFor ?? this.changeTableFor),
   );
 }
 
@@ -191,6 +200,26 @@ class BookingNotifier extends Notifier<BookingState> {
   void selectTable(TableInfo table) {
     state = state.copyWith(selectedTable: table, message: table.tableCode);
   }
+
+  /// 開始換桌：記下待換桌的訂位，座位圖進入選桌模式。
+  void startChangeTable(int id) {
+    state = state.copyWith(changeTableFor: id, isError: false);
+  }
+
+  /// 放棄換桌：離開選桌模式，不送任何請求。
+  void cancelChangeTable() {
+    state = state.copyWith(clearChangeTable: true);
+  }
+
+  /// 換桌：送上新桌子 id 清單，成功後把新訂位換回列表並離開選桌模式。
+  Future<void> changeTable(int id, List<int> tableIds) => _run(() async {
+    final b = await _repo.changeTables(id, tableIds);
+    return (BookingState s) => _replace(
+      s,
+      b,
+      '已換桌至 ${b.tableCodes.join('、')}',
+    ).copyWith(clearChangeTable: true);
+  });
 
   BookingState _replace(BookingState s, Booking b, String message) {
     List<Booking> swap(List<Booking> list) => [

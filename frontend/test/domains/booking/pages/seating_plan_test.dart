@@ -9,7 +9,15 @@ import 'package:tabletop_hub/domains/booking/pages/widgets/seating_plan.dart';
 
 import '../../../support/fakes.dart';
 import 'booking_pages_test.dart'
-    show admin, player, pumpAt, sampleBooking, staff, tapKey;
+    show
+    admin,
+    chooseShop,
+    player,
+    pumpAt,
+    sampleBooking,
+    staff,
+    tableTaken,
+    tapKey;
 
 TableInfo seat(
   int id,
@@ -288,6 +296,93 @@ void main() {
       seating = tester.getRect(find.byKey(const Key('board-seating')));
       card = tester.getRect(find.byKey(const Key('board-card-7')));
       expect(card.left, greaterThanOrEqualTo(seating.right));
+    });
+  });
+
+  group('店家看板：換桌', () {
+    testWidgets('已確認的訂位才有「換桌」，已入座沒有', (tester) async {
+      final repo = FakeBookingRepository()
+        ..board = [sampleBooking(), sampleBooking(id: 9, status: 'seated')]
+        ..seatingPlans = staffPlans;
+      await pumpAt(tester, '/booking/board', repo: repo, user: staff);
+      expect(find.byKey(const Key('board-change-table-7')), findsOneWidget);
+      expect(find.byKey(const Key('board-change-table-9')), findsNothing);
+    });
+
+    testWidgets('按「換桌」進入選桌模式，按「取消選桌」離開且不送請求', (tester) async {
+      final repo = FakeBookingRepository()
+        ..board = [sampleBooking()]
+        ..seatingPlans = staffPlans;
+      await pumpAt(tester, '/booking/board', repo: repo, user: staff);
+
+      await tapKey(tester, 'board-change-table-7');
+      expect(find.byKey(const Key('board-change-table-hint')), findsOneWidget);
+      expect(find.text('請點選要更換的桌子'), findsOneWidget);
+
+      await tapKey(tester, 'board-change-table-cancel');
+      expect(find.byKey(const Key('board-change-table-hint')), findsNothing);
+      expect(find.text('點桌子看詳情，雙指可以放大'), findsOneWidget);
+      expect(repo.changeTablesCalls, isEmpty);
+    });
+
+    testWidgets('點桌子跳出確認視窗顯示定位與換桌，按「確認換桌」才送請求', (tester) async {
+      final repo = FakeBookingRepository()
+        ..board = [sampleBooking()]
+        ..seatingPlans = staffPlans;
+      await pumpAt(tester, '/booking/board', repo: repo, user: staff);
+
+      await tapKey(tester, 'board-change-table-7');
+      await tapKey(tester, 'seat-table-2');
+      expect(find.byKey(const Key('seat-detail')), findsNothing);
+      expect(find.text('確定要換桌嗎？'), findsOneWidget);
+      expect(find.textContaining('定位：T1、T2'), findsOneWidget);
+      expect(find.textContaining('換桌：B'), findsOneWidget);
+
+      await tapKey(tester, 'booking-cancel-confirm');
+      final call = repo.changeTablesCalls.single;
+      expect(call.id, 7);
+      expect(call.tableIds, [2]);
+      expect(find.byKey(const Key('board-change-table-hint')), findsNothing);
+    });
+
+    testWidgets('確認視窗按「先不要」：不送請求，仍停留在選桌模式', (tester) async {
+      final repo = FakeBookingRepository()
+        ..board = [sampleBooking()]
+        ..seatingPlans = staffPlans;
+      await pumpAt(tester, '/booking/board', repo: repo, user: staff);
+
+      await tapKey(tester, 'board-change-table-7');
+      await tapKey(tester, 'seat-table-2');
+      await tapKey(tester, 'booking-cancel-dismiss');
+      expect(repo.changeTablesCalls, isEmpty);
+      expect(find.byKey(const Key('board-change-table-hint')), findsOneWidget);
+    });
+
+    testWidgets('目標桌已被訂走：顯示後端錯誤，仍停留在選桌模式', (tester) async {
+      final repo = FakeBookingRepository()
+        ..board = [sampleBooking()]
+        ..seatingPlans = staffPlans
+        ..changeTablesError = tableTaken;
+      await pumpAt(tester, '/booking/board', repo: repo, user: staff);
+
+      await tapKey(tester, 'board-change-table-7');
+      await tapKey(tester, 'seat-table-2');
+      await tapKey(tester, 'booking-cancel-confirm');
+      expect(find.textContaining('這個時段已經沒有空桌'), findsOneWidget);
+      expect(find.byKey(const Key('board-change-table-hint')), findsOneWidget);
+    });
+
+    testWidgets('管理員：選店家後也能換桌', (tester) async {
+      final repo = FakeBookingRepository()
+        ..board = [sampleBooking()]
+        ..seatingPlans = staffPlans;
+      await pumpAt(tester, '/booking/board', repo: repo, user: admin);
+      await chooseShop(tester, '甲店');
+
+      await tapKey(tester, 'board-change-table-7');
+      await tapKey(tester, 'seat-table-2');
+      await tapKey(tester, 'booking-cancel-confirm');
+      expect(repo.changeTablesCalls.single.id, 7);
     });
   });
 

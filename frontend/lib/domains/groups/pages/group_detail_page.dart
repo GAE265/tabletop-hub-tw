@@ -265,6 +265,20 @@ class _Actions extends ConsumerWidget {
               icon: const Icon(Icons.emoji_events_outlined),
               label: const Text('填入戰績'),
             ),
+            GroupAction.confirm => FilledButton.icon(
+              key: const Key('group-confirm'),
+              onPressed: enabled(
+                () => confirm('確定成團後會通知所有成員，之後不能取消成團。確定嗎？', notifier.confirm),
+              ),
+              icon: const Icon(Icons.check_circle_outline),
+              label: const Text('確定成團'),
+            ),
+            GroupAction.confirmed => FilledButton.icon(
+              key: const Key('group-confirmed'),
+              onPressed: null,
+              icon: const Icon(Icons.check_circle),
+              label: const Text('已成團'),
+            ),
             GroupAction.cancel => TextButton(
               onPressed: enabled(
                 () => confirm('確定要取消這個揪團嗎？取消後無法復原。', notifier.cancel),

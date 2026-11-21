@@ -281,4 +281,20 @@ void main() {
       expect(repo.updateCalls.single.$2['game_ids'], [1, 3]);
     });
   });
+
+  testWidgets('日期只能選今天以後；編輯過去日期的揪團，初始日期為今天', (tester) async {
+    await openForm(
+      tester,
+      FakeGroupsRepository(),
+      GroupFormData(date: DateTime(2026, 11, 1)),
+      groupId: 'g-1',
+    );
+    await tester.tap(find.text('2026/11/1'));
+    await tester.pumpAndSettle();
+    final picker = tester.widget<DatePickerDialog>(
+      find.byType(DatePickerDialog),
+    );
+    expect(picker.firstDate, DateTime(2026, 11, 14));
+    expect(picker.initialDate, DateTime(2026, 11, 14));
+  });
 }

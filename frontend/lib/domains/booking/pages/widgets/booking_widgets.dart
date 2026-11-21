@@ -144,12 +144,16 @@ class BookingCard extends StatelessWidget {
     required this.booking,
     required this.shopName,
     this.actions = const [],
+    this.overtimeMinutes,
     super.key,
   });
 
   final Booking booking;
   final String? shopName;
   final List<Widget> actions;
+
+  /// 已入座且超過結束時間的分鐘數；有值時顯示「已超時 N 分鐘」（店家看板用）。
+  final int? overtimeMinutes;
 
   @override
   Widget build(BuildContext context) {
@@ -191,6 +195,13 @@ class BookingCard extends StatelessWidget {
                     label: '桌位 ${b.tableCodes.join('、')}',
                     icon: Icons.table_restaurant_outlined,
                   ),
+                if (overtimeMinutes != null)
+                  PillBadge(
+                    key: Key('board-overtime-${b.id}'),
+                    label: '已超時 $overtimeMinutes 分鐘',
+                    tone: PillTone.accent,
+                    icon: Icons.timer_off_outlined,
+                  ),
               ],
             ),
             const SizedBox(height: AppSpacing.small),
@@ -229,16 +240,18 @@ class BookingCard extends StatelessWidget {
   }
 }
 
-/// 確認視窗；按「確定」回傳 true。
+/// 確認視窗；按「確定」回傳 true。[content] 是標題下方的說明文字。
 Future<bool> confirmBookingAction(
   BuildContext context, {
   required String title,
   required String confirmLabel,
+  String? content,
 }) async {
   final ok = await showDialog<bool>(
     context: context,
     builder: (context) => AlertDialog(
       title: Text(title),
+      content: content == null ? null : Text(content),
       actions: [
         TextButton(
           key: const Key('booking-cancel-dismiss'),

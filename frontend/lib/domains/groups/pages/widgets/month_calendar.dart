@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../state/group_clock.dart';
 import '../../state/groups_calendar_state.dart';
@@ -142,6 +143,10 @@ class _CalendarGrid extends ConsumerWidget {
                     state.selectedDate ==
                     DateTime(month.year, month.month, day),
                 isToday: today == DateTime(month.year, month.month, day),
+                enabled: isSelectableDate(
+                  DateTime(month.year, month.month, day),
+                  today,
+                ),
               ),
           ],
         ),
@@ -157,6 +162,7 @@ class _DayCell extends ConsumerWidget {
     required this.count,
     required this.selected,
     required this.isToday,
+    required this.enabled,
   });
 
   final DateTime date;
@@ -164,19 +170,33 @@ class _DayCell extends ConsumerWidget {
   final bool selected;
   final bool isToday;
 
+  /// 今天以前的日期停用：點了沒有反應，文字變淡，但照樣顯示團數。
+  final bool enabled;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
     final text = Theme.of(context).textTheme;
-    final dayColor = selected ? scheme.onPrimary : scheme.onSurface;
-    final countColor = selected ? scheme.onPrimary : scheme.onPrimaryContainer;
+    final dayColor = selected
+        ? scheme.onPrimary
+        : enabled
+        ? scheme.onSurface
+        : AppColors.inkMuted;
+    final countColor = selected
+        ? scheme.onPrimary
+        : enabled
+        ? scheme.onPrimaryContainer
+        : AppColors.inkMuted;
     final radius = BorderRadius.circular(AppRadius.button);
     return Material(
+      // 已過的揪團用灰底，和之後的揪團區別
       color: selected
           ? scheme.primary
-          : count > 0
+          : count == 0
+          ? Colors.transparent
+          : enabled
           ? scheme.primaryContainer
-          : Colors.transparent,
+          : AppColors.border,
       shape: RoundedRectangleBorder(
         borderRadius: radius,
         side: isToday && !selected
@@ -185,7 +205,9 @@ class _DayCell extends ConsumerWidget {
       ),
       child: InkWell(
         borderRadius: radius,
-        onTap: () => ref.read(groupsCalendarProvider.notifier).selectDate(date),
+        onTap: enabled
+            ? () => ref.read(groupsCalendarProvider.notifier).selectDate(date)
+            : null,
         child: Padding(
           padding: const EdgeInsets.all(AppSpacing.xSmall),
           child: FittedBox(

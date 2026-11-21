@@ -7,16 +7,18 @@ import '../domains/booking/pages/new_booking_page.dart';
 import '../domains/booking/pages/my_bookings_page.dart';
 import '../domains/booking/pages/shop_board_page.dart';
 import '../domains/games_advisor/pages/games_advisor_page.dart';
+import '../domains/groups/pages/group_detail_page.dart';
 import '../domains/groups/pages/groups_page.dart';
 import '../domains/health/pages/health_page.dart';
 import '../domains/matches/pages/match_detail_page.dart';
 import '../domains/matches/pages/matches_page.dart';
 import '../domains/rules_qa/pages/rules_lesson_page.dart';
 import '../domains/rules_qa/pages/rules_lessons_page.dart';
+import '../domains/rules_ingest/pages/rules_ingest_page.dart';
 import '../prototypes/booking/booking_list_proto_page.dart';
 import '../prototypes/booking/booking_proto_page.dart';
-import '../prototypes/rules_ingest/rules_ingest_proto_page.dart';
 import 'home/pages/home_page.dart';
+import 'notifications/notifications_page.dart';
 import 'shell.dart';
 import 'theme/theme_preview_page.dart';
 
@@ -36,6 +38,23 @@ GoRouter createRouter(AppConfig config) => GoRouter(
         GoRoute(
           path: '/groups',
           builder: (context, state) => const GroupsPage(),
+          routes: [
+            GoRoute(
+              path: ':id',
+              builder: (context, state) =>
+                  GroupDetailPage(groupId: state.pathParameters['id']!),
+            ),
+          ],
+        ),
+        // 規則書匯入，只有管理員能用（add-rules-ingest-page）
+        GoRoute(
+          path: '/rules-ingest',
+          builder: (context, state) => const RulesIngestPage(),
+        ),
+        // 揪團與訂位的通知（add-booking-notifications）
+        GoRoute(
+          path: '/notifications',
+          builder: (context, state) => const NotificationsPage(),
         ),
         GoRoute(
           path: '/games-advisor',
@@ -87,10 +106,6 @@ GoRouter createRouter(AppConfig config) => GoRouter(
           GoRoute(
             path: '/proto/theme',
             builder: (context, state) => const ThemePreviewPage(),
-          ),
-          GoRoute(
-            path: '/proto/rules-ingest',
-            builder: (context, state) => const RulesIngestProtoPage(),
           ),
           GoRoute(
             path: '/proto/booking',

@@ -12,6 +12,7 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     Text,
     UniqueConstraint,
@@ -31,6 +32,16 @@ GROUP_STATUSES = (
     "cancelled",
 )
 # 「已結束」不儲存，由 end_at 判斷（design.md D2）
+
+# 揪團通知的種類（add-groups-notifications）
+NOTIFICATION_TYPES = (
+    # 成團：開團主確定成團，通知成員。例如 5 人《阿瓦隆》團湊到 4 人，開團主決定照常舉辦
+    "group_confirmed",
+    # 解散：揪團被取消，通知成員與候補。例如《卡坦島》團湊不到人，開團主取消
+    "group_cancelled",
+    # 候補正取：候補遞補為成員，通知該玩家。例如 5 人《阿瓦隆》團有人退出，第一位候補補上
+    "waitlist_promoted",
+)
 
 # 報名狀態
 MEMBER_STATUSES = (
@@ -107,6 +118,11 @@ class Group(Base):
             "已結束不存在這裡，由 end_at 判斷"
         ),
     )
+    confirmed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        comment="開團主確定成團的時間；空值代表還沒確定成團。成團後仍可報名、候補、退出與取消",
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
@@ -178,4 +194,53 @@ class GroupGame(Base):
     )
     position: Mapped[int] = mapped_column(
         Integer, comment="開團主選擇的順序，從 1 開始；畫面依這個順序顯示遊戲"
+    )
+
+
+class GroupNotification(Base):
+    """揪團的站內通知；文字不儲存，由 type 與揪團目前的名稱組成（add-groups-notifications D2）。"""
+
+    __tablename__ = "groups_notifications"
+    __table_args__ = (
+        CheckConstraint(
+            "type IN ('group_confirmed', 'group_cancelled', 'waitlist_promoted')",
+            name="ck_groups_notifications_type",
+        ),
+        Index("ix_groups_notifications_user_created", "user_id", "created_at"),
+        {"comment": "揪團的站內通知：成團、解散、候補正取時通知受影響的玩家"},
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        primary_key=True,
+        default=uuid.uuid4,
+        server_default=text("gen_random_uuid()"),
+        comment="通知編號（UUID）",
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        ForeignKey("auth_users.id"),
+        comment="收到通知的玩家",
+    )
+    group_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        ForeignKey("groups.id", ondelete="CASCADE"),
+        comment="通知的揪團；揪團刪除時通知一併刪除",
+    )
+    type: Mapped[str] = mapped_column(
+        Text,
+        comment=(
+            "通知種類：group_confirmed＝開團主確定成團；group_cancelled＝揪團被取消（解散）；"
+            "waitlist_promoted＝候補遞補為成員"
+        ),
+    )
+    read_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        comment="玩家標成已讀的時間；空值代表未讀",
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        comment="建立通知的時間",
     )
