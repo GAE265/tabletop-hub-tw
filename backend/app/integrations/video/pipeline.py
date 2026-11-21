@@ -1,7 +1,8 @@
 """完整影片輸出（spec rules-video-maker「完整影片輸出」）。
 
 順序：排版（放不下就在任何輸出前失敗）→ 確認 ffmpeg → 合成旁白（快取）→ 依實際長度算時間軸
-→ 逐段編碼（快取）→ 串接成無聲版 → 合成背景音樂 → 混音（旁白出現時壓低音樂）。
+→ 逐段編碼（快取，段影片不含進度條）→ 串接 → 疊上進度條成無聲版 → 合成背景音樂
+→ 混音（旁白出現時壓低音樂）。
 """
 
 from dataclasses import dataclass, field
@@ -21,6 +22,7 @@ from app.integrations.video.fonts import FontSet
 from app.integrations.video.layout import layout_video
 from app.integrations.video.model import Video
 from app.integrations.video.narration import NarrationClip, prepare_narration
+from app.integrations.video.progress import OVERLAY_VIDEO_ARGS, overlay_progress
 from app.integrations.video.render import Renderer
 from app.integrations.video.stills import safe_file_part
 from app.integrations.video.style import Style
@@ -29,14 +31,16 @@ from app.integrations.video.timeline import Timeline, build_timeline, write_timi
 DEFAULT_MUSIC_VOLUME = 0.25
 ESTIMATED_NOTE = "時間為估計值：未設定文字轉語音（TTS_PROVIDER），旁白為靜音，每句長度依字數估計"
 PROGRESS_NOTE = (
-    "段快取的限制（第 1 階段）：每段畫面都畫了全片進度條，旁白長度一變，同一章的段都會重新編碼"
+    "進度條：段影片不含進度條，串接後才疊上去（重新編碼整支影片一次："
+    f"{' '.join(OVERLAY_VIDEO_ARGS)}）；改了某一段，只會重新編碼那一段"
 )
 
 
 @dataclass(frozen=True)
 class RenderResult:
     video: Path
-    silent: Path
+    silent: Path  # 疊好進度條的無聲版
+    joined: Path  # 串接好、還沒疊進度條的影片（在快取資料夾，畫質檢查用）
     bgm: Path
     timing_csv: Path
     report: Path
@@ -76,8 +80,10 @@ def render_video(
     )
 
     out_dir.mkdir(parents=True, exist_ok=True)
+    joined = cache_dir / "joined.mp4"
+    _concat(ffmpeg, [s.path for s in segments], joined, cache_dir)
     silent = out_dir / "silent.mp4"
-    _concat(ffmpeg, [s.path for s in segments], silent, cache_dir)
+    overlay_progress(ffmpeg, joined, silent, timeline, style)
 
     bgm = out_dir / "bgm.wav"
     starts = tuple(start for _, start, _ in timeline.chapter_spans)
@@ -98,6 +104,7 @@ def render_video(
     return RenderResult(
         video=final,
         silent=silent,
+        joined=joined,
         bgm=bgm,
         timing_csv=timing_csv,
         report=report,
