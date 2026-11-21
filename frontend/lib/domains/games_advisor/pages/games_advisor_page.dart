@@ -13,8 +13,18 @@ import 'widgets/game_card.dart';
 const _examples = ['我們 4 個人，想輕鬆聊天', '2 個人約會玩', '6 個人，30 分鐘內玩完'];
 
 /// 推薦 Agent 正式頁面。所有操作都交給 `advisorProvider`，與參考畫面行為相同。
+///
+/// 網址可以帶 `?shop_id=<店家 id>`（例如從訂位頁進來）：這時店家沒有的桌遊，
+/// 卡片上會多一行提示。
 class GamesAdvisorPage extends ConsumerStatefulWidget {
-  const GamesAdvisorPage({super.key});
+  const GamesAdvisorPage({super.key, this.shopId});
+
+  /// 從網址參數建立。
+  factory GamesAdvisorPage.fromQuery(Map<String, String> query, {Key? key}) =>
+      GamesAdvisorPage(key: key, shopId: advisorShopIdFromQuery(query));
+
+  /// 玩家是從哪間店進來的；沒有店家時是 null。
+  final String? shopId;
 
   @override
   ConsumerState<GamesAdvisorPage> createState() => _GamesAdvisorPageState();
@@ -31,7 +41,11 @@ class _GamesAdvisorPageState extends ConsumerState<GamesAdvisorPage> {
     super.dispose();
   }
 
-  AdvisorNotifier get _advisor => ref.read(advisorProvider.notifier);
+  /// 這個頁面的對話：帶著網址給的店家。
+  NotifierProvider<AdvisorNotifier, AdvisorState> get _provider =>
+      advisorForShopProvider(widget.shopId);
+
+  AdvisorNotifier get _advisor => ref.read(_provider.notifier);
 
   /// Enter 送出、Shift+Enter 換行；輸入法還在選字時 Enter 交給輸入法。
   KeyEventResult _onKey(FocusNode node, KeyEvent event) {
@@ -47,7 +61,7 @@ class _GamesAdvisorPageState extends ConsumerState<GamesAdvisorPage> {
     if (composing.isValid && !composing.isCollapsed) {
       return KeyEventResult.ignored;
     }
-    final state = ref.read(advisorProvider);
+    final state = ref.read(_provider);
     if (state.canSend) _advisor.sendMessage(state.draft);
     return KeyEventResult.handled;
   }
@@ -68,14 +82,14 @@ class _GamesAdvisorPageState extends ConsumerState<GamesAdvisorPage> {
   @override
   Widget build(BuildContext context) {
     // 送出時清空、失敗時放回：輸入框跟著 state 的 draft
-    ref.listen(advisorProvider.select((s) => s.draft), (_, draft) {
+    ref.listen(_provider.select((s) => s.draft), (_, draft) {
       if (_input.text != draft) _input.text = draft;
     });
     ref.listen(
-      advisorProvider.select((s) => (s.messages.length, s.status)),
+      _provider.select((s) => (s.messages.length, s.status)),
       (_, _) => _scrollToEnd(),
     );
-    final state = ref.watch(advisorProvider);
+    final state = ref.watch(_provider);
     final sending = state.status == AdvisorStatus.sending;
     final maxWidth =
         AppSpacing.contentMaxWidth(context.screenSize) ?? double.infinity;

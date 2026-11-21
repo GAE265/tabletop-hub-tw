@@ -19,6 +19,10 @@ abstract class AdvisorMessageRequest with _$AdvisorMessageRequest {
     /// 上一則回應的 `response_id`，新對話是 null。
     /// 後端規定這個欄位一定要帶，漏了會回 422，所以 null 也要送出。
     @JsonKey(includeIfNull: true) required String? previousResponseId,
+
+    /// 玩家是從哪間店進到推薦頁的；沒有店家時是 null，這時 body 不帶 `shop_id`
+    /// （後端把沒帶和 null 當成同一件事）。
+    @JsonKey(includeIfNull: false) String? shopId,
   }) = _AdvisorMessageRequest;
 
   factory AdvisorMessageRequest.fromJson(Map<String, dynamic> json) =>
@@ -50,10 +54,14 @@ abstract class AdvisorMessageResponse with _$AdvisorMessageResponse {
 /// 一張推薦卡片：桌遊、推薦理由、被引用的心得片段。
 @freezed
 abstract class AdvisorRecommendation with _$AdvisorRecommendation {
+  @JsonSerializable(fieldRename: FieldRename.snake)
   const factory AdvisorRecommendation({
     required AdvisorGame game,
     required String reason,
     required List<AdvisorExcerpt> excerpts,
+
+    /// 請求帶的那間店有沒有這款：true 有、false 沒有、null 請求沒帶店家。
+    bool? inStock,
   }) = _AdvisorRecommendation;
 
   factory AdvisorRecommendation.fromJson(Map<String, dynamic> json) =>

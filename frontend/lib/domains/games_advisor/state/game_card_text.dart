@@ -21,6 +21,11 @@ String relaxedConstraintText(RelaxedConstraint constraint) =>
       RelaxedConstraint.age => '以下放寬了「年齡」條件',
     };
 
+/// 卡片上「店家沒有這款」的提示：只有確定那間店沒有（`inStock` 是 false）才有文字；
+/// 店裡有、或這次沒有帶店家（null）都不提示（回 null）。
+String? stockHintText(AdvisorRecommendation recommendation) =>
+    recommendation.inStock == false ? '這間店目前沒有這款桌遊' : null;
+
 /// 心得片段旁的語言標記：英文標「英文」，中文不標（回 null）。
 String? excerptLanguageLabel(AdvisorExcerpt excerpt) =>
     excerpt.language == 'en' ? '英文' : null;

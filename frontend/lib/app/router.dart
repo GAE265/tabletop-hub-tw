@@ -61,7 +61,8 @@ GoRouter createRouter(AppConfig config) => GoRouter(
         ),
         GoRoute(
           path: '/games-advisor',
-          builder: (context, state) => const GamesAdvisorPage(),
+          builder: (context, state) =>
+              GamesAdvisorPage.fromQuery(state.uri.queryParameters),
         ),
         GoRoute(
           path: '/matches',
