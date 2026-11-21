@@ -22,7 +22,7 @@ from tests.integrations.video.support import (
     segment,
     write_game,
 )
-from tests.rules_qa.video_script_support import llm_output, write_inputs
+from tests.rules_qa.video_script_support import coverage_output, llm_output, write_inputs
 
 Run = Callable[..., tuple[int, str, str]]
 
@@ -273,6 +273,65 @@ def test_draft_with_reference_pages(
     assert "Red Knight" in llm.calls[0].kwargs["input"]
 
 
+# --- coverage（規則涵蓋檢查）---
+
+
+def test_coverage_writes_files(
+    tmp_path: Path, make_settings: Callable[..., Settings], capsys: pytest.CaptureFixture[str]
+) -> None:
+    folder = write_inputs(write_game(tmp_path / "game", base_data()))
+    llm = FakeLLMProvider(json_outputs=[coverage_output()])
+    args = ["coverage", str(folder), "--pages", "rulebook/en-005.txt"]
+    code = main(args, settings=make_settings(), llm=llm)
+    assert code == 0, capsys.readouterr().err
+    assert (folder / "coverage.json").is_file()
+    assert "沒有發現問題" in (folder / "coverage.md").read_text(encoding="utf-8")
+
+
+def test_coverage_llm_unavailable(
+    tmp_path: Path, make_settings: Callable[..., Settings], capsys: pytest.CaptureFixture[str]
+) -> None:
+    folder = write_inputs(write_game(tmp_path / "game", base_data()))
+    llm = FakeLLMProvider(json_outputs=[LLMUnavailable("連不上")])
+    args = ["coverage", str(folder), "--pages", "rulebook/en-005.txt"]
+    code = main(args, settings=make_settings(), llm=llm)
+    assert code != 0
+    assert "LLM" in capsys.readouterr().err
+    assert not (folder / "coverage.json").exists()
+
+
+def test_coverage_missing_inputs_does_not_call_llm(
+    tmp_path: Path, make_settings: Callable[..., Settings], capsys: pytest.CaptureFixture[str]
+) -> None:
+    folder = write_inputs(tmp_path / "empty")  # 沒有 video.json
+    llm = FakeLLMProvider(json_outputs=[])
+    args = ["coverage", str(folder), "--pages", "rulebook/en-005.txt"]
+    assert main(args, settings=make_settings(), llm=llm) != 0
+    game = write_game(tmp_path / "game", base_data())  # 沒有頁面檔
+    args = ["coverage", str(game), "--pages", "rulebook/en-005.txt"]
+    assert main(args, settings=make_settings(), llm=llm) != 0
+    assert llm.calls == []
+    capsys.readouterr()
+
+
+def test_compare_includes_coverage_section(
+    tmp_path: Path, make_settings: Callable[..., Settings], capsys: pytest.CaptureFixture[str]
+) -> None:
+    ai = write_inputs(write_game(tmp_path / "ai", base_data()))
+    write_game(tmp_path / "hand", base_data())
+    compare = ["compare", str(ai), str(tmp_path / "hand")]
+    assert main(compare, settings=make_settings()) == 0
+    assert "未做規則涵蓋檢查" in (ai / "compare.md").read_text(encoding="utf-8")
+
+    llm = FakeLLMProvider(json_outputs=[coverage_output()])
+    coverage = ["coverage", str(ai), "--pages", "rulebook/en-005.txt"]
+    assert main(coverage, settings=make_settings(), llm=llm) == 0
+    assert main(compare, settings=make_settings()) == 0
+    report = (ai / "compare.md").read_text(encoding="utf-8")
+    assert "規則陳述檢查" in report and "僅供參考" in report
+    capsys.readouterr()
+
+
 def test_draft_writes_cleanup_log_and_compare_section(
     tmp_path: Path, make_settings: Callable[..., Settings], capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -291,3 +350,62 @@ def test_draft_writes_cleanup_log_and_compare_section(
     assert code == 0
     report = (folder / "draft" / "compare.md").read_text(encoding="utf-8")
     assert "自動清理" in report and "sidebar@ zone_a" in report
+
+
+# --- #76 審核修正：空清單、舊的檢查結果 ---
+
+_COVERAGE = ["--pages", "rulebook/en-005.txt"]
+
+
+def test_coverage_empty_rule_list_fails(
+    tmp_path: Path, make_settings: Callable[..., Settings], capsys: pytest.CaptureFixture[str]
+) -> None:
+    folder = write_inputs(write_game(tmp_path / "game", base_data()))
+    good = FakeLLMProvider(json_outputs=[coverage_output()])
+    assert main(["coverage", str(folder), *_COVERAGE], settings=make_settings(), llm=good) == 0
+    empty = FakeLLMProvider(json_outputs=[coverage_output([])])
+    code = main(["coverage", str(folder), *_COVERAGE], settings=make_settings(), llm=empty)
+    assert code != 0
+    assert "檢查無效" in capsys.readouterr().err
+    assert "檢查無效" in (folder / "coverage.md").read_text(encoding="utf-8")
+    assert not (folder / "coverage.json").exists()  # 舊的結果也一併刪掉
+
+
+def test_redraft_removes_old_coverage(
+    tmp_path: Path, make_settings: Callable[..., Settings], capsys: pytest.CaptureFixture[str]
+) -> None:
+    folder = write_inputs(write_game(tmp_path / "game", base_data()))
+    llm = FakeLLMProvider(json_outputs=[llm_output()])
+    assert main(_draft_args(folder), settings=make_settings(), llm=llm) == 0
+    draft = write_inputs(folder / "draft")
+    llm = FakeLLMProvider(json_outputs=[coverage_output()])
+    assert main(["coverage", str(draft), *_COVERAGE], settings=make_settings(), llm=llm) == 0
+
+    second = llm_output()
+    second["segments"][0]["beats"][0]["narration"] = "第二份草稿的旁白。"
+    llm = FakeLLMProvider(json_outputs=[second])
+    assert main(_draft_args(folder), settings=make_settings(), llm=llm) == 0
+    assert not (draft / "coverage.json").exists()
+    assert not (draft / "coverage.md").exists()
+    assert main(["compare", str(draft), str(folder)], settings=make_settings()) == 0
+    assert "未做規則涵蓋檢查" in (draft / "compare.md").read_text(encoding="utf-8")
+    capsys.readouterr()
+
+
+def test_compare_marks_stale_coverage(
+    tmp_path: Path, make_settings: Callable[..., Settings], capsys: pytest.CaptureFixture[str]
+) -> None:
+    ai = write_inputs(write_game(tmp_path / "ai", base_data()))
+    write_game(tmp_path / "hand", base_data())
+    llm = FakeLLMProvider(json_outputs=[coverage_output()])
+    assert main(["coverage", str(ai), *_COVERAGE], settings=make_settings(), llm=llm) == 0
+    compare = ["compare", str(ai), str(tmp_path / "hand")]
+    assert main(compare, settings=make_settings()) == 0
+    assert "已過期" not in (ai / "compare.md").read_text(encoding="utf-8")
+
+    data = json.loads((ai / "video.json").read_text(encoding="utf-8"))
+    data["segments"][0]["beats"][0]["subtitle"] = "手動改過的字幕"
+    (ai / "video.json").write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    assert main(compare, settings=make_settings()) == 0
+    assert "已過期" in (ai / "compare.md").read_text(encoding="utf-8")
+    capsys.readouterr()
