@@ -367,14 +367,15 @@ void main() {
     });
   });
 
-  group('草稿確認後', () {
-    testWidgets('「確認草稿」前往素材清單', (tester) async {
+  group('草稿之後', () {
+    // 整本範圍（D17）：草稿只顯示摘要、不擋流程；「確認草稿」改成「下一步：拍素材」
+    testWidgets('「下一步：拍素材」前往素材清單', (tester) async {
       final h = await pumpVideo(
         tester,
         location: '/videos/p1/draft',
         repo: listRepo(notReady),
       );
-      await tapKey(tester, 'video-draft-confirm');
+      await tapKey(tester, 'video-draft-next');
       expect(h.path, '/videos/p1/assets');
     });
 
@@ -384,7 +385,8 @@ void main() {
         location: '/videos/p1',
         repo: listRepo(notReady),
       );
-      await tapKey(tester, 'video-step-2');
+      // 整本範圍（D17）：步驟只剩草稿、素材、影片，「素材」是第 2 個（index 1）
+      await tapKey(tester, 'video-step-1');
       expect(h.path, '/videos/p1/assets');
     });
   });

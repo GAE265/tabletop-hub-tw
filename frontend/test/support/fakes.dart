@@ -1607,22 +1607,18 @@ class FakeVideoStudioRepository implements VideoStudioRepository {
   FakeVideoStudioRepository({
     List<VideoProject>? projects,
     List<VideoGameOption>? games,
-    Map<String, VideoPages>? pages,
     Map<String, VideoDraft>? drafts,
   }) : projects = projects ?? [],
        games = games ?? [],
-       pages = pages ?? {},
        drafts = drafts ?? {};
 
   List<VideoProject> projects;
   List<VideoGameOption> games;
-  Map<String, VideoPages> pages;
   Map<String, VideoDraft> drafts;
 
   /// 各方法丟出的錯誤（有值就丟）。
   Object? listError;
   Object? createError;
-  Object? savePagesError;
   Object? startDraftError;
   Object? draftError;
 
@@ -1634,7 +1630,6 @@ class FakeVideoStudioRepository implements VideoStudioRepository {
   int _jobIndex = 0;
 
   final created = <VideoProjectCreate>[];
-  final savedPages = <(String, VideoPagesUpdate)>[];
   final startedDrafts = <String>[];
   final polledJobs = <String>[];
 
@@ -1651,12 +1646,8 @@ class FakeVideoStudioRepository implements VideoStudioRepository {
   Future<VideoProject> createProject(VideoProjectCreate input) async {
     created.add(input);
     if (createError != null) throw createError!;
-    final project = sampleVideoProject(
-      id: 'p-new',
-      gameId: input.gameId,
-      chapterNumber: input.chapterNumber,
-      chapterTitle: input.chapterTitle,
-    );
+    // 整個遊戲一支影片：建立後後端自動開始產生草稿
+    final project = sampleVideoProject(id: 'p-new', gameId: input.gameId);
     projects = [project, ...projects];
     return project;
   }
@@ -1664,26 +1655,6 @@ class FakeVideoStudioRepository implements VideoStudioRepository {
   @override
   Future<VideoProject> getProject(String projectId) async =>
       projects.firstWhere((p) => p.id == projectId);
-
-  /// 沒設定的專案回傳空的頁面（和後端一樣：新專案還沒選頁）。
-  @override
-  Future<VideoPages> getPages(String projectId) async =>
-      pages[projectId] ?? _emptyPages;
-
-  static const _emptyPages = VideoPages(
-    availablePages: [],
-    chapterPages: [],
-    referencePages: [],
-    pagesVersion: 0,
-    pages: [],
-  );
-
-  @override
-  Future<VideoPages> savePages(String projectId, VideoPagesUpdate input) async {
-    savedPages.add((projectId, input));
-    if (savePagesError != null) throw savePagesError!;
-    return pages[projectId]!;
-  }
 
   @override
   Future<VideoJob> startDraft(String projectId) async {
@@ -1815,17 +1786,14 @@ VideoProject sampleVideoProject({
   String id = 'p1',
   int gameId = 1,
   String gameName = '假遊戲',
-  int chapterNumber = 11,
-  String chapterTitle = '步驟三',
-  String step = 'pages',
+  String step = 'draft',
 }) => VideoProject(
   id: id,
   gameId: gameId,
   gameName: gameName,
   shopId: 's1',
   createdBy: 'u1',
-  chapterNumber: chapterNumber,
-  chapterTitle: chapterTitle,
+  title: '$gameName 規則教學',
   step: step,
   createdAt: DateTime.utc(2026, 11, 21),
   updatedAt: DateTime.utc(2026, 11, 21),

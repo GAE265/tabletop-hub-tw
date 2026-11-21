@@ -298,7 +298,8 @@ void main() {
       });
     }
 
-    testWidgets('專案總覽：完成時下一步是「看影片」，四步都打勾', (tester) async {
+    // 整本範圍（D17）：步驟只剩草稿、素材、影片三步
+    testWidgets('專案總覽：完成時下一步是「看影片」，三步都打勾', (tester) async {
       await pumpVideo(
         tester,
         location: '/videos/p1',
@@ -311,7 +312,7 @@ void main() {
         ),
         findsOneWidget,
       );
-      expect(find.byIcon(Icons.check_circle), findsNWidgets(4));
+      expect(find.byIcon(Icons.check_circle), findsNWidgets(3));
     });
 
     testWidgets('專案總覽：可以齊了以後點「影片」', (tester) async {
@@ -320,7 +321,7 @@ void main() {
         location: '/videos/p1',
         repo: renderRepo(step: 'render'),
       );
-      await tapKey(tester, 'video-step-3');
+      await tapKey(tester, 'video-step-2');
       expect(h.path, '/videos/p1/render');
     });
 

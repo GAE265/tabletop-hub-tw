@@ -32,7 +32,7 @@ VideoStudioRepository makeRepository(RecordingAdapter adapter) {
 const projectJson = '''
 {
   "id": "p1", "game_id": 1, "game_name": "假遊戲", "shop_id": "s1", "created_by": "u1",
-  "chapter_number": 11, "chapter_title": "步驟三", "step": "draft",
+  "chapter_number": null, "chapter_title": null, "title": "假遊戲 規則教學", "step": "draft",
   "created_at": "2026-11-21T00:00:00Z", "updated_at": "2026-11-21T00:00:00Z"
 }
 ''';
@@ -53,7 +53,7 @@ void main() {
     );
     final projects = await makeRepository(adapter).listProjects();
     expect(adapter.requests.single.path, '/api/v1/rules-videos');
-    expect(projects.single.chapterTitle, '步驟三');
+    expect(projects.single.title, '假遊戲 規則教學');
     expect(projects.single.step, 'draft');
   });
 
@@ -67,44 +67,15 @@ void main() {
     expect(games.single.name, '假遊戲');
   });
 
-  test('建立專案：POST，body 是 snake_case', () async {
+  test('建立專案：POST，只送遊戲（整個遊戲一支影片）', () async {
     final adapter = RecordingAdapter(statusCode: 201, body: projectJson);
-    await makeRepository(adapter).createProject(
-      const VideoProjectCreate(
-        gameId: 1,
-        chapterNumber: 11,
-        chapterTitle: '步驟三',
-      ),
-    );
+    final project = await makeRepository(
+      adapter,
+    ).createProject(const VideoProjectCreate(gameId: 1));
     expect(adapter.requests.single.method, 'POST');
-    expect(jsonDecode(adapter.bodies.single!), {
-      'game_id': 1,
-      'chapter_number': 11,
-      'chapter_title': '步驟三',
-    });
-  });
-
-  test('存頁面文字：PUT .../pages，texts 的 key 是頁碼字串', () async {
-    final adapter = RecordingAdapter(
-      body:
-          '{"available_pages": [7], "chapter_pages": [7], "reference_pages": [], '
-          '"pages_version": 1, "pages": []}',
-    );
-    await makeRepository(adapter).savePages(
-      'p1',
-      const VideoPagesUpdate(
-        chapterPages: [7],
-        referencePages: [],
-        texts: {'7': '文字'},
-      ),
-    );
-    expect(adapter.requests.single.method, 'PUT');
-    expect(adapter.requests.single.path, '/api/v1/rules-videos/p1/pages');
-    expect(jsonDecode(adapter.bodies.single!), {
-      'chapter_pages': [7],
-      'reference_pages': [],
-      'texts': {'7': '文字'},
-    });
+    expect(jsonDecode(adapter.bodies.single!), {'game_id': 1});
+    expect(project.chapterNumber, isNull);
+    expect(project.title, '假遊戲 規則教學');
   });
 
   test('產生草稿：POST .../jobs，kind=draft', () async {

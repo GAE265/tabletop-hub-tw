@@ -1,4 +1,5 @@
-// 規則影片生產器 1d 的手機頁 state（add-rules-video-mobile MR 6，design.md D12）。
+// 規則影片生產器 1d 的手機頁 state（add-rules-video-mobile MR 6，design.md D12；
+// 整個遊戲一支影片見 D17：建立只選遊戲、沒有選頁與編輯文字、草稿只顯示摘要）。
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tabletop_hub/core/api/api_exception.dart';
@@ -6,7 +7,6 @@ import 'package:tabletop_hub/domains/rules_qa/data/video_studio_models.dart';
 import 'package:tabletop_hub/domains/rules_qa/data/video_studio_repository.dart';
 import 'package:tabletop_hub/domains/rules_qa/state/video_draft_state.dart';
 import 'package:tabletop_hub/domains/rules_qa/state/video_job_state.dart';
-import 'package:tabletop_hub/domains/rules_qa/state/video_pages_state.dart';
 import 'package:tabletop_hub/domains/rules_qa/state/video_projects_state.dart';
 
 import '../../support/fakes.dart';
@@ -22,38 +22,54 @@ ProviderContainer makeContainer(FakeVideoStudioRepository repo) {
   return container;
 }
 
-VideoPageText page7({String? text}) => VideoPageText(
-  page: 7,
-  role: 'chapter',
-  original: '把所有有蓋子的木箱排成一列。',
-  text: text ?? '把所有有蓋子的木箱排成一列。',
-  originalChanged: false,
-  removed: const [],
-  changed: const [],
-);
-
-VideoPages samplePages({List<VideoPageText>? pages, int version = 1}) =>
-    VideoPages(
-      availablePages: const [2, 7, 8],
-      chapterPages: const [7],
-      referencePages: const [],
-      pagesVersion: version,
-      pages: pages ?? [page7()],
-    );
-
 const sampleDraft = VideoDraft(
   videoVersion: 1,
   segments: [
     DraftSegment(
       segmentKey: 's1',
+      chapter: 'setup',
       sourcePages: [7],
       beats: [
         DraftBeat(beatKey: 'b1', narration: '先洗牌。', subtitle: '洗牌。'),
         DraftBeat(beatKey: 'b2', narration: '再翻開。', subtitle: '翻開。'),
       ],
     ),
+    DraftSegment(
+      segmentKey: 's2',
+      chapter: 'round',
+      sourcePages: [8],
+      beats: [DraftBeat(beatKey: 'b3', narration: '輪到下一位。', subtitle: '換人。')],
+    ),
+    DraftSegment(
+      segmentKey: 's3',
+      chapter: 'round',
+      sourcePages: [8],
+      beats: [DraftBeat(beatKey: 'b4', narration: '打出一張牌。', subtitle: '出牌。')],
+    ),
   ],
-  assets: [],
+  assets: [
+    DraftAsset(
+      assetKey: 'board',
+      label: '盤面',
+      kind: 'flat_photo',
+      priority: 'must',
+      reason: 'r',
+      shot: null,
+      representative: false,
+      regions: [],
+      hasPhoto: false,
+    ),
+    DraftAsset(
+      assetKey: 'coin',
+      kind: 'flat_photo',
+      priority: 'optional',
+      reason: '金幣',
+      shot: null,
+      representative: false,
+      regions: [],
+      hasPhoto: false,
+    ),
+  ],
   coverage: DraftCoverage(
     status: 'done',
     totalRules: 3,
@@ -126,148 +142,40 @@ void main() {
     });
   });
 
-  group('建立專案', () {
-    test('欄位齊全才能送出；標題去掉空白後 1–50 字', () {
+  group('建立專案（只選遊戲）', () {
+    test('選了遊戲才能送出', () {
       final container = makeContainer(FakeVideoStudioRepository());
       final form = container.read(videoProjectFormProvider.notifier);
       expect(container.read(videoProjectFormProvider).canSubmit, isFalse);
-      form
-        ..selectGame(const VideoGameOption(id: 1, name: '假遊戲'))
-        ..setChapterNumber('11')
-        ..setChapterTitle('   ');
-      expect(container.read(videoProjectFormProvider).canSubmit, isFalse);
-      form.setChapterTitle('長' * 51);
-      expect(container.read(videoProjectFormProvider).canSubmit, isFalse);
-      form.setChapterTitle(' 步驟三 ');
+      form.selectGame(const VideoGameOption(id: 1, name: '假遊戲'));
       expect(container.read(videoProjectFormProvider).canSubmit, isTrue);
-      form.setChapterNumber('0');
-      expect(container.read(videoProjectFormProvider).canSubmit, isFalse);
     });
 
-    test('送出成功：回傳新專案、標題去掉空白', () async {
+    test('送出成功：只送遊戲，回傳新專案', () async {
       final repo = FakeVideoStudioRepository();
       final container = makeContainer(repo);
       final form = container.read(videoProjectFormProvider.notifier)
-        ..selectGame(const VideoGameOption(id: 1, name: '假遊戲'))
-        ..setChapterNumber('11')
-        ..setChapterTitle(' 步驟三 ');
+        ..selectGame(const VideoGameOption(id: 1, name: '假遊戲'));
       final project = await form.submit();
       expect(project?.id, 'p-new');
-      expect(repo.created.single.chapterTitle, '步驟三');
+      expect(repo.created.single.toJson(), {'game_id': 1});
     });
 
-    test('送出失敗：顯示後端的說明', () async {
+    test('規則書還沒匯入（422）：顯示後端的說明', () async {
       final repo = FakeVideoStudioRepository()
         ..createError = const ApiException(
-          code: 'GAME_NOT_FOUND',
-          message: '找不到桌遊 9',
-          statusCode: 404,
+          code: 'RULES_VIDEO_NO_RULEBOOK',
+          message: '這款遊戲的規則書還沒有匯入，請管理員先匯入',
+          statusCode: 422,
         );
       final container = makeContainer(repo);
       final form = container.read(videoProjectFormProvider.notifier)
-        ..selectGame(const VideoGameOption(id: 9, name: '不存在'))
-        ..setChapterNumber('1')
-        ..setChapterTitle('第一章');
+        ..selectGame(const VideoGameOption(id: 9, name: '沒有規則書'));
       expect(await form.submit(), isNull);
-      expect(container.read(videoProjectFormProvider).error, '找不到桌遊 9');
-    });
-  });
-
-  group('選頁與編輯文字', () {
-    test('載入、修改文字、儲存', () async {
-      final repo = FakeVideoStudioRepository(pages: {'p1': samplePages()});
-      final container = makeContainer(repo);
-      final provider = videoPagesProvider('p1');
-      await container.read(provider.notifier).load();
-      expect(container.read(provider).pages?.pages.single.page, 7);
-      expect(container.read(provider).dirty, isFalse);
-
-      container.read(provider.notifier).editText(7, '把所有蓋好的木箱排成一列。');
-      expect(container.read(provider).dirty, isTrue);
-      expect(await container.read(provider.notifier).save(), isTrue);
-      final (_, sent) = repo.savedPages.single;
-      expect(sent.chapterPages, [7]);
-      expect(sent.texts, {'7': '把所有蓋好的木箱排成一列。'});
-      expect(container.read(provider).dirty, isFalse);
-    });
-
-    test('換選頁：保留還在的頁的文字，立刻儲存', () async {
-      final repo = FakeVideoStudioRepository(pages: {'p1': samplePages()});
-      final container = makeContainer(repo);
-      final provider = videoPagesProvider('p1');
-      await container.read(provider.notifier).load();
-      container.read(provider.notifier).editText(7, '改過');
-      await container
-          .read(provider.notifier)
-          .selectPages(chapter: [7, 8], reference: [2]);
-      final (_, sent) = repo.savedPages.single;
-      expect(sent.chapterPages, [7, 8]);
-      expect(sent.referencePages, [2]);
-      expect(sent.texts, {'7': '改過'}); // 新選的頁不給文字：後端用原文
-    });
-
-    test('缺頁：提示請管理員先匯入', () async {
-      final repo = FakeVideoStudioRepository(pages: {'p1': samplePages()})
-        ..savePagesError = const ApiException(
-          code: 'RULES_VIDEO_PAGES_MISSING',
-          message: '規則書還沒有這幾頁',
-          statusCode: 422,
-          details: {
-            'missing': [3, 9],
-          },
-        );
-      final container = makeContainer(repo);
-      final provider = videoPagesProvider('p1');
-      await container.read(provider.notifier).load();
       expect(
-        await container.read(provider.notifier).selectPages(chapter: [3, 9]),
-        isFalse,
+        container.read(videoProjectFormProvider).error,
+        '這款遊戲的規則書還沒有匯入，請管理員先匯入',
       );
-      expect(container.read(provider).error, '請管理員先匯入第 3、9 頁');
-    });
-
-    test('本章全部空白：提示沒有文字', () async {
-      final repo = FakeVideoStudioRepository(pages: {'p1': samplePages()})
-        ..savePagesError = const ApiException(
-          code: 'RULES_VIDEO_PAGES_EMPTY',
-          message: '本章頁的文字全部是空白，沒有東西可以產生草稿',
-          statusCode: 422,
-        );
-      final container = makeContainer(repo);
-      final provider = videoPagesProvider('p1');
-      await container.read(provider.notifier).load();
-      container.read(provider.notifier).editText(7, '');
-      expect(await container.read(provider.notifier).save(), isFalse);
-      expect(container.read(provider).error, contains('沒有東西可以產生草稿'));
-    });
-
-    test('確認差異：刪掉的段落與改過的行都保留原文與編輯後', () async {
-      final reviewed = samplePages(
-        pages: [
-          page7(text: '把所有蓋好的木箱排成一列。').copyWith(
-            changed: const [
-              ChangedLine(
-                original: '把所有有蓋子的木箱排成一列。',
-                edited: '把所有蓋好的木箱排成一列。',
-                similarity: 0.95,
-              ),
-            ],
-            removed: const [
-              RemovedBlock(lines: ['# 收工', '籌碼收進收納盒時活動結束。']),
-            ],
-          ),
-        ],
-      );
-      final repo = FakeVideoStudioRepository(pages: {'p1': reviewed});
-      final container = makeContainer(repo);
-      final provider = videoPagesProvider('p1');
-      await container.read(provider.notifier).load();
-      final differences = container.read(provider).differences;
-      expect(differences, hasLength(2));
-      expect(differences.first.original, '把所有有蓋子的木箱排成一列。');
-      expect(differences.first.edited, '把所有蓋好的木箱排成一列。');
-      expect(differences.last.original, '# 收工\n籌碼收進收納盒時活動結束。');
-      expect(differences.last.edited, isNull); // 刪掉：只有原文
     });
   });
 
@@ -374,20 +282,22 @@ void main() {
       expect(await container.read(videoDraftProvider('p1').future), isNull);
     });
 
-    test('逐句勾選「已檢查」：只存在畫面上', () async {
-      final repo = FakeVideoStudioRepository(drafts: {'p1': sampleDraft});
-      final container = makeContainer(repo);
-      await container.read(videoDraftProvider('p1').future);
-      final checks = container.read(subtitleChecksProvider('p1').notifier);
-      checks.toggle('b1');
-      expect(container.read(subtitleChecksProvider('p1')), {'b1'});
-      checks.toggle('b1');
-      expect(container.read(subtitleChecksProvider('p1')), isEmpty);
-      checks.toggle('b2');
+    test('草稿摘要：三格各幾段、必拍與選拍各幾個', () {
+      final summary = draftSummary(sampleDraft);
       expect(
-        checkedCount(container.read(subtitleChecksProvider('p1')), sampleDraft),
-        (1, 2),
+        [
+          for (final slot in summary.slots)
+            (slot.title, slot.segments, slot.beats),
+        ],
+        [('開局', 1, 2), ('走完一輪', 2, 2), ('獲勝方式', 0, 0)],
       );
+      expect(summary.mustAssets, 1);
+      expect(summary.optionalAssets, 1);
+    });
+
+    test('素材的名稱：有中文名稱用名稱，沒有時用 reason', () {
+      expect(assetDisplayName(sampleDraft.assets[0]), '盤面');
+      expect(assetDisplayName(sampleDraft.assets[1]), '金幣');
     });
 
     test('對照表與依舊文字的提示原樣提供', () async {
