@@ -1,4 +1,4 @@
-"""文字轉語音整合層（spec：openspec/changes/add-rules-video-maker/specs/media-integrations）。"""
+"""文字轉語音整合層（spec：openspec/specs/media-integrations）。"""
 
 from app.integrations.tts.azure import AzureTTSProvider
 from app.integrations.tts.base import AudioClip, TTSProvider

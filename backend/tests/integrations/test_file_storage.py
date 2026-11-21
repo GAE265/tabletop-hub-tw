@@ -1,4 +1,4 @@
-"""檔案儲存整合層（spec：openspec/changes/add-rules-video-maker/specs/media-integrations）。
+"""檔案儲存整合層（spec：openspec/specs/media-integrations）。
 
 fake 與 local 照同一份介面行為測試；雲端實作只在 test_file_storage_external.py 測。
 """

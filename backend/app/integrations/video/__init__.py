@@ -1,4 +1,4 @@
-"""規則影片的版型引擎（spec：openspec/changes/add-rules-video-maker/specs/rules-video-maker）。
+"""規則影片的版型引擎（spec：openspec/specs/rules-video-maker）。
 
 用宣告式的段資料描述影片，依版型排版、依句內動作計算畫面狀態並畫出畫面。
 不知道任何遊戲或 domain；設定值由呼叫方傳入，不讀 Settings。

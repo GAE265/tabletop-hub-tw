@@ -51,7 +51,8 @@
 - [x] 2b.4 `assets.py`：`crop` 太小時除以零 → 載入時 crop 寬、高至少 0.01；裁切時至少保留 1 像素
 - [x] 2b.5 `model.py`：素材 `file` 可以用 `..` 或絕對路徑指到 `assets/` 以外 → 載入時檢查解析後的路徑在 `assets/` 內
 - [x] 2b.6 `model.py`：`template` 不是字串時拋 `TypeError` → 改成驗證錯誤
-- [ ] 2b.7 自我檢查與 Draft MR，驗證：全部通過、CI 全綠，再改成 Ready for review
+- [x] 2b.7 自我檢查與 Draft MR，驗證：全部通過、CI 全綠，再改成 Ready for review
+  - 完成：#74 已合併（2026-11-21）。
   - 進度（2026-11-21）：Draft MR #74，CI 全綠，等審核。
 
 ## 3. MR 2：`integrations/tts`（可與 MR 1 平行）
@@ -69,7 +70,8 @@
 > - 段快取與進度條：第 1 階段接受限制。每段畫面都畫了進度條，旁白長度一變，同一章的段都會重新編碼；快取只在「只改畫面、不改長度」時有效，報告中註明。
 > - TTS 未設定（`TTS_PROVIDER` 未填或為 fake）時，旁白為靜音、照常輸出並警告；警告與報告都註明「時間為估計值」。
 
-- [ ] 4.1 永傑開 Draft MR 3，AI 從 `specs/rules-video-maker` 的「先音後畫的時間軸」（旁白快取）、「完整影片輸出」與 `specs/media-integrations` 的「ffmpeg 呼叫」整理分組情境表格，驗證：Draft MR 已存在
+- [x] 4.1 永傑開 Draft MR 3，AI 從 `specs/rules-video-maker` 的「先音後畫的時間軸」（旁白快取）、「完整影片輸出」與 `specs/media-integrations` 的「ffmpeg 呼叫」整理分組情境表格，驗證：Draft MR 已存在
+  - 完成：Draft MR #75（2026-11-21）。
 - [x] 4.2 撰寫旁白快取的單元測試（文字沒變不重新呼叫 TTS），驗證：測試存在且失敗
 - [x] 4.3 撰寫 `content_hash` 與「只重做有變的段」的單元測試（用手寫的 `FakeSegmentEncoder` 記錄哪些段被編碼），驗證：測試存在且失敗
 - [x] 4.4 撰寫背景音樂的單元測試（長度、同長度可重現）、找不到 ffmpeg、編碼中斷不留壞檔的測試，驗證：測試存在且失敗
@@ -78,7 +80,8 @@
 - [x] 4.7 用 2.10 的 `video.json` 以 Azure TTS 輸出《血與刃》步驟三完整影片，驗證：**交給永傑看完整支影片**，依「規則正確、新手能看懂」判斷，並與手做版比較
   - 進度（2026-11-21）：已用 Azure TTS 輸出 `backend/.local/rules_video/out/blades_and_rose.mp4`（27.9 秒，1920×1080、30 fps、H.264＋AAC）。每句時段由實際旁白長度決定，旁白不會超出；量測音量：旁白約 −15～−20 dB，句間只剩音樂約 −25～−29 dB，結尾淡出到靜音。
   - 永傑看完整支影片，合格（2026-11-21）。
-- [ ] 4.8 自我檢查（同 2.11），驗證：全部通過、CI 全綠，再改成 Ready for review
+- [x] 4.8 自我檢查（同 2.11），驗證：全部通過、CI 全綠，再改成 Ready for review
+  - 完成：#75 CI 全綠並已合併（2026-11-21）。
 
 ### #75 審核修正（2026-11-21）
 
@@ -103,3 +106,9 @@
 - **第 2 階段的前置項目**：進度條改成最後才疊上去（例如在 ffmpeg 合成時疊加），讓段影片不依賴全片長度，才能真正做到「只重做受影響的那一段」（2026-11-21 決定）。
 - 第 1 階段結果確認後，由永傑決定 1c（AI 產生段資料與最小素材清單）與 1d（API、資料表、前端精靈、發布）怎麼做，另開 change。
 - 三個 MR 都合併後，執行 `/opsx:archive`。
+
+## 歸檔（2026-11-21）
+
+- 所有 MR 已合併：#71、#72、#74、#75、#78。
+- spec 已併入 `openspec/specs/rules-video-maker/`、`openspec/specs/media-integrations/`。
+- 上方「Workflow follow-up」仍有效（第 2 階段前置項目、第 3 階段自動檢查的輸入），開第 2、3 階段的 change 時要帶過去。

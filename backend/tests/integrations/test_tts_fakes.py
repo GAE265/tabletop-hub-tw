@@ -1,6 +1,6 @@
 """文字轉語音的 fake。
 
-spec：openspec/changes/add-rules-video-maker/specs/media-integrations「文字轉語音」。
+spec：openspec/specs/media-integrations「文字轉語音」。
 """
 
 import io
