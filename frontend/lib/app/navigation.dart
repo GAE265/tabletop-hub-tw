@@ -81,11 +81,29 @@ const adminNavItems = [
   ),
 ];
 
-/// 依角色決定要顯示的導覽項目：管理員多了 [adminNavItems]。
-List<NavItem> visibleNavItems(String? role) => [
-  ...navItems,
-  if (role == 'admin') ...adminNavItems,
+/// 店家人員與管理員才看得到的項目，插在「規則」後面（add-rules-video-mobile）。
+const staffNavItems = [
+  NavItem(
+    path: '/videos',
+    label: '影片',
+    icon: Icons.video_library_outlined,
+    selectedIcon: Icons.video_library,
+    keyName: 'shell-nav-videos',
+  ),
 ];
+
+/// 依角色決定要顯示的導覽項目：店家人員與管理員多了 [staffNavItems]（放在「規則」後面），
+/// 管理員再多 [adminNavItems]。
+List<NavItem> visibleNavItems(String? role) {
+  final staff = role == 'shop_staff' || role == 'admin';
+  return [
+    for (final item in navItems) ...[
+      item,
+      if (staff && item.path == '/rules') ...staffNavItems,
+    ],
+    if (role == 'admin') ...adminNavItems,
+  ];
+}
 
 /// 目前身分要顯示的導覽項目。
 final visibleNavItemsProvider = Provider<List<NavItem>>(
@@ -97,7 +115,11 @@ final visibleNavItemsProvider = Provider<List<NavItem>>(
 /// 首頁只在路徑剛好是 `/` 時選取；其他項目在路徑等於它或是它的子路徑時選取。
 String? selectedNavPath(String path) {
   if (path == '/') return '/';
-  for (final item in [...navItems.skip(1), ...adminNavItems]) {
+  for (final item in [
+    ...navItems.skip(1),
+    ...staffNavItems,
+    ...adminNavItems,
+  ]) {
     if (path == item.path || path.startsWith('${item.path}/')) {
       return item.path;
     }

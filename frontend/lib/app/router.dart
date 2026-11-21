@@ -14,6 +14,7 @@ import '../domains/matches/pages/match_detail_page.dart';
 import '../domains/matches/pages/matches_page.dart';
 import '../domains/rules_qa/pages/rules_lesson_page.dart';
 import '../domains/rules_qa/pages/rules_lessons_page.dart';
+import '../domains/rules_qa/pages/video_routes.dart';
 import '../domains/rules_ingest/pages/rules_ingest_page.dart';
 import '../prototypes/booking/booking_list_proto_page.dart';
 import '../prototypes/booking/booking_proto_page.dart';
@@ -107,6 +108,8 @@ GoRouter createRouter(AppConfig config) => GoRouter(
             ),
           ],
         ),
+        // 規則影片生產器，店家人員與管理員才能用（add-rules-video-mobile）
+        videoStudioRoute,
         if (config.showPrototypes) ...[
           GoRoute(
             path: '/proto/theme',

@@ -1664,8 +1664,18 @@ class FakeVideoStudioRepository implements VideoStudioRepository {
   Future<VideoProject> getProject(String projectId) async =>
       projects.firstWhere((p) => p.id == projectId);
 
+  /// 沒設定的專案回傳空的頁面（和後端一樣：新專案還沒選頁）。
   @override
-  Future<VideoPages> getPages(String projectId) async => pages[projectId]!;
+  Future<VideoPages> getPages(String projectId) async =>
+      pages[projectId] ?? _emptyPages;
+
+  static const _emptyPages = VideoPages(
+    availablePages: [],
+    chapterPages: [],
+    referencePages: [],
+    pagesVersion: 0,
+    pages: [],
+  );
 
   @override
   Future<VideoPages> savePages(String projectId, VideoPagesUpdate input) async {

@@ -29,6 +29,13 @@ final videoProjectsProvider =
       retry: (_, _) => null,
     );
 
+/// 單一專案（專案總覽）。草稿工作完成時會重新讀取（步驟會變）。
+final videoProjectProvider = FutureProvider.family<VideoProject, String>(
+  (ref, projectId) =>
+      ref.read(videoStudioRepositoryProvider).getProject(projectId),
+  retry: (_, _) => null,
+);
+
 /// 建立專案時可選的遊戲。
 final videoGameOptionsProvider = FutureProvider<List<VideoGameOption>>(
   (ref) => ref.read(videoStudioRepositoryProvider).listGames(),

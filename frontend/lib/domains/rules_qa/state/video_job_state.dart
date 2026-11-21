@@ -40,6 +40,8 @@ class VideoJobNotifier extends Notifier<VideoJobState> {
   VideoStudioRepository get _repo => ref.read(videoStudioRepositoryProvider);
 
   Future<void> startDraft() async {
+    // 清掉上一次的錯誤
+    state = VideoJobState(job: state.job);
     try {
       final job = await _repo.startDraft(projectId);
       state = VideoJobState(job: job);
@@ -75,18 +77,24 @@ class VideoJobNotifier extends Notifier<VideoJobState> {
     final interval = ref.read(videoJobPollIntervalProvider);
     while (true) {
       await Future<void>.delayed(interval);
+      // 畫面整個關掉（provider 已釋放）就不再查
+      if (!ref.mounted) return;
       try {
         final job = await _repo.getJob(projectId, jobId);
+        if (!ref.mounted) return;
         state = VideoJobState(job: job);
         if (job.active) continue;
         if (job.status == VideoJobStatus.succeeded) {
           ref
             ..invalidate(videoDraftProvider(projectId))
-            ..invalidate(videoProjectsProvider);
+            ..invalidate(videoProjectsProvider)
+            ..invalidate(videoProjectProvider(projectId));
         }
         return;
       } on ApiException catch (error) {
-        state = VideoJobState(job: state.job, error: error.message);
+        if (ref.mounted) {
+          state = VideoJobState(job: state.job, error: error.message);
+        }
         return;
       }
     }
