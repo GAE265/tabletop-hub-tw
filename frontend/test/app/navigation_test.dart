@@ -49,6 +49,8 @@ Future<GoRouter> pumpShell(
             '/groups',
             '/notifications',
             '/rules-ingest',
+            '/videos',
+            '/videos/p1/draft',
             '/games-advisor',
             '/rules',
             '/rules/1',
@@ -274,5 +276,70 @@ void main() {
         }
       });
     }
+  });
+  group('店家人員與管理員才有的「影片」（add-rules-video-mobile）', () {
+    const key = Key('shell-nav-videos');
+
+    test('「影片」放在「規則」後面', () {
+      expect(visibleNavItems('shop_staff').map((item) => item.label), [
+        '首頁',
+        '揪團',
+        '推薦',
+        '規則',
+        '影片',
+        '訂位',
+        '戰績',
+      ]);
+      expect(visibleNavItems('admin').map((item) => item.label), [
+        '首頁',
+        '揪團',
+        '推薦',
+        '規則',
+        '影片',
+        '訂位',
+        '戰績',
+        '匯入',
+      ]);
+      expect(
+        visibleNavItems(
+          'shop_staff',
+        ).firstWhere((item) => item.path == '/videos').icon,
+        Icons.video_library_outlined,
+      );
+    });
+
+    test('子路徑選取「影片」', () {
+      expect(selectedNavPath('/videos'), '/videos');
+      expect(selectedNavPath('/videos/p1/draft'), '/videos');
+    });
+
+    for (final user in [fakeStaff, fakeAdmin]) {
+      for (final size in [const Size(400, 900), const Size(1280, 800)]) {
+        testWidgets(
+          '${user.role}（寬度 ${size.width.toInt()}）：有「影片」，點下前往 /videos',
+          (tester) async {
+            final router = await pumpShell(tester, size: size, user: user);
+            expect(find.byKey(key), findsOneWidget);
+            await tester.tap(find.byKey(key));
+            await tester.pumpAndSettle();
+            expect(router.state.uri.path, '/videos');
+            expect(isSelected(tester, 'shell-nav-videos'), isTrue);
+          },
+        );
+      }
+    }
+
+    for (final user in [fakePlayer, null]) {
+      testWidgets('${user?.role ?? '沒有身分'}：沒有「影片」', (tester) async {
+        await pumpShell(tester, user: user);
+        expect(find.byKey(key), findsNothing);
+      });
+    }
+
+    testWidgets('在 /videos/p1/draft：「影片」為選取狀態', (tester) async {
+      await pumpShell(tester, location: '/videos/p1/draft', user: fakeStaff);
+      expect(isSelected(tester, 'shell-nav-videos'), isTrue);
+      expect(isSelected(tester, 'shell-nav-rules'), isFalse);
+    });
   });
 }

@@ -97,6 +97,35 @@ void main() {
     });
   });
 
+  group('專案總覽', () {
+    test('讀單一專案', () async {
+      final repo = FakeVideoStudioRepository(
+        projects: [sampleVideoProject(step: 'draft')],
+      );
+      final container = makeContainer(repo);
+      final project = await container.read(videoProjectProvider('p1').future);
+      expect(project.step, 'draft');
+    });
+
+    test('草稿工作完成後重新讀專案（步驟會變）', () async {
+      final repo = FakeVideoStudioRepository(projects: [sampleVideoProject()])
+        ..jobSequence = [sampleVideoJob(status: VideoJobStatus.succeeded)];
+      final container = makeContainer(repo);
+      expect(
+        (await container.read(videoProjectProvider('p1').future)).step,
+        'pages',
+      );
+      repo.projects = [sampleVideoProject(step: 'draft')];
+      final notifier = container.read(videoJobProvider('p1').notifier);
+      await notifier.startDraft();
+      await notifier.finished;
+      expect(
+        (await container.read(videoProjectProvider('p1').future)).step,
+        'draft',
+      );
+    });
+  });
+
   group('建立專案', () {
     test('欄位齊全才能送出；標題去掉空白後 1–50 字', () {
       final container = makeContainer(FakeVideoStudioRepository());
