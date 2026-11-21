@@ -145,7 +145,9 @@ def test_rejected_twice_keeps_previous_draft(factory, rules_db, project):
     llm = FakeLLMProvider(json_outputs=[_bad_output(), _bad_output()])
     row = job_row(rules_db, _run(factory, rules_db, project, llm))
     assert row.status == "failed"
-    assert row.error.startswith("AI 產生的草稿沒有通過檢查") and "次" in row.error
+    # 整本範圍（2026-11-22 永傑決定）：店員看到的訊息不含檢查細節，原因改放 error_detail
+    assert row.error.startswith("AI 產生的草稿沒有通過檢查")
+    assert "使用了「次」" not in row.error and "使用了「次」" in row.error_detail
     after = project_row(rules_db, project)
     assert after.video == before.video and after.video_version == before.video_version
 

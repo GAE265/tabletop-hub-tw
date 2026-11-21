@@ -447,3 +447,19 @@ def test_strip_skipped_removes_references(rules_db, project):
     assert "blue" not in {a["asset_key"] for a in result.video["assets"]}
     # 原本的段資料不變
     assert len(video["segments"][0]["slots"]["main"]["items"]) == 3
+
+
+# --- 整本範圍：店員看到的錯誤不含內部代號 ---
+
+
+def test_bad_video_data_message_hides_internal_codes(api, ready, rules_db, storage, tmp_path):
+    from app.domains.rules_qa.video_render import RENDER_DATA_MESSAGE
+
+    video = project_row(rules_db, ready).video
+    video["segments"][0]["highlights"][0]["target"] = "sidebar@no_such_zone"
+    _set_video(rules_db, ready, video)
+    job = _render(rules_db, storage, ready, tmp_path)
+    assert job.status == "failed"
+    assert job.error == RENDER_DATA_MESSAGE
+    assert "h1" not in job.error and "s1" not in job.error
+    assert "no_such_zone" in job.error_detail
