@@ -9,19 +9,25 @@ from sqlalchemy.orm import Session
 from app.core.auth import CurrentUser, get_current_user
 from app.core.db import get_session
 from app.domains.booking.repository import BookingRepository
-from app.domains.rules_qa.repository import RulesQaRepository, VideoProjectRepository
+from app.domains.rules_qa.repository import (
+    RulesQaRepository,
+    VideoJobRepository,
+    VideoProjectRepository,
+)
 from app.domains.rules_qa.schemas import (
     MessageRequest,
     MessageResponse,
     RulesLessonList,
     RulesLessonOut,
+    VideoJobList,
+    VideoJobOut,
     VideoOut,
     VideoProjectCreate,
     VideoProjectList,
     VideoProjectOut,
     VideoRequest,
 )
-from app.domains.rules_qa.service import RulesQaService, VideoProjectService
+from app.domains.rules_qa.service import RulesQaService, VideoJobService, VideoProjectService
 
 router = APIRouter(prefix="/rules-lessons", tags=["rules_qa"])
 
@@ -115,3 +121,38 @@ def get_video_project(
 ) -> VideoProjectOut:
     """查看一個影片專案；別家店的專案回 404。"""
     return service.get(user, project_id)
+
+
+def get_video_job_service(
+    request: Request, session: Annotated[Session, Depends(get_session)]
+) -> VideoJobService:
+    """建立工作時通知背景執行緒（後端啟動時建立；RULES_VIDEO_WORKER=false 時沒有）。"""
+    runner = getattr(request.app.state, "rules_video_runner", None)
+    return VideoJobService(
+        VideoJobRepository(session),
+        VideoProjectRepository(session),
+        notify=runner.notify if runner is not None else None,
+    )
+
+
+VideoJobServiceDep = Annotated[VideoJobService, Depends(get_video_job_service)]
+
+
+@videos_router.get("/{project_id}/jobs", response_model=VideoJobList)
+def list_video_jobs(
+    project_id: uuid.UUID,
+    user: CurrentUserDep,
+    service: VideoJobServiceDep,
+    page: Page = 1,
+    page_size: PageSize = 20,
+) -> VideoJobList:
+    """專案的工作，新的在前；店員離開再回來時，看第一筆就知道最近的工作做到哪裡。"""
+    return service.list(user, project_id, page, page_size)
+
+
+@videos_router.get("/{project_id}/jobs/{job_id}", response_model=VideoJobOut)
+def get_video_job(
+    project_id: uuid.UUID, job_id: uuid.UUID, user: CurrentUserDep, service: VideoJobServiceDep
+) -> VideoJobOut:
+    """一個工作的狀態、進度、說明、失敗原因與結果。"""
+    return service.get(user, project_id, job_id)

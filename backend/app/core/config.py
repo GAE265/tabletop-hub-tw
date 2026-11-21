@@ -86,6 +86,8 @@ class Settings(BaseSettings):
     ffmpeg_path: str = "ffmpeg"
     # 背景音樂音量（0–1）；旁白出現時還會再自動壓低
     video_music_volume: float = Field(default=0.25, ge=0, le=1)
+    # 規則影片的背景工作（產生草稿、影片、修改）；false 時後端不啟動背景執行緒
+    rules_video_worker: bool = True
     # 允許跨來源呼叫 API 的前端網址，逗號分隔。預設是本機 Flutter Web 固定的 port；
     # 部署時必須改成實際的前端網址
     cors_allow_origins: str = "http://localhost:5000"

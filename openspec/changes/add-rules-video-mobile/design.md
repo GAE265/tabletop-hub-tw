@@ -27,12 +27,17 @@
 - 列表：`page`（≥ 1）、`page_size`（1–100，預設 20），依 `updated_at` 由新到舊；回 `{items, total}`。
 - 權限：`shop_staff` 只能存取自己店的專案（別家店的回 404，不透露存在）；`admin` 全部；`player` 403；沒登入 401。
 
-**D2 非同步工作（`rules_qa_video_jobs`）。** 草稿（含涵蓋檢查）、產生影片一律做成工作（Q7）：
-- `POST` 建立工作，回 202 與工作 id；前端每幾秒查一次 `GET .../jobs/{id}`。
-- 欄位（草案）：`id`、`project_id`、`kind`（draft｜render）、`status`（queued｜running｜succeeded｜failed）、`progress`（0–1）、`message`、`error`（店員看得懂的中文與下一步）、`result`（JSONB）、時間。
-- 同一個專案同時只能有一個進行中的工作，否則 409 `RULES_VIDEO_JOB_RUNNING`。
-- 後端程式內一個背景執行緒依序執行；不需要新套件、不加服務。
-- **已知限制**：伺服器重新啟動會中斷工作。啟動時把 running 的工作標成 failed（「伺服器重新啟動，請重試」），可以重新建立。
+**D2 非同步工作（`rules_qa_video_jobs`，MR 2；2026-11-21 永傑確認）。** 草稿（含涵蓋檢查）、產生影片、修改一律做成工作（Q7）：
+- **kind**：`draft`（產生草稿）、`render`（產生影片）、`revise`（用一句話修改）。處理函式分別在 MR 4、MR 8、MR 10 接上；MR 2 只做機制，用測試裡的假處理函式驗證。
+- **狀態**：`queued`（等待）→ `running`（處理中）→ `succeeded`（完成，結果在 `result`）或 `failed`（失敗，原因在 `error`）。`succeeded`、`failed` 不再改變；重試＝建立新工作。
+- **欄位**：`id`、`project_id`、`kind`、`status`、`progress`（0–1）、`message`（現在在做什麼）、`error`（給店員看）、`error_detail`（給開發者看：例外類型與訊息，最多 2000 字，不在 API 回傳）、`result`（JSONB）、`created_by`、`created_at`、`started_at`、`finished_at`。
+- **同時兩個工作回 409**：部分唯一索引保證同一個專案 `queued`／`running` 最多一筆；寫入違反時回 409 `RULES_VIDEO_JOB_RUNNING`，`details` 附進行中的工作 id。由資料庫保證，兩個請求同時送進來也只有一個成功。
+- **卡死的工作的出口**：建立新工作時，同專案 `running` 且 `started_at` 超過 **30 分鐘**的工作先標為 `failed`（「工作逾時，已中止」），再建立新的。未超時的仍回 409。逾時中止後，原本的執行緒若之後才做完，也不會改寫它的狀態（結束與回報進度都只更新 `running` 的工作）。
+- **處理函式必須設逾時**：MR 4、MR 8、MR 10 的處理函式呼叫 LLM、TTS、ffmpeg 時都必須設逾時（LLM 用 `LLM_TIMEOUT_SECONDS`；ffmpeg 子程序要加上限），不能依賴 30 分鐘的出口。
+- **背景執行緒**：後端啟動時開一個執行緒（FastAPI lifespan），關閉時停止；`RULES_VIDEO_WORKER=false` 不啟動。每次取一個最早的 `queued` 工作（`FOR UPDATE SKIP LOCKED`），同時改成 `running`。建立工作時通知執行緒立刻取，平常每 2 秒檢查一次。處理函式用 `report(進度, 說明)` 回報，每次用獨立的短交易寫入。
+- **伺服器重新啟動**：啟動時、執行緒開始前，把 `running` 的工作標為 `failed`（「伺服器重新啟動，工作中斷，請重新開始」）；`queued` 保留繼續做。**已知限制**：假設後端只有一個程序。
+- **例外的記錄**：處理函式拋出例外時，(1) 伺服器 log 用 `logger.exception` 記下工作 id、kind 與堆疊；(2) `error`：拋出 `JobFailed("…")` 用那句話，其他例外用「發生未預期的錯誤，請重試；若持續發生請通知管理員」；(3) `error_detail`：例外類型與訊息。寫入失敗結果時本身又出錯，只記 log，執行緒繼續；那個工作停在 `running`，30 分鐘後由上面的出口釋放。沒有對應 kind 的處理函式：`failed`（「這種工作還沒有實作」）。
+- **API**：`GET /rules-videos/{id}/jobs`（新的在前、分頁）、`GET /rules-videos/{id}/jobs/{job_id}`；權限同專案。建立工作的 API 在 MR 4、MR 8、MR 10（建立時回 202）。
 
 **D3 規則書頁面。** 沿用 `rules_ingest` 的上傳與 OCR，不另做。草稿工作從 `games_manual` 讀店員選的本章頁與參考頁（`read_manual_pages`）。`games_manual` 沒有語言欄位，頁面的 `lang` 一律記為 `zh`（之後需要再加設定）。
 
