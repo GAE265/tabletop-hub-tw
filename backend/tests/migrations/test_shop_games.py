@@ -122,7 +122,7 @@ def test_table_and_every_column_have_comments(engine: Engine):
 def test_downgrade_removes_table(migrated_url: str):
     url = recreate_database(Settings().database_url, "shop_games_down")
     migrate(url)
-    migrate(url, "downgrade", "0014")
+    migrate(url, "downgrade", "0016")
     engine = create_engine(url)
     with engine.connect() as conn:
         exists = conn.scalar(text("SELECT to_regclass('public.shop_games') IS NOT NULL"))
