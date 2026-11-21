@@ -437,7 +437,10 @@ def test_coverage_warnings_only_for_changed_segments(tmp_path: Path, run: Run) -
         rule_id="R1", narration=("incomplete", ["b1"], "同時翻開"), source="Reveal together."
     )
     unrelated = coverage_rule(
-        rule_id="R2", narration=("incomplete", ["b3"], "全部結束"), source="Unrelated rule."
+        rule_id="R2",
+        narration=("incomplete", ["b3"], "全部結束"),
+        subtitle=("complete", ["b3"], None),  # 預設對應 b1；改成只對應沒被改的 s2
+        source="Unrelated rule.",
     )
     llm = FakeLLMProvider(
         json_outputs=[
