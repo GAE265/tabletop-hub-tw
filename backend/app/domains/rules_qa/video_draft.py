@@ -7,6 +7,7 @@
 任何一步失敗，原本的草稿都不變。LLM 的逾時用 LLM_TIMEOUT_SECONDS（每次呼叫）加 SDK 的重試。
 """
 
+import hashlib
 import json
 import tempfile
 from dataclasses import asdict
@@ -41,6 +42,19 @@ DRAFT_CONFLICT_MESSAGE = "產生草稿期間專案被修改，請重新產生"
 DRAFT_PAGES_NOT_SET_MESSAGE = "還沒有選本章頁，請先選頁並確認文字"
 TERMS_MISSING_HINT = "這款遊戲還沒有用語對照表，草稿的用詞品質可能下降"
 PAGES_STALE_HINT = "這份草稿依舊的頁面文字產生，建議重新產生"
+
+
+def narration_text_hash(video: dict[str, Any]) -> str:
+    """旁白與字幕的雜湊：涵蓋檢查只看這兩樣，所以只有它們變了才算過期。
+
+    上傳照片、改區域會讓 video_version 加 1，但不影響涵蓋檢查（2026-11-21 永傑決定）。
+    """
+    texts = [
+        [beat.get("narration", ""), beat.get("subtitle", "")]
+        for segment in video.get("segments", [])
+        for beat in segment.get("beats", [])
+    ]
+    return hashlib.sha256(json.dumps(texts, ensure_ascii=False).encode("utf-8")).hexdigest()
 
 
 def terms_status(stored: list[dict[str, Any]] | None) -> str:
@@ -84,6 +98,7 @@ class DraftJobHandler:
             data = self._generate(request, base_dir, cleanup)
             ctx.report(0.7, "規則涵蓋檢查")
             coverage = self._coverage(data, base_dir, chapter)
+            coverage["text_hash"] = narration_text_hash(data)
 
         ctx.report(0.95, "儲存草稿")
         with ctx.session_factory() as session:

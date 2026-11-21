@@ -176,7 +176,8 @@ class RulesQaVideoProject(Base):
         JSONB, comment="最近一次規則涵蓋檢查（done＋report 或 not_done＋reason）；空值代表還沒檢查"
     )
     coverage_version: Mapped[int | None] = mapped_column(
-        Integer, comment="涵蓋檢查是對哪一個 video_version 做的；空值代表還沒檢查"
+        Integer,
+        comment="涵蓋檢查是對哪一個 video_version 做的（紀錄用）；空值代表還沒檢查",
     )
     draft_pages_version: Mapped[int | None] = mapped_column(
         Integer, comment="草稿用的是哪一版頁面文字；空值代表還沒有草稿"

@@ -60,6 +60,7 @@ from app.domains.rules_qa.video_draft import (
     DRAFT_PAGES_NOT_SET_MESSAGE,
     PAGES_STALE_HINT,
     TERMS_MISSING_HINT,
+    narration_text_hash,
     terms_status,
 )
 from app.domains.rules_qa.video_jobs import JOB_TIMEOUT_MINUTES, TIMEOUT_MESSAGE
@@ -775,10 +776,11 @@ def _draft_coverage(state: DraftState) -> DraftCoverageOut:
             hints=[],
         )
     report = report_from_dict(coverage["report"])
-    stale = state.coverage_version != state.video_version
+    # 只有旁白或字幕變了才算過期；只改素材（照片、區域）不算
+    stale = coverage.get("text_hash") != narration_text_hash(state.video or {})
     return DraftCoverageOut(
         status="stale" if stale else "done",
-        reason="草稿在涵蓋檢查之後改過，結果可能過期" if stale else None,
+        reason="旁白或字幕在涵蓋檢查之後改過，結果可能過期" if stale else None,
         total_rules=len(report.rules),
         issues=[
             CoverageIssueOut(

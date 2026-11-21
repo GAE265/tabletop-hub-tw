@@ -53,7 +53,7 @@ def upgrade() -> None:
             nullable=True,
             comment=(
                 "最近一次規則涵蓋檢查：status＝done 時附 report，not_done 時附 reason；"
-                "空值代表還沒檢查"
+                "text_hash 是檢查時旁白與字幕的雜湊，不同就是過期；空值代表還沒檢查"
             ),
         ),
     )
@@ -63,7 +63,10 @@ def upgrade() -> None:
             "coverage_version",
             sa.Integer(),
             nullable=True,
-            comment="涵蓋檢查是對哪一個 video_version 做的；不同就是過期；空值代表還沒檢查",
+            comment=(
+                "涵蓋檢查是對哪一個 video_version 做的（紀錄用；是否過期看 coverage 裡"
+                "旁白與字幕的雜湊）；空值代表還沒檢查"
+            ),
         ),
     )
     op.add_column(
