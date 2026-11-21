@@ -29,7 +29,6 @@ def test_shop_staff_header_with_shop(client: TestClient) -> None:
 @pytest.mark.parametrize(
     "value",
     [
-        f"{SOME_ID}:shop_staff",  # shop_staff 缺店家
         f"{SOME_ID}:shop_staff:",  # 第三段為空
         f"{SOME_ID}:shop_staff:not-a-uuid",  # 店家不是 UUID
         f"{SOME_ID}:player:{SHOP_ID}",  # player 多帶店家
@@ -43,6 +42,13 @@ def test_shop_segment_rules_are_enforced(client: TestClient, value: str) -> None
     assert response.json()["error"]["code"] == "INVALID_DEV_USER"
 
 
+def test_shop_staff_header_without_shop_means_no_shop_yet(client: TestClient) -> None:
+    """契約變更（add-shops-management）：還沒有店的店員可以不帶店家；店家以資料庫為準。"""
+    response = client.get("/_probe/me", headers={"X-Dev-User": f"{SOME_ID}:shop_staff"})
+    assert response.status_code == 200
+    assert response.json() == {"id": SOME_ID, "role": "shop_staff", "shop_id": ""}
+
+
 def test_current_user_does_not_need_the_database(client: TestClient) -> None:
     """測試用 app 指向連不上的資料庫；取得身分不得查任何資料表。"""
     response = client.get("/_probe/me", headers={"X-Dev-User": f"{SOME_ID}:shop_staff:{SHOP_ID}"})
@@ -50,7 +56,6 @@ def test_current_user_does_not_need_the_database(client: TestClient) -> None:
 
 
 def test_header_sets_current_user(client: TestClient) -> None:
-    # 契約變更：shop_staff 必須帶 :<shop_uuid>（原本不帶店家的寫法現在是 400）
     response = client.get("/_probe/me", headers={"X-Dev-User": f"{SOME_ID}:shop_staff:{SHOP_ID}"})
     assert response.status_code == 200
     assert response.json()["id"] == SOME_ID

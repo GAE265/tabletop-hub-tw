@@ -37,7 +37,7 @@ with Session(create_db_engine(settings.database_url)) as s, s.begin():
 PY
 ```
 
-預期：seed 印出「已建立（或確認存在）3 個測試帳號與 1 間測試店家」。
+預期：seed 印出「已建立（或確認存在）4 個測試帳號與 1 間測試店家」。
 
 **店家設定資料（自行準備 DML，不進 repo）**：沒有這些資料，任何訂位都會被拒絕。表名與欄位使用目前專案結構，`shop_id` 請填「測試桌遊店」的 `booking_shops.id`（uuid）：
 
