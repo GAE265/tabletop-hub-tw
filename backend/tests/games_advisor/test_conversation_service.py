@@ -4,6 +4,7 @@
 """
 
 import logging
+import uuid
 from typing import TYPE_CHECKING, Any
 
 import pytest
@@ -31,6 +32,7 @@ from tests.games_advisor.conversation_support import (
     responds,
     search,
 )
+from tests.games_advisor.fakes import FakeShopStock
 from tests.games_advisor.support import make_tag
 
 if TYPE_CHECKING:
@@ -445,3 +447,67 @@ def test_every_role_can_chat(user: CurrentUser) -> None:
     reply = send(service, user=user)
 
     assert reply.reply == "請問幾個人？"
+
+
+# --- 店家有沒有這款桌遊（spec §16） ---
+
+SHOP = uuid.UUID("c0000000-0000-4000-8000-000000000001")
+MISSING_SHOP = uuid.UUID("c0000000-0000-4000-8000-0000000000ff")
+
+
+def in_stock(reply: "AdvisorReply") -> dict[int, bool | None]:
+    return {card.game["id"]: card.in_stock for card in reply.recommendations}
+
+
+def test_cards_are_marked_with_shop_stock() -> None:
+    stock = FakeShopStock({SHOP: {1, 3, 4}})
+    service, _, _ = make_service(
+        [search(players=4), final("幫你找到 3 款", rec(1), rec(2), rec(3))], stock=stock
+    )
+
+    reply = service.send_message(TEST_PLAYER, "我們 4 個人", None, shop_id=SHOP)
+
+    assert in_stock(reply) == {1: True, 2: False, 3: True}
+    # 只問被推薦的那幾款，不問整個查詢結果
+    assert stock.calls[-1] == (SHOP, [1, 2, 3])
+
+
+def test_without_shop_in_stock_is_none_and_stock_is_not_asked() -> None:
+    stock = FakeShopStock({SHOP: {1}})
+    service, _, _ = make_service([search(players=4), final("好", rec(1), rec(2))], stock=stock)
+
+    reply = send(service)
+
+    assert in_stock(reply) == {1: None, 2: None}
+    assert stock.calls == []
+
+
+def test_unknown_shop_is_404_before_calling_llm() -> None:
+    stock = FakeShopStock({SHOP: {1}})
+    service, llm, repo = make_service([search(players=4), final("好", rec(1))], stock=stock)
+
+    with pytest.raises(AppError) as info:
+        service.send_message(TEST_PLAYER, "我們 4 個人", None, shop_id=MISSING_SHOP)
+
+    assert (info.value.status_code, info.value.code) == (404, "SHOP_NOT_FOUND")
+    assert llm.calls == []
+    assert repo.filter_calls == []
+
+
+def test_shop_id_is_not_sent_to_llm() -> None:
+    stock = FakeShopStock({SHOP: {1}})
+    service, llm, _ = make_service([search(players=4), final("好", rec(1))], stock=stock)
+
+    service.send_message(TEST_PLAYER, "我們 4 個人", None, shop_id=SHOP)
+
+    assert str(SHOP) not in repr(llm.calls)
+
+
+def test_follow_up_with_shop_has_no_cards() -> None:
+    stock = FakeShopStock({SHOP: {1}})
+    service, _, _ = make_service([final("請問你們有幾個人？")], stock=stock)
+
+    reply = service.send_message(TEST_PLAYER, "想找桌遊", None, shop_id=SHOP)
+
+    assert reply.reply == "請問你們有幾個人？"
+    assert reply.recommendations == []

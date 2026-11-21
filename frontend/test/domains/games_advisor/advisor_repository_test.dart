@@ -181,4 +181,47 @@ void main() {
       });
     }
   });
+
+  group('店家有沒有這款桌遊（spec §16）', () {
+    Map<String, dynamic> cardJson(String inStock) =>
+        jsonDecode('''
+{
+  "game": {
+    "id": 1, "name": "範例桌遊甲",
+    "min_players": 2, "max_players": 4,
+    "min_playtime": 30, "max_playtime": 45,
+    "min_age": 10, "weight": 1.85
+  },
+  "reason": "規則簡單、不燒腦。",
+  "excerpts": [],
+  "in_stock": $inStock
+}
+''')
+            as Map<String, dynamic>;
+
+    test('卡片的 in_stock 是 false、true、null：各自解析成 inStock', () {
+      expect(AdvisorRecommendation.fromJson(cardJson('false')).inStock, false);
+      expect(AdvisorRecommendation.fromJson(cardJson('true')).inStock, true);
+      expect(AdvisorRecommendation.fromJson(cardJson('null')).inStock, isNull);
+    });
+
+    test('請求帶店家：body 多一個 shop_id', () async {
+      final adapter = RecordingAdapter(statusCode: 201, body: responseJson);
+      final repository = makeRepository(adapter);
+
+      await repository.sendMessage(
+        const AdvisorMessageRequest(
+          content: '想輕鬆聊天',
+          previousResponseId: null,
+          shopId: 'c0000000-0000-4000-8000-000000000001',
+        ),
+      );
+
+      expect(jsonDecode(adapter.bodies.single!), {
+        'content': '想輕鬆聊天',
+        'previous_response_id': null,
+        'shop_id': 'c0000000-0000-4000-8000-000000000001',
+      });
+    });
+  });
 }

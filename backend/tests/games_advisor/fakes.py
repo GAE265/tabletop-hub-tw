@@ -1,10 +1,12 @@
 """games_advisor service 測試用的手寫 fake（AGENTS.md §7.5）：不連資料庫、不連外部服務。"""
 
 import copy
+import uuid
 from collections.abc import Collection, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from typing import Any
 
+from app.core.errors import AppError
 from app.integrations.embedding.fake import FakeEmbeddingProvider
 
 
@@ -293,3 +295,21 @@ class FakeSearchRepository:
             for game_id in game_ids
             if game_id in self.excerpt_models
         }
+
+
+class FakeShopStock:
+    """假的店家庫存查詢（ShopsService.games_in_stock）。
+
+    - stock：店家 id → 店裡有的桌遊 id；沒列的店家就是不存在，和真的一樣拋 404 SHOP_NOT_FOUND。
+    - calls 記下每次查的店家與桌遊 id。
+    """
+
+    def __init__(self, stock: Mapping[uuid.UUID, Collection[int]]) -> None:
+        self.stock = {shop_id: set(game_ids) for shop_id, game_ids in stock.items()}
+        self.calls: list[tuple[uuid.UUID, list[int]]] = []
+
+    def games_in_stock(self, shop_id: uuid.UUID, game_ids: Collection[int]) -> set[int]:
+        self.calls.append((shop_id, sorted(game_ids)))
+        if shop_id not in self.stock:
+            raise AppError(404, "SHOP_NOT_FOUND", "找不到這間店家", {"shop_id": str(shop_id)})
+        return self.stock[shop_id] & set(game_ids)

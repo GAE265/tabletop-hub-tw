@@ -4,6 +4,7 @@
 """
 
 import uuid
+from collections.abc import Collection
 from contextlib import contextmanager
 
 from app.domains.booking.records import ShopRef
@@ -67,6 +68,9 @@ class FakeShopGamesRepository:
 
     def list_games(self, shop_id: uuid.UUID) -> list[ShopGameItem]:
         return [ShopGameItem(g, self.games.names[g]) for s, g in self.rows if s == shop_id]
+
+    def games_in_stock(self, shop_id: uuid.UUID, game_ids: Collection[int]) -> set[int]:
+        return {g for s, g in self.rows if s == shop_id and g in set(game_ids)}
 
     def add(self, shop_id: uuid.UUID, game_id: int) -> ShopGameItem:
         if (shop_id, game_id) in self.rows:
