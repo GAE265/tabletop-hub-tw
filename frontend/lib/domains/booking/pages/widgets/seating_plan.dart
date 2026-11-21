@@ -129,16 +129,23 @@ const _maxFitScale = 2.0;
 ///
 /// [staffView] 為 true 時是店員看板（所有訂位都是「已訂」，點桌子看訂位內容）；
 /// false 時是玩家（自己的桌另外標示，別人的訂位不顯示內容）。
+///
+/// [selecting] 為 true 時是換桌的選桌模式：桌子加上可點選的框線，點桌子改呼叫
+/// [onTapTable]（不會再滑出詳情）。
 class SeatingPlanView extends StatefulWidget {
   const SeatingPlanView({
     required this.plans,
     required this.staffView,
+    this.selecting = false,
+    this.onTapTable,
     this.now,
     super.key,
   });
 
   final List<SeatingPlan> plans;
   final bool staffView;
+  final bool selecting;
+  final void Function(SeatGroup seat)? onTapTable;
 
   /// 用來判斷超時的「現在」（UTC）；只有店員看板會用到，null 時不標示超時。
   final DateTime? now;
@@ -208,7 +215,8 @@ class _SeatingPlanViewState extends State<SeatingPlanView> {
         ),
         const SizedBox(height: AppSpacing.xSmall),
         Text(
-          '點桌子看詳情，雙指可以放大',
+          widget.selecting ? '請點選要更換的桌子' : '點桌子看詳情，雙指可以放大',
+          key: const Key('seating-hint'),
           style: Theme.of(
             context,
           ).textTheme.bodySmall!.copyWith(color: AppColors.inkMuted),
@@ -264,7 +272,15 @@ class _SeatingPlanViewState extends State<SeatingPlanView> {
                     staffView: widget.staffView,
                     now: widget.now,
                   ),
-                  onTap: () => _showDetail(context, s),
+                  highlight: widget.selecting,
+                  onTap: () {
+                    final select = widget.onTapTable;
+                    if (select == null) {
+                      _showDetail(context, s);
+                    } else {
+                      select(s);
+                    }
+                  },
                 ),
               ),
           ],
@@ -292,6 +308,7 @@ class SeatTable extends StatelessWidget {
     required this.seat,
     required this.tone,
     required this.onTap,
+    this.highlight = false,
     super.key,
   });
 
@@ -299,13 +316,21 @@ class SeatTable extends StatelessWidget {
   final SeatTone tone;
   final VoidCallback onTap;
 
+  /// 換桌選桌中：改用主色粗框線，讓使用者知道這張桌可以點。
+  final bool highlight;
+
   @override
   Widget build(BuildContext context) {
     final t = seat.table;
     final colors = _colorsFor(tone);
     final text = Theme.of(context).textTheme;
     final shape = RoundedRectangleBorder(
-      side: BorderSide(color: colors.border, width: AppSizes.seatTableBorder),
+      side: BorderSide(
+        color: highlight ? AppColors.primary : colors.border,
+        width: highlight
+            ? AppSizes.seatTableBorder * 2
+            : AppSizes.seatTableBorder,
+      ),
       borderRadius: BorderRadius.circular(AppRadius.seatTable),
     );
     return Semantics(

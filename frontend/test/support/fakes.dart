@@ -194,6 +194,7 @@ class FakeBookingRepository implements BookingRepository {
   Object? quoteError;
   Object? createError;
   Object? patchError;
+  Object? changeTablesError;
 
   /// 正式頁面測試用：送出的請求。
   final createCalls =
@@ -207,6 +208,7 @@ class FakeBookingRepository implements BookingRepository {
         })
       >[];
   final patchCalls = <({int id, Map<String, dynamic> patch})>[];
+  final changeTablesCalls = <({int id, List<int> tableIds})>[];
   final boardQueries = <({String shopId, String from, String to})>[];
 
   /// 目前使用者的訂位通知，新的在前（add-booking-notifications）。
@@ -322,6 +324,28 @@ class FakeBookingRepository implements BookingRepository {
       tableCodes: b.tableCodes,
       estimatedFee: b.estimatedFee,
       finalFee: patch['status'] == 'completed' ? '480.00' : b.finalFee,
+      notice: b.notice,
+    );
+  }
+
+  /// 換桌：記下請求，回傳把桌位換成 `T<id>` 的新訂位。
+  @override
+  Future<Booking> changeTables(int id, List<int> tableIds) async {
+    changeTablesCalls.add((id: id, tableIds: tableIds));
+    if (changeTablesError != null) throw changeTablesError!;
+    final b = [...mine, ...board].firstWhere((x) => x.id == id);
+    return Booking(
+      shopName: '測試店',
+      id: b.id,
+      reservationCode: b.reservationCode,
+      shopId: b.shopId,
+      startAt: b.startAt,
+      endAt: b.endAt,
+      partySize: b.partySize,
+      status: b.status,
+      tableCodes: [for (final t in tableIds) 'T$t'],
+      estimatedFee: b.estimatedFee,
+      finalFee: b.finalFee,
       notice: b.notice,
     );
   }
