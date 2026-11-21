@@ -1,10 +1,12 @@
 // 規則影片生產器 1d 的 HTTP repository（add-rules-video-mobile MR 6，design.md D12）。
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tabletop_hub/core/api/api_client.dart';
 import 'package:tabletop_hub/core/config/app_config.dart';
+import 'package:tabletop_hub/core/platform/image_picker.dart';
 import 'package:tabletop_hub/domains/rules_qa/data/video_studio_models.dart';
 import 'package:tabletop_hub/domains/rules_qa/data/video_studio_repository.dart';
 
@@ -128,5 +130,102 @@ void main() {
           '"details": {}}}',
     );
     expect(await makeRepository(adapter).getDraft('p1'), isNull);
+  });
+  group('素材（MR 8）', () {
+    const assetJson = '''
+{
+  "asset_key": "board", "kind": "flat_photo", "priority": "must", "reason": "圖板",
+  "shot": "從正上方拍", "has_photo": true, "orientation": 90,
+  "regions": {"zone_a": [0.1, 0.2, 0.3, 0.4], "zone_b": null}, "video_version": 3
+}
+''';
+
+    test('素材明細：GET .../assets/{key}，區域可以是 null', () async {
+      final adapter = RecordingAdapter(body: assetJson);
+      final asset = await makeRepository(adapter).getAsset('p1', 'board');
+      expect(
+        adapter.requests.single.path,
+        '/api/v1/rules-videos/p1/assets/board',
+      );
+      expect(asset.orientation, 90);
+      expect(asset.regions, {
+        'zone_a': [0.1, 0.2, 0.3, 0.4],
+        'zone_b': null,
+      });
+    });
+
+    test('上傳照片：PUT .../photo，multipart 的 file 欄位', () async {
+      final adapter = RecordingAdapter(body: assetJson);
+      await makeRepository(adapter).uploadPhoto(
+        'p1',
+        'board',
+        PickedImage(
+          name: 'board.jpg',
+          bytes: Uint8List.fromList(utf8.encode('img')),
+        ),
+      );
+      final request = adapter.requests.single;
+      expect(request.method, 'PUT');
+      expect(request.path, '/api/v1/rules-videos/p1/assets/board/photo');
+      expect(
+        adapter.bodies.single,
+        contains('name="file"; filename="board.jpg"'),
+      );
+    });
+
+    test('讀照片：GET .../photo，回傳位元組', () async {
+      final adapter = RecordingAdapter(body: 'PNGDATA');
+      final bytes = await makeRepository(adapter).getPhoto('p1', 'board');
+      expect(
+        adapter.requests.single.path,
+        '/api/v1/rules-videos/p1/assets/board/photo',
+      );
+      expect(bytes, utf8.encode('PNGDATA'));
+    });
+
+    test('改方向：PATCH 只送有給的欄位', () async {
+      final adapter = RecordingAdapter(body: assetJson);
+      await makeRepository(
+        adapter,
+      ).updateAsset('p1', 'board', const VideoAssetUpdate(orientation: 90));
+      expect(adapter.requests.single.method, 'PATCH');
+      expect(jsonDecode(adapter.bodies.single!), {'orientation': 90});
+    });
+
+    test('改區域：區域給 null 代表改回待量測', () async {
+      final adapter = RecordingAdapter(body: assetJson);
+      await makeRepository(adapter).updateAsset(
+        'p1',
+        'board',
+        const VideoAssetUpdate(
+          regions: {
+            'zone_a': [0.1, 0.2, 0.3, 0.4],
+            'zone_b': null,
+          },
+        ),
+      );
+      expect(jsonDecode(adapter.bodies.single!), {
+        'regions': {
+          'zone_a': [0.1, 0.2, 0.3, 0.4],
+          'zone_b': null,
+        },
+      });
+    });
+
+    test('缺什麼：GET .../readiness', () async {
+      final adapter = RecordingAdapter(
+        body:
+            '{"ready": false, "missing_photos": [{"asset_key": "board", "priority": "optional", '
+            '"reason": "圖板", "shot": null}], "missing_regions": [{"asset_key": "board", '
+            '"region": "zone_a"}], "unsupported": [{"asset_key": "m", "kind": "drawn", '
+            '"message": "本版不支援"}]}',
+      );
+      final readiness = await makeRepository(adapter).getReadiness('p1');
+      expect(adapter.requests.single.path, '/api/v1/rules-videos/p1/readiness');
+      expect(readiness.ready, isFalse);
+      expect(readiness.missingPhotos.single.priority, 'optional');
+      expect(readiness.missingRegions.single.region, 'zone_a');
+      expect(readiness.unsupported.single.message, '本版不支援');
+    });
   });
 }

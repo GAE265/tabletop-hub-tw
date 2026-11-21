@@ -1707,6 +1707,76 @@ class FakeVideoStudioRepository implements VideoStudioRepository {
     if (draftError != null) throw draftError!;
     return drafts[projectId];
   }
+
+  // --- 素材（MR 8）：key 是 '<專案>/<asset_key>' ---
+
+  final assets = <String, VideoAsset>{};
+  final photos = <String, Uint8List>{};
+  final readiness = <String, VideoReadiness>{};
+
+  /// 上傳成功後存下的照片內容（預設是上傳的內容；後端轉正時內容會不同）。
+  Uint8List Function(Uint8List uploaded)? storedPhoto;
+  Object? uploadError;
+  Object? updateError;
+
+  final uploads = <(String, String, PickedImage)>[];
+  final updates = <(String, String, VideoAssetUpdate)>[];
+
+  @override
+  Future<VideoAsset> getAsset(String projectId, String assetKey) async =>
+      assets['$projectId/$assetKey']!;
+
+  @override
+  Future<Uint8List> getPhoto(String projectId, String assetKey) async =>
+      photos['$projectId/$assetKey']!;
+
+  @override
+  Future<VideoAsset> uploadPhoto(
+    String projectId,
+    String assetKey,
+    PickedImage image,
+  ) async {
+    uploads.add((projectId, assetKey, image));
+    if (uploadError != null) throw uploadError!;
+    final key = '$projectId/$assetKey';
+    photos[key] = storedPhoto?.call(image.bytes) ?? image.bytes;
+    final asset = assets[key]!;
+    return assets[key] = asset.copyWith(
+      hasPhoto: true,
+      orientation: 0,
+      videoVersion: asset.videoVersion + 1,
+    );
+  }
+
+  @override
+  Future<VideoAsset> updateAsset(
+    String projectId,
+    String assetKey,
+    VideoAssetUpdate input,
+  ) async {
+    updates.add((projectId, assetKey, input));
+    if (updateError != null) throw updateError!;
+    final key = '$projectId/$assetKey';
+    final asset = assets[key]!;
+    var regions = {...asset.regions};
+    final orientation = input.orientation;
+    if (orientation != null && orientation != asset.orientation) {
+      // 和後端一樣：只改方向時區域改回待量測
+      if (input.regions == null) {
+        regions = {for (final name in regions.keys) name: null};
+      }
+    }
+    regions.addAll(input.regions ?? const {});
+    return assets[key] = asset.copyWith(
+      orientation: orientation ?? asset.orientation,
+      regions: regions,
+      videoVersion: asset.videoVersion + 1,
+    );
+  }
+
+  @override
+  Future<VideoReadiness> getReadiness(String projectId) async =>
+      readiness[projectId]!;
 }
 
 VideoProject sampleVideoProject({
