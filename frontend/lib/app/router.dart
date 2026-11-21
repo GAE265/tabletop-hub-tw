@@ -15,11 +15,11 @@ import '../domains/matches/pages/matches_page.dart';
 import '../domains/rules_qa/pages/rules_lesson_page.dart';
 import '../domains/rules_qa/pages/rules_lessons_page.dart';
 import '../domains/rules_ingest/pages/rules_ingest_page.dart';
-import '../domains/shops/pages/shop_create_page.dart';
-import '../domains/shops/pages/shop_inventory_page.dart';
-import '../domains/shops/pages/shops_entry_page.dart';
 import '../prototypes/booking/booking_list_proto_page.dart';
 import '../prototypes/booking/booking_proto_page.dart';
+import '../prototypes/shops/shop_create_proto_page.dart';
+import '../prototypes/shops/shop_inventory_proto_page.dart';
+import '../prototypes/shops/shops_entry_proto_page.dart';
 import 'home/pages/home_page.dart';
 import 'notifications/notifications_page.dart';
 import 'shell.dart';
@@ -53,22 +53,6 @@ GoRouter createRouter(AppConfig config) => GoRouter(
         GoRoute(
           path: '/rules-ingest',
           builder: (context, state) => const RulesIngestPage(),
-        ),
-        // 店家管理：新增店家、管理自己店的桌遊庫存（店家人員與管理員）
-        GoRoute(
-          path: '/shops',
-          builder: (context, state) => const ShopsEntryPage(),
-          routes: [
-            GoRoute(
-              path: 'new',
-              builder: (context, state) => const ShopCreatePage(),
-            ),
-            GoRoute(
-              path: ':shopId/games',
-              builder: (context, state) =>
-                  ShopInventoryPage(shopId: state.pathParameters['shopId']!),
-            ),
-          ],
         ),
         // 揪團與訂位的通知（add-booking-notifications）
         GoRoute(
@@ -133,6 +117,20 @@ GoRouter createRouter(AppConfig config) => GoRouter(
           GoRoute(
             path: '/proto/booking/list',
             builder: (context, state) => const BookingListProtoPage(),
+          ),
+          // 店家管理的參考畫面：新增店家、管理店家的桌遊庫存
+          GoRoute(
+            path: '/proto/shops',
+            builder: (context, state) => const ShopsEntryProtoPage(),
+          ),
+          GoRoute(
+            path: '/proto/shops/new',
+            builder: (context, state) => const ShopCreateProtoPage(),
+          ),
+          GoRoute(
+            path: '/proto/shops/:shopId/games',
+            builder: (context, state) =>
+                ShopInventoryProtoPage(shopId: state.pathParameters['shopId']!),
           ),
         ],
       ],

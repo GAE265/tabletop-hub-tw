@@ -70,17 +70,6 @@ const navItems = [
   ),
 ];
 
-/// 店家人員與管理員看得到的項目，接在 [navItems] 後面。
-const shopNavItems = [
-  NavItem(
-    path: '/shops',
-    label: '店家',
-    icon: Icons.storefront_outlined,
-    selectedIcon: Icons.storefront,
-    keyName: 'shell-nav-shops',
-  ),
-];
-
 /// 只有管理員看得到的項目，接在 [navItems] 後面（add-rules-ingest-page）。
 const adminNavItems = [
   NavItem(
@@ -92,10 +81,9 @@ const adminNavItems = [
   ),
 ];
 
-/// 依角色決定要顯示的導覽項目：店家人員與管理員多了 [shopNavItems]，管理員再多 [adminNavItems]。
+/// 依角色決定要顯示的導覽項目：管理員多了 [adminNavItems]。
 List<NavItem> visibleNavItems(String? role) => [
   ...navItems,
-  if (role == 'shop_staff' || role == 'admin') ...shopNavItems,
   if (role == 'admin') ...adminNavItems,
 ];
 
@@ -109,7 +97,7 @@ final visibleNavItemsProvider = Provider<List<NavItem>>(
 /// 首頁只在路徑剛好是 `/` 時選取；其他項目在路徑等於它或是它的子路徑時選取。
 String? selectedNavPath(String path) {
   if (path == '/') return '/';
-  for (final item in [...navItems.skip(1), ...shopNavItems, ...adminNavItems]) {
+  for (final item in [...navItems.skip(1), ...adminNavItems]) {
     if (path == item.path || path.startsWith('${item.path}/')) {
       return item.path;
     }
