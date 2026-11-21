@@ -4,15 +4,21 @@
 """
 
 import logging
+import uuid
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import AbstractContextManager, contextmanager
 from typing import Any, Protocol
 
 from app.core.auth import CurrentUser, require_role
-from app.core.errors import AppError
+from app.core.errors import AppError, PermissionDenied
 from app.domains.rules_qa import prompts
 from app.domains.rules_qa.chunking import split_pages
-from app.domains.rules_qa.repository import ChunkHit, LessonSummary, VideoRecord
+from app.domains.rules_qa.repository import (
+    ChunkHit,
+    LessonSummary,
+    VideoProjectRecord,
+    VideoRecord,
+)
 from app.domains.rules_qa.schemas import (
     Citation,
     MessageRequest,
@@ -21,6 +27,9 @@ from app.domains.rules_qa.schemas import (
     RulesLessonList,
     RulesLessonOut,
     VideoOut,
+    VideoProjectCreate,
+    VideoProjectList,
+    VideoProjectOut,
     VideoRequest,
 )
 from app.domains.rules_qa.youtube import parse_youtube_id
@@ -248,4 +257,115 @@ def _video_out(video: VideoRecord) -> VideoOut:
         video_url=video.video_url,
         youtube_id=video.youtube_id,
         title=video.title,
+    )
+
+
+# --------------------------------------------------------------------------- 規則影片專案
+
+
+class VideoProjectStore(Protocol):
+    def transaction(self) -> AbstractContextManager[None]: ...
+    def create(
+        self,
+        *,
+        game_id: int,
+        shop_id: uuid.UUID,
+        created_by: uuid.UUID,
+        chapter_number: int,
+        chapter_title: str,
+    ) -> uuid.UUID: ...
+    def get(self, project_id: uuid.UUID) -> VideoProjectRecord | None: ...
+    def list_projects(
+        self, shop_id: uuid.UUID | None, offset: int, limit: int
+    ) -> tuple[list[VideoProjectRecord], int]: ...
+
+
+class GameNames(Protocol):
+    def game_name(self, game_id: int) -> str | None: ...
+
+
+class ShopLookup(Protocol):
+    """共用表 booking_shops 的 repository（擁有者瑋鋐，AGENTS.md 4.2 共用資料表例外）。"""
+
+    def shop_exists(self, shop_id: uuid.UUID) -> bool: ...
+
+
+def _project_not_found() -> AppError:
+    return AppError(404, "RULES_VIDEO_PROJECT_NOT_FOUND", "找不到這個影片專案")
+
+
+class VideoProjectService:
+    """規則影片專案（add-rules-video-mobile design.md D1）。"""
+
+    def __init__(self, projects: VideoProjectStore, games: GameNames, shops: ShopLookup) -> None:
+        self._projects = projects
+        self._games = games
+        self._shops = shops
+
+    def create(self, user: CurrentUser, body: VideoProjectCreate) -> VideoProjectOut:
+        require_role(user, "shop_staff", "admin")
+        shop_id = self._shop_for(user, body.shop_id)
+        if self._games.game_name(body.game_id) is None:
+            raise _game_not_found(body.game_id)
+        with self._projects.transaction():
+            project_id = self._projects.create(
+                game_id=body.game_id,
+                shop_id=shop_id,
+                created_by=user.id,
+                chapter_number=body.chapter_number,
+                chapter_title=body.chapter_title,
+            )
+            record = self._projects.get(project_id)
+        assert record is not None
+        return _project_out(record)
+
+    def get(self, user: CurrentUser, project_id: uuid.UUID) -> VideoProjectOut:
+        require_role(user, "shop_staff", "admin")
+        record = self._projects.get(project_id)
+        # 別家店的專案回 404，不透露專案存在
+        if record is None or not _can_access(user, record):
+            raise _project_not_found()
+        return _project_out(record)
+
+    def list(self, user: CurrentUser, page: int, page_size: int) -> VideoProjectList:
+        require_role(user, "shop_staff", "admin")
+        shop_id = None if user.role == "admin" else user.shop_id
+        if user.role != "admin" and shop_id is None:
+            raise PermissionDenied("這個店家人員帳號沒有所屬店家")
+        records, total = self._projects.list_projects(shop_id, (page - 1) * page_size, page_size)
+        return VideoProjectList(items=[_project_out(r) for r in records], total=total)
+
+    def _shop_for(self, user: CurrentUser, requested: uuid.UUID | None) -> uuid.UUID:
+        """店家人員用登入身分的店家；管理員必須指定店家。"""
+        if user.role == "admin":
+            if requested is None:
+                raise AppError(
+                    422, "RULES_VIDEO_SHOP_REQUIRED", "管理員建立專案時要指定店家（shop_id）"
+                )
+            if not self._shops.shop_exists(requested):
+                raise AppError(404, "BOOKING_SHOP_NOT_FOUND", "找不到店家")
+            return requested
+        if user.shop_id is None:
+            raise PermissionDenied("這個店家人員帳號沒有所屬店家")
+        if requested is not None and requested != user.shop_id:
+            raise PermissionDenied("只能為自己的店建立影片專案")
+        return user.shop_id
+
+
+def _can_access(user: CurrentUser, record: VideoProjectRecord) -> bool:
+    return user.role == "admin" or record.shop_id == user.shop_id
+
+
+def _project_out(record: VideoProjectRecord) -> VideoProjectOut:
+    return VideoProjectOut(
+        id=record.id,
+        game_id=record.game_id,
+        game_name=record.game_name,
+        shop_id=record.shop_id,
+        created_by=record.created_by,
+        chapter_number=record.chapter_number,
+        chapter_title=record.chapter_title,
+        step="pages",  # MR 1 沒有其他狀態（design.md D1）
+        created_at=record.created_at,
+        updated_at=record.updated_at,
     )

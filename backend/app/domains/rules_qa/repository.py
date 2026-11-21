@@ -6,13 +6,14 @@
 import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass
+from datetime import datetime
 
 from sqlalchemy import delete, exists, func, insert, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.core.db import SessionRepository
 from app.core.games.models import Game
-from app.domains.rules_qa.models import RulesQaChunk, RulesQaVideo
+from app.domains.rules_qa.models import RulesQaChunk, RulesQaVideo, RulesQaVideoProject
 
 
 @dataclass(frozen=True)
@@ -140,3 +141,88 @@ class RulesQaRepository(SessionRepository):
             .limit(limit)
         )
         return [ChunkHit(id=r.id, page=r.page, content=r.content) for r in rows]
+
+
+# --------------------------------------------------------------------------- 規則影片專案
+
+
+@dataclass(frozen=True)
+class VideoProjectRecord:
+    id: uuid.UUID
+    game_id: int
+    game_name: str
+    shop_id: uuid.UUID
+    created_by: uuid.UUID
+    chapter_number: int
+    chapter_title: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class VideoProjectRepository(SessionRepository):
+    """rules_qa_video_projects（add-rules-video-mobile design.md D1）。遊戲名稱讀共用表 games。"""
+
+    def _select(self):
+        return select(RulesQaVideoProject, Game.name).join(
+            Game, Game.id == RulesQaVideoProject.game_id
+        )
+
+    @staticmethod
+    def _record(project: RulesQaVideoProject, game_name: str) -> VideoProjectRecord:
+        return VideoProjectRecord(
+            id=project.id,
+            game_id=project.game_id,
+            game_name=game_name,
+            shop_id=project.shop_id,
+            created_by=project.created_by,
+            chapter_number=project.chapter_number,
+            chapter_title=project.chapter_title,
+            created_at=project.created_at,
+            updated_at=project.updated_at,
+        )
+
+    def create(
+        self,
+        *,
+        game_id: int,
+        shop_id: uuid.UUID,
+        created_by: uuid.UUID,
+        chapter_number: int,
+        chapter_title: str,
+    ) -> uuid.UUID:
+        project = RulesQaVideoProject(
+            game_id=game_id,
+            shop_id=shop_id,
+            created_by=created_by,
+            chapter_number=chapter_number,
+            chapter_title=chapter_title,
+        )
+        self.session.add(project)
+        self.session.flush()
+        return project.id
+
+    def get(self, project_id: uuid.UUID) -> VideoProjectRecord | None:
+        row = self.session.execute(
+            self._select().where(RulesQaVideoProject.id == project_id)
+        ).one_or_none()
+        return None if row is None else self._record(*row)
+
+    def list_projects(
+        self, shop_id: uuid.UUID | None, offset: int, limit: int
+    ) -> tuple[list[VideoProjectRecord], int]:
+        """shop_id 為 None 時列出全部（管理員）；依 updated_at 由新到舊。"""
+        query = self._select()
+        count = select(func.count()).select_from(RulesQaVideoProject)
+        if shop_id is not None:
+            query = query.where(RulesQaVideoProject.shop_id == shop_id)
+            count = count.where(RulesQaVideoProject.shop_id == shop_id)
+        rows = self.session.execute(
+            query.order_by(
+                RulesQaVideoProject.updated_at.desc(),
+                RulesQaVideoProject.created_at.desc(),
+                RulesQaVideoProject.id,
+            )
+            .offset(offset)
+            .limit(limit)
+        ).all()
+        return [self._record(*row) for row in rows], self.session.scalar(count) or 0

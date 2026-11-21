@@ -12,6 +12,7 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     Text,
     Uuid,
@@ -92,4 +93,51 @@ class RulesQaChunk(Base):
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), comment="建立索引的時間"
+    )
+
+
+class RulesQaVideoProject(Base):
+    """規則影片專案（add-rules-video-mobile design.md D1）。
+
+    本章頁、參考頁、段資料等欄位等 MR 4 用到時再加；目前步驟（step）不存欄位，由狀態推出。
+    """
+
+    __tablename__ = "rules_qa_video_projects"
+    __table_args__ = (
+        CheckConstraint("chapter_number >= 1", name="ck_rules_qa_video_projects_chapter_number"),
+        Index("ix_rules_qa_video_projects_shop_updated", "shop_id", "updated_at"),
+        {"comment": "規則影片專案：店員用手機產出規則影片的工作空間，一個專案一章"},
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        primary_key=True,
+        default=uuid.uuid4,
+        server_default=text("gen_random_uuid()"),
+        comment="專案編號（UUID）",
+    )
+    game_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("games.id"),
+        comment="這支規則影片教哪一款遊戲（桌遊被刪除時由資料庫擋下，ADR 0003）",
+    )
+    shop_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        ForeignKey("booking_shops.id"),
+        comment="哪一間店的專案；店家人員只能存取自己店的專案",
+    )
+    created_by: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("auth_users.id"), comment="建立專案的使用者（店家人員或管理員）"
+    )
+    chapter_number: Mapped[int] = mapped_column(
+        Integer, comment="章節編號，例如《血與刃》步驟三是第 11 章；從 1 開始"
+    )
+    chapter_title: Mapped[str] = mapped_column(Text, comment="章節標題，例如「步驟三」；1 到 50 字")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), comment="建立專案的時間"
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        comment="最後一次修改專案的時間；列表依此由新到舊排列",
     )
