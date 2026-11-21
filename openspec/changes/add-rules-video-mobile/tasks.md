@@ -43,10 +43,11 @@
 | 9 | `feature/rules_qa-video-render-api` | `render_video` 的進度回呼（`integrations/video`）、產生影片工作、成品網址 | API |
 | 10 | `feature/rules_qa-video-render-page` | 手機：產生影片、進度、播放（新增 `video_player`，`lesson_video_player` 補 `file`） | 新增套件 |
 
-- MR 1：測試先行、實作、自我檢查完成並 push（2026-11-21），等 Draft PR 與 CI
-- MR 2：測試先行、實作、自我檢查完成並 push（2026-11-21），等 Draft PR 與 CI
+- MR 1：#80，2026-11-21 核准並合併到 dev
+- MR 2：#81，2026-11-21 核准；base 已改回 dev，已合併 dev，等 CI
 - MR 3：測試先行、實作、自我檢查完成（2026-11-21），本機未 push（堆疊規則：MR 1 合併、MR 2 改回 dev 後才推）
 - MR 4：測試先行、實作、自我檢查完成（2026-11-21），本機未 push（堆疊規則）
+- MR 5：測試先行、實作、自我檢查完成（2026-11-21），本機未 push；本機驗收用真的 LLM 跑一次（暫時資料庫，驗收後刪除）
 - 存放（D5）相關的 MR（4、5、7、9）的說明列出「保留期限與是否刪除」的選項與後果（含專案上的規則書文字副本），由永傑與團隊決定。
 - 每個 MR 的 tasks（測試 → 實作 → 自我檢查 → MR 說明）在開工時補上。
 
