@@ -168,10 +168,9 @@ void main() {
       final provider = videoPagesProvider('p1');
       await container.read(provider.notifier).load();
       container.read(provider.notifier).editText(7, '改過');
-      await container.read(provider.notifier).selectPages(
-        chapter: [7, 8],
-        reference: [2],
-      );
+      await container
+          .read(provider.notifier)
+          .selectPages(chapter: [7, 8], reference: [2]);
       final (_, sent) = repo.savedPages.single;
       expect(sent.chapterPages, [7, 8]);
       expect(sent.referencePages, [2]);
@@ -247,7 +246,11 @@ void main() {
     test('產生草稿：queued → running → succeeded，完成後重新讀草稿', () async {
       final repo = FakeVideoStudioRepository()
         ..jobSequence = [
-          sampleVideoJob(status: VideoJobStatus.running, progress: 0.5, message: 'AI 產生草稿'),
+          sampleVideoJob(
+            status: VideoJobStatus.running,
+            progress: 0.5,
+            message: 'AI 產生草稿',
+          ),
           sampleVideoJob(status: VideoJobStatus.succeeded, progress: 1),
         ]
         ..drafts = {'p1': sampleDraft};
@@ -286,7 +289,9 @@ void main() {
           statusCode: 409,
           details: {'job_id': 'j-running'},
         )
-        ..jobSequence = [sampleVideoJob(id: 'j-running', status: VideoJobStatus.succeeded)];
+        ..jobSequence = [
+          sampleVideoJob(id: 'j-running', status: VideoJobStatus.succeeded),
+        ];
       final container = makeContainer(repo);
       final provider = videoJobProvider('p1');
       await container.read(provider.notifier).startDraft();
@@ -322,7 +327,10 @@ void main() {
 
     test('離開再回來：最近的工作已結束，就不查', () async {
       final repo = FakeVideoStudioRepository()
-        ..latestJobs['p1'] = sampleVideoJob(status: VideoJobStatus.failed, error: '失敗了');
+        ..latestJobs['p1'] = sampleVideoJob(
+          status: VideoJobStatus.failed,
+          error: '失敗了',
+        );
       final container = makeContainer(repo);
       final provider = videoJobProvider('p1');
       await container.read(provider.notifier).resume();

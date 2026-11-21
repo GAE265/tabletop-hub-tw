@@ -46,7 +46,9 @@ const jobJson = '''
 
 void main() {
   test('專案列表：GET /api/v1/rules-videos，解析 snake_case', () async {
-    final adapter = RecordingAdapter(body: '{"items": [$projectJson], "total": 1}');
+    final adapter = RecordingAdapter(
+      body: '{"items": [$projectJson], "total": 1}',
+    );
     final projects = await makeRepository(adapter).listProjects();
     expect(adapter.requests.single.path, '/api/v1/rules-videos');
     expect(projects.single.chapterTitle, '步驟三');
@@ -55,7 +57,8 @@ void main() {
 
   test('遊戲清單：GET /api/v1/games', () async {
     final adapter = RecordingAdapter(
-      body: '{"items": [{"id": 1, "name": "假遊戲", "english_name": "Fake"}], "total": 1}',
+      body:
+          '{"items": [{"id": 1, "name": "假遊戲", "english_name": "Fake"}], "total": 1}',
     );
     final games = await makeRepository(adapter).listGames();
     expect(adapter.requests.single.path, '/api/v1/games');
@@ -65,7 +68,11 @@ void main() {
   test('建立專案：POST，body 是 snake_case', () async {
     final adapter = RecordingAdapter(statusCode: 201, body: projectJson);
     await makeRepository(adapter).createProject(
-      const VideoProjectCreate(gameId: 1, chapterNumber: 11, chapterTitle: '步驟三'),
+      const VideoProjectCreate(
+        gameId: 1,
+        chapterNumber: 11,
+        chapterTitle: '步驟三',
+      ),
     );
     expect(adapter.requests.single.method, 'POST');
     expect(jsonDecode(adapter.bodies.single!), {
@@ -77,12 +84,17 @@ void main() {
 
   test('存頁面文字：PUT .../pages，texts 的 key 是頁碼字串', () async {
     final adapter = RecordingAdapter(
-      body: '{"available_pages": [7], "chapter_pages": [7], "reference_pages": [], '
+      body:
+          '{"available_pages": [7], "chapter_pages": [7], "reference_pages": [], '
           '"pages_version": 1, "pages": []}',
     );
     await makeRepository(adapter).savePages(
       'p1',
-      const VideoPagesUpdate(chapterPages: [7], referencePages: [], texts: {'7': '文字'}),
+      const VideoPagesUpdate(
+        chapterPages: [7],
+        referencePages: [],
+        texts: {'7': '文字'},
+      ),
     );
     expect(adapter.requests.single.method, 'PUT');
     expect(adapter.requests.single.path, '/api/v1/rules-videos/p1/pages');
@@ -111,7 +123,8 @@ void main() {
   test('還沒有草稿（404 RULES_VIDEO_DRAFT_NOT_FOUND）回 null', () async {
     final adapter = RecordingAdapter(
       statusCode: 404,
-      body: '{"error": {"code": "RULES_VIDEO_DRAFT_NOT_FOUND", "message": "這個專案還沒有草稿", '
+      body:
+          '{"error": {"code": "RULES_VIDEO_DRAFT_NOT_FOUND", "message": "這個專案還沒有草稿", '
           '"details": {}}}',
     );
     expect(await makeRepository(adapter).getDraft('p1'), isNull);
