@@ -2,10 +2,9 @@
 
 from collections.abc import Callable
 
-import pytest
-
 from app.core.config import Settings
 from app.integrations.realtime_voice import (
+    CloudRealtimeVoiceProvider,
     FakeRealtimeVoiceProvider,
     get_realtime_voice_provider,
 )
@@ -16,12 +15,10 @@ def test_fake(make_settings: Callable[..., Settings]) -> None:
     assert isinstance(provider, FakeRealtimeVoiceProvider)
 
 
-def test_cloud_not_implemented_yet(make_settings: Callable[..., Settings]) -> None:
+def test_cloud(make_settings: Callable[..., Settings]) -> None:
     settings = make_settings(
         host_realtime_provider="cloud",
         host_realtime_api_key="test-key",
         host_realtime_api_host="example.invalid",
     )
-    with pytest.raises(NotImplementedError) as exc:
-        get_realtime_voice_provider(settings)
-    assert "cloud" in str(exc.value)
+    assert isinstance(get_realtime_voice_provider(settings), CloudRealtimeVoiceProvider)
