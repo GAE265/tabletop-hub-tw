@@ -32,6 +32,9 @@ abstract interface class BookingRepository {
   /// 修改時間／人數（[patch] 內放要改的欄位）或變更狀態（`{'status': ...}`）。
   Future<Booking> patch(int id, Map<String, dynamic> patch);
 
+  /// 換桌：送上新桌子 id 清單（[tableIds]），回傳換桌後的訂位。
+  Future<Booking> changeTables(int id, List<int> tableIds);
+
   Future<BookingPage> listMine({
     String? status,
     String? fromDate,
@@ -139,6 +142,15 @@ class HttpBookingRepository implements BookingRepository {
     final r = await _dio.patch<Map<String, dynamic>>(
       '/api/v1/bookings/$id',
       data: patch,
+    );
+    return Booking.fromJson(r.data!);
+  });
+
+  @override
+  Future<Booking> changeTables(int id, List<int> tableIds) => _call(() async {
+    final r = await _dio.put<Map<String, dynamic>>(
+      '/api/v1/bookings/$id/tables',
+      data: {'table_ids': tableIds},
     );
     return Booking.fromJson(r.data!);
   });

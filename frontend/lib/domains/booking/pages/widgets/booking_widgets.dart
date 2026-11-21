@@ -240,16 +240,18 @@ class BookingCard extends StatelessWidget {
   }
 }
 
-/// 確認視窗；按「確定」回傳 true。
+/// 確認視窗；按「確定」回傳 true。[content] 是標題下方的說明文字。
 Future<bool> confirmBookingAction(
   BuildContext context, {
   required String title,
   required String confirmLabel,
+  String? content,
 }) async {
   final ok = await showDialog<bool>(
     context: context,
     builder: (context) => AlertDialog(
       title: Text(title),
+      content: content == null ? null : Text(content),
       actions: [
         TextButton(
           key: const Key('booking-cancel-dismiss'),
