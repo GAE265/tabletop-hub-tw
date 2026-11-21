@@ -128,11 +128,25 @@ def _concat(ffmpeg: Ffmpeg, parts: list[Path], target: Path, cache_dir: Path) ->
         lines.append(f"file '{path}'")
     listing.write_text("\n".join(lines) + "\n", encoding="utf-8")
     temporary = target.with_name(target.stem + ".tmp.mp4")
-    ffmpeg.run(
+    _run_to_temporary(
+        ffmpeg,
         ["-y", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", str(listing),
          "-c", "copy", str(temporary)],
+        temporary,
+        target,
         what="串接段影片",
     )  # fmt: skip
+
+
+def _run_to_temporary(
+    ffmpeg: Ffmpeg, args: list[str], temporary: Path, target: Path, *, what: str
+) -> None:
+    """ffmpeg 先寫暫存檔，成功才改名成正式檔；失敗時刪掉暫存檔再拋錯（#75 審核）。"""
+    try:
+        ffmpeg.run(args, what=what)
+    except BaseException:
+        temporary.unlink(missing_ok=True)
+        raise
     temporary.replace(target)
 
 
@@ -185,8 +199,7 @@ def _mix(
         "-t", f"{timeline.total:.3f}", "-movflags", "+faststart",
         str(temporary),
     ]  # fmt: skip
-    ffmpeg.run(args, what="混音")
-    temporary.replace(target)
+    _run_to_temporary(ffmpeg, args, temporary, target, what="混音")
 
 
 def _write_report(

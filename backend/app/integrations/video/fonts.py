@@ -6,6 +6,7 @@
 超出範圍時直接失敗，不靜默退回。
 """
 
+import hashlib
 from functools import lru_cache
 from pathlib import Path
 
@@ -50,7 +51,9 @@ class FontSet:
         """字型的識別字串，段快取用：換了字型，畫面就不同。"""
         if self.fallback:
             return "pillow-default"
-        return f"{self._paths[False]}|{self._paths[True]}|{self.index}"
+        # 加上字型檔內容的雜湊：同一個路徑換了字型檔，段影片也要重新編碼（#75 審核）
+        regular, bold = self._paths[False], self._paths[True]
+        return f"{regular}|{font_fingerprint(regular)}|{bold}|{font_fingerprint(bold)}|{self.index}"
 
     @property
     def warning(self) -> str | None:
@@ -107,3 +110,14 @@ def _tokens(text: str) -> list[str]:
     if word:
         tokens.append(word)
     return tokens
+
+
+@lru_cache(maxsize=16)
+def _fingerprint(path: str, size: int, mtime_ns: int) -> str:
+    return hashlib.sha256(Path(path).read_bytes()).hexdigest()[:16]
+
+
+def font_fingerprint(path: str) -> str:
+    """字型檔內容的雜湊（段快取用）。以大小與修改時間當快取鍵，同一個檔案不會重複計算。"""
+    stat = Path(path).stat()
+    return _fingerprint(path, stat.st_size, stat.st_mtime_ns)

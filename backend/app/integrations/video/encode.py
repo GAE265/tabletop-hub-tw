@@ -6,6 +6,7 @@
 """
 
 import dataclasses
+import glob
 import hashlib
 import json
 import tempfile
@@ -102,16 +103,18 @@ def encode_segments(
     results = []
     for timing in timeline.segments:
         key = timing.segment.segment_key
-        prefix = safe_file_part(key)
-        path = (
-            folder / f"{prefix}_{segment_hash(video, timing, timeline, style, renderer)[:16]}.mp4"
-        )
+        # 檔名＝安全檔名＋key 的短雜湊＋內容雜湊。key 的短雜湊讓「開頭相同」（s1 與 s1_2）
+        # 或「轉成檔名後相同」（s/1 與 s-1）的段各有自己的檔名前綴，清舊快取時不會互刪（#75 審核）
+        key_id = hashlib.sha256(key.encode()).hexdigest()[:8]
+        prefix = f"{safe_file_part(key)}__{key_id}__"
+        content = segment_hash(video, timing, timeline, style, renderer)[:16]
+        path = folder / f"{prefix}{content}.mp4"
         reused = path.is_file()
         if not reused:
             encoder.encode(timing, renderer, path)
             if not path.is_file():
                 raise VideoRenderError(f"段 {key} 編碼後沒有產生影片檔")
-            for old in folder.glob(f"{prefix}_*.mp4"):
+            for old in folder.glob(f"{glob.escape(prefix)}*.mp4"):
                 if old != path and not old.name.endswith(".tmp.mp4"):
                     old.unlink()
         results.append(EncodedSegment(key, path, reused))
