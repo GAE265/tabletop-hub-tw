@@ -1,6 +1,6 @@
 # 03：圖之一（換節點、結束、語音指令核對、整局記憶）
 
-Status: ready-for-agent
+Status: resolved
 Blocked by: 02
 Spec: [spec](../../host/spec.md) §3、§5、§9
 MR: [#68](https://github.com/GAE265/tabletop-hub-tw/pull/68)
@@ -30,12 +30,12 @@ MR: [#68](https://github.com/GAE265/tabletop-hub-tw/pull/68)
 
 ## 驗收條件
 
-- [ ] 先 commit 會失敗的測試，再 commit 功能（AGENTS.md §7.2）
-- [ ] spec §3.4 的 F-01 到 F-11、F-13 每一行都有測試而且通過（F-12 要有暫停，在 04）
-- [ ] spec §5.3 的 V-01 到 V-10 每一行都有測試而且通過
-- [ ] spec §4.5 的 C-06 到 C-08 每一行都有測試而且通過
-- [ ] spec §9 的 M-01、M-02、M-04、M-05 每一行都有測試而且通過（M-03 要有暫停，在 04）
-- [ ] 測試跑真的圖，不用 fake 取代圖（spec §13.1）
-- [ ] `graph.py` 沒有 import FastAPI 與任何模型廠商的 SDK（AGENTS.md §4.2）
-- [ ] AGENTS.md §2 第 7 點的後端三項檢查通過
-- [ ] 做完的最後一個 commit 把本檔的 `Status` 改成 `resolved`
+- [x] 先 commit 會失敗的測試，再 commit 功能（AGENTS.md §7.2）
+- [x] spec §3.4 的 F-01 到 F-11、F-13 每一行都有測試而且通過（F-12 要有暫停，在 04）
+- [x] spec §5.3 的 V-01 到 V-10 每一行都有測試而且通過
+- [x] spec §4.5 的 C-06 到 C-08 每一行都有測試而且通過
+- [x] spec §9 的 M-01、M-02、M-04、M-05 每一行都有測試而且通過（M-03 要有暫停，在 04）
+- [x] 測試跑真的圖，不用 fake 取代圖（spec §13.1）
+- [x] `graph.py` 沒有 import FastAPI 與任何模型廠商的 SDK（AGENTS.md §4.2）
+- [x] AGENTS.md §2 第 7 點的後端三項檢查通過
+- [x] 做完的最後一個 commit 把本檔的 `Status` 改成 `resolved`
