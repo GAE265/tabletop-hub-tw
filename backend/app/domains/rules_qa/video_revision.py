@@ -8,6 +8,7 @@
 import copy
 import dataclasses
 import json
+import os
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -15,7 +16,7 @@ from typing import Any
 
 from app.domains.rules_qa import video_prompts
 from app.domains.rules_qa.video_coverage import CoverageReport, video_hash
-from app.domains.rules_qa.video_script import FORBIDDEN_WORD, Term, _texts
+from app.domains.rules_qa.video_script import FORBIDDEN_WORD, PAGE_FILE, Term, _texts
 from app.integrations.llm import LLMProvider
 from app.integrations.llm.types import JsonSchema
 from app.integrations.video import VideoDataError, parse_video
@@ -705,6 +706,42 @@ def write_json(path: Path, data: Any) -> None:
 
 
 # --------------------------------------------------------------------------- 寫入後的涵蓋檢查
+
+RULEBOOK_DIR = "rulebook"
+
+
+def pages_from_source(folder: Path, data: dict[str, Any]) -> tuple[list[str], list[str]]:
+    """段資料 source_pages 記錄的本章頁面 → 頁面檔（相對 folder）。回傳 (頁面檔, 找不到的原因)。
+
+    source_pages 只能是本章的頁（草稿檢查不允許參考頁），所以就是涵蓋檢查要用的頁。
+    先找 <資料夾>/rulebook/，再找上一層的 rulebook/（草稿資料夾的規則書在上一層）。
+    有任何一頁找不到就整個不用：只拿部分頁面檢查，結果會不完整。
+    """
+    wanted = sorted(
+        {
+            (str(p.get("lang")), int(p.get("page")))
+            for segment in data["segments"]
+            for p in segment.get("source_pages") or []
+            if isinstance(p, dict) and isinstance(p.get("page"), int)
+        }
+    )
+    if not wanted:
+        return [], ["段資料沒有記錄 source_pages"]
+    found: dict[tuple[str, int], Path] = {}
+    for directory in (folder / RULEBOOK_DIR, folder.parent / RULEBOOK_DIR):
+        if not directory.is_dir():
+            continue
+        for path in sorted(directory.glob("*.txt")):
+            match = PAGE_FILE.match(path.name)
+            if match:
+                found.setdefault((match.group(1), int(match.group(2))), path)
+    missing = [
+        f"找不到 {lang} 第 {page} 頁的頁面檔" for lang, page in wanted if (lang, page) not in found
+    ]
+    if missing:
+        return [], missing
+    names = [Path(os.path.relpath(found[key], folder)).as_posix() for key in wanted]
+    return names, []
 
 
 def coverage_warnings(report: CoverageReport, beat_keys: set[str]) -> list[str]:

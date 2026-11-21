@@ -90,7 +90,15 @@
 
 #### Scenario: 寫入後的涵蓋檢查失敗
 - **WHEN** 涵蓋檢查的 LLM 無法使用或回空清單
-- **THEN** 只印警告，修改照樣寫入
+- **THEN** 印出「這次沒有做規則涵蓋檢查」與原因，修改照樣寫入
+
+#### Scenario: 沒有 --pages 時沿用 source_pages
+- **WHEN** 沒有 `--pages`，段資料的 `source_pages` 記錄的頁面檔都找得到（先找 `<資料夾>/rulebook/`，再找上一層的 `rulebook/`）
+- **THEN** 沿用那些頁面做涵蓋檢查，並印出用了哪些頁（2026-11-21 永傑要求）
+
+#### Scenario: 沒有 --pages 且頁面找不齊
+- **WHEN** 沒有 `--pages`，`source_pages` 有任何一頁找不到頁面檔，或段資料沒有 `source_pages`
+- **THEN** 不做涵蓋檢查，明確印出「這次沒有做規則涵蓋檢查」與缺哪一頁
 
 #### Scenario: LLM 無法使用
 - **WHEN** LLM 服務無法連線
