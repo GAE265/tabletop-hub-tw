@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/video_studio_models.dart';
@@ -9,6 +11,14 @@ final videoRenderProvider = FutureProvider.family<VideoRender?, String>(
       ref.read(videoStudioRepositoryProvider).getRender(projectId),
   retry: (_, _) => null,
 );
+
+/// 成品的影片檔（整支下載，離開看影片頁就釋放）。
+final videoRenderVideoProvider = FutureProvider.autoDispose
+    .family<Uint8List, String>(
+      (ref, projectId) =>
+          ref.read(videoStudioRepositoryProvider).getRenderVideo(projectId),
+      retry: (_, _) => null,
+    );
 
 String _segments(List<int> numbers) => numbers.join('、');
 

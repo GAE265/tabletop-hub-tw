@@ -404,9 +404,25 @@ abstract class VideoRender with _$VideoRender {
     required List<String> skippedAssets,
     required bool estimated,
     required List<String> warnings,
+    // 段清單（看影片頁點一段跳到那個時間點）
+    @Default([]) List<RenderSegment> segments,
     DateTime? finishedAt,
   }) = _VideoRender;
 
   factory VideoRender.fromJson(Map<String, dynamic> json) =>
       _$VideoRenderFromJson(json);
+}
+
+/// 成品的一段：第一句開始的秒數與字幕。
+@freezed
+abstract class RenderSegment with _$RenderSegment {
+  @JsonSerializable(fieldRename: FieldRename.snake)
+  const factory RenderSegment({
+    required String segmentKey,
+    required double startSeconds,
+    required String title,
+  }) = _RenderSegment;
+
+  factory RenderSegment.fromJson(Map<String, dynamic> json) =>
+      _$RenderSegmentFromJson(json);
 }
