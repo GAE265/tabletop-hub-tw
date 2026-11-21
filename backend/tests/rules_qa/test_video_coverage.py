@@ -141,3 +141,24 @@ def test_category_shown_in_table(tmp_path: Path) -> None:
     )
     _, report = _run(tmp_path, coverage_output([condition]))
     assert "| R3 | 條件 |" in report.markdown()
+
+
+# --- #76 審核修正：空清單與檢查了幾條 ---
+
+
+def test_empty_rule_list_is_invalid(tmp_path: Path) -> None:
+    _, report = _run(tmp_path, coverage_output([]))
+    assert report.is_valid is False
+    markdown = report.markdown()
+    assert "檢查無效" in markdown
+    assert "沒有發現問題" not in markdown
+
+
+def test_report_shows_checked_rule_count_and_rules(tmp_path: Path) -> None:
+    rule = coverage_rule(source="Reveal all cards at the same time.")
+    _, one = _run(tmp_path / "one", coverage_output([rule]))
+    _, empty = _run(tmp_path / "empty", coverage_output([]))
+    markdown = one.markdown()
+    assert "共檢查 1 條規則" in markdown
+    assert "R1" in markdown and "Reveal all cards at the same time." in markdown
+    assert markdown != empty.markdown()

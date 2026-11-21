@@ -350,3 +350,62 @@ def test_draft_writes_cleanup_log_and_compare_section(
     assert code == 0
     report = (folder / "draft" / "compare.md").read_text(encoding="utf-8")
     assert "自動清理" in report and "sidebar@ zone_a" in report
+
+
+# --- #76 審核修正：空清單、舊的檢查結果 ---
+
+_COVERAGE = ["--pages", "rulebook/en-005.txt"]
+
+
+def test_coverage_empty_rule_list_fails(
+    tmp_path: Path, make_settings: Callable[..., Settings], capsys: pytest.CaptureFixture[str]
+) -> None:
+    folder = write_inputs(write_game(tmp_path / "game", base_data()))
+    good = FakeLLMProvider(json_outputs=[coverage_output()])
+    assert main(["coverage", str(folder), *_COVERAGE], settings=make_settings(), llm=good) == 0
+    empty = FakeLLMProvider(json_outputs=[coverage_output([])])
+    code = main(["coverage", str(folder), *_COVERAGE], settings=make_settings(), llm=empty)
+    assert code != 0
+    assert "檢查無效" in capsys.readouterr().err
+    assert "檢查無效" in (folder / "coverage.md").read_text(encoding="utf-8")
+    assert not (folder / "coverage.json").exists()  # 舊的結果也一併刪掉
+
+
+def test_redraft_removes_old_coverage(
+    tmp_path: Path, make_settings: Callable[..., Settings], capsys: pytest.CaptureFixture[str]
+) -> None:
+    folder = write_inputs(write_game(tmp_path / "game", base_data()))
+    llm = FakeLLMProvider(json_outputs=[llm_output()])
+    assert main(_draft_args(folder), settings=make_settings(), llm=llm) == 0
+    draft = write_inputs(folder / "draft")
+    llm = FakeLLMProvider(json_outputs=[coverage_output()])
+    assert main(["coverage", str(draft), *_COVERAGE], settings=make_settings(), llm=llm) == 0
+
+    second = llm_output()
+    second["segments"][0]["beats"][0]["narration"] = "第二份草稿的旁白。"
+    llm = FakeLLMProvider(json_outputs=[second])
+    assert main(_draft_args(folder), settings=make_settings(), llm=llm) == 0
+    assert not (draft / "coverage.json").exists()
+    assert not (draft / "coverage.md").exists()
+    assert main(["compare", str(draft), str(folder)], settings=make_settings()) == 0
+    assert "未做規則涵蓋檢查" in (draft / "compare.md").read_text(encoding="utf-8")
+    capsys.readouterr()
+
+
+def test_compare_marks_stale_coverage(
+    tmp_path: Path, make_settings: Callable[..., Settings], capsys: pytest.CaptureFixture[str]
+) -> None:
+    ai = write_inputs(write_game(tmp_path / "ai", base_data()))
+    write_game(tmp_path / "hand", base_data())
+    llm = FakeLLMProvider(json_outputs=[coverage_output()])
+    assert main(["coverage", str(ai), *_COVERAGE], settings=make_settings(), llm=llm) == 0
+    compare = ["compare", str(ai), str(tmp_path / "hand")]
+    assert main(compare, settings=make_settings()) == 0
+    assert "已過期" not in (ai / "compare.md").read_text(encoding="utf-8")
+
+    data = json.loads((ai / "video.json").read_text(encoding="utf-8"))
+    data["segments"][0]["beats"][0]["subtitle"] = "手動改過的字幕"
+    (ai / "video.json").write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    assert main(compare, settings=make_settings()) == 0
+    assert "已過期" in (ai / "compare.md").read_text(encoding="utf-8")
+    capsys.readouterr()
