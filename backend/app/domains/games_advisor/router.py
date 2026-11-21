@@ -22,14 +22,21 @@ from app.domains.games_advisor.schemas import (
 )
 from app.domains.games_advisor.search import GameSearch
 from app.domains.games_advisor.service import embedding_model_name
+from app.domains.shops.router import get_shops_service
+from app.domains.shops.service import ShopsService
 
 router = APIRouter(prefix="/advisor", tags=["games_advisor"])
 
 
 def get_conversation_service(
-    request: Request, session: Annotated[Session, Depends(get_session)]
+    request: Request,
+    session: Annotated[Session, Depends(get_session)],
+    shops: Annotated[ShopsService, Depends(get_shops_service)],
 ) -> ConversationService:
-    """組出對話 service：LLM 與 embedding 用後端啟動時建立的 provider。測試會覆寫這個依賴。"""
+    """組出對話 service：LLM 與 embedding 用後端啟動時建立的 provider。測試會覆寫這個依賴。
+
+    店家庫存只透過 shops 的 service 查（AGENTS.md 4.2）。
+    """
     state = request.app.state
     search = GameSearch(
         games=GameRepository(session),
@@ -38,7 +45,7 @@ def get_conversation_service(
         embedding=state.games_advisor_embedding,
         embedding_model=embedding_model_name(state.games_advisor_embedding_config),
     )
-    return ConversationService(search=search, llm=state.llm)
+    return ConversationService(search=search, llm=state.llm, stock=shops)
 
 
 @router.post("/messages", status_code=201, response_model=MessageResponse)
@@ -48,7 +55,7 @@ def create_message(
     service: Annotated[ConversationService, Depends(get_conversation_service)],
 ) -> MessageResponse:
     """送出一則訊息，Agent 追問或推薦最多 3 款桌遊。"""
-    reply = service.send_message(user, body.content, body.previous_response_id)
+    reply = service.send_message(user, body.content, body.previous_response_id, body.shop_id)
     return MessageResponse(
         response_id=reply.response_id,
         reply=reply.reply,
@@ -58,6 +65,7 @@ def create_message(
                 game=AdvisorGame(**card.game),
                 reason=card.reason,
                 excerpts=[AdvisorExcerpt(**excerpt) for excerpt in card.excerpts],
+                in_stock=card.in_stock,
             )
             for card in reply.recommendations
         ],

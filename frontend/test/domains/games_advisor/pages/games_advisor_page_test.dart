@@ -72,6 +72,7 @@ final newButton = find.byKey(const Key('advisor-new'));
 Future<FakeAdvisorRepository> pumpPage(
   WidgetTester tester, {
   Size size = const Size(400, 900),
+  Widget page = const GamesAdvisorPage(),
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
@@ -82,7 +83,7 @@ Future<FakeAdvisorRepository> pumpPage(
       overrides: [advisorRepositoryProvider.overrideWithValue(repo)],
       child: MaterialApp(
         theme: buildAppTheme(const FakeAppFonts()),
-        home: const GamesAdvisorPage(),
+        home: page,
       ),
     ),
   );
@@ -318,6 +319,110 @@ void main() {
       final column = tester.getRect(find.byKey(const Key('advisor-column')));
       expect(column.width, lessThan(1280));
       expect(column.center.dx, closeTo(640, 1));
+    });
+  });
+
+  group('店家沒有這款桌遊的提示（spec §19）', () {
+    const shopId = 'c0000000-0000-4000-8000-000000000001';
+    const hint = '這間店目前沒有這款桌遊';
+
+    AdvisorRecommendation card(AdvisorGame game, bool? inStock) =>
+        AdvisorRecommendation(
+          game: game,
+          reason: '規則簡單。',
+          excerpts: const [],
+          inStock: inStock,
+        );
+
+    const catan = AdvisorGame(
+      id: 12,
+      name: '卡坦島',
+      minPlayers: 3,
+      maxPlayers: 4,
+      minPlaytime: 60,
+      maxPlaytime: 90,
+      minAge: 10,
+      weight: 2.3,
+    );
+
+    testWidgets('in_stock 是 false、true、null：只有 false 那張顯示提示', (tester) async {
+      final repo = await pumpPage(
+        tester,
+        page: GamesAdvisorPage.fromQuery(const {'shop_id': shopId}),
+      );
+      await ask(
+        tester,
+        repo,
+        '我們 4 個人',
+        AdvisorMessageResponse(
+          responseId: 'r-1',
+          reply: '這三款都適合。',
+          relaxedConstraint: null,
+          recommendations: [
+            card(avalon, false),
+            card(animals, true),
+            card(catan, null),
+          ],
+        ),
+      );
+
+      expect(find.text(hint), findsOneWidget);
+      final cardOf = find.ancestor(
+        of: find.text(hint),
+        matching: find.byKey(const Key('advisor-game-card')),
+      );
+      expect(
+        find.descendant(of: cardOf, matching: find.text('阿瓦隆')),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('網址帶 shop_id：送出的請求帶這間店', (tester) async {
+      final repo = await pumpPage(
+        tester,
+        page: GamesAdvisorPage.fromQuery(const {'shop_id': shopId}),
+      );
+      await ask(tester, repo, '我們 4 個人', textOnly);
+      await ask(tester, repo, '想玩 30 分鐘', textOnly);
+
+      expect(repo.requests.map((r) => r.shopId), [shopId, shopId]);
+    });
+
+    for (final (name, query) in [
+      ('沒有 shop_id', const <String, String>{}),
+      ('shop_id 是空的', const {'shop_id': ''}),
+    ]) {
+      testWidgets('網址$name：請求不帶店家，卡片沒有提示', (tester) async {
+        final repo = await pumpPage(
+          tester,
+          page: GamesAdvisorPage.fromQuery(query),
+        );
+        await ask(tester, repo, '我們 4 個人', cards());
+
+        expect(repo.requests.single.shopId, isNull);
+        expect(find.text(hint), findsNothing);
+      });
+    }
+
+    testWidgets('手機寬度（360）有提示時沒有溢出', (tester) async {
+      final repo = await pumpPage(
+        tester,
+        size: const Size(360, 800),
+        page: GamesAdvisorPage.fromQuery(const {'shop_id': shopId}),
+      );
+      await ask(
+        tester,
+        repo,
+        '我們 4 個人',
+        AdvisorMessageResponse(
+          responseId: 'r-1',
+          reply: '這款適合。',
+          relaxedConstraint: null,
+          recommendations: [card(avalon, false)],
+        ),
+      );
+
+      expect(find.text(hint), findsOneWidget);
     });
   });
 }

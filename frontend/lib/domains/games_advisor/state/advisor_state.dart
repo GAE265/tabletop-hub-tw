@@ -88,6 +88,12 @@ abstract class AdvisorState with _$AdvisorState {
 
 /// 推薦 Agent 的對話與操作。參考畫面（prototypes）與正式頁面（pages）共用這一份。
 class AdvisorNotifier extends Notifier<AdvisorState> {
+  AdvisorNotifier([this.shopId]);
+
+  /// 玩家是從哪間店進到推薦頁的；這段對話的每一則訊息都帶上，開始新對話也不變。
+  /// 沒有店家時是 null。
+  final String? shopId;
+
   @override
   AdvisorState build() => const AdvisorState();
 
@@ -103,6 +109,7 @@ class AdvisorNotifier extends Notifier<AdvisorState> {
     final request = AdvisorMessageRequest(
       content: text,
       previousResponseId: state.responseId,
+      shopId: shopId,
     );
     state = state.copyWith(
       messages: [...state.messages, PlayerMessage(text)],
@@ -158,8 +165,16 @@ class AdvisorNotifier extends Notifier<AdvisorState> {
   }
 }
 
+/// 網址的 `shop_id` 轉成對話要帶的店家 id：沒帶或是空的就是沒有店家（null）。
+String? advisorShopIdFromQuery(Map<String, String> query) {
+  final shopId = query['shop_id']?.trim() ?? '';
+  return shopId.isEmpty ? null : shopId;
+}
+
+/// 帶著某間店的對話；參數是店家 id，沒有店家給 null。
 /// 離開頁面就丟掉（autoDispose）；也不存進瀏覽器，所以重新整理或換頁回來都是新對話。
-final advisorProvider =
-    NotifierProvider.autoDispose<AdvisorNotifier, AdvisorState>(
-      AdvisorNotifier.new,
-    );
+final advisorForShopProvider = NotifierProvider.autoDispose
+    .family<AdvisorNotifier, AdvisorState, String?>(AdvisorNotifier.new);
+
+/// 沒有店家的對話。
+final advisorProvider = advisorForShopProvider(null);

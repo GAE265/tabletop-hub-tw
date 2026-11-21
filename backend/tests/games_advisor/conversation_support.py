@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, Any
 
 from app.integrations.embedding import FakeEmbeddingProvider
 from app.integrations.llm import FakeLLMProvider, FakeResponse, ToolCall
-from tests.games_advisor.fakes import FakeSearchRepository
+from tests.games_advisor.fakes import FakeSearchRepository, FakeShopStock
 from tests.games_advisor.support import make_tag
 
 if TYPE_CHECKING:
@@ -91,6 +91,7 @@ def make_service(
     responses: list[FakeResponse | Exception] | None,
     repo: FakeSearchRepository | None = None,
     embedding: FakeEmbeddingProvider | None = None,
+    stock: FakeShopStock | None = None,
 ) -> tuple["ConversationService", FakeLLMProvider, FakeSearchRepository]:
     from app.domains.games_advisor.conversation import ConversationService
     from app.domains.games_advisor.search import GameSearch
@@ -104,7 +105,10 @@ def make_service(
         embedding=embedding or FakeEmbeddingProvider(DIM),
         embedding_model=MODEL,
     )
-    return ConversationService(search=game_search, llm=llm), llm, repo
+    if stock is None:
+        # 沒給庫存就照原本的方式建立：不帶店家的對話不需要它
+        return ConversationService(search=game_search, llm=llm), llm, repo
+    return ConversationService(search=game_search, llm=llm, stock=stock), llm, repo
 
 
 def responds(llm: FakeLLMProvider) -> list[dict[str, Any]]:

@@ -294,4 +294,47 @@ void main() {
       expectInitial(container.read(advisorProvider));
     });
   });
+
+  group('帶著店家進頁面（spec §19）', () {
+    const shopId = 'c0000000-0000-4000-8000-000000000001';
+
+    test('以 shop_id 進入後送兩則訊息：兩則請求都帶同一個 shop_id', () async {
+      final provider = advisorForShopProvider(shopId);
+      container.listen(provider, (_, _) {});
+      final shopAdvisor = container.read(provider.notifier);
+
+      final first = shopAdvisor.sendMessage('我們 4 個人');
+      repo.respond(reply());
+      await first;
+      final second = shopAdvisor.sendMessage('想玩 30 分鐘');
+      repo.respond(reply(responseId: 'resp_2'));
+      await second;
+
+      expect(repo.requests.map((r) => r.shopId), [shopId, shopId]);
+      expect(repo.requests.last.previousResponseId, 'resp_1');
+    });
+
+    test('開始新對話之後，還是帶同一個 shop_id', () async {
+      final provider = advisorForShopProvider(shopId);
+      container.listen(provider, (_, _) {});
+      final shopAdvisor = container.read(provider.notifier);
+
+      final first = shopAdvisor.sendMessage('我們 4 個人');
+      repo.respond(reply());
+      await first;
+      shopAdvisor.startNewConversation();
+      final second = shopAdvisor.sendMessage('2 個人');
+      repo.respond(reply());
+      await second;
+
+      expect(repo.requests.last.shopId, shopId);
+      expect(repo.requests.last.previousResponseId, isNull);
+    });
+
+    test('沒帶店家：請求的 shop_id 是 null', () async {
+      await exchange('我們 4 個人', reply());
+
+      expect(repo.requests.single.shopId, isNull);
+    });
+  });
 }
