@@ -26,8 +26,10 @@ class _ShopInventoryProtoPageState
 
   Future<void> _load() async {
     final notifier = ref.read(shopsProvider.notifier);
-    await notifier.loadInventory(widget.shopId);
+    // 庫存放最後載入：state 每次操作成功都會清掉錯誤，
+    // 先載入庫存的話，它的錯誤（403、404）會被後面成功的桌遊清單蓋掉
     await notifier.loadChoices();
+    await notifier.loadInventory(widget.shopId);
   }
 
   @override
