@@ -212,3 +212,24 @@ def test_coverage_issues_are_kept(factory, rules_db, project):
     _run(factory, rules_db, project, llm)
     report = project_row(rules_db, project).coverage["report"]
     assert report["rules"][0]["narration"]["missing"] == "同時翻開"
+
+
+def test_coverage_records_text_hash(factory, rules_db, project):
+    # 涵蓋檢查記下旁白與字幕的雜湊，之後用來判斷是否過期（2026-11-21 永傑決定）
+    from app.domains.rules_qa.video_draft import narration_text_hash
+
+    _run(
+        factory, rules_db, project, FakeLLMProvider(json_outputs=[llm_output(), coverage_output()])
+    )
+    saved = project_row(rules_db, project)
+    assert saved.coverage["text_hash"] == narration_text_hash(saved.video)
+
+
+def test_text_hash_ignores_assets_but_not_subtitles() -> None:
+    from app.domains.rules_qa.video_draft import narration_text_hash
+
+    video = {"segments": [{"beats": [{"narration": "甲", "subtitle": "乙"}]}], "assets": []}
+    same = {**video, "assets": [{"asset_key": "x", "file": "x.jpg"}]}
+    changed = {"segments": [{"beats": [{"narration": "甲", "subtitle": "丙"}]}], "assets": []}
+    assert narration_text_hash(video) == narration_text_hash(same)
+    assert narration_text_hash(video) != narration_text_hash(changed)

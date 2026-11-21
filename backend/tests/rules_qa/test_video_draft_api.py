@@ -185,13 +185,31 @@ def test_coverage_not_done_is_shown(api, as_shop_staff, rules_db, project):
     assert coverage["issues"] == []
 
 
-def test_coverage_stale_when_video_changed(api, as_shop_staff, rules_db, project):
+def test_coverage_stale_when_narration_changed(api, as_shop_staff, rules_db, project):
+    # 涵蓋檢查「過期」看旁白與字幕的雜湊（2026-11-21 永傑決定；原本看 video_version）
     _draft(rules_db, project)
     with rules_db.begin() as conn:
         conn.execute(
             text(
-                "UPDATE rules_qa_video_projects SET video_version = video_version + 1 WHERE id = :p"
+                "UPDATE rules_qa_video_projects SET video = jsonb_set(video, "
+                "'{segments,0,beats,0,narration}', '\"改過的旁白\"'), "
+                "video_version = video_version + 1 WHERE id = :p"
             ),
             {"p": project},
         )
     assert api.get(f"{URL}/{project}/draft").json()["coverage"]["status"] == "stale"
+
+
+def test_coverage_not_stale_when_only_assets_changed(api, as_shop_staff, rules_db, project):
+    # 上傳照片、改區域會讓 video_version 加 1，但旁白字幕沒變，涵蓋檢查不算過期
+    _draft(rules_db, project)
+    with rules_db.begin() as conn:
+        conn.execute(
+            text(
+                "UPDATE rules_qa_video_projects SET video = jsonb_set(video, "
+                "'{assets,0,file}', '\"photo.jpg\"'), video_version = video_version + 1 "
+                "WHERE id = :p"
+            ),
+            {"p": project},
+        )
+    assert api.get(f"{URL}/{project}/draft").json()["coverage"]["status"] == "done"
