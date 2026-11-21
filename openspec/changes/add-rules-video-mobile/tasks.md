@@ -36,7 +36,7 @@
 | 2 | `feature/rules_qa-video-jobs` | 工作資料表、背景執行緒、查詢 API、重新啟動的處理 | API、migration |
 | 3 | `feature/rules_qa-video-terms` | 用語對照表資料表、管理員上傳 API | API、migration |
 | 4 | `feature/rules_qa-video-draft-api` | 草稿工作（讀 `games_manual` → 草稿 → 涵蓋檢查）、草稿查詢；工作資料夾與存放介面 | API |
-| 5 | `feature/rules_qa-video-draft-page` | 手機：專案列表、建立專案、規則書頁面（沿用 `rules_ingest`）、選頁產生草稿、看草稿、素材清單與涵蓋檢查 | — |
+| 5 | `feature/rules_qa-video-draft-page` | 手機：專案列表、建立專案、規則書頁面（沿用 `rules_ingest`）、選頁產生草稿、看草稿、素材清單與涵蓋檢查；**這款遊戲從未上傳用語對照表時，提示店員草稿的用詞品質可能下降**（design.md D4） | — |
 | 6 | `feature/rules_qa-video-assets-api` | 素材照片上傳、方向、區域座標、缺什麼的檢查 | API |
 | 7 | `feature/rules_qa-video-assets-page` | 手機：素材清單、拍照上傳、旋轉、拖框標區域 | — |
 | 8 | `feature/rules_qa-video-render-api` | `render_video` 的進度回呼（`integrations/video`）、產生影片工作、成品網址 | API |

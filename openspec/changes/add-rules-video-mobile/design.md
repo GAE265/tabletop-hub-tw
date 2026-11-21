@@ -41,9 +41,14 @@
 
 **D3 規則書頁面。** 沿用 `rules_ingest` 的上傳與 OCR，不另做。草稿工作從 `games_manual` 讀店員選的本章頁與參考頁（`read_manual_pages`）。`games_manual` 沒有語言欄位，頁面的 `lang` 一律記為 `zh`（之後需要再加設定）。
 
-**D4 用語對照表（`rules_qa_video_terms`）。** 每款遊戲一份（Q5 b）：`game_id`（主鍵）、`terms`（JSONB，格式同 `terms.json`：`en`、`zh`、`key`、`avoid`、`category`）、`updated_at`。
-- `PUT /api/v1/games/{game_id}/video-terms`：只有 `admin`，上傳 JSON，用 `load_terms` 的規則驗證（格式錯回 422）。
-- 草稿工作有對照表就帶入，沒有就不帶，並在草稿結果註明「沒有用語對照表」。
+**D4 用語對照表（`rules_qa_video_terms`，MR 3；2026-11-21 永傑確認）。** 每款遊戲一份、所有店家共用（Q5 b）：`game_id`（主鍵）、`terms`（JSONB，格式同 `terms.json`）、`updated_by`、`updated_at`。
+- `PUT /api/v1/games/{game_id}/video-terms`：只有 `admin`；body `{"terms": [...]}`，整份取代。`GET` 同路徑：`admin`、`shop_staff` 可看。
+- **每一筆**：`en`、`zh` 必填，去掉前後空白後 1–100 字；`key` 選填（1–100 字）；`avoid` 選填，字串陣列（每個 1–100 字；空字串會比對到所有文字，所以不允許）；`category` 選填，`generic`（泛稱）或 `single`（單一種牌）。最多 500 筆。
+- **`en` 不能重複**：去掉前後空白、不分大小寫後比對（「White Rose」與「 white rose 」算重複）→ 422 `RULES_VIDEO_TERMS_DUPLICATE`。
+- **`key` 可以重複**：規則書常用兩個英文名稱指同一個區域或物件，例如 *White Rose placement area* 與 *Sanctuary* 都對到 `white_rose_zone`（《血與刃》的對照表就是這樣）。`key` 的用途是把用詞對到素材或區域，本來就可能多對一。但**同一個 `key` 的 `category` 必須一致**：只有兩筆都填了 `category` 才比較，一筆有、一筆沒有不算不一致；`key` 也是去掉空白、不分大小寫後比對。不一致 → 422 `RULES_VIDEO_TERMS_CATEGORY_CONFLICT`。
+- **驗證規則與命令列共用**：`load_terms`（讀本機 `terms.json`）與 API 用同一份規則，命令列遇到上述錯誤也會報錯。
+- **還沒上傳時 `GET` 回 404 `RULES_VIDEO_TERMS_NOT_FOUND`**，不回空表：「從未上傳」與「上傳了空表」意思不同——上傳空表是管理員確認這款遊戲不使用對照表；從未上傳是還沒準備好。草稿頁要能分辨，才知道該不該提醒店員。
+- 草稿工作（MR 4）有對照表就帶入，沒有就不帶；**MR 4 的草稿頁在「從未上傳」時提示店員「這款遊戲還沒有用語對照表，草稿的用詞品質可能下降」**。
 
 **D5 存放（Q1）。** 本機磁碟，中間隔一層存放介面：
 - 素材照片、成品影片：透過 `integrations/storage`（本機實作，`STORAGE_LOCAL_DIR`）；之後要換雲端只換設定。
