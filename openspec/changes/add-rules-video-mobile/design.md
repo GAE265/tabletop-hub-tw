@@ -304,6 +304,13 @@
 
 - `core/platform/lesson_video_player.dart` 補上 `file` 來源（`video_player`；網頁版用 blob 網址，見 MR 7 待決 1）。
 
+*實作決定（2026-11-22，做 MR 10 時補充；播放方式永傑確認）*：
+- **播放用 `video_player`**（永傑選定）：新增 `video_player`，並把原本就是間接依賴的 `web` 改成直接依賴（建立 blob 網址）。版本配合 CI 的 Flutter 3.41.4：`video_player` 2.11.1、`web` 1.1.1（較新的版本需要 Flutter 3.44 以上）；`pubspec.lock` 只加新套件，SDK 綁定的套件版本不動。
+- 播放器包在 `core/platform/video_file_player.dart`（`VideoFilePlayer`、`VideoPlayback`、控制列 `VideoPlaybackControls`）後面，頁面與測試不直接用套件；blob 網址在 `core/platform/blob_url*.dart`（只有網頁版，其他平台之後改成暫存檔）。沒有沿用 `lesson_video_player.dart`：那裡播的是有網址的教學影片，這裡是帶身分下載的檔案內容。
+- **段清單**：MR 9 的成品結果加上每段第一句的開始秒數與字幕（從 `timing.csv` 讀），看影片頁點一段就跳到那裡並播放。
+- 產生影片頁顯示真正的百分比（外觀決定）；草稿工作仍是不確定進度的橫條。工作進度卡依工作種類決定「重試」與完成後的按鈕（查看草稿／看影片）。
+
+
 *情境表格*：
 
 | 類別 | 情境 | 預期結果 |
