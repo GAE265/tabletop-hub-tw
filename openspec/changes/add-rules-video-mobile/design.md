@@ -281,6 +281,20 @@
 | 權限 | 別家店、玩家、沒登入 | 404、403、401 |
 | external（integrations） | 真的 ffmpeg 輸出時進度回呼的順序與次數 | 與段數一致；成品與第 1 階段相同規格 |
 
+*實作決定（2026-11-22，做 MR 9 時補充；前三項永傑確認）*：
+- **以第 2 階段 MR 1 為基礎**：本機把 `feature/integrations-video-progress-overlay`（進度條串接後才疊上、改一段只重新編碼那一段）merge 進 MR 9 的分支，進度回呼與逾時直接寫在新版 pipeline 上。MR 9 要等它合併後才能推。
+- **工作資料夾設定**：`core/config.py` 新增 `RULES_VIDEO_WORK_DIR`（預設 `backend/.local/rules_videos`，已被 gitignore），`.env.example` 補欄位說明；部署時改到持久的磁碟（@立倫）。
+- **選拍可以略過（永傑決定）**：記在素材的 `usable` 欄位（`false`＝店員略過；段資料原本就有這個預留欄位，不用 migration），可以取消略過。
+  - 只有選拍可以略過（必拍回 422 `RULES_VIDEO_SKIP_NOT_OPTIONAL`）。
+  - 略過後，用到它的每一段仍必須有內容：程式固定判斷，拿掉這張素材（槽位、卡牌項目、以它為牌背的項目）以及指向被拿掉東西的 highlight、label、cue 後，若某段的必填槽位（`main`）空了，就是「第 N 段只靠這張」，不能略過（422 `RULES_VIDEO_SKIP_BLOCKED`，details 列出段號）。
+  - 素材明細與 readiness 的缺照片清單附上 `skip_blocked_segments`（不能略過的原因）與 `skip_affected_segments`（略過後會少一張圖的段），手機頁用來顯示「第 N 段只靠這張，不能略過」與略過前的「略過後第 N 段會少一張圖」。
+  - 略過的素材不列在 readiness；產生影片時才把它和引用它的地方從要輸出的段資料拿掉（資料庫的草稿不改）。
+  - 重新產生草稿時不沿用略過（新草稿的素材清單可能不同，由店員重新決定）。
+- **專案步驟**：有草稿、還沒拍任何照片 → `draft`（保留 MR 5 的行為，店員還在確認草稿）；拍了至少一張或略過了素材、但還沒齊 → `assets`；齊了、還沒有成品 → `render`；有成功的成品 → `done`。
+- **逾時**：TTS 每句原本就有 30 秒逾時（`integrations/tts`）。ffmpeg 每次呼叫加上限（`Ffmpeg(timeout_seconds=)`，逾時就結束子程序並拋錯）；產生影片的工作用 10 分鐘（domain 常數，不加設定），整個工作仍受 30 分鐘的工作逾時限制。
+- **段的 `rendered` 狀態**：`mark_rendered` 在第 2 階段 MR 2（還沒合併），本 MR 不標，等第 2 階段合併後再接上。
+- 成品影片用帶身分的 API 整支讀出（MR 7 待決 1），只能在網頁使用。
+
 **D16 MR 10 產生與播放手機頁（`feature/rules_qa-video-render-page`；新增套件 `video_player`，MR 說明寫理由）**
 
 | 路由 | 畫面 | 主要內容 |
