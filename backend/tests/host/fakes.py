@@ -1,7 +1,8 @@
-"""host 測試用的手寫 fake（AGENTS.md §7.5）：查規則、思考模型。"""
+"""host 測試用的手寫 fake（AGENTS.md §7.5）：查規則、思考模型、時鐘。"""
 
 import threading
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 
 from app.integrations.llm import LLMProvider, LLMResponse, ToolResult, ToolSpec
 from app.integrations.llm.types import JsonSchema
@@ -68,3 +69,16 @@ class FakeThinkingModel(LLMProvider):
     ) -> LLMResponse:
         self.other_calls.append("respond")
         raise AssertionError("思考模型節點只該呼叫 generate()")
+
+
+class FakeClock:
+    """可以控制的假時鐘：呼叫它拿現在的時間（UTC），advance 讓時間往前走。"""
+
+    def __init__(self) -> None:
+        self.now = datetime(2026, 11, 22, 12, 0, tzinfo=UTC)
+
+    def __call__(self) -> datetime:
+        return self.now
+
+    def advance(self, *, seconds: float = 0, minutes: float = 0) -> None:
+        self.now += timedelta(seconds=seconds, minutes=minutes)
