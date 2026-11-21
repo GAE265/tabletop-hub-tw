@@ -18,8 +18,14 @@
 
 ## Decisions（2026-11-21 永傑確認 Q1–Q8）
 
-**D1 影片專案（`rules_qa_video_projects`）。** 一個專案＝一章（Q4）。欄位（草案）：`id`（UUID）、`game_id`、`shop_id`、`created_by`、`chapter_number`、`chapter_title`、`chapter_pages`、`reference_pages`、`video`（JSONB，`video.json` 的內容，含 `state`、`revisions`）、`created_at`、`updated_at`。
-- 權限：`shop_staff` 只能存取自己店的專案（別家店的回 404，不透露存在）；`admin` 全部；`player` 403。
+**D1 影片專案（`rules_qa_video_projects`）。** 一個專案＝一章（Q4）。
+- MR 1 的欄位：`id`（UUID）、`game_id`、`shop_id`、`created_by`、`chapter_number`（≥ 1）、`chapter_title`（1–50 字，去掉前後空白後不可為空）、`created_at`、`updated_at`。
+- 本章頁、參考頁、段資料等欄位**等 MR 4 用到時再加**（2026-11-21 永傑決定：沒有寫入也沒有測試的欄位，審核看不出設計對不對；段資料欄位會決定資料庫與 `video.json` 誰是正本，要在 MR 4 一起決定）。
+- **`step`（目前步驟）不存欄位，由其他狀態推出**。MR 1 沒有其他狀態，固定回 `pages`（上傳規則書）；之後的 MR 依草稿、素材、工作的狀態推出 `draft`、`assets`、`render` 等值，加值時在該 MR 寫明推導規則。
+- 建立：店員的店家用登入身分的 `shop_id`，body 帶別家店回 403；管理員必須帶 `shop_id`（沒帶 422，店家不存在 404）。
+- **同一間店、同一款遊戲、同一章可以建立多個專案**（2026-11-21 永傑決定）：例如重拍一版或比較兩份草稿，不加唯一限制。
+- 列表：`page`（≥ 1）、`page_size`（1–100，預設 20），依 `updated_at` 由新到舊；回 `{items, total}`。
+- 權限：`shop_staff` 只能存取自己店的專案（別家店的回 404，不透露存在）；`admin` 全部；`player` 403；沒登入 401。
 
 **D2 非同步工作（`rules_qa_video_jobs`）。** 草稿（含涵蓋檢查）、產生影片一律做成工作（Q7）：
 - `POST` 建立工作，回 202 與工作 id；前端每幾秒查一次 `GET .../jobs/{id}`。
