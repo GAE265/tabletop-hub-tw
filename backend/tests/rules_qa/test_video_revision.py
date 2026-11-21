@@ -337,7 +337,7 @@ def test_unsupported_saves_alternatives_and_request(tmp_path: Path, run: Run) ->
     before = copy.deepcopy(data)
     flip = copy.deepcopy(segment(data, "s1"))
     flip["beats"][1]["cues"][1] = {"at": 1.0, "do": "flip", "target": "main.c1"}
-    alternatives = [_alternative("改成翻牌", flip), _alternative("改成移動", segment(data, "s1"))]
+    alternatives = [_alternative("改成翻牌", flip), _alternative("改成移動", _move_to_zone_b(data))]
     llm = FakeLLMProvider(json_outputs=[_unsupported(*alternatives)])
     code, out, err = run("revise", str(folder), "讓牌旋轉著飛進盤面", llm=llm)
     assert code == 0, err
@@ -358,7 +358,7 @@ def test_unknown_action_goes_to_alternatives(tmp_path: Path, run: Run) -> None:
     before = copy.deepcopy(data)
     rotate = copy.deepcopy(segment(data, "s1"))
     rotate["beats"][1]["cues"][1] = {"at": 1.0, "do": "rotate", "target": "main.c1"}
-    alternatives = _unsupported(_alternative("改成翻牌", segment(data, "s1")), reason="不支援旋轉")
+    alternatives = _unsupported(_alternative("改成翻牌", _flip(data)), reason="不支援旋轉")
     llm = FakeLLMProvider(json_outputs=[_revise(_entry(rotate, ["cues"])), alternatives])
     code, out, err = run("revise", str(folder), "讓牌旋轉", llm=llm)
     assert code == 0, err
@@ -396,9 +396,7 @@ def test_choose_errors(tmp_path: Path, run: Run, situation: str) -> None:
     folder = _game(tmp_path)
     data = _video(folder)
     if situation == "out_of_range":
-        llm = FakeLLMProvider(
-            json_outputs=[_unsupported(_alternative("改成翻牌", segment(data, "s1")))]
-        )
+        llm = FakeLLMProvider(json_outputs=[_unsupported(_alternative("改成翻牌", _flip(data)))])
         assert run("revise", str(folder), "旋轉", llm=llm)[0] == 0
     if situation == "proposal_pending":
         llm = FakeLLMProvider(json_outputs=[_revise(_entry(_gold_to_red(data), ["highlights"]))])
@@ -535,6 +533,12 @@ def _noop(data: dict[str, Any]) -> dict[str, Any]:
 def _flip(data: dict[str, Any]) -> dict[str, Any]:
     changed = copy.deepcopy(segment(data, "s1"))
     changed["beats"][1]["cues"][1] = {"at": 1.0, "do": "flip", "target": "main.c1"}
+    return changed
+
+
+def _move_to_zone_b(data: dict[str, Any]) -> dict[str, Any]:
+    changed = copy.deepcopy(segment(data, "s1"))
+    changed["beats"][1]["cues"][1]["to"] = "sidebar@zone_b"
     return changed
 
 
