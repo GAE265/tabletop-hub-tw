@@ -10,6 +10,7 @@ import 'video_project_form_page.dart';
 import 'video_project_page.dart';
 import 'video_projects_page.dart';
 import 'video_regions_page.dart';
+import 'video_render_page.dart';
 import 'widgets/video_studio_widgets.dart';
 
 /// 規則影片生產器的路由（add-rules-video-mobile design.md D12）。每一頁都先檢查身分。
@@ -54,6 +55,12 @@ final videoStudioRoute = GoRoute(
           path: 'draft',
           builder: (context, state) => VideoAccessGuard(
             child: VideoDraftPage(projectId: state.pathParameters['id']!),
+          ),
+        ),
+        GoRoute(
+          path: 'render',
+          builder: (context, state) => VideoAccessGuard(
+            child: VideoRenderPage(projectId: state.pathParameters['id']!),
           ),
         ),
         GoRoute(

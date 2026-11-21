@@ -146,6 +146,28 @@ class VideoAssetNotifier extends Notifier<VideoAssetState> {
     }
   }
 
+  /// 略過（true）或取消略過（false）這個選拍素材；成功回傳 true（MR 10）。
+  Future<bool> setSkipped(bool skipped) async {
+    if (state.asset == null) return false;
+    state = state.copyWith(busy: true, clearError: true);
+    try {
+      final updated = await _repo.updateAsset(
+        target.projectId,
+        target.assetKey,
+        VideoAssetUpdate(skipped: skipped),
+      );
+      if (!ref.mounted) return true;
+      state = state.copyWith(asset: updated, busy: false);
+      _changed();
+      return true;
+    } on ApiException catch (error) {
+      if (ref.mounted) {
+        state = state.copyWith(busy: false, error: error.message);
+      }
+      return false;
+    }
+  }
+
   /// 照片或方向改了：素材清單、缺什麼、標區域頁都要重新讀。
   void _changed() {
     ref

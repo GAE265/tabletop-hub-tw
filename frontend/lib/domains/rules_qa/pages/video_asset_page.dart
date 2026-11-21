@@ -4,7 +4,9 @@ import 'package:go_router/go_router.dart';
 
 import '../../../app/theme/app_spacing.dart';
 import '../data/video_image_size.dart';
+import '../data/video_studio_models.dart';
 import '../state/video_assets_state.dart';
+import '../state/video_render_state.dart';
 import 'widgets/notice_banner.dart';
 import 'widgets/video_studio_widgets.dart';
 
@@ -70,6 +72,33 @@ class _VideoAssetPageState extends ConsumerState<VideoAssetPage> {
     );
   }
 
+  /// 略過前先說明會影響哪幾段（2026-11-22 永傑決定）。
+  Future<void> _confirmSkip(BuildContext context, VideoAsset asset) async {
+    final affected = asset.skipAffectedSegments;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('略過這張選拍素材？'),
+        content: Text(
+          affected.isEmpty ? '沒有段用到這張素材' : skipConfirmText(affected),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('略過'),
+          ),
+        ],
+      ),
+    );
+    if ((ok ?? false) && mounted) {
+      await ref.read(videoAssetProvider(_ref).notifier).setSkipped(true);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(videoAssetProvider(_ref));
@@ -128,6 +157,15 @@ class _VideoAssetPageState extends ConsumerState<VideoAssetPage> {
                     ),
                   ),
                   const SizedBox(height: AppSpacing.medium),
+                  if (asset.priority == 'optional') ...[
+                    _SkipSection(
+                      asset: asset,
+                      busy: state.busy,
+                      onSkip: () => _confirmSkip(context, asset),
+                      onUnskip: () => notifier.setSkipped(false),
+                    ),
+                    const SizedBox(height: AppSpacing.medium),
+                  ],
                   if (state.error != null) ...[
                     NoticeBanner(text: state.error!, isError: true),
                     const SizedBox(height: AppSpacing.medium),
@@ -216,6 +254,55 @@ class _VideoAssetPageState extends ConsumerState<VideoAssetPage> {
                   ],
                 ],
               ),
+      ),
+    );
+  }
+}
+
+/// 選拍素材的略過：可以略過、已略過（可取消）、只靠它的段不能略過。
+class _SkipSection extends StatelessWidget {
+  const _SkipSection({
+    required this.asset,
+    required this.busy,
+    required this.onSkip,
+    required this.onUnskip,
+  });
+
+  final VideoAsset asset;
+  final bool busy;
+  final VoidCallback onSkip;
+  final VoidCallback onUnskip;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    if (asset.skipped) {
+      return Card(
+        child: ListTile(
+          leading: const Icon(Icons.block),
+          title: const Text('已略過'),
+          subtitle: const Text('產生影片時不用這張'),
+          trailing: OutlinedButton(
+            key: const Key('video-asset-unskip'),
+            onPressed: busy ? null : onUnskip,
+            child: const Text('取消略過'),
+          ),
+        ),
+      );
+    }
+    if (asset.skipBlockedSegments.isNotEmpty) {
+      return Text(
+        skipBlockedText(asset.skipBlockedSegments),
+        style: text.bodyMedium,
+      );
+    }
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: OutlinedButton.icon(
+        key: const Key('video-asset-skip'),
+        onPressed: busy ? null : onSkip,
+        icon: const Icon(Icons.block),
+        label: const Text('略過這張'),
       ),
     );
   }

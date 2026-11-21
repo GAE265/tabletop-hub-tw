@@ -5,6 +5,7 @@ import '../data/video_studio_models.dart';
 import '../data/video_studio_repository.dart';
 import 'video_draft_state.dart';
 import 'video_projects_state.dart';
+import 'video_render_state.dart';
 
 /// 查詢工作進度的間隔（測試換成 0）。
 final videoJobPollIntervalProvider = Provider<Duration>(
@@ -23,7 +24,7 @@ class VideoJobState {
   bool get running => job?.active ?? false;
 }
 
-/// 專案的工作進度：建立草稿工作、每隔一段時間查一次，直到結束（design.md D12）。
+/// 專案的工作進度：建立草稿或產生影片的工作、每隔一段時間查一次，直到結束（design.md D12、D16）。
 /// 留在記憶體裡，離開頁面也會繼續查；回到專案時用 [resume] 接上最近的工作。
 class VideoJobNotifier extends Notifier<VideoJobState> {
   VideoJobNotifier(this.projectId);
@@ -39,11 +40,17 @@ class VideoJobNotifier extends Notifier<VideoJobState> {
 
   VideoStudioRepository get _repo => ref.read(videoStudioRepositoryProvider);
 
-  Future<void> startDraft() async {
+  /// 產生草稿（MR 6）。
+  Future<void> startDraft() => _start(() => _repo.startDraft(projectId));
+
+  /// 產生影片（MR 10）；素材沒齊時顯示後端的說明。
+  Future<void> startRender() => _start(() => _repo.startRender(projectId));
+
+  Future<void> _start(Future<VideoJob> Function() create) async {
     // 清掉上一次的錯誤
     state = VideoJobState(job: state.job);
     try {
-      final job = await _repo.startDraft(projectId);
+      final job = await create();
       state = VideoJobState(job: job);
       _poll(job.id);
     } on ApiException catch (error) {
@@ -88,7 +95,8 @@ class VideoJobNotifier extends Notifier<VideoJobState> {
           ref
             ..invalidate(videoDraftProvider(projectId))
             ..invalidate(videoProjectsProvider)
-            ..invalidate(videoProjectProvider(projectId));
+            ..invalidate(videoProjectProvider(projectId))
+            ..invalidate(videoRenderProvider(projectId));
         }
         return;
       } on ApiException catch (error) {

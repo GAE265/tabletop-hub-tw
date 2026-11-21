@@ -39,11 +39,7 @@ class _VideoDraftPageState extends ConsumerState<VideoDraftPage> {
   Widget build(BuildContext context) {
     final draft = ref.watch(videoDraftProvider(_id));
     final running = ref.watch(videoJobProvider(_id)).running;
-    final jobCard = VideoJobCard(
-      projectId: _id,
-      onRetry: _regenerate,
-      showDone: false,
-    );
+    final jobCard = VideoJobCard(projectId: _id, showDone: false);
     return Scaffold(
       key: const Key('video-draft-page'),
       appBar: AppBar(title: const Text('確認草稿')),

@@ -60,6 +60,15 @@ abstract interface class VideoStudioRepository {
 
   /// 產生影片前還缺什麼。
   Future<VideoReadiness> getReadiness(String projectId);
+
+  /// 建立產生影片的工作（202）。素材沒齊時拋 `RULES_VIDEO_NOT_READY`（MR 9）。
+  Future<VideoJob> startRender(String projectId);
+
+  /// 最近一次成功的成品；還沒有時是 null。
+  Future<VideoRender?> getRender(String projectId);
+
+  /// 成品的影片檔（帶身分讀取，整支下載）。
+  Future<Uint8List> getRenderVideo(String projectId);
 }
 
 class HttpVideoStudioRepository implements VideoStudioRepository {
@@ -224,6 +233,39 @@ class HttpVideoStudioRepository implements VideoStudioRepository {
       '$_base/$projectId/readiness',
     );
     return VideoReadiness.fromJson(response.data!);
+  });
+
+  @override
+  Future<VideoJob> startRender(String projectId) => _guard(() async {
+    final response = await _dio.post<Map<String, dynamic>>(
+      '$_base/$projectId/jobs',
+      data: {'kind': 'render'},
+    );
+    return VideoJob.fromJson(response.data!);
+  });
+
+  @override
+  Future<VideoRender?> getRender(String projectId) async {
+    try {
+      return await _guard(() async {
+        final response = await _dio.get<Map<String, dynamic>>(
+          '$_base/$projectId/render',
+        );
+        return VideoRender.fromJson(response.data!);
+      });
+    } on ApiException catch (error) {
+      if (error.code == 'RULES_VIDEO_RENDER_NOT_FOUND') return null;
+      rethrow;
+    }
+  }
+
+  @override
+  Future<Uint8List> getRenderVideo(String projectId) => _guard(() async {
+    final response = await _dio.get<List<int>>(
+      '$_base/$projectId/render/video',
+      options: Options(responseType: ResponseType.bytes),
+    );
+    return Uint8List.fromList(response.data!);
   });
 
   Future<T> _guard<T>(Future<T> Function() call) async {

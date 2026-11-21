@@ -8,6 +8,7 @@ import '../../../core/widgets/pill_badge.dart';
 import '../data/video_studio_models.dart';
 import '../state/video_assets_state.dart';
 import '../state/video_draft_state.dart';
+import '../state/video_render_state.dart';
 import 'widgets/video_studio_widgets.dart';
 
 /// 素材清單（`/videos/:id/assets`）：最上方是還缺什麼；每個素材的必拍／選拍、代表牌、
@@ -21,9 +22,21 @@ class VideoAssetsPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final draft = ref.watch(videoDraftProvider(projectId));
     final readiness = ref.watch(videoReadinessProvider(projectId));
+    final ready = readiness.value?.ready ?? false;
     return Scaffold(
       key: const Key('video-assets-page'),
       appBar: AppBar(title: const Text('拍素材')),
+      bottomNavigationBar: VideoBottomActions(
+        children: [
+          FilledButton(
+            key: const Key('video-assets-next'),
+            onPressed: ready
+                ? () => context.go('/videos/$projectId/render')
+                : null,
+            child: const Text('下一步：產生影片'),
+          ),
+        ],
+      ),
       body: VideoPageBody(
         child: draft.when(
           skipLoadingOnRefresh: false,
@@ -66,7 +79,7 @@ class VideoAssetsPage extends ConsumerWidget {
                       error: (error, _) => Text(
                         error is ApiException ? error.message : '讀不到還缺什麼',
                       ),
-                      data: (r) => _ReadinessCard(readiness: r),
+                      data: (r) => VideoReadinessCard(readiness: r),
                     ),
                     const SizedBox(height: AppSpacing.medium),
                     for (final asset in value.assets)
@@ -80,59 +93,17 @@ class VideoAssetsPage extends ConsumerWidget {
                           missingRegions: readiness.value?.missingRegions
                               .where((m) => m.assetKey == asset.assetKey)
                               .length,
+                          blockedSegments: [
+                            for (final m
+                                in readiness.value?.missingPhotos ??
+                                    const <MissingPhoto>[])
+                              if (m.assetKey == asset.assetKey)
+                                ...m.skipBlockedSegments,
+                          ],
                         ),
                       ),
                   ],
                 ),
-        ),
-      ),
-    );
-  }
-}
-
-class _ReadinessCard extends StatelessWidget {
-  const _ReadinessCard({required this.readiness});
-
-  final VideoReadiness readiness;
-
-  @override
-  Widget build(BuildContext context) {
-    final text = Theme.of(context).textTheme;
-    final scheme = Theme.of(context).colorScheme;
-    if (readiness.ready) {
-      return Card(
-        key: const Key('video-readiness'),
-        child: ListTile(
-          leading: Icon(Icons.check_circle, color: scheme.primary),
-          title: const Text('可以產生影片'),
-        ),
-      );
-    }
-    return Card(
-      key: const Key('video-readiness'),
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.medium),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('還缺這些才能產生影片', style: text.titleSmall),
-            const SizedBox(height: AppSpacing.small),
-            for (final photo in readiness.missingPhotos)
-              Text(
-                '拍照：${photo.reason}（${photo.priority == 'must' ? '必拍' : '選拍'}）',
-                style: text.bodyMedium,
-              ),
-            for (final region in readiness.missingRegions)
-              Text(
-                '標區域：${region.assetKey} 的 ${region.region}',
-                style: text.bodyMedium,
-              ),
-            for (final asset in readiness.unsupported)
-              Text(
-                asset.message,
-                style: text.bodyMedium!.copyWith(color: scheme.error),
-              ),
-          ],
         ),
       ),
     );
@@ -144,6 +115,7 @@ class _AssetTile extends StatelessWidget {
     required this.projectId,
     required this.asset,
     required this.missingRegions,
+    required this.blockedSegments,
   });
 
   final String projectId;
@@ -151,6 +123,9 @@ class _AssetTile extends StatelessWidget {
 
   /// 這個素材還沒標的區域數；readiness 還沒讀到時是 null。
   final int? missingRegions;
+
+  /// 選拍但不能略過：只靠這張素材的段（MR 10）。
+  final List<int> blockedSegments;
 
   @override
   Widget build(BuildContext context) {
@@ -193,16 +168,23 @@ class _AssetTile extends StatelessWidget {
                         ),
                         if (asset.representative)
                           const PillBadge(label: '代表牌', tone: PillTone.neutral),
-                        PillBadge(
-                          label: asset.hasPhoto ? '已拍' : '未拍',
-                          tone: asset.hasPhoto
-                              ? PillTone.players
-                              : PillTone.duration,
-                          icon: asset.hasPhoto
-                              ? Icons.check
-                              : Icons.photo_camera_outlined,
-                        ),
-                        if (total > 0 && missing != null)
+                        if (asset.skipped)
+                          const PillBadge(
+                            label: '已略過',
+                            tone: PillTone.neutral,
+                            icon: Icons.block,
+                          )
+                        else
+                          PillBadge(
+                            label: asset.hasPhoto ? '已拍' : '未拍',
+                            tone: asset.hasPhoto
+                                ? PillTone.players
+                                : PillTone.duration,
+                            icon: asset.hasPhoto
+                                ? Icons.check
+                                : Icons.photo_camera_outlined,
+                          ),
+                        if (total > 0 && missing != null && !asset.skipped)
                           PillBadge(
                             label: missing == 0
                                 ? '區域已標好'
@@ -213,6 +195,13 @@ class _AssetTile extends StatelessWidget {
                           ),
                       ],
                     ),
+                    if (blockedSegments.isNotEmpty) ...[
+                      const SizedBox(height: AppSpacing.xSmall),
+                      Text(
+                        skipBlockedText(blockedSegments),
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
                   ],
                 ),
               ),

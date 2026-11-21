@@ -195,6 +195,8 @@ abstract class DraftAsset with _$DraftAsset {
     required bool representative,
     required List<String> regions,
     required bool hasPhoto,
+    // 店員略過的選拍素材（MR 9）
+    @Default(false) bool skipped,
   }) = _DraftAsset;
 
   factory DraftAsset.fromJson(Map<String, dynamic> json) =>
@@ -305,6 +307,10 @@ abstract class VideoAsset with _$VideoAsset {
     required int orientation,
     required Map<String, List<double>?> regions,
     required int videoVersion,
+    // 略過（MR 9）：只有選拍可以；略過後會少一張圖的段、只靠它而不能略過的段（段號從 1 開始）
+    @Default(false) bool skipped,
+    @Default([]) List<int> skipAffectedSegments,
+    @Default([]) List<int> skipBlockedSegments,
   }) = _VideoAsset;
 
   factory VideoAsset.fromJson(Map<String, dynamic> json) =>
@@ -318,6 +324,8 @@ abstract class VideoAssetUpdate with _$VideoAssetUpdate {
   const factory VideoAssetUpdate({
     int? orientation,
     Map<String, List<double>?>? regions,
+    // true 略過、false 取消略過
+    bool? skipped,
   }) = _VideoAssetUpdate;
 
   factory VideoAssetUpdate.fromJson(Map<String, dynamic> json) =>
@@ -333,6 +341,8 @@ abstract class MissingPhoto with _$MissingPhoto {
     required String priority,
     required String reason,
     String? shot,
+    @Default([]) List<int> skipAffectedSegments,
+    @Default([]) List<int> skipBlockedSegments,
   }) = _MissingPhoto;
 
   factory MissingPhoto.fromJson(Map<String, dynamic> json) =>
@@ -378,4 +388,25 @@ abstract class VideoReadiness with _$VideoReadiness {
 
   factory VideoReadiness.fromJson(Map<String, dynamic> json) =>
       _$VideoReadinessFromJson(json);
+}
+
+/// 最近一次成功產生的影片（`GET /api/v1/rules-videos/{id}/render`，MR 9）。
+/// `estimated`：沒有設定文字轉語音，旁白靜音、時間為估計值。
+@freezed
+abstract class VideoRender with _$VideoRender {
+  @JsonSerializable(fieldRename: FieldRename.snake)
+  const factory VideoRender({
+    required String jobId,
+    required String videoPath,
+    required double totalSeconds,
+    required List<String> reencoded,
+    required List<String> reused,
+    required List<String> skippedAssets,
+    required bool estimated,
+    required List<String> warnings,
+    DateTime? finishedAt,
+  }) = _VideoRender;
+
+  factory VideoRender.fromJson(Map<String, dynamic> json) =>
+      _$VideoRenderFromJson(json);
 }

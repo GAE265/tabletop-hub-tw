@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../core/dev/state/dev_user_state.dart';
@@ -110,19 +111,11 @@ class VideoBottomActions extends StatelessWidget {
 class VideoJobCard extends ConsumerWidget {
   const VideoJobCard({
     required this.projectId,
-    required this.onRetry,
-    this.doneLabel,
-    this.onDone,
     this.showDone = true,
     super.key,
   });
 
   final String projectId;
-  final VoidCallback onRetry;
-
-  /// 完成時的按鈕（例如「查看草稿」）；null 時不放按鈕。
-  final String? doneLabel;
-  final VoidCallback? onDone;
 
   /// 完成的工作要不要顯示（草稿頁本身就是結果，不必再顯示）。
   final bool showDone;
@@ -141,6 +134,15 @@ class VideoJobCard extends ConsumerWidget {
         ),
     ];
     if (job != null) {
+      // 依工作種類決定「重試」做什麼、完成後去哪裡
+      final notifier = ref.read(videoJobProvider(projectId).notifier);
+      final render = job.kind == 'render';
+      final VoidCallback retry = render
+          ? notifier.startRender
+          : notifier.startDraft;
+      final (doneLabel, donePath) = render
+          ? ('看影片', '/videos/$projectId/watch')
+          : ('查看草稿', '/videos/$projectId/draft');
       final card = switch (job.status) {
         VideoJobStatus.queued || VideoJobStatus.running => _card(
           context,
@@ -175,8 +177,10 @@ class VideoJobCard extends ConsumerWidget {
                     style: text.titleMedium,
                   ),
                 ),
-                if (doneLabel != null)
-                  TextButton(onPressed: onDone, child: Text(doneLabel!)),
+                TextButton(
+                  onPressed: () => context.go(donePath),
+                  child: Text(doneLabel),
+                ),
               ],
             ),
           ],
@@ -193,7 +197,7 @@ class VideoJobCard extends ConsumerWidget {
             const SizedBox(height: AppSpacing.small),
             Align(
               alignment: Alignment.centerRight,
-              child: FilledButton(onPressed: onRetry, child: const Text('重試')),
+              child: FilledButton(onPressed: retry, child: const Text('重試')),
             ),
           ],
         ),
@@ -231,4 +235,54 @@ class VideoJobCard extends ConsumerWidget {
       ),
     ),
   );
+}
+
+/// 產生影片前還缺什麼（素材清單與產生影片頁共用）。
+class VideoReadinessCard extends StatelessWidget {
+  const VideoReadinessCard({required this.readiness, super.key});
+
+  final VideoReadiness readiness;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    final scheme = Theme.of(context).colorScheme;
+    if (readiness.ready) {
+      return Card(
+        key: const Key('video-readiness'),
+        child: ListTile(
+          leading: Icon(Icons.check_circle, color: scheme.primary),
+          title: const Text('可以產生影片'),
+        ),
+      );
+    }
+    return Card(
+      key: const Key('video-readiness'),
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.medium),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('還缺這些才能產生影片', style: text.titleSmall),
+            const SizedBox(height: AppSpacing.small),
+            for (final photo in readiness.missingPhotos)
+              Text(
+                '拍照：${photo.reason}（${photo.priority == 'must' ? '必拍' : '選拍'}）',
+                style: text.bodyMedium,
+              ),
+            for (final region in readiness.missingRegions)
+              Text(
+                '標區域：${region.assetKey} 的 ${region.region}',
+                style: text.bodyMedium,
+              ),
+            for (final asset in readiness.unsupported)
+              Text(
+                asset.message,
+                style: text.bodyMedium!.copyWith(color: scheme.error),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
 }

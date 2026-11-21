@@ -97,6 +97,9 @@ class _Overview extends ConsumerWidget {
     final current = _stepIndex(project.step);
     final next = switch (project.step) {
       'pages' => ('下一步：選頁與編輯文字', '/videos/$id/pages'),
+      'assets' => ('下一步：拍素材', '/videos/$id/assets'),
+      'render' => ('下一步：產生影片', '/videos/$id/render'),
+      'done' => ('看影片', '/videos/$id/watch'),
       _ => ('下一步：確認草稿', '/videos/$id/draft'),
     };
     return ListView(
@@ -109,12 +112,7 @@ class _Overview extends ConsumerWidget {
           style: text.bodyLarge,
         ),
         const SizedBox(height: AppSpacing.large),
-        VideoJobCard(
-          projectId: id,
-          onRetry: ref.read(videoJobProvider(id).notifier).startDraft,
-          doneLabel: '查看草稿',
-          onDone: () => context.go('/videos/$id/draft'),
-        ),
+        VideoJobCard(projectId: id),
         Card(
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: AppSpacing.small),
@@ -143,6 +141,9 @@ class _Overview extends ConsumerWidget {
                       ),
                       2 when current >= 1 => () => context.go(
                         '/videos/$id/assets',
+                      ),
+                      3 when current >= 3 => () => context.go(
+                        '/videos/$id/render',
                       ),
                       _ => null,
                     },
