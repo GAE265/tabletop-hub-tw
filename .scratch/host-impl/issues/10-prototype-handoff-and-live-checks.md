@@ -1,6 +1,6 @@
 # 10：參考畫面、交接說明、流程圖；試聽定稿與手動檢查
 
-Status: ready-for-human
+Status: resolved
 Blocked by: 08, 09
 Spec: [spec](../../host/spec.md) §4.1、§13.6、§14.4、§14.5、§14.6、§15
 MR: [#68](https://github.com/GAE265/tabletop-hub-tw/pull/68)
@@ -46,16 +46,16 @@ MR: [#68](https://github.com/GAE265/tabletop-hub-tw/pull/68)
 
 ## 驗收條件
 
-- [ ] 參考畫面有 spec §14.4 兩張表的每一個元件，以及 spec §14.5 的每一種提醒
-- [ ] 參考畫面只呼叫 `state/` 的方法，沒有直接呼叫 API（AGENTS.md §5.3）
-- [ ] `/proto/host` 只在 `SHOW_PROTOTYPES=true` 時出現
-- [ ] 交接說明照範本寫完，有截圖、設計稿 v1 與 v2 的連結、流程圖
-- [ ] `flutter analyze`、`flutter test` 通過；後端三項檢查通過
-- [ ] 立倫試聽後，固定台詞與提醒的字句已定稿
+- [x] 參考畫面有 spec §14.4 兩張表的每一個元件，以及 spec §14.5 的每一種提醒
+- [x] 參考畫面只呼叫 `state/` 的方法，沒有直接呼叫 API（AGENTS.md §5.3）
+- [x] `/proto/host` 只在 `SHOW_PROTOTYPES=true` 時出現
+- [x] 交接說明照範本寫完，有截圖、設計稿 v1 與 v2 的連結、流程圖
+- [x] `flutter analyze`、`flutter test` 通過；後端三項檢查通過
+- [x] 立倫試聽後，固定台詞與提醒的字句已定稿
 - [ ] 手動檢查的結果記在 Comments
-- [ ] 01 到 09 都是 `resolved`；spec 11 組情境表格的 140 行都有對應的測試（AGENTS.md §7.4）
-- [ ] PR 說明草稿存在 `docs/mr_info/feature-host.md`（AGENTS.md §9），情境表格之外 500 個中文字以內
-- [ ] 做完的最後一個 commit 把本檔的 `Status` 改成 `resolved`
+- [x] 01 到 09 都是 `resolved`；spec 11 組情境表格的 140 行都有對應的測試（AGENTS.md §7.4）
+- [x] PR 說明草稿存在 `docs/mr_info/feature-host.md`（AGENTS.md §9），情境表格之外 500 個中文字以內
+- [x] 做完的最後一個 commit 把本檔的 `Status` 改成 `resolved`
 
 ## Comments
 
@@ -120,3 +120,8 @@ MR: [#68](https://github.com/GAE265/tabletop-hub-tw/pull/68)
   - 派一個 Orca worker 用 `ui-ux-pro-max` 與 `mattpocock-skills:tdd` 做（`b664a31` 到 `d72c82c`）：進度放大、用卡片分區、手機的流程鍵固定在畫面底部（原本出現暫停橫幅時會被往下推 70px）、「結束主持」移到標題列、筆電兩欄、提醒分三種。沒有自訂顏色、字型、主題覆寫。驗收通過。
   - 立倫再要求：已結束後把流程鍵收起來。`state/` 加 `showFlowControls`（連著而且這一局還沒結束才是真），上一步、暫停或繼續、下一步與「結束主持」只在它為真時顯示；按住說話鍵留著，因為結束後照常可以問規則（spec §3.3）。交接說明已補上。
 - 2026-11-22：立倫開頁面時一片空白。重現到：開發用的前端伺服器（`flutter run -d web-server`）還活著，但 App 卡在載入沒有啟動；重啟前端就好了。推測是先前接在上面的瀏覽器（截圖用）占住了它的除錯連線，所以之後截完圖都把那個瀏覽器關掉。這是開發伺服器的事，不是程式的問題。
+- 2026-11-22：**結案。** 立倫試用後說「語音主持功能可以了」，並指示 push 進 MR。
+  - 做了的：18 句固定台詞走過一遍，改定的是宣布獲勝的兩句；「血刃贏了」沒反應已處理；參考畫面整理過；規則索引補好，問規則查得到。
+  - 驗收條件「手動檢查的結果記在 Comments」沒有打勾：17 項清單沒有逐項量時間與填結果。確定沒做的有第 4 項（真人多人桌邊閒聊，要組員在場）、第 16 項（部署後才量得到）、第 17 項的 Safari、Firefox 與手機（沒有 HTTPS，手機沒測）。手動檢查不擋合併（spec §15.1）；之後量到再補在這裡。
+  - 第二段第 6 點：ADR 0004 的 `status` 仍是 `proposed`，等 PR #68 審核通過再改。
+  - PR 說明草稿在 `docs/mr_info/feature/host.md`（AGENTS.md §9），另放一份在 `.scratch/host-impl/mr/`（送審檢查的腳本看這個位置）；兩處都不進 git。
