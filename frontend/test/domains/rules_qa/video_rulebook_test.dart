@@ -1,5 +1,6 @@
 // 店員拍規則書的資料層與 state（2026-11-22 永傑決定）。
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -141,6 +142,24 @@ void main() {
       expect(state.busy, isFalse);
     });
 
+    test('選到 HEIC：整批都不上傳（避免頁的順序亂掉），說明要改成 JPEG', () async {
+      final repo = FakeVideoStudioRepository();
+      final picker = FakeImagePicker()
+        ..images = [
+          page('1.jpg'),
+          PickedImage(name: 'IMG_0002.HEIC', bytes: heicBytes()),
+        ];
+      final container = makeContainer(repo, picker: picker);
+      final notifier = container.read(videoRulebookProvider('p1').notifier);
+      await notifier.load();
+      expect(await notifier.addPhotos(), isFalse);
+      expect(repo.rulebookUploads, isEmpty);
+      expect(
+        container.read(videoRulebookProvider('p1')).error,
+        '不支援 HEIC，請把相機格式改為最相容（JPEG）',
+      );
+    });
+
     test('取消選圖：不上傳', () async {
       final repo = FakeVideoStudioRepository();
       final container = makeContainer(repo, picker: FakeImagePicker());
@@ -247,3 +266,20 @@ void main() {
     });
   });
 }
+
+/// HEIC 檔頭（ftyp heic），內容是假的。
+Uint8List heicBytes() => Uint8List.fromList([
+  0,
+  0,
+  0,
+  0x18,
+  ...utf8.encode('ftypheic'),
+  0,
+  0,
+  0,
+  0,
+  ...utf8.encode('mif1heic'),
+  1,
+  2,
+  3,
+]);

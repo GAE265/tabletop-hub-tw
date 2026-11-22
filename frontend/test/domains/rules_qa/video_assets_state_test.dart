@@ -1,4 +1,5 @@
 // 規則影片素材的 state（add-rules-video-mobile MR 8，design.md D14）。
+import 'dart:convert';
 import 'dart:typed_data';
 import 'dart:ui';
 
@@ -107,6 +108,32 @@ void main() {
       await notifier.load();
       await notifier.pickAndUpload();
       expect(container.read(videoAssetProvider(ref)).photoReplaced, isTrue);
+    });
+
+    // 2026-11-22 永傑決定：HEIC 讀不到，選檔時就擋下並說明怎麼改相機設定（不自動轉檔）
+    test('選到 HEIC：不上傳，說明要把相機格式改成 JPEG', () async {
+      final repo = assetsRepo();
+      final picker = FakeImagePicker()
+        ..images = [PickedImage(name: 'IMG_0001.HEIC', bytes: heicBytes())];
+      final container = makeContainer(repo, picker: picker);
+      final notifier = container.read(videoAssetProvider(ref).notifier);
+      await notifier.load();
+      await notifier.pickAndUpload();
+      expect(repo.uploads, isEmpty);
+      expect(
+        container.read(videoAssetProvider(ref)).error,
+        '不支援 HEIC，請把相機格式改為最相容（JPEG）',
+      );
+    });
+
+    test('判斷 HEIC：看檔頭，副檔名是 .heic 但內容是 JPEG 的不算', () {
+      expect(isHeicImage('a.jpg', heicBytes()), isTrue);
+      expect(
+        isHeicImage('IMG_0001.HEIC', Uint8List.fromList([1, 2, 3])),
+        isTrue,
+      );
+      expect(isHeicImage('IMG_0001.heic', jpegBytes), isFalse);
+      expect(isHeicImage('board.png', pngBytes), isFalse);
     });
 
     test('取消選圖：不上傳', () async {
@@ -281,3 +308,20 @@ void main() {
     });
   });
 }
+
+/// HEIC 檔頭（ftyp heic），內容是假的。
+Uint8List heicBytes() => Uint8List.fromList([
+  0,
+  0,
+  0,
+  0x18,
+  ...utf8.encode('ftypheic'),
+  0,
+  0,
+  0,
+  0,
+  ...utf8.encode('mif1heic'),
+  1,
+  2,
+  3,
+]);
