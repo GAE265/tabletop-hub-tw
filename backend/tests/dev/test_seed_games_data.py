@@ -84,8 +84,8 @@ def test_fresh_database_gets_games_and_advisor_data(db: Engine, run_seed: RunSee
     assert result.returncode == 0, result.stderr
     assert table_counts(db, tuple(SEEDED_COUNTS)) == SEEDED_COUNTS
     assert next_game_id(db) == SEEDED_NEXT_GAME_ID
-    # 既有步驟照舊：3 個測試帳號、1 間測試店家
-    assert account_counts(db) == {"auth_users": 3, "booking_shops": 1}
+    # 既有步驟照舊：4 個測試帳號、1 間測試店家
+    assert account_counts(db) == {"auth_users": 4, "booking_shops": 1}
     # 桌遊在教學影片之前寫入，同一次執行就登記完成，不會再印「找不到…略過」
     assert table_counts(db, ("rules_qa_videos",)) == {"rules_qa_videos": LESSON_VIDEO_COUNT}
     assert "找不到" not in result.stdout
@@ -113,7 +113,7 @@ def test_second_run_changes_nothing(db: Engine, run_seed: RunSeed) -> None:
     assert table_counts(db, tuple(SEEDED_COUNTS)) == counts == SEEDED_COUNTS
     assert fingerprints(db, advisor_tables) == before
     assert next_game_id(db) == SEEDED_NEXT_GAME_ID
-    assert account_counts(db) == {"auth_users": 3, "booking_shops": 1}
+    assert account_counts(db) == {"auth_users": 4, "booking_shops": 1}
     assert table_counts(db, ("rules_qa_videos",)) == {"rules_qa_videos": LESSON_VIDEO_COUNT}
 
 
@@ -168,7 +168,7 @@ def test_extra_game_in_use_stops_games_step_only(db: Engine, run_seed: RunSeed) 
         "rules_qa_videos": LESSON_VIDEO_COUNT + 1,
     }
     # 帳號等既有步驟仍完成
-    assert account_counts(db) == {"auth_users": 3, "booking_shops": 1}
+    assert account_counts(db) == {"auth_users": 4, "booking_shops": 1}
     assert "測試帳號" in result.stdout
 
 
@@ -245,7 +245,7 @@ def test_bad_data_file_stops_games_step_only(
     assert games_state(db) == before
     assert table_counts(db, tuple(SEEDED_COUNTS)) == SEEDED_COUNTS
     # 帳號等既有步驟仍完成
-    assert account_counts(db) == {"auth_users": 3, "booking_shops": 1}
+    assert account_counts(db) == {"auth_users": 4, "booking_shops": 1}
     assert table_counts(db, ("rules_qa_videos",)) == {"rules_qa_videos": LESSON_VIDEO_COUNT}
     assert "測試帳號" in result.stdout
 
@@ -257,7 +257,7 @@ def test_bad_data_file_on_fresh_database_still_creates_accounts(
 
     assert result.returncode != 0
     assert table_counts(db, tuple(SEEDED_COUNTS)) == NOTHING_SEEDED
-    assert account_counts(db) == {"auth_users": 3, "booking_shops": 1}
+    assert account_counts(db) == {"auth_users": 4, "booking_shops": 1}
     # 桌遊沒寫入，教學影片「找不到就略過」的保護照舊
     assert "找不到" in result.stdout
 
