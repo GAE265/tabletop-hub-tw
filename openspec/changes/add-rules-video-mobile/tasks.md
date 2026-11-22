@@ -35,8 +35,8 @@
 | 1 | `feature/rules_qa-video-projects` | 影片專案資料表、建立／列表／查看 API、權限 | API、migration |
 | 2 | `feature/rules_qa-video-jobs` | 工作資料表、背景執行緒、查詢 API、重新啟動的處理 | API、migration |
 | 3 | `feature/rules_qa-video-terms` | 用語對照表資料表、管理員上傳 API | API、migration |
-| 4 | `feature/rules_qa-video-pages` | migration 0018（本章頁、參考頁、編輯後的頁面文字、`pages_version`）；`GET`／`PUT /rules-videos/{id}/pages`；刪掉的段落與改過的行（design.md D11） | API、migration |
-| 5 | `feature/rules_qa-video-draft-api` | migration 0019（段資料正本、版本、涵蓋檢查）；草稿工作（讀編輯後的文字 → 草稿 → 涵蓋檢查）、`GET /rules-videos/{id}/draft`；在 `main.py` 註冊處理函式（design.md D11） | API、migration |
+| 4 | `feature/rules_qa-video-pages` | migration 0019（本章頁、參考頁、編輯後的頁面文字、`pages_version`）；`GET`／`PUT /rules-videos/{id}/pages`；刪掉的段落與改過的行（design.md D11） | API、migration |
+| 5 | `feature/rules_qa-video-draft-api` | migration 0020（段資料正本、版本、涵蓋檢查）；草稿工作（讀編輯後的文字 → 草稿 → 涵蓋檢查）、`GET /rules-videos/{id}/draft`；在 `main.py` 註冊處理函式（design.md D11） | API、migration |
 | 6 | `feature/rules_qa-video-draft-page` | 手機：專案列表、建立專案、規則書頁面（沿用 `rules_ingest`）；**產生草稿前逐頁檢視與編輯文字：修正 OCR 錯字、刪除不屬於本章的段落；確認前列出「店員刪掉了哪些段落」（原文有、編輯後沒有）與改過的行，**每一處同時顯示原文與編輯後**，不只顯示分類**；產生草稿、看草稿、素材清單與涵蓋檢查；店員逐句檢查字幕（標出處頁）；**這款遊戲從未上傳用語對照表時，提示草稿的用詞品質可能下降**；**頁面文字在草稿產生後被改過時，標示「依舊文字產生」** | — |
 | 7 | `feature/rules_qa-video-assets-api` | 素材照片上傳（存放介面）、方向、區域座標、缺什麼的檢查；重新產生草稿時沿用照片與區域 | API |
 | 8 | `feature/rules_qa-video-assets-page` | 手機：素材清單、拍照上傳、旋轉、拖框標區域（提示用四個角對齊框線） | — |

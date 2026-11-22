@@ -1,4 +1,4 @@
-"""0018：rules_qa_video_projects 加上頁面文字（add-rules-video-mobile MR 4，design.md D11）。"""
+"""0019：rules_qa_video_projects 加上頁面文字（add-rules-video-mobile MR 4，design.md D11）。"""
 
 from collections.abc import Iterator
 
@@ -16,7 +16,7 @@ NEW_COLUMNS = {"chapter_pages", "reference_pages", "page_texts", "pages_version"
 @pytest.fixture(scope="module")
 def url() -> str:
     url = recreate_database(Settings().database_url, "rules_qa_video_pages")
-    migrate(url, "upgrade", "0018")
+    migrate(url, "upgrade", "0019")
     return url
 
 
@@ -74,7 +74,7 @@ def test_existing_project_gets_defaults(engine: Engine):
 
 def test_downgrade_removes_columns(url: str):
     try:
-        migrate(url, "downgrade", "0017")
+        migrate(url, "downgrade", "0018")
         engine = create_engine(url)
         try:
             columns = {c["name"] for c in inspect(engine).get_columns(TABLE)}
@@ -82,4 +82,4 @@ def test_downgrade_removes_columns(url: str):
         finally:
             engine.dispose()
     finally:
-        migrate(url, "upgrade", "0018")
+        migrate(url, "upgrade", "0019")
