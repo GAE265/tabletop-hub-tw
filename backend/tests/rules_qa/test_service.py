@@ -358,3 +358,51 @@ def test_expired_conversation_is_404(repo, embedding):
 def test_every_role_can_ask(repo, embedding, user):
     llm = FakeLLMProvider(responses=[answer(ids=[1])])
     assert make_service(repo, embedding, llm).send_message(user, ROSE, message_in()).answer
+
+
+# --- 只檢索、不叫 LLM 的方法（給其他 domain 的 service 用；host spec §13.2） ---
+
+
+def test_search_rule_chunks_returns_pages_and_text_without_llm(repo, embedding):
+    llm = FakeLLMProvider()
+    chunks = make_service(repo, embedding, llm).search_rule_chunks(ROSE, QUESTION)
+    assert [(c.page, c.content) for c in chunks] == [
+        (5, "每個回合可以抽兩張牌。"),
+        (5, "也可以改成打出一張牌。"),
+        (3, "遊戲開始時每人拿五張牌。"),
+        (9, "結束時計算分數。"),
+    ]
+    assert llm.calls == []
+
+
+def test_search_rule_chunks_returns_at_most_six(repo, embedding):
+    from app.domains.rules_qa.service import SEARCH_LIMIT
+
+    for index in range(5):
+        repo.add_chunk(ROSE, 10 + index, f"補充規則 {index}", FAR)
+    llm = FakeLLMProvider()
+    chunks = make_service(repo, embedding, llm).search_rule_chunks(ROSE, QUESTION)
+    assert SEARCH_LIMIT == 6
+    assert len(chunks) == 6
+    assert chunks[0].page == 5
+    assert repo.searches[-1] == (ROSE, "fake", SEARCH_LIMIT)
+    assert llm.calls == []
+
+
+def test_search_rule_chunks_only_this_game(repo, embedding):
+    chunks = make_service(repo, embedding, FakeLLMProvider()).search_rule_chunks(MARCO, QUESTION)
+    assert [(c.page, c.content) for c in chunks] == [(2, "馬可波羅的回合流程。")]
+
+
+@pytest.mark.parametrize("game_id", [AVALON, EMPTY, 999])
+def test_search_rule_chunks_without_index_is_empty_not_409(repo, embedding, game_id):
+    llm = FakeLLMProvider()
+    assert make_service(repo, embedding, llm).search_rule_chunks(game_id, QUESTION) == []
+    assert llm.calls == []
+
+
+def test_search_rule_chunks_embedding_failure_raises_like_send_message(repo):
+    failing = FakeEmbeddingProvider(dim=3, error=EmbeddingUnavailable("embedding 連不上"))
+    with pytest.raises(AppError) as exc:
+        make_service(repo, failing, FakeLLMProvider()).search_rule_chunks(ROSE, QUESTION)
+    assert_app_error(exc, 503, "RULES_QA_UNAVAILABLE")

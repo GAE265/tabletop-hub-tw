@@ -220,6 +220,21 @@ class RulesQaService:
             citations=_citations(output["citation_ids"], hits) if answerable else [],
         )
 
+    # --- 只檢索（給其他 domain 的 service 用） ---
+
+    def search_rule_chunks(self, game_id: int, question: str) -> list[ChunkHit]:
+        """用問題找這款遊戲最像的幾段規則原文，每段有頁碼與原文。不叫 LLM。
+
+        給其他 domain 的 service 用（AI 語音主持）：不檢查使用者，不開成 API。
+        這款遊戲沒有索引（或沒有這款遊戲）時回空的清單，不回 409。
+        embedding 失敗時和 send_message 一樣丟 503 RULES_QA_UNAVAILABLE，由呼叫端決定怎麼處理。
+        """
+        if not self._repo.has_chunks(game_id):
+            return []
+        with _external_services():
+            vector = self._embedding.embed([question])[0]
+            return self._repo.search_chunks(game_id, vector, self._embedding_model, SEARCH_LIMIT)
+
     # --- 內部 ---
 
     def _game_name(self, game_id: int) -> str:

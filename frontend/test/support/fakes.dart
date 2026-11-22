@@ -1,9 +1,14 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:tabletop_hub/core/platform/audio_capture.dart';
+import 'package:tabletop_hub/core/platform/audio_playback.dart';
 import 'package:tabletop_hub/core/platform/image_picker.dart';
+import 'package:tabletop_hub/core/platform/page_visibility.dart';
+import 'package:tabletop_hub/core/platform/screen_wake_lock.dart';
 import 'package:tabletop_hub/domains/rules_ingest/data/manual_page.dart';
 import 'package:tabletop_hub/domains/rules_ingest/data/game_option.dart';
 import 'package:tabletop_hub/domains/rules_ingest/data/game_search_repository.dart';
@@ -29,6 +34,9 @@ import 'package:tabletop_hub/domains/groups/data/groups_repository.dart';
 import 'package:tabletop_hub/domains/groups/state/group_clock.dart';
 
 import 'package:tabletop_hub/domains/health/data/health_repository.dart';
+import 'package:tabletop_hub/domains/host/data/host_models.dart';
+import 'package:tabletop_hub/domains/host/data/host_stream.dart';
+import 'package:tabletop_hub/domains/host/data/hosting_sessions_repository.dart';
 import 'package:tabletop_hub/domains/health/data/health_status.dart';
 import 'package:tabletop_hub/domains/matches/data/game_match.dart';
 import 'package:tabletop_hub/domains/matches/data/match_input.dart';
@@ -1237,6 +1245,290 @@ class FakeMatchesRepository implements MatchesRepository {
       ),
     );
     return match;
+  }
+}
+
+// --- host（AI 語音主持）---
+
+/// 收音、播音、常亮、連線各個 fake 共用的呼叫紀錄，用來確認先後順序。
+typedef HostCallLog = List<String>;
+
+class FakeAudioCapture implements AudioCapture {
+  FakeAudioCapture({HostCallLog? log}) : log = log ?? [];
+
+  final HostCallLog log;
+
+  /// 設成 false 模擬玩家拒絕麥克風。
+  bool permissionGranted = true;
+  bool capturing = false;
+  int startCount = 0;
+  int stopCount = 0;
+  void Function(Uint8List chunk)? _onChunk;
+
+  /// 模擬麥克風送出一小段 PCM。
+  void emit(Uint8List chunk) {
+    if (capturing) _onChunk?.call(chunk);
+  }
+
+  @override
+  Future<bool> requestPermission() async {
+    log.add('mic.request');
+    return permissionGranted;
+  }
+
+  @override
+  Future<void> start(void Function(Uint8List chunk) onChunk) async {
+    log.add('mic.start');
+    startCount++;
+    capturing = true;
+    _onChunk = onChunk;
+  }
+
+  @override
+  Future<void> stop() async {
+    stopCount++;
+    capturing = false;
+    _onChunk = null;
+  }
+}
+
+class FakeAudioPlayback implements AudioPlayback {
+  /// 設成 false 模擬瀏覽器不讓出聲。
+  bool unlockResult = true;
+  bool _unlocked = false;
+  int unlockCount = 0;
+  int clearCount = 0;
+
+  /// 已排進、還沒被清掉的聲音。
+  final queued = <Uint8List>[];
+  final _segmentEnds = <void Function()>[];
+
+  /// 模擬排進去的聲音都播完了：通知每一段的播完。
+  void finishSegments() {
+    final callbacks = List.of(_segmentEnds);
+    _segmentEnds.clear();
+    queued.clear();
+    for (final callback in callbacks) {
+      callback();
+    }
+  }
+
+  @override
+  bool get isUnlocked => _unlocked;
+
+  @override
+  Future<bool> unlock() async {
+    unlockCount++;
+    _unlocked = unlockResult;
+    return unlockResult;
+  }
+
+  @override
+  void enqueue(Uint8List pcm) => queued.add(pcm);
+
+  @override
+  void markSegmentEnd(void Function() onPlayed) => _segmentEnds.add(onPlayed);
+
+  @override
+  void clear() {
+    clearCount++;
+    queued.clear();
+    _segmentEnds.clear();
+  }
+}
+
+class FakeScreenWakeLock implements ScreenWakeLock {
+  FakeScreenWakeLock({HostCallLog? log}) : log = log ?? [];
+
+  final HostCallLog log;
+
+  /// 設成 false 模擬系統拒絕常亮。
+  bool granted = true;
+  bool held = false;
+  int releaseCount = 0;
+
+  @override
+  Future<bool> request() async {
+    log.add('wakeLock.request');
+    held = granted;
+    return granted;
+  }
+
+  @override
+  Future<void> release() async {
+    releaseCount++;
+    held = false;
+  }
+}
+
+class FakePageVisibility implements PageVisibility {
+  final _changes = StreamController<bool>.broadcast(sync: true);
+  bool _visible = true;
+
+  void hide() {
+    _visible = false;
+    _changes.add(false);
+  }
+
+  void show() {
+    _visible = true;
+    _changes.add(true);
+  }
+
+  @override
+  bool get isVisible => _visible;
+
+  @override
+  Stream<bool> get changes => _changes.stream;
+}
+
+/// 測試用的一場主持：預設剛開、在開場。
+HostingSession fakeHostingSession({
+  String id = 'h-1',
+  HostStatus status = HostStatus.active,
+  int playerCount = 7,
+  TurnTakingMode turnTakingMode = TurnTakingMode.auto,
+  HostVoice voice = HostVoice.male,
+  HostStep step = HostStep.opening,
+  int? turnNumber,
+  int? phaseNumber,
+  bool paused = false,
+  HostWinner? winner,
+}) => HostingSession(
+  id: id,
+  status: status,
+  playerCount: playerCount,
+  turnTakingMode: turnTakingMode,
+  voice: voice,
+  step: step,
+  turnNumber: turnNumber,
+  phaseNumber: phaseNumber,
+  paused: paused,
+  winner: winner,
+  createdAt: DateTime.utc(2026, 11, 22, 12),
+);
+
+class FakeHostingSessionsRepository implements HostingSessionsRepository {
+  FakeHostingSessionsRepository({
+    List<HostingSession>? sessions,
+    HostCallLog? log,
+  }) : sessions = sessions ?? [],
+       log = log ?? [];
+
+  List<HostingSession> sessions;
+  final HostCallLog log;
+  Object? listError;
+  Object? createError;
+  Object? connectError;
+  final createRequests = <CreateHostingSessionRequest>[];
+  final connectCalls = <({String id, TurnTakingMode? turnTakingMode})>[];
+  int _ticketCount = 0;
+
+  HostConnectionTicket _ticket() => HostConnectionTicket(
+    ticket: 't-${++_ticketCount}',
+    expiresAt: DateTime.utc(2026, 11, 22, 12, 1),
+  );
+
+  @override
+  Future<List<HostingSession>> list() async {
+    if (listError != null) throw listError!;
+    return sessions;
+  }
+
+  @override
+  Future<HostingSessionAccess> create(
+    CreateHostingSessionRequest request,
+  ) async {
+    log.add('POST');
+    createRequests.add(request);
+    if (createError != null) throw createError!;
+    final session = fakeHostingSession(
+      playerCount: request.playerCount,
+      turnTakingMode: request.turnTakingMode,
+      voice: request.voice,
+    );
+    sessions = [session];
+    return HostingSessionAccess(session: session, connection: _ticket());
+  }
+
+  @override
+  Future<HostingSessionAccess> connect(
+    String id, {
+    TurnTakingMode? turnTakingMode,
+  }) async {
+    log.add('connections');
+    connectCalls.add((id: id, turnTakingMode: turnTakingMode));
+    if (connectError != null) throw connectError!;
+    final current = sessions.firstWhere(
+      (session) => session.id == id,
+      orElse: () => fakeHostingSession(id: id),
+    );
+    final session = turnTakingMode == null
+        ? current
+        : current.copyWith(turnTakingMode: turnTakingMode);
+    sessions = [session];
+    return HostingSessionAccess(session: session, connection: _ticket());
+  }
+}
+
+/// 手寫的 WebSocket 通道：記下裝置送出的訊息，測試用 [emit] 假裝後端送來訊息。
+class FakeHostStream implements HostStream {
+  FakeHostStream({required this.sessionId, required this.ticket});
+
+  final String sessionId;
+  final String ticket;
+  final _messages = StreamController<HostServerMessage>(sync: true);
+
+  /// 裝置送出的 JSON 訊息（照 spec §12.3 的格式）。
+  final sentJson = <Map<String, dynamic>>[];
+
+  /// 裝置送出的聲音。
+  final sentAudio = <Uint8List>[];
+  bool closed = false;
+
+  void emit(HostServerMessage message) => _messages.add(message);
+
+  /// 模擬後端關掉連線。
+  void serverClose() => _messages.close();
+
+  @override
+  Stream<HostServerMessage> get messages => _messages.stream;
+
+  @override
+  void send(HostClientMessage message) {
+    if (closed) return;
+    sentJson.add(message.toJson());
+  }
+
+  @override
+  void sendAudio(Uint8List pcm) {
+    if (closed) return;
+    sentAudio.add(pcm);
+  }
+
+  @override
+  Future<void> close() async {
+    closed = true;
+    if (!_messages.isClosed) await _messages.close();
+  }
+}
+
+class FakeHostStreamConnector implements HostStreamConnector {
+  FakeHostStreamConnector({HostCallLog? log}) : log = log ?? [];
+
+  final HostCallLog log;
+  Object? error;
+  final streams = <FakeHostStream>[];
+
+  FakeHostStream get current => streams.last;
+
+  @override
+  Future<HostStream> connect(String sessionId, String ticket) async {
+    log.add('ws.connect');
+    if (error != null) throw error!;
+    final stream = FakeHostStream(sessionId: sessionId, ticket: ticket);
+    streams.add(stream);
+    return stream;
   }
 }
 
