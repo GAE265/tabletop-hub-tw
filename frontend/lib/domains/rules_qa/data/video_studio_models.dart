@@ -26,6 +26,8 @@ abstract class VideoProject with _$VideoProject {
     // 影片標題：整個遊戲是「〈遊戲〉 規則教學」
     required String title,
     required String step,
+    // 規則書來源：imported＝管理員匯入的；photos＝店員拍規則書（2026-11-22 永傑決定）
+    @Default('imported') String rulebook,
     required DateTime createdAt,
     required DateTime updatedAt,
   }) = _VideoProject;
@@ -37,8 +39,12 @@ abstract class VideoProject with _$VideoProject {
 /// 建立專案：只選遊戲（整個遊戲一支影片，建立後後端自動產生草稿）。店員的店家用登入身分。
 @freezed
 abstract class VideoProjectCreate with _$VideoProjectCreate {
-  @JsonSerializable(fieldRename: FieldRename.snake)
-  const factory VideoProjectCreate({required int gameId}) = _VideoProjectCreate;
+  @JsonSerializable(fieldRename: FieldRename.snake, includeIfNull: false)
+  const factory VideoProjectCreate({
+    required int gameId,
+    // 'photos'＝拍規則書；null＝用已匯入的規則書（不送這個欄位）
+    String? rulebook,
+  }) = _VideoProjectCreate;
 
   factory VideoProjectCreate.fromJson(Map<String, dynamic> json) =>
       _$VideoProjectCreateFromJson(json);
@@ -400,4 +406,36 @@ abstract class RenderSegment with _$RenderSegment {
 
   factory RenderSegment.fromJson(Map<String, dynamic> json) =>
       _$RenderSegmentFromJson(json);
+}
+
+/// 一張規則書照片（店員拍規則書）。`quality`：ok｜warn（可能讀錯，建議重拍）｜bad（太模糊，請重拍）。
+@freezed
+abstract class RulebookPhoto with _$RulebookPhoto {
+  @JsonSerializable(fieldRename: FieldRename.snake)
+  const factory RulebookPhoto({
+    // 不隨刪除改變的代號（縮圖快取用）
+    required String id,
+    // 第幾張（從 1 開始），就是頁的順序
+    required int index,
+    required int width,
+    required int height,
+    required String quality,
+    String? qualityMessage,
+  }) = _RulebookPhoto;
+
+  factory RulebookPhoto.fromJson(Map<String, dynamic> json) =>
+      _$RulebookPhotoFromJson(json);
+}
+
+/// 照片模式專案的規則書照片；`read`＝這些照片都讀過了（重新產生草稿不會再讀）。
+@freezed
+abstract class Rulebook with _$Rulebook {
+  @JsonSerializable(fieldRename: FieldRename.snake)
+  const factory Rulebook({
+    required List<RulebookPhoto> photos,
+    required bool read,
+  }) = _Rulebook;
+
+  factory Rulebook.fromJson(Map<String, dynamic> json) =>
+      _$RulebookFromJson(json);
 }

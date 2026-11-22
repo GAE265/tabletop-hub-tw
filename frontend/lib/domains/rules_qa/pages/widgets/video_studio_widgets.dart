@@ -11,6 +11,7 @@ import 'notice_banner.dart';
 
 /// 專案步驟（`step`）給店員看的名稱。
 String videoStepLabel(String step) => switch (step) {
+  'rulebook' => '拍規則書',
   'pages' => '選頁（舊）',
   'draft' => '草稿',
   'assets' => '拍素材',

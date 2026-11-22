@@ -63,6 +63,18 @@ abstract interface class VideoStudioRepository {
 
   /// 成品的影片檔（帶身分讀取，整支下載）。
   Future<Uint8List> getRenderVideo(String projectId);
+
+  /// 照片模式專案的規則書照片（店員拍規則書）。
+  Future<Rulebook> getRulebook(String projectId);
+
+  /// 加一張規則書照片（排在最後）。
+  Future<Rulebook> uploadRulebookPhoto(String projectId, PickedImage image);
+
+  /// 刪掉第 index 張（後面的往前遞補）。
+  Future<void> deleteRulebookPhoto(String projectId, int index);
+
+  /// 第 index 張的圖檔（帶身分讀取）。
+  Future<Uint8List> getRulebookPhoto(String projectId, int index);
 }
 
 class HttpVideoStudioRepository implements VideoStudioRepository {
@@ -243,6 +255,42 @@ class HttpVideoStudioRepository implements VideoStudioRepository {
     );
     return Uint8List.fromList(response.data!);
   });
+
+  @override
+  Future<Rulebook> getRulebook(String projectId) => _guard(() async {
+    final response = await _dio.get<Map<String, dynamic>>(
+      '$_base/$projectId/rulebook',
+    );
+    return Rulebook.fromJson(response.data!);
+  });
+
+  @override
+  Future<Rulebook> uploadRulebookPhoto(String projectId, PickedImage image) =>
+      _guard(() async {
+        final response = await _dio.post<Map<String, dynamic>>(
+          '$_base/$projectId/rulebook/photos',
+          data: FormData.fromMap({
+            'file': MultipartFile.fromBytes(image.bytes, filename: image.name),
+          }),
+        );
+        return Rulebook.fromJson(response.data!);
+      });
+
+  @override
+  Future<void> deleteRulebookPhoto(String projectId, int index) =>
+      _guard(() async {
+        await _dio.delete<void>('$_base/$projectId/rulebook/photos/$index');
+      });
+
+  @override
+  Future<Uint8List> getRulebookPhoto(String projectId, int index) =>
+      _guard(() async {
+        final response = await _dio.get<List<int>>(
+          '$_base/$projectId/rulebook/photos/$index',
+          options: Options(responseType: ResponseType.bytes),
+        );
+        return Uint8List.fromList(response.data!);
+      });
 
   Future<T> _guard<T>(Future<T> Function() call) async {
     try {

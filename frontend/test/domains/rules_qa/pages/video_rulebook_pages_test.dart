@@ -127,6 +127,7 @@ void main() {
           rulebook: Rulebook(photos: [sampleRulebookPhoto()], read: false),
         ),
       );
+      h.repo.jobSequence = [sampleVideoJob(status: VideoJobStatus.succeeded)];
       await tapKey(tester, 'video-rulebook-start');
       expect(h.repo.startedDrafts, ['p1']);
       expect(h.path, '/videos/p1');

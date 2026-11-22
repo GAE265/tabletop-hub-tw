@@ -40,9 +40,17 @@ final videoGameOptionsProvider = FutureProvider<List<VideoGameOption>>(
 );
 
 class VideoProjectFormState {
-  const VideoProjectFormState({this.game, this.submitting = false, this.error});
+  const VideoProjectFormState({
+    this.game,
+    this.rulebook = 'imported',
+    this.submitting = false,
+    this.error,
+  });
 
   final VideoGameOption? game;
+
+  /// 規則書來源：imported＝已匯入的規則書；photos＝店員拍規則書。
+  final String rulebook;
   final bool submitting;
 
   /// 後端回的錯誤說明（例如規則書還沒匯入）。
@@ -52,11 +60,13 @@ class VideoProjectFormState {
 
   VideoProjectFormState copyWith({
     VideoGameOption? game,
+    String? rulebook,
     bool? submitting,
     String? error,
     bool clearError = false,
   }) => VideoProjectFormState(
     game: game ?? this.game,
+    rulebook: rulebook ?? this.rulebook,
     submitting: submitting ?? this.submitting,
     error: clearError ? null : error ?? this.error,
   );
@@ -73,6 +83,9 @@ class VideoProjectFormNotifier extends Notifier<VideoProjectFormState> {
   void selectGame(VideoGameOption game) =>
       state = state.copyWith(game: game, clearError: true);
 
+  void selectRulebook(String rulebook) =>
+      state = state.copyWith(rulebook: rulebook, clearError: true);
+
   /// 送出；成功回傳新專案並重新載入列表，失敗回傳 null（說明在 `error`）。
   Future<VideoProject?> submit() async {
     if (!state.canSubmit) return null;
@@ -80,7 +93,12 @@ class VideoProjectFormNotifier extends Notifier<VideoProjectFormState> {
     try {
       final project = await ref
           .read(videoStudioRepositoryProvider)
-          .createProject(VideoProjectCreate(gameId: state.game!.id));
+          .createProject(
+            VideoProjectCreate(
+              gameId: state.game!.id,
+              rulebook: state.rulebook == 'photos' ? 'photos' : null,
+            ),
+          );
       state = state.copyWith(submitting: false);
       ref.invalidate(videoProjectsProvider);
       return project;

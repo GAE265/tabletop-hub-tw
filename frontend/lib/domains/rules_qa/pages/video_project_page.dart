@@ -10,15 +10,25 @@ import '../state/video_job_state.dart';
 import '../state/video_projects_state.dart';
 import 'widgets/video_studio_widgets.dart';
 
-/// 專案的三個步驟（整個遊戲一支影片，design.md D17：頁面文字那一步從店員流程移除）。
-const _steps = ['草稿', '素材', '影片'];
+/// 專案的步驟（整個遊戲一支影片，design.md D17：頁面文字那一步從店員流程移除）。
+/// 拍規則書的專案前面多一步「規則書」（2026-11-22 永傑決定）。
+List<String> _stepsOf(VideoProject project) => [
+  if (project.rulebook == 'photos') '規則書',
+  '草稿',
+  '素材',
+  '影片',
+];
 
-int _stepIndex(String step) => switch (step) {
-  'assets' => 1,
-  'render' => 2,
-  'done' => 3,
-  _ => 0, // draft；舊的單章專案的 pages 也從草稿算起
-};
+int _stepIndex(VideoProject project) {
+  final offset = project.rulebook == 'photos' ? 1 : 0;
+  return switch (project.step) {
+    'rulebook' => 0,
+    'assets' => 1 + offset,
+    'render' => 2 + offset,
+    'done' => 3 + offset,
+    _ => offset, // draft；舊的單章專案的 pages 也從草稿算起
+  };
+}
 
 /// 專案總覽（`/videos/:id`）：目前在哪一步、下一步做什麼、最近一個工作的進度。
 class VideoProjectPage extends ConsumerStatefulWidget {
@@ -88,10 +98,15 @@ class _Overview extends ConsumerWidget {
     final id = project.id;
     final text = Theme.of(context).textTheme;
     final scheme = Theme.of(context).colorScheme;
-    final current = _stepIndex(project.step);
+    final steps = _stepsOf(project);
+    final current = _stepIndex(project);
+    final photos = project.rulebook == 'photos';
+    // 拍規則書的專案多一步，後面的步驟往後一格
+    final draftAt = photos ? 1 : 0;
     // 草稿不擋流程：有草稿就可以直接去拍素材
     final hasDraft = ref.watch(videoDraftProvider(id)).value != null;
     final next = switch (project.step) {
+      'rulebook' => ('下一步：拍規則書', '/videos/$id/rulebook'),
       'assets' => ('下一步：拍素材', '/videos/$id/assets'),
       'render' => ('下一步：產生影片', '/videos/$id/render'),
       'done' => ('看影片', '/videos/$id/watch'),
@@ -109,7 +124,7 @@ class _Overview extends ConsumerWidget {
             padding: const EdgeInsets.symmetric(vertical: AppSpacing.small),
             child: Column(
               children: [
-                for (final (i, label) in _steps.indexed)
+                for (final (i, label) in steps.indexed)
                   ListTile(
                     key: Key('video-step-$i'),
                     leading: Icon(
@@ -125,12 +140,14 @@ class _Overview extends ConsumerWidget {
                     title: Text(label),
                     subtitle: i == current ? const Text('目前在這一步') : null,
                     // 已經做過的步驟可以回去改
-                    onTap: switch (i) {
-                      0 => () => context.go('/videos/$id/draft'),
-                      1 when current >= 1 || hasDraft => () => context.go(
-                        '/videos/$id/assets',
+                    onTap: switch (i - draftAt) {
+                      -1 => () => context.go('/videos/$id/rulebook'),
+                      0 when current >= draftAt => () => context.go(
+                        '/videos/$id/draft',
                       ),
-                      2 when current >= 2 => () => context.go(
+                      1 when current >= 1 + draftAt || hasDraft =>
+                        () => context.go('/videos/$id/assets'),
+                      2 when current >= 2 + draftAt => () => context.go(
                         '/videos/$id/render',
                       ),
                       _ => null,

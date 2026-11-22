@@ -30,7 +30,13 @@ class _VideoProjectFormPageState extends ConsumerState<VideoProjectFormPage> {
 
   Future<void> _submit() async {
     final project = await ref.read(videoProjectFormProvider.notifier).submit();
-    if (project != null && mounted) context.go('/videos/${project.id}');
+    if (project == null || !mounted) return;
+    // 拍規則書：直接到規則書頁；已匯入的規則書：回到專案總覽看草稿進度
+    context.go(
+      project.step == 'rulebook'
+          ? '/videos/${project.id}/rulebook'
+          : '/videos/${project.id}',
+    );
   }
 
   @override
@@ -76,6 +82,30 @@ class _VideoProjectFormPageState extends ConsumerState<VideoProjectFormPage> {
                 },
               ),
             ),
+            const SizedBox(height: AppSpacing.medium),
+            Text('規則書', style: text.titleSmall),
+            RadioGroup<String>(
+              groupValue: form.rulebook,
+              onChanged: (value) {
+                if (value != null) notifier.selectRulebook(value);
+              },
+              child: const Column(
+                children: [
+                  RadioListTile<String>(
+                    key: Key('video-project-rulebook-imported'),
+                    value: 'imported',
+                    title: Text('用已匯入的規則書'),
+                    subtitle: Text('管理員已經匯入這款遊戲的規則書'),
+                  ),
+                  RadioListTile<String>(
+                    key: Key('video-project-rulebook-photos'),
+                    value: 'photos',
+                    title: Text('拍規則書'),
+                    subtitle: Text('用手機依頁面順序拍規則書的每一頁'),
+                  ),
+                ],
+              ),
+            ),
             if (form.error != null) ...[
               const SizedBox(height: AppSpacing.medium),
               NoticeBanner(text: form.error!, isError: true),
@@ -84,7 +114,13 @@ class _VideoProjectFormPageState extends ConsumerState<VideoProjectFormPage> {
             FilledButton(
               key: const Key('video-project-submit'),
               onPressed: form.canSubmit ? _submit : null,
-              child: Text(form.submitting ? '建立中…' : '建立並產生草稿'),
+              child: Text(
+                form.submitting
+                    ? '建立中…'
+                    : form.rulebook == 'photos'
+                    ? '建立並拍規則書'
+                    : '建立並產生草稿',
+              ),
             ),
           ],
         ),
