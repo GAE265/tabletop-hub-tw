@@ -60,4 +60,17 @@ void main() {
       isNull,
     );
   });
+
+  test('店家沒有這款的提示：只有 inStock 是 false 才有文字', () {
+    AdvisorRecommendation card(bool? inStock) => AdvisorRecommendation(
+      game: game(),
+      reason: '規則簡單。',
+      excerpts: const [],
+      inStock: inStock,
+    );
+
+    expect(stockHintText(card(false)), '這間店目前沒有這款桌遊');
+    expect(stockHintText(card(true)), isNull);
+    expect(stockHintText(card(null)), isNull);
+  });
 }

@@ -11,6 +11,8 @@
 
 玩家用聊天的方式說出人數、時間和喜好，推薦 Agent 會追問條件，或推薦最多 3 款桌遊，附上推薦理由與心得片段。
 
+> **2026-11-21 新增：店家沒有這款桌遊的提示。** 網址可以帶店家：`/games-advisor?shop_id=<店家 id>`（Demo 流程從訂位資訊頁進來）。這時送出的每則訊息都帶 `shop_id`，後端在每張卡片回 `in_stock`；店家沒有的那款，卡片上多一行「這間店目前沒有這款桌遊」。沒帶 `shop_id` 時和原本完全一樣。正式頁面已經改好（`pages/widgets/game_card.dart`）。
+
 ## 1. 頁面清單
 
 | 頁面 | 路由 | 用途 |
@@ -28,11 +30,14 @@
 | 訊息列表 | 清單 | 依序顯示玩家與推薦 Agent 的訊息；推薦 Agent 的訊息下面接放寬提示與卡片 | `messages`（`PlayerMessage`、`AdvisorReplyMessage`） | 不呼叫 |
 | 放寬提示 | 文字 | 卡片上方一行，整則訊息一次，不是每張卡片各標一次 | `relaxedConstraintText()` | 不呼叫 |
 | 推薦卡片 | 卡片 | 繁中名稱、資訊行、推薦理由；「心得片段（n）」預設摺疊，點開看原文，英文片段旁標「英文」；沒有片段時不顯示這一行 | `gameMetaText()`、`excerptLanguageLabel()` | 不呼叫 |
+| 店家沒有這款的提示 | 卡片裡的一行文字 | 卡片的 `inStock` 是 `false` 時，在資訊行下面顯示「這間店目前沒有這款桌遊」；`true`（店裡有）與 `null`（沒帶店家）不顯示任何東西 | `stockHintText()` | 不呼叫 |
 | 輸入框 | 輸入欄位 | 顯示字數；Enter 送出、Shift+Enter 換行；送出中停用 | `editDraft(text)`、`draftLength` | 不呼叫 |
 | 送出 | 按鈕 | 送出輸入框的內容；不能送出時停用 | `sendMessage(draft)`、`canSend` | `POST /api/v1/advisor/messages` |
 | 規則問答連結 | 文字連結 | 輸入框下方固定一行「想問規則或玩法？到規則問答」；目前停用 | — | 不呼叫 |
 
 ### `state/` 提供的東西
+
+對話的 provider 有兩個寫法，狀態與方法都一樣：`advisorForShopProvider(shopId)` 是帶著某間店的對話，這段對話的每則訊息都帶同一個 `shop_id`（開始新對話也不變）；`advisorProvider` 是沒有店家的對話。正式頁面用 `GamesAdvisorPage.fromQuery(查詢參數)` 建立，網址沒有 `shop_id`（或是空的）就是沒有店家。
 
 `advisorProvider`（`AdvisorNotifier`）的狀態：
 
@@ -52,6 +57,7 @@
 | `gameMetaText(game)` | `2–4 人 · 30–45 分鐘 · 10 歲以上 · 難度 1.9 / 5`。最少等於最多時只寫一個數字（`4 人`）；難度四捨五入到小數 1 位 |
 | `relaxedConstraintText(constraint)` | `以下放寬了「時長」條件`、`以下放寬了「年齡」條件` |
 | `excerptLanguageLabel(excerpt)` | 英文片段回 `英文`，中文回 `null`（不標） |
+| `stockHintText(recommendation)` | 卡片的 `inStock` 是 `false` 回 `這間店目前沒有這款桌遊`；`true` 與 `null` 回 `null`（不顯示） |
 
 字數上限用 `advisorMaxContentLength`（500）。
 
@@ -62,7 +68,7 @@
 | 載入中（`status` 是 `sending`） | 推薦 Agent 的位置顯示「正在找桌遊…」，輸入框、送出鈕、開始新對話都停用 |
 | 沒有資料（新對話） | 說明文字＋範例按鈕 |
 | 錯誤：`notice` 是 `expired`（對話已失效，後端 404 `GAMES_ADVISOR_CONVERSATION_NOT_FOUND`） | 畫面清空，顯示「對話已失效，請開始新對話」，剛剛那句在輸入框 |
-| 錯誤：`notice` 是 `unavailable`（其他所有錯誤：503、500、422、斷線、逾時） | 剛剛那句從畫面拿掉、放回輸入框，前面的對話保留，顯示「推薦 Agent 暫時無法回應，請再送一次」 |
+| 錯誤：`notice` 是 `unavailable`（其他所有錯誤：503、500、422、斷線、逾時；網址的 `shop_id` 找不到店家的 404 `SHOP_NOT_FOUND` 也算） | 剛剛那句從畫面拿掉、放回輸入框，前面的對話保留，顯示「推薦 Agent 暫時無法回應，請再送一次」 |
 | 追問、離題、查無結果、固定文字 | 只有文字，沒有卡片 |
 | 沒有權限（403） | 這個功能沒有 403。推薦 Agent 不用登入就能用，所以也沒有「請先登入」的畫面；使用者權限之後再討論 |
 

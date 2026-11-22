@@ -196,6 +196,41 @@ def test_unknown_shop_is_404(service):
     assert code_of(excinfo) == "SHOP_NOT_FOUND"
 
 
+# --- 查庫存裡有哪些（給桌遊推薦用，不限角色） ---
+
+
+def test_games_in_stock_returns_only_stocked_games(service):
+    service.add_game(STAFF_A, SHOP_A, GAME_1)
+    service.add_game(ADMIN, SHOP_B, GAME_2)
+
+    assert service.games_in_stock(SHOP_A, [GAME_1, GAME_2]) == {GAME_1}
+    assert service.games_in_stock(SHOP_B, [GAME_1, GAME_2]) == {GAME_2}
+
+
+def test_games_in_stock_ignores_games_not_asked(service):
+    service.add_game(STAFF_A, SHOP_A, GAME_1)
+    service.add_game(STAFF_A, SHOP_A, GAME_2)
+
+    assert service.games_in_stock(SHOP_A, [GAME_2]) == {GAME_2}
+    assert service.games_in_stock(SHOP_A, []) == set()
+
+
+def test_games_in_stock_of_unknown_shop_is_404(service):
+    missing = uuid.UUID("c0000000-0000-4000-8000-0000000000ff")
+    with pytest.raises(AppError) as excinfo:
+        service.games_in_stock(missing, [GAME_1])
+    assert excinfo.value.status_code == 404
+    assert code_of(excinfo) == "SHOP_NOT_FOUND"
+
+
+def test_games_in_stock_with_no_games_still_checks_the_shop(service):
+    """桌遊推薦在呼叫 LLM 之前，用空的清單確認店家存在。"""
+    missing = uuid.UUID("c0000000-0000-4000-8000-0000000000ff")
+    with pytest.raises(AppError) as excinfo:
+        service.games_in_stock(missing, [])
+    assert code_of(excinfo) == "SHOP_NOT_FOUND"
+
+
 def _call(service, operation: str, user: CurrentUser, shop_id: uuid.UUID):
     if operation == "list":
         return service.list_games(user, shop_id)

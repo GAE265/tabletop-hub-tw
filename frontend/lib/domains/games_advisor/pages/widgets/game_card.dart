@@ -5,7 +5,7 @@ import '../../../../core/widgets/pill_badge.dart';
 import '../../data/advisor_message.dart';
 import '../../state/game_card_text.dart';
 
-/// 推薦卡片：名稱、資訊行、推薦理由，以及預設摺疊的心得片段。
+/// 推薦卡片：名稱、資訊行、店家沒有這款時的提示、推薦理由，以及預設摺疊的心得片段。
 /// 卡片上的文字一律用 `state/game_card_text.dart` 的函式產生（交接說明第 2 節）。
 class GameCard extends StatelessWidget {
   const GameCard(this.recommendation, {super.key});
@@ -31,6 +31,15 @@ class GameCard extends StatelessWidget {
                 Text(recommendation.game.name, style: text.titleLarge),
                 const SizedBox(height: AppSpacing.xSmall),
                 Text(gameMetaText(recommendation.game), style: text.bodySmall),
+                if (stockHintText(recommendation) case final hint?) ...[
+                  const SizedBox(height: AppSpacing.small),
+                  PillBadge(
+                    key: const Key('advisor-stock-hint'),
+                    label: hint,
+                    tone: PillTone.accent,
+                    icon: Icons.storefront_outlined,
+                  ),
+                ],
                 const SizedBox(height: AppSpacing.small),
                 Text(recommendation.reason, style: text.bodyMedium),
               ],

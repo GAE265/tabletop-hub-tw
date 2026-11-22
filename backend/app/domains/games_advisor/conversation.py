@@ -6,8 +6,10 @@
 """
 
 import logging
-from dataclasses import dataclass, field
-from typing import Any
+import uuid
+from collections.abc import Collection
+from dataclasses import dataclass, field, replace
+from typing import Any, Protocol
 
 from pydantic import BaseModel, ValidationError
 
@@ -49,6 +51,8 @@ class RecommendationCard:
     game: dict[str, Any]
     reason: str
     excerpts: list[dict[str, Any]]
+    # 請求帶的那間店有沒有這款；沒帶店家是 None（spec §19）
+    in_stock: bool | None = None
 
 
 @dataclass(frozen=True)
@@ -77,23 +81,43 @@ class _OffScript(Exception):
     """模型不照約定回應（spec §12.2），當作拒答。"""
 
 
+class ShopStock(Protocol):
+    """店家庫存的查詢，由 shops 的 service 提供（ShopsService）。"""
+
+    def games_in_stock(self, shop_id: uuid.UUID, game_ids: Collection[int]) -> set[int]:
+        """game_ids 裡面這間店有的那些；店家不存在拋 404 SHOP_NOT_FOUND。"""
+        ...
+
+
 class ConversationService:
-    def __init__(self, *, search: GameSearch, llm: LLMProvider) -> None:
+    def __init__(
+        self, *, search: GameSearch, llm: LLMProvider, stock: ShopStock | None = None
+    ) -> None:
         self._search = search
         self._llm = llm
+        # 評估題組不帶店家，可以不給
+        self._stock = stock
 
     def send_message(
-        self, user: CurrentUser, content: str, previous_response_id: str | None
+        self,
+        user: CurrentUser,
+        content: str,
+        previous_response_id: str | None,
+        shop_id: uuid.UUID | None = None,
     ) -> AdvisorReply:
         """處理一則玩家訊息。content 由 router 去掉前後空白。
 
+        shop_id 有值時，每張卡片標示那間店有沒有這款（spec §19）；這是程式查的，不經過 LLM。
+
+        - 404 SHOP_NOT_FOUND：shop_id 的店家不存在，不呼叫 LLM。
         - 404 GAMES_ADVISOR_CONVERSATION_NOT_FOUND：對話過期或 id 錯。
         - 503 GAMES_ADVISOR_UNAVAILABLE：LLM 或 embedding 暫時連不上、沒設定模型。
         - 其他 LLMError 不攔截（500）。
         """
         require_role(user, "player", "shop_staff", "admin")
+        stock = self._stock_for(shop_id)
         try:
-            return self._converse(content, previous_response_id)
+            reply = self._converse(content, previous_response_id)
         except LLMConversationNotFound as exc:
             raise AppError(
                 404, "GAMES_ADVISOR_CONVERSATION_NOT_FOUND", "對話已過期，請重新開始"
@@ -103,6 +127,24 @@ class ConversationService:
             raise AppError(
                 503, "GAMES_ADVISOR_UNAVAILABLE", "推薦服務暫時無法使用，請稍後再試"
             ) from exc
+        if stock is None or shop_id is None or not reply.recommendations:
+            return reply
+        stocked = stock.games_in_stock(shop_id, [card.game["id"] for card in reply.recommendations])
+        return replace(
+            reply,
+            recommendations=[
+                replace(card, in_stock=card.game["id"] in stocked) for card in reply.recommendations
+            ],
+        )
+
+    def _stock_for(self, shop_id: uuid.UUID | None) -> ShopStock | None:
+        """沒帶店家回 None。帶了就先確認店家存在：不存在的店不值得花一次 LLM。"""
+        if shop_id is None:
+            return None
+        if self._stock is None:
+            raise RuntimeError("這個 ConversationService 沒有接上店家庫存，不能帶 shop_id")
+        self._stock.games_in_stock(shop_id, [])
+        return self._stock
 
     def _converse(self, content: str, previous_response_id: str | None) -> AdvisorReply:
         vocabulary = self._search.load_vocabulary()

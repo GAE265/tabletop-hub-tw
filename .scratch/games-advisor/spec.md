@@ -1236,6 +1236,8 @@ LLM 的最終輸出用 strict JSON schema（名稱 `advisor_reply`〔Q14〕）�
 
 〔API〕§1。成功回 201。後端不存對話，所以沒有 GET，也沒有列出對話的端點。
 
+2026-11-21 新增：請求多一個選填的 `shop_id`、每張卡片多一個 `in_stock`，見 §19。
+
 請求：
 
 ```json
@@ -1331,6 +1333,8 @@ LLM 的最終輸出用 strict JSON schema（名稱 `advisor_reply`〔Q14〕）�
 ## 14. 前端
 
 只做 `data/`、`state/`、`prototypes/` 與交接說明，不碰 `pages/` 與 `app/theme/`（AGENTS.md §5.4、§9）。
+
+2026-11-21 新增：網址的 `shop_id` 與卡片上「店家沒有這款」的提示，見 §19；這一項直接改正式頁面。
 
 ### 14.1 `data/`（`frontend/lib/domains/games_advisor/data/`）
 
@@ -1658,3 +1662,60 @@ uv run python -m app.domains.games_advisor.commands eval <eval_cases.json> --out
 | ADR 0002 | 追問與推薦由 LLM 依對話規則決定 | 〔ADR 0002〕 |
 | 評估題組的位置 | pytest 仍是合併的唯一標準；評估題組不進 CI、不擋合併，改到對話規則等項目時把分數貼進 MR | 〔驗收〕§3 |
 | 外部服務測試不進 CI（已寫進 AGENTS.md） | 外部服務測試（§2）只能放在 `integrations/`，加上 `external` 標記，不在 CI 跑；缺金鑰時直接失敗並說明缺哪個設定；改到 `integrations/` 的 MR 要在說明貼上本機執行 `uv run pytest -m external` 的結果。能用 fake（例如 `FakeAzureTransport`）寫的測試，照樣進 CI | AGENTS.md 7.6（#18）、[ticket 11](../games-advisor-impl/issues/11-agents-md-secret-tests.md) |
+
+## 19. 店家沒有推薦的桌遊時顯示提示
+
+立倫 2026-11-21 決定。實作 ticket：[13](../games-advisor-impl/issues/13-shop-stock-hint.md)。相依店家管理（PR #73）的 `shop_games` 資料表與 `shops` domain。
+
+玩家從某間店進到推薦頁時，被推薦的桌遊如果那間店的庫存沒有，就在那張推薦卡片顯示提示。沒帶店家時，一切和 §13、§14 一樣。
+
+### 19.1 店家從哪裡來
+
+- Demo 流程從訂位資訊頁按按鈕進到推薦頁，網址帶著店家 id：`/games-advisor?shop_id=<uuid>`。推薦頁不做店家下拉選單。
+- 沒帶 `shop_id`（或是空的）就是沒有店家，沒有提示。
+- 訂位頁的那個按鈕屬於 `booking`，不在這一節的範圍。
+
+### 19.2 後端
+
+請求多一個選填欄位，回應的每張卡片多一個欄位：
+
+| 位置 | 欄位 | 型別 | 說明 |
+|---|---|---|---|
+| 請求 | `shop_id` | UUID 或 null，預設 null | 選填；省略這個欄位也可以，舊的請求照常運作 |
+| `recommendations[]` | `in_stock` | `true`、`false`、`null` | `true`：請求帶了 `shop_id`，那間店的庫存有這款。`false`：帶了 `shop_id`，庫存沒有這款。`null`：請求沒帶 `shop_id` |
+
+- 這是程式判斷，不經過 LLM：不改對話規則（§12.1）、不改「查桌遊」工具（§11）、不影響推薦哪幾款，`shop_id` 也不送給 LLM。推薦結果出來之後才查庫存，只查被推薦的那幾款。
+- 帶了 `shop_id` 時，先確認店家存在，再呼叫 LLM。店家不存在回 404 `SHOP_NOT_FOUND`（沿用 `shops` 的錯誤），而且不呼叫 LLM。`shop_id` 不是 UUID 回 422。
+- 查庫存不限角色：玩家、店家人員（不論是不是那間店的）、管理員都可以帶任何一間店的 `shop_id`。
+- 分層（AGENTS.md §4.2）：`games_advisor` 只呼叫 `shops` 的 service。`ShopsService.games_in_stock(shop_id, game_ids)` 回傳 `game_ids` 裡在庫存的那些，店家不存在拋 `SHOP_NOT_FOUND`。`ConversationService` 用介面 `ShopStock` 接它，由 `router.py` 的 `get_conversation_service` 組起來。
+- 評估題組（§15）不帶店家，行為不變。
+- 沒有新的資料表，沒有 migration。
+
+### 19.3 前端
+
+- 路由 `/games-advisor` 接受選填的查詢參數 `shop_id`。
+- `data/`：請求的 `shopId` 有值時 body 帶 `shop_id`，是 null 時 body 不帶這個欄位（後端把沒帶和 null 當成同一件事）。卡片的 DTO 多 `inStock`（`bool?`，對應 `in_stock`）。
+- `state/`：`advisorForShopProvider(shopId)` 是帶著某間店的對話，這段對話的每一則訊息都帶同一個店家 id，開始新對話也不變。`advisorProvider` 是沒有店家的對話。
+- 「要不要顯示提示」寫在 `state/game_card_text.dart` 的 `stockHintText()`：`inStock` 是 `false` 回「這間店目前沒有這款桌遊」，`true` 與 `null` 回 null。
+- 正式頁面：`stockHintText()` 有文字的卡片，在資訊行下面顯示那一行提示；樣式只用 `app/theme/` 既有的設定。
+- `shop_id` 的店家不存在（404）或格式錯誤（422）時，照 §14.2 既有的規則顯示「推薦 Agent 暫時無法回應，請再送一次」。
+
+### 19.4 測試
+
+LLM 用 `FakeLLMProvider`，庫存用手寫的 `FakeShopStock`，不連 Azure。
+
+| 情境 | 操作 | 預期結果 |
+|---|---|---|
+| 帶店家，店裡有這款 | `POST /api/v1/advisor/messages` 帶 `shop_id`，Agent 推薦 | 201，那張卡片 `in_stock` 是 true |
+| 帶店家，店裡沒有這款 | 同上 | 201，那張卡片 `in_stock` 是 false |
+| 一次推薦多款，有的有、有的沒有 | 同上 | 每張卡片各自標示 |
+| 沒帶店家 | 不帶 `shop_id`，或帶 null | 201，每張卡片 `in_stock` 是 null，其他欄位和原本一樣 |
+| 店家不存在 | 帶不存在的 `shop_id` | 404 `SHOP_NOT_FOUND`，沒有呼叫 LLM |
+| `shop_id` 格式錯誤 | 帶不是 UUID 的字串 | 422 |
+| Agent 只追問、沒有推薦 | 帶 `shop_id` | 201，`recommendations` 是空的 |
+| 不限角色 | 玩家、不屬於那間店的店家人員、管理員各帶同一個 `shop_id` | 都是 201，結果相同 |
+| 未登入 | 不帶身分 | 401（既有行為不變） |
+| `shops` service 查庫存 | 給店家 id 與一組桌遊 id | 回傳在庫存裡的那些；店家不存在拋 `SHOP_NOT_FOUND` |
+| 前端：帶店家進頁面 | 以 `shop_id` 進入後送兩則訊息 | 兩則請求都帶同一個 `shop_id` |
+| 前端：沒帶店家 | 直接進頁面送訊息 | 請求的 `shop_id` 是 null |
+| 前端：卡片提示 | 回應的卡片 `in_stock` 分別是 false、true、null | 只有 false 那張顯示「這間店目前沒有這款桌遊」 |
