@@ -76,6 +76,7 @@
 - [x] 標區域畫面顯示一行白話說明（`hint`）與「第 N 段會用到」（後端 `feature/rules_qa-video-whole-game-api`、手機頁 `feature/rules_qa-video-whole-game-page`）
 - [x] 照片拍不到某個區域時，標區域畫面可以略過那個區域並提示影響（同上）
 - [ ] 用語對照表與規則書不一致，等永傑確認採哪個詞再改用語表：主板／主圖版、血刃區／血刃角色放置區、水晶放置處（OCR 是「處」，紙本待確認）
+- [ ] 下一版：HEIC 自動轉檔（2026-11-22 永傑決定先不做，現在選到 HEIC 時擋下並請店員把相機格式改成 JPEG）。做法是後端加 `pillow-heif`（第三方套件，MR 要寫理由；它的 wheel 內含 libheif 等原生函式庫，Linux x86_64、Windows、macOS 都有預先編好的版本，Azure Container Apps 的 Linux 映像用 pip 就裝得起來，不用另外裝系統套件），上傳時轉成 JPEG 再存。加之前要確認 wheel 內附函式庫的授權，以及 HEIC 照片的 EXIF 方向是否照樣轉正
 - [ ] 歸檔：本機分支 `docs/archive-add-rules-video-maker`（2026-11-21 建立，沒有 push，沒有遠端備份）已歸檔 `add-rules-video-maker`；永傑決定等影片產生器做好後，和其他已完成的 change 一起歸檔、一起開一個 PR。上傳前先合併最新的 `dev`
 
 **排在修改頁之後**（2026-11-21 永傑暫定 Q1，推 MR 4 前與團隊確認）：
