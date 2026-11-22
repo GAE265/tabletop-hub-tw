@@ -318,3 +318,30 @@ def test_tools_match_spec() -> None:
     assert end["properties"]["winner"]["enum"] == ["white_rose", "blood_blade"]
     assert end.get("required", []) == []
     assert all(tool.description.strip() for tool in tools)
+
+
+# --- 結束的祝詞要有儀式感（2026-11-22 立倫試聽後要求） ---
+
+
+@pytest.mark.parametrize("code", ["end_white_rose", "end_blood_blade"])
+def test_winner_lines_are_announced_with_ceremony(code: str) -> None:
+    request = content.line_request(code)
+    # 字句還是固定台詞，一個字都不能改
+    assert content.fixed_line(code) in request
+    assert "不要加、不要改" in request
+    # 語氣與節奏：隆重、放慢、加重、停頓
+    for word in ("隆重", "放慢", "加重", "停頓"):
+        assert word in request, word
+    assert request != content.verbatim_request(content.fixed_line(code))
+
+
+@pytest.mark.parametrize("code", ["end_plain", "opening", "setup", "night_1", "night_2"])
+def test_other_lines_are_requested_as_before(code: str) -> None:
+    assert content.line_request(code) == content.verbatim_request(content.fixed_line(code))
+
+
+def test_winner_lines_have_a_beat_between_the_two_sentences() -> None:
+    for code in ("end_white_rose", "end_blood_blade"):
+        line = content.fixed_line(code)
+        assert "獲勝" in line
+        assert "辛苦" not in line
