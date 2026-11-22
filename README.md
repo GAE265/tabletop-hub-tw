@@ -88,12 +88,12 @@ uv run uvicorn app.main:create_app --factory --reload # http://localhost:8000/do
 
 | 資料 | 資料表 | 來源 |
 |---|---|---|
-| 測試帳號 3 個（player／shop_staff／admin）、測試店家 1 間 | `auth_users`、`booking_shops` | `backend/app/dev/accounts.py` |
+| 測試帳號 4 個（player、admin 各 1 個；shop_staff 2 個，1 個屬於測試店家、1 個還沒有店）、測試店家 1 間 | `auth_users`、`booking_shops` | `backend/app/dev/accounts.py` |
 | 共用桌遊資料 16 款（1–16 號，1–4 號是 4 款 Demo 遊戲） | `games`、`game_genres` | `backend/app/dev/seed_data/games-export.json` |
 | 推薦 Agent 的資料：標籤、每款桌遊的標籤、心得摘要、心得片段（含向量） | `games_advisor_` 開頭的 4 張表 | `backend/app/dev/seed_data/games_advisor_data.sql` |
 | 3 款 Demo 遊戲的規則教學影片 | `rules_qa_videos` | `backend/app/dev/lesson_videos.py` |
 
-跑完 seed，每個人的桌遊與編號都相同，講「3 號」都是同一款。資料檔放在 repo 的原因與後果見 [ADR 0004](docs/adr/0004-seed-data-in-repo.md)；資料檔的來源與更新方法見 [`backend/app/dev/seed_data/README.md`](backend/app/dev/seed_data/README.md)。
+跑完 seed，每個人的桌遊與編號都相同，講「3 號」都是同一款。資料檔放在 repo 的原因與後果見 [ADR 0005](docs/adr/0005-seed-data-in-repo.md)；資料檔的來源與更新方法見 [`backend/app/dev/seed_data/README.md`](backend/app/dev/seed_data/README.md)。
 
 **`uv run python -m app.dev.seed_shop`**：「測試桌遊店」的訂位設定。店家和 `app.dev.seed` 建立的測試店家是同一間；資料寫在 `backend/app/dev/seed_shop.py`，已經存在的資料不會被覆蓋。
 
