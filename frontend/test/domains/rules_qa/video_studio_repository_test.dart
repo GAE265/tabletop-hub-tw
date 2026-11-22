@@ -247,6 +247,30 @@ void main() {
       expect(bytes, utf8.encode('MP4DATA'));
     });
 
+    test('區域：讀白話說明與用到的段；略過區域只送 skipped_regions', () async {
+      final adapter = RecordingAdapter(
+        body:
+            '{"asset_key": "board", "kind": "flat_photo", "priority": "must", '
+            '"reason": "圖板", "shot": null, "has_photo": true, "orientation": 0, '
+            '"regions": {"zone_a": null}, "video_version": 2, '
+            '"region_hints": {"zone_a": "盤面左邊的方框"}, '
+            '"region_segments": {"zone_a": [2]}, "skipped_regions": ["zone_a"]}',
+      );
+      final asset = await makeRepository(adapter).updateAsset(
+        'p1',
+        'board',
+        const VideoAssetUpdate(skippedRegions: ['zone_a']),
+      );
+      expect(jsonDecode(adapter.bodies.single!), {
+        'skipped_regions': ['zone_a'],
+      });
+      expect(asset.regionHints, {'zone_a': '盤面左邊的方框'});
+      expect(asset.regionSegments, {
+        'zone_a': [2],
+      });
+      expect(asset.skippedRegions, ['zone_a']);
+    });
+
     test('略過：PATCH 只送 skipped', () async {
       final adapter = RecordingAdapter(
         body:

@@ -257,6 +257,45 @@ void main() {
       expect(find.byKey(const Key('video-region-chip-zone_b')), findsOneWidget);
     });
 
+    FakeVideoStudioRepository hintedRepo() => assetsRepo(
+      asset: sampleAsset(hasPhoto: true).copyWith(
+        regionHints: {'zone_a': '盤面左邊的方框'},
+        regionSegments: {
+          'zone_a': [2],
+        },
+      ),
+      photo: pngBytes,
+    );
+
+    testWidgets('顯示目前區域的白話說明與「第 N 段會用到」', (tester) async {
+      await pumpVideo(
+        tester,
+        location: '/videos/p1/assets/board/regions',
+        repo: hintedRepo(),
+      );
+      expect(find.text('盤面左邊的方框'), findsOneWidget);
+      expect(find.text('第 2 段會用到'), findsOneWidget);
+    });
+
+    testWidgets('照片拍不到：略過前提示影響並建議重拍，確定後略過；可以取消', (tester) async {
+      final repo = hintedRepo();
+      await pumpVideo(
+        tester,
+        location: '/videos/p1/assets/board/regions',
+        repo: repo,
+      );
+      await tapKey(tester, 'video-region-skip');
+      expect(find.textContaining('第 2 段'), findsWidgets);
+      expect(find.textContaining('重拍'), findsOneWidget);
+      await tapText(tester, '略過');
+      expect(repo.updates.single.$3.skippedRegions, ['zone_a']);
+      expect(find.text('已略過：照片拍不到這個區域'), findsOneWidget);
+
+      await tapKey(tester, 'video-region-unskip');
+      expect(repo.updates.last.$3.skippedRegions, isEmpty);
+      expect(find.byKey(const Key('video-region-skip')), findsOneWidget);
+    });
+
     testWidgets('依序拖出 2 個區域並儲存：存相對比例', (tester) async {
       final repo = regionsRepo();
       final h = await pumpVideo(

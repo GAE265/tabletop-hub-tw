@@ -227,6 +227,51 @@ void main() {
       expect(state.dirty, isTrue);
     });
 
+    // 2026-11-22 永傑決定：標區域畫面顯示白話說明與「第 N 段會用到」；拍不到的區域可以略過
+    test('載入：每個區域的白話說明、用到的段、略過的區域', () async {
+      final repo = assetsRepo(
+        asset: sampleAsset(hasPhoto: true).copyWith(
+          regionHints: {'zone_a': '盤面左邊的方框'},
+          regionSegments: {
+            'zone_a': [2, 5],
+          },
+          skippedRegions: ['zone_b'],
+        ),
+        photo: pngBytes,
+      );
+      final container = makeContainer(repo);
+      await container.read(videoRegionsProvider(ref).notifier).load();
+      final state = container.read(videoRegionsProvider(ref));
+      expect(state.hints['zone_a'], '盤面左邊的方框');
+      expect(state.segments['zone_a'], [2, 5]);
+      expect(state.skipped, {'zone_b'});
+      // 略過的區域算處理好了；目前選第一個還沒標、也沒略過的
+      expect(state.doneCount, 1);
+      expect(state.current, 'zone_a');
+    });
+
+    test('照片拍不到：略過區域立刻存；可以取消', () async {
+      final repo = regionsRepo();
+      final container = makeContainer(repo);
+      final notifier = container.read(videoRegionsProvider(ref).notifier);
+      await notifier.load();
+      expect(await notifier.setRegionSkipped('zone_b', true), isTrue);
+      expect(repo.updates.single.$3.skippedRegions, ['zone_b']);
+      expect(repo.updates.single.$3.regions, isNull);
+      var state = container.read(videoRegionsProvider(ref));
+      expect(state.skipped, {'zone_b'});
+      expect(state.doneCount, 2);
+      expect(await notifier.setRegionSkipped('zone_b', false), isTrue);
+      expect(repo.updates.last.$3.skippedRegions, isEmpty);
+      state = container.read(videoRegionsProvider(ref));
+      expect(state.skipped, isEmpty);
+    });
+
+    test('文字：第 N 段會用到', () {
+      expect(regionSegmentsText([2, 5]), '第 2、5 段會用到');
+      expect(regionSegmentsText([]), '目前沒有段用到這個區域');
+    });
+
     test('選區域', () async {
       final container = makeContainer(regionsRepo());
       final notifier = container.read(videoRegionsProvider(ref).notifier);

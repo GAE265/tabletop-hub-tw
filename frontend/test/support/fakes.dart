@@ -1743,6 +1743,7 @@ class FakeVideoStudioRepository implements VideoStudioRepository {
       orientation: orientation ?? asset.orientation,
       regions: regions,
       skipped: input.skipped ?? asset.skipped,
+      skippedRegions: input.skippedRegions ?? asset.skippedRegions,
       videoVersion: asset.videoVersion + 1,
     );
   }
