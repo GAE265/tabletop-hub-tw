@@ -58,6 +58,7 @@ const notReady = VideoReadiness(
     MissingPhoto(
       assetKey: 'card',
       priority: 'optional',
+      skippable: true,
       reason: '一張代表牌',
       shot: null,
     ),

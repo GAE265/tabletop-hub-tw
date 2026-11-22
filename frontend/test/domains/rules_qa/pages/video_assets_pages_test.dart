@@ -38,6 +38,7 @@ const draftWithAssets = VideoDraft(
       representative: true,
       regions: [],
       hasPhoto: true,
+      skippable: true,
     ),
   ],
   coverage: DraftCoverage(
@@ -61,7 +62,7 @@ Finder inTile(String key, Finder finder) => find.descendant(
 
 void main() {
   group('素材清單', () {
-    testWidgets('最上方列出還缺什麼；每個素材標示必拍／選拍、代表牌、已拍／未拍、區域', (tester) async {
+    testWidgets('最上方列出還缺什麼；每個素材標示可略過（程式判斷）、代表牌、已拍／未拍、區域', (tester) async {
       await pumpVideo(
         tester,
         location: '/videos/p1/assets',
@@ -83,10 +84,16 @@ void main() {
         find.descendant(of: missing, matching: find.text('本版不支援繪製素材，請改成拍照')),
         findsOneWidget,
       );
-      expect(inTile('board', find.text('必拍')), findsOneWidget);
+      // 2026-11-22 永傑決定：不再顯示 AI 標的必拍／選拍，改顯示程式判斷的「可略過」
+      expect(inTile('board', find.text('必拍')), findsNothing);
+      expect(inTile('board', find.text('可略過')), findsNothing);
+      expect(
+        find.descendant(of: missing, matching: find.textContaining('（可略過）')),
+        findsOneWidget,
+      );
       expect(inTile('board', find.text('未拍')), findsOneWidget);
       expect(inTile('board', find.text('區域 0／2')), findsOneWidget);
-      expect(inTile('card', find.text('選拍')), findsOneWidget);
+      expect(inTile('card', find.text('可略過')), findsOneWidget);
       expect(inTile('card', find.text('代表牌')), findsOneWidget);
       expect(inTile('card', find.text('已拍')), findsOneWidget);
     });

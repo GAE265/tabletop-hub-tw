@@ -68,6 +68,7 @@ const sampleDraft = VideoDraft(
       representative: false,
       regions: [],
       hasPhoto: false,
+      skippable: true,
     ),
   ],
   coverage: DraftCoverage(
@@ -282,7 +283,7 @@ void main() {
       expect(await container.read(videoDraftProvider('p1').future), isNull);
     });
 
-    test('草稿摘要：三格各幾段、必拍與選拍各幾個', () {
+    test('草稿摘要：三格各幾段、素材幾個與其中可略過幾個', () {
       final summary = draftSummary(sampleDraft);
       expect(
         [
@@ -291,8 +292,26 @@ void main() {
         ],
         [('開局', 1, 2), ('走完一輪', 2, 2), ('獲勝方式', 0, 0)],
       );
-      expect(summary.mustAssets, 1);
-      expect(summary.optionalAssets, 1);
+      expect(summary.assets, 2);
+      expect(summary.skippableAssets, 1);
+    });
+
+    test('可略過看程式判斷的 skippable，不看 priority', () {
+      final draft = sampleDraft.copyWith(
+        assets: [
+          sampleDraft.assets[0].copyWith(priority: 'optional'),
+          sampleDraft.assets[1].copyWith(priority: 'must'),
+        ],
+      );
+      expect(draftSummary(draft).skippableAssets, 1);
+      expect(
+        draftSummary(
+          draft.copyWith(
+            assets: [draft.assets[1].copyWith(skipped: true), draft.assets[0]],
+          ),
+        ).assets,
+        1,
+      );
     });
 
     test('素材的名稱：有中文名稱用名稱，沒有時用 reason', () {

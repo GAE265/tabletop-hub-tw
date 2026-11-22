@@ -187,7 +187,7 @@ void main() {
       final adapter = RecordingAdapter(
         body:
             '{"ready": false, "missing_photos": [{"asset_key": "board", "priority": "optional", '
-            '"reason": "圖板", "shot": null}], "missing_regions": [{"asset_key": "board", '
+            '"skippable": true, "reason": "圖板", "shot": null}], "missing_regions": [{"asset_key": "board", '
             '"region": "zone_a"}], "unsupported": [{"asset_key": "m", "kind": "drawn", '
             '"message": "本版不支援"}]}',
       );
@@ -195,6 +195,7 @@ void main() {
       expect(adapter.requests.single.path, '/api/v1/rules-videos/p1/readiness');
       expect(readiness.ready, isFalse);
       expect(readiness.missingPhotos.single.priority, 'optional');
+      expect(readiness.missingPhotos.single.skippable, isTrue);
       expect(readiness.missingRegions.single.region, 'zone_a');
       expect(readiness.unsupported.single.message, '本版不支援');
     });
@@ -251,7 +252,7 @@ void main() {
         body:
             '{"asset_key": "blue", "kind": "flat_photo", "priority": "optional", '
             '"reason": "藍牌", "shot": null, "has_photo": false, "orientation": 0, '
-            '"regions": {}, "video_version": 2, "skipped": true, '
+            '"regions": {}, "video_version": 2, "skipped": true, "skippable": true, '
             '"skip_affected_segments": [1], "skip_blocked_segments": []}',
       );
       final asset = await makeRepository(
@@ -259,6 +260,7 @@ void main() {
       ).updateAsset('p1', 'blue', const VideoAssetUpdate(skipped: true));
       expect(jsonDecode(adapter.bodies.single!), {'skipped': true});
       expect(asset.skipped, isTrue);
+      expect(asset.skippable, isTrue);
       expect(asset.skipAffectedSegments, [1]);
     });
   });

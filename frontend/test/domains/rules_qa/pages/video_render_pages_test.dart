@@ -203,12 +203,14 @@ void main() {
     });
   });
 
-  group('選拍略過', () {
-    testWidgets('素材清單：只靠它的段標示「不能略過」；已略過的標示「已略過」', (tester) async {
+  group('略過（程式判斷可不可以略過）', () {
+    testWidgets('素材清單：不可略過的不標示「可略過」；已略過的標示「已略過」', (tester) async {
       final repo = assetsRepo(readiness: redBlocked)
         ..drafts['p1'] = draftForSkip;
       await pumpVideo(tester, location: '/videos/p1/assets', repo: repo);
-      expect(inTile('red', find.text('第 2 段只靠這張，不能略過')), findsOneWidget);
+      // 每個素材都有「只靠它的段」，清單不再逐一列出，只在單一素材頁說明
+      expect(inTile('red', find.text('可略過')), findsNothing);
+      expect(inTile('red', find.textContaining('不能略過')), findsNothing);
       expect(inTile('blue', find.text('已略過')), findsOneWidget);
     });
 
@@ -216,9 +218,8 @@ void main() {
       final repo = assetsRepo(
         asset: sampleAsset(
           key: 'blue',
-          priority: 'optional',
           regions: const {},
-        ).copyWith(skipAffectedSegments: [1]),
+        ).copyWith(skippable: true, skipAffectedSegments: [1]),
       );
       await pumpVideo(tester, location: '/videos/p1/assets/blue', repo: repo);
       await tapKey(tester, 'video-asset-skip');
@@ -236,9 +237,8 @@ void main() {
       final repo = assetsRepo(
         asset: sampleAsset(
           key: 'blue',
-          priority: 'optional',
           regions: const {},
-        ).copyWith(skipAffectedSegments: [1]),
+        ).copyWith(skippable: true, skipAffectedSegments: [1]),
       );
       await pumpVideo(tester, location: '/videos/p1/assets/blue', repo: repo);
       await tapKey(tester, 'video-asset-skip');
@@ -259,7 +259,7 @@ void main() {
       expect(find.byKey(const Key('video-asset-skip')), findsNothing);
     });
 
-    testWidgets('必拍：沒有略過按鈕', (tester) async {
+    testWidgets('不可略過：沒有略過按鈕', (tester) async {
       await pumpVideo(
         tester,
         location: '/videos/p1/assets/board',

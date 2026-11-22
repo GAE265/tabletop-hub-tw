@@ -107,6 +107,7 @@ VideoDraft draftOf({
       representative: false,
       regions: [],
       hasPhoto: false,
+      skippable: true,
     ),
   ],
   coverage: coverage ?? cleanCoverage,
@@ -323,7 +324,7 @@ void main() {
   });
 
   group('草稿（只顯示摘要，不擋流程）', () {
-    testWidgets('三格各幾段幾句、必拍與選拍各幾個；不列逐句內容', (tester) async {
+    testWidgets('三格各幾段幾句、素材幾個與其中可略過幾個；不列逐句內容', (tester) async {
       await pumpVideo(
         tester,
         location: '/videos/p1/draft',
@@ -338,7 +339,7 @@ void main() {
         );
       }
       expect(
-        find.descendant(of: summary, matching: find.text('素材：必拍 1、選拍 1')),
+        find.descendant(of: summary, matching: find.text('素材：2 個，其中可略過 1 個')),
         findsOneWidget,
       );
       expect(find.text('先把牌洗勻。'), findsNothing);
