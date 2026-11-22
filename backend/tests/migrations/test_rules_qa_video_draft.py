@@ -1,4 +1,4 @@
-"""0019：rules_qa_video_projects 加上草稿（add-rules-video-mobile MR 5，design.md D11）。"""
+"""0020：rules_qa_video_projects 加上草稿（add-rules-video-mobile MR 5，design.md D11）。"""
 
 from collections.abc import Iterator
 
@@ -17,7 +17,7 @@ NULLABLE = {"video", "coverage", "coverage_version", "draft_pages_version"}
 @pytest.fixture(scope="module")
 def url() -> str:
     url = recreate_database(Settings().database_url, "rules_qa_video_draft")
-    migrate(url, "upgrade", "0019")
+    migrate(url, "upgrade", "0020")
     return url
 
 
@@ -78,7 +78,7 @@ def test_existing_project_gets_defaults(engine: Engine):
 
 def test_downgrade_removes_columns(url: str):
     try:
-        migrate(url, "downgrade", "0018")
+        migrate(url, "downgrade", "0019")
         engine = create_engine(url)
         try:
             columns = {c["name"] for c in inspect(engine).get_columns(TABLE)}
@@ -86,4 +86,4 @@ def test_downgrade_removes_columns(url: str):
         finally:
             engine.dispose()
     finally:
-        migrate(url, "upgrade", "0019")
+        migrate(url, "upgrade", "0020")
