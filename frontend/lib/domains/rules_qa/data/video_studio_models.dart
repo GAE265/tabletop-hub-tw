@@ -128,6 +128,8 @@ abstract class DraftAsset with _$DraftAsset {
     String? shot,
     required bool representative,
     required List<String> regions,
+    // 已經標好座標的區域（重新產生草稿前提示要重標）
+    @Default([]) List<String> markedRegions,
     required bool hasPhoto,
     // 店員略過的選拍素材（MR 9）
     @Default(false) bool skipped,

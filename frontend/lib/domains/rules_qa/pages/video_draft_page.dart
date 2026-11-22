@@ -35,6 +35,34 @@ class _VideoDraftPageState extends ConsumerState<VideoDraftPage> {
 
   void _regenerate() => ref.read(videoJobProvider(_id).notifier).startDraft();
 
+  /// 有已標好的區域時先確認：新草稿的區域名稱常常會變，標好的區域多半要重標（D17）。
+  Future<void> _confirmRegenerate(VideoDraft draft) async {
+    final marked = draft.assets.fold(0, (n, a) => n + a.markedRegions.length);
+    if (marked == 0) {
+      _regenerate();
+      return;
+    }
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('重新產生草稿？'),
+        content: Text('已標的區域會要重標（目前已標 $marked 個）。照片會盡量沿用。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            key: const Key('video-draft-regenerate-confirm'),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('重新產生'),
+          ),
+        ],
+      ),
+    );
+    if ((ok ?? false) && mounted) _regenerate();
+  }
+
   @override
   Widget build(BuildContext context) {
     final draft = ref.watch(videoDraftProvider(_id));
@@ -49,7 +77,9 @@ class _VideoDraftPageState extends ConsumerState<VideoDraftPage> {
               children: [
                 OutlinedButton(
                   key: const Key('video-draft-regenerate'),
-                  onPressed: running ? null : _regenerate,
+                  onPressed: running
+                      ? null
+                      : () => _confirmRegenerate(draft.value!),
                   child: const Text('重新產生'),
                 ),
                 // 不擋流程：涵蓋檢查有問題也可以往下（漏講的之後用修改補救）
