@@ -33,7 +33,7 @@ git checkout feature/rules_qa-video-whole-game-page
 cd backend
 uv sync
 # 先確認 DATABASE_URL 的主機是 localhost（不要對共用資料庫執行）
-uv run alembic upgrade head          # 升到 0020（整本範圍：章節欄位可空、分類結果）
+uv run alembic upgrade head          # 升到 0021（整本範圍：章節欄位可空、分類結果）
 uv run python -m app.dev.seed        # 測試帳號（可重複執行）
 cd ..\frontend
 flutter pub get
