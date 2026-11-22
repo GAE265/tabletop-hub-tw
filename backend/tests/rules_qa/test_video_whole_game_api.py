@@ -278,8 +278,7 @@ def test_asset_errors_name_the_asset(api, as_shop_staff, rules_db, game):
     response = api.patch(f"{URL}/{project}/assets/board", json={"regions": {"nope": None}})
     assert response.status_code == 422
     assert "「盤面」" in response.json()["error"]["message"]
-    response = api.patch(f"{URL}/{project}/assets/board", json={"skipped": True})
-    assert "「盤面」" in response.json()["error"]["message"]
+    # 略過只靠它的段的素材已經不會出錯（2026-11-22 永傑決定：改用文字卡），不再測略過的錯誤訊息
 
 
 def test_unknown_asset_message_has_no_internal_key(api, as_shop_staff, rules_db, game):

@@ -391,19 +391,18 @@ def test_skip_optional_asset(api, as_shop_staff, rules_db, project):
     assert "blue" in {m["asset_key"] for m in readiness["missing_photos"]}
 
 
-def test_cannot_skip_when_segment_relies_on_it(api, as_shop_staff, rules_db, project):
-    # red 是 s2 主畫面唯一的圖
-    _make_optional(rules_db, project, "red")
+def test_skip_asset_a_segment_relies_on(api, as_shop_staff, rules_db, project):
+    # red 是 s2 主畫面唯一的圖。2026-11-22 永傑決定：拍不了的素材（例如「身上有花香的玩家」）
+    # 也可以略過，產生影片時那幾段改成文字卡，不再擋住「產生影片」
     detail = api.get(f"{URL}/{project}/assets/red").json()
-    assert detail["skip_blocked_segments"] == [2]
-    response = api.patch(f"{URL}/{project}/assets/red", json={"skipped": True})
-    assert response.status_code == 422 and _code(response) == "RULES_VIDEO_SKIP_BLOCKED"
-    # 整本範圍（2026-11-22 永傑決定）：素材頁的錯誤要指出是哪一個素材（舊草稿沒有名稱時用 reason）
-    assert response.json()["error"]["message"] == "「要認得紅牌」：第 2 段只靠這張，不能略過"
-    assert response.json()["error"]["details"] == {"segments": [2]}
+    assert detail["skippable"] is False and detail["skip_blocked_segments"] == [2]
     missing = api.get(f"{URL}/{project}/readiness").json()["missing_photos"]
-    red = next(m for m in missing if m["asset_key"] == "red")
-    assert red["skip_blocked_segments"] == [2]
+    assert next(m for m in missing if m["asset_key"] == "red")["skip_blocked_segments"] == [2]
+    response = api.patch(f"{URL}/{project}/assets/red", json={"skipped": True})
+    assert response.status_code == 200, response.text
+    assert response.json()["skipped"] is True
+    readiness = api.get(f"{URL}/{project}/readiness").json()
+    assert "red" not in {m["asset_key"] for m in readiness["missing_photos"]}
 
 
 def test_skippable_is_decided_by_program(api, as_shop_staff, project):
@@ -426,8 +425,26 @@ def test_can_skip_must_asset_when_segments_keep_content(api, as_shop_staff, proj
     response = api.patch(f"{URL}/{project}/assets/blue", json={"skipped": True})
     assert response.status_code == 200, response.text
     assert response.json()["skipped"] is True
-    response = api.patch(f"{URL}/{project}/assets/red", json={"skipped": True})
-    assert response.status_code == 422 and _code(response) == "RULES_VIDEO_SKIP_BLOCKED"
+
+
+def test_render_with_text_card(api, as_shop_staff, rules_db, storage, project, tmp_path):
+    # 略過 s2 唯一的圖 red：產生影片時 red 改成寫著素材名稱的文字卡，影片照常輸出
+    assert api.patch(f"{URL}/{project}/assets/red", json={"skipped": True}).status_code == 200
+    for key in ("back", "blue", "board"):
+        _upload(api, project, key)
+    body = {"regions": {"zone_a": [0.1, 0.1, 0.4, 0.4]}}
+    assert api.patch(f"{URL}/{project}/assets/board", json=body).status_code == 200
+    assert api.get(f"{URL}/{project}/readiness").json()["ready"] is True
+    job = _render(rules_db, storage, project, tmp_path)
+    assert job.status == "succeeded", job.error
+    assert job.result["text_cards"] == ["red"]
+    rendered = load_video(tmp_path / "work" / str(project))
+    red = rendered.assets["red"]
+    assert red.file.startswith("card-")
+    assert (tmp_path / "work" / str(project) / "assets" / red.file).is_file()
+    # 資料庫的草稿不改
+    video = project_row(rules_db, project).video
+    assert next(a for a in video["assets"] if a["asset_key"] == "red").get("file") is None
 
 
 def test_render_after_skip(api, as_shop_staff, rules_db, storage, project, tmp_path):
