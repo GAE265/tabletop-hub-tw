@@ -131,8 +131,10 @@ abstract class DraftAsset with _$DraftAsset {
     // 已經標好座標的區域（重新產生草稿前提示要重標）
     @Default([]) List<String> markedRegions,
     required bool hasPhoto,
-    // 店員略過的選拍素材（MR 9）
+    // 店員略過的素材（MR 9）
     @Default(false) bool skipped,
+    // 可以略過：略過後每一段仍有主要內容（後端程式判斷，不看 priority）
+    @Default(false) bool skippable,
   }) = _DraftAsset;
 
   factory DraftAsset.fromJson(Map<String, dynamic> json) =>
@@ -266,8 +268,10 @@ abstract class VideoAsset with _$VideoAsset {
     required int orientation,
     required Map<String, List<double>?> regions,
     required int videoVersion,
-    // 略過（MR 9）：只有選拍可以；略過後會少一張圖的段、只靠它而不能略過的段（段號從 1 開始）
+    // 略過（MR 9）：可不可以略過由後端程式判斷（skippable，不看 priority）；
+    // 略過後會少一張圖的段、只靠它而不能略過的段（段號從 1 開始）
     @Default(false) bool skipped,
+    @Default(false) bool skippable,
     @Default([]) List<int> skipAffectedSegments,
     @Default([]) List<int> skipBlockedSegments,
   }) = _VideoAsset;
@@ -291,7 +295,8 @@ abstract class VideoAssetUpdate with _$VideoAssetUpdate {
       _$VideoAssetUpdateFromJson(json);
 }
 
-/// 還沒有照片的素材。`priority`：must＝必拍、optional＝選拍（選拍也會擋住產生影片）。
+/// 還沒有照片的素材（都會擋住產生影片）。`skippable`：可以略過（後端程式判斷）；
+/// `priority` 是 AI 標的必拍／選拍，畫面不再使用。
 @freezed
 abstract class MissingPhoto with _$MissingPhoto {
   @JsonSerializable(fieldRename: FieldRename.snake)
@@ -300,6 +305,7 @@ abstract class MissingPhoto with _$MissingPhoto {
     // 給店員看的名稱（中文名稱；舊的草稿是 reason）
     @Default('') String label,
     required String priority,
+    @Default(false) bool skippable,
     required String reason,
     String? shot,
     @Default([]) List<int> skipAffectedSegments,

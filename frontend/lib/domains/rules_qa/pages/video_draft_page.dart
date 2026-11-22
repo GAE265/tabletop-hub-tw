@@ -12,7 +12,7 @@ import 'widgets/notice_banner.dart';
 import 'widgets/video_studio_widgets.dart';
 
 /// 草稿（`/videos/:id/draft`，design.md D17）：只顯示進度與結果摘要，不擋流程。
-/// 摘要是三格各幾段幾句、必拍與選拍各幾個，以及依格的涵蓋檢查（細節展開才看）。
+/// 摘要是三格各幾段幾句、素材幾個與其中可略過幾個，以及依格的涵蓋檢查（細節展開才看）。
 class VideoDraftPage extends ConsumerStatefulWidget {
   const VideoDraftPage({required this.projectId, super.key});
 
@@ -176,7 +176,7 @@ class _Banner extends StatelessWidget {
   );
 }
 
-/// 結果摘要：三格各幾段幾句、必拍與選拍各幾個。
+/// 結果摘要：三格各幾段幾句、素材幾個與其中可略過幾個。
 class _Summary extends StatelessWidget {
   const _Summary({required this.draft});
 
@@ -205,7 +205,7 @@ class _Summary extends StatelessWidget {
               ),
             const SizedBox(height: AppSpacing.small),
             Text(
-              '素材：必拍 ${summary.mustAssets}、選拍 ${summary.optionalAssets}',
+              '素材：${summary.assets} 個，其中可略過 ${summary.skippableAssets} 個',
               style: text.bodyMedium,
             ),
           ],

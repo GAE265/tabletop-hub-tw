@@ -8,10 +8,9 @@ import '../../../core/widgets/pill_badge.dart';
 import '../data/video_studio_models.dart';
 import '../state/video_assets_state.dart';
 import '../state/video_draft_state.dart';
-import '../state/video_render_state.dart';
 import 'widgets/video_studio_widgets.dart';
 
-/// 素材清單（`/videos/:id/assets`）：最上方是還缺什麼；每個素材的必拍／選拍、代表牌、
+/// 素材清單（`/videos/:id/assets`）：最上方是還缺什麼；每個素材的可略過、代表牌、
 /// 有沒有照片、區域標好了沒（design.md D14）。
 class VideoAssetsPage extends ConsumerWidget {
   const VideoAssetsPage({required this.projectId, super.key});
@@ -99,13 +98,6 @@ class VideoAssetsPage extends ConsumerWidget {
                           missingRegions: readiness.value?.missingRegions
                               .where((m) => m.assetKey == asset.assetKey)
                               .length,
-                          blockedSegments: [
-                            for (final m
-                                in readiness.value?.missingPhotos ??
-                                    const <MissingPhoto>[])
-                              if (m.assetKey == asset.assetKey)
-                                ...m.skipBlockedSegments,
-                          ],
                         ),
                       ),
                   ],
@@ -121,7 +113,6 @@ class _AssetTile extends StatelessWidget {
     required this.projectId,
     required this.asset,
     required this.missingRegions,
-    required this.blockedSegments,
   });
 
   final String projectId;
@@ -129,9 +120,6 @@ class _AssetTile extends StatelessWidget {
 
   /// 這個素材還沒標的區域數；readiness 還沒讀到時是 null。
   final int? missingRegions;
-
-  /// 選拍但不能略過：只靠這張素材的段（MR 10）。
-  final List<int> blockedSegments;
 
   @override
   Widget build(BuildContext context) {
@@ -166,12 +154,9 @@ class _AssetTile extends StatelessWidget {
                       spacing: AppSpacing.small,
                       runSpacing: AppSpacing.xSmall,
                       children: [
-                        PillBadge(
-                          label: asset.priority == 'must' ? '必拍' : '選拍',
-                          tone: asset.priority == 'must'
-                              ? PillTone.accent
-                              : PillTone.neutral,
-                        ),
+                        // 程式判斷的「可略過」（2026-11-22 永傑決定，不看 AI 標的 priority）
+                        if (asset.skippable && !asset.skipped)
+                          const PillBadge(label: '可略過', tone: PillTone.neutral),
                         if (asset.representative)
                           const PillBadge(label: '代表牌', tone: PillTone.neutral),
                         if (asset.skipped)
@@ -201,13 +186,6 @@ class _AssetTile extends StatelessWidget {
                           ),
                       ],
                     ),
-                    if (blockedSegments.isNotEmpty) ...[
-                      const SizedBox(height: AppSpacing.xSmall),
-                      Text(
-                        skipBlockedText(blockedSegments),
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                    ],
                   ],
                 ),
               ),

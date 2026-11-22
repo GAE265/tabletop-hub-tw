@@ -78,7 +78,7 @@ class _VideoAssetPageState extends ConsumerState<VideoAssetPage> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('略過這張選拍素材？'),
+        title: const Text('略過這張素材？'),
         content: Text(
           affected.isEmpty ? '沒有段用到這張素材' : skipConfirmText(affected),
         ),
@@ -157,7 +157,9 @@ class _VideoAssetPageState extends ConsumerState<VideoAssetPage> {
                     ),
                   ),
                   const SizedBox(height: AppSpacing.medium),
-                  if (asset.priority == 'optional') ...[
+                  if (asset.skipped ||
+                      asset.skippable ||
+                      asset.skipBlockedSegments.isNotEmpty) ...[
                     _SkipSection(
                       asset: asset,
                       busy: state.busy,
@@ -259,7 +261,7 @@ class _VideoAssetPageState extends ConsumerState<VideoAssetPage> {
   }
 }
 
-/// 選拍素材的略過：可以略過、已略過（可取消）、只靠它的段不能略過。
+/// 略過（程式判斷可不可以）：已略過（可取消）、可以略過、只靠它的段不能略過。
 class _SkipSection extends StatelessWidget {
   const _SkipSection({
     required this.asset,
@@ -290,7 +292,7 @@ class _SkipSection extends StatelessWidget {
         ),
       );
     }
-    if (asset.skipBlockedSegments.isNotEmpty) {
+    if (!asset.skippable) {
       return Text(
         skipBlockedText(asset.skipBlockedSegments),
         style: text.bodyMedium,

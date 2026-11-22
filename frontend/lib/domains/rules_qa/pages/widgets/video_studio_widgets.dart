@@ -275,7 +275,7 @@ class VideoReadinessCard extends StatelessWidget {
             for (final photo in readiness.missingPhotos)
               Text(
                 '拍照：${photo.label.isNotEmpty ? photo.label : photo.reason}'
-                '（${photo.priority == 'must' ? '必拍' : '選拍'}）',
+                '${photo.skippable ? '（可略過）' : ''}',
                 style: text.bodyMedium,
               ),
             for (final region in readiness.missingRegions)

@@ -23,14 +23,18 @@ class DraftSlotSummary {
 }
 
 class DraftSummary {
-  const DraftSummary(this.slots, this.mustAssets, this.optionalAssets);
+  const DraftSummary(this.slots, this.assets, this.skippableAssets);
 
   final List<DraftSlotSummary> slots;
-  final int mustAssets;
-  final int optionalAssets;
+
+  /// 沒有略過的素材數。
+  final int assets;
+
+  /// 其中可以略過的（後端程式判斷，不看 AI 標的 priority）。
+  final int skippableAssets;
 }
 
-/// 草稿頁只顯示結果摘要（D17：不擋流程）：三格各幾段幾句、必拍與選拍各幾個。
+/// 草稿頁只顯示結果摘要（D17：不擋流程）：三格各幾段幾句、素材幾個與其中可略過幾個。
 DraftSummary draftSummary(VideoDraft draft) => DraftSummary(
   [
     for (final (key, title) in videoSlots)
@@ -43,8 +47,8 @@ DraftSummary draftSummary(VideoDraft draft) => DraftSummary(
             .fold(0, (sum, s) => sum + s.beats.length),
       ),
   ],
-  draft.assets.where((a) => !a.skipped && a.priority == 'must').length,
-  draft.assets.where((a) => !a.skipped && a.priority != 'must').length,
+  draft.assets.where((a) => !a.skipped).length,
+  draft.assets.where((a) => !a.skipped && a.skippable).length,
 );
 
 /// 給店員看的素材名稱：中文名稱；舊的草稿沒有時用 reason（不顯示 asset_key 這類內部代號）。
