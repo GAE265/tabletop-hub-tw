@@ -57,6 +57,7 @@ from app.domains.rules_qa.video_script import (
 )
 from app.integrations.llm import LLMProvider
 from app.integrations.llm.errors import LLMError, LLMUnavailable
+from app.integrations.llm.usage import collect_usage
 from app.integrations.ocr.base import VisionProvider
 from app.integrations.ocr.errors import OCRError, OCRUnavailable
 from app.integrations.storage import FileStorage, StorageError
@@ -159,6 +160,13 @@ class DraftJobHandler:
         self._read_workers = read_workers
 
     def __call__(self, ctx: JobContext) -> dict[str, Any]:
+        # 每次 LLM／看圖呼叫的實際 token 用量記在結果（2026-11-23 永傑要求，算費用用）
+        with collect_usage() as usage:
+            result = self._run(ctx)
+        result["usage"] = usage.summary()
+        return result
+
+    def _run(self, ctx: JobContext) -> dict[str, Any]:
         ctx.report(0.05, "讀取規則書文字")
         with ctx.session_factory() as session:
             state = VideoDraftRepository(session).get_state(ctx.project_id)

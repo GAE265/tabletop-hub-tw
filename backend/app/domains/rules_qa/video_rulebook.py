@@ -19,6 +19,7 @@ from typing import Any
 from PIL import Image
 
 from app.integrations.llm.types import JsonSchema
+from app.integrations.llm.usage import in_current_context
 from app.integrations.ocr.base import VisionProvider
 from app.integrations.storage import FileNotFound, FileStorage
 
@@ -221,7 +222,7 @@ def _read_one(vision: VisionProvider, data: bytes, parallel: bool) -> ReadPage:
 
     if parallel:
         with ThreadPoolExecutor(max_workers=len(crops)) as pool:
-            parts = dict(pool.map(read_tile, crops))
+            parts = dict(pool.map(in_current_context(read_tile), crops))
     else:
         parts = dict(map(read_tile, crops))
     merged = merge_tiles(parts)
@@ -267,7 +268,8 @@ def read_rulebook(
     if workers <= 1:
         return [one(data) for data in photos]
     with ThreadPoolExecutor(max_workers=workers) as pool:
-        return list(pool.map(one, photos))
+        # 執行緒裡的看圖呼叫也記進呼叫端的用量紀錄
+        return list(pool.map(in_current_context(one), photos))
 
 
 # --------------------------------------------------------------------------- 照片清單（存放介面）
