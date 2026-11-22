@@ -14,6 +14,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.domains.rules_qa.video_draft import DraftJobHandler
 from app.domains.rules_qa.video_jobs import JobRunner
+from app.integrations.llm.errors import LLMUnavailable
 from app.integrations.llm.fake import FakeLLMProvider
 from tests.rules_qa.video_script_support import coverage_output
 from tests.rules_qa.video_support import seed_people
@@ -229,7 +230,8 @@ def test_rejected_script_hides_internal_codes(api, as_shop_staff, rules_db, game
     project = _create(api, game)["id"]
     bad = whole_game_output()
     bad["segments"][0]["beats"][0]["narration"] = "每人只有一次機會。"
-    _run(rules_db, [classify_output(), bad, bad])
+    # 每格改寫 2 次、整個工作自動重試 1 次（2026-11-22 永傑決定）都沒過才失敗
+    _run(rules_db, [classify_output(), bad, bad, bad, classify_output(), bad, bad, bad])
     job = _job(rules_db, project)
     assert job.status == "failed"
     assert job.error == "AI 產生的草稿沒有通過檢查，請再產生一次；若一直失敗，請通知管理員"
@@ -300,7 +302,8 @@ def test_project_id_is_uuid(api, as_shop_staff, game):
 def test_page_without_place_fails_job(api, as_shop_staff, rules_db, game):
     project = _create(api, game)["id"]
     missing_page_4 = classify_output(excluded=[])
-    _run(rules_db, [missing_page_4, missing_page_4])
+    # 改寫、漏頁補救、整個工作重試一次（2026-11-22 永傑決定）都沒補上才失敗
+    _run(rules_db, [missing_page_4] * 6)
     job = _job(rules_db, project)
     assert job.status == "failed"
     assert job.error == (
@@ -383,3 +386,45 @@ def test_skip_unknown_region_is_422(api, as_shop_staff, rules_db, game):
     response = api.patch(f"{URL}/{project}/assets/board", json={"skipped_regions": ["nope"]})
     assert response.status_code == 422 and _code(response) == "RULES_VIDEO_REGION_UNKNOWN"
     assert "「盤面」" in response.json()["error"]["message"]
+
+
+# --- 草稿工作自動重試一次（2026-11-22 永傑決定）：只對「檢查沒過」與「分類漏頁」 ---
+
+
+def test_job_retries_once_after_rejected_script(api, as_shop_staff, rules_db, game):
+    project = _create(api, game)["id"]
+    bad = whole_game_output()
+    bad["segments"][0]["beats"][0]["narration"] = "每人只有一次機會。"
+    llm = _run(rules_db, [classify_output(), bad, bad, bad, *whole_game_llm_outputs()])
+    job = _job(rules_db, project)
+    assert job.status == "succeeded", job.error
+    assert job.result["retried"] is True
+    assert (
+        job.result["retry_reason"]
+        == "AI 產生的草稿沒有通過檢查，請再產生一次；若一直失敗，請通知管理員"
+    )
+    assert len(llm.calls) == 4 + 7
+    assert api.get(f"{URL}/{project}/draft").status_code == 200
+
+
+def test_job_retries_once_after_missing_page(api, as_shop_staff, rules_db, game):
+    project = _create(api, game)["id"]
+    missing_page_4 = classify_output(excluded=[])
+    _run(rules_db, [missing_page_4] * 3 + whole_game_llm_outputs())
+    job = _job(rules_db, project)
+    assert job.status == "succeeded", job.error
+    assert job.result["retried"] is True
+
+
+def test_job_does_not_retry_when_llm_unavailable(api, as_shop_staff, rules_db, game):
+    project = _create(api, game)["id"]
+    llm = _run(rules_db, [LLMUnavailable("連不上")])
+    job = _job(rules_db, project)
+    assert job.status == "failed"
+    assert len(llm.calls) == 1
+
+
+def test_successful_job_without_retry(api, as_shop_staff, rules_db, game):
+    project = _create(api, game)["id"]
+    _run(rules_db, whole_game_llm_outputs())
+    assert _job(rules_db, project).result["retried"] is False

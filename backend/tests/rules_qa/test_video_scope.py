@@ -299,12 +299,26 @@ def test_each_slot_rewrites_once(tmp_path: Path):
 
 
 def test_slot_rejected_twice_names_the_slot(tmp_path: Path):
+    # 2026-11-22 永傑決定每格改寫 2 次：第一次加上兩次改寫都沒過才失敗
     bad = slot_output("win")
     bad["segments"][0]["beats"][0]["narration"] = "每人只有一次機會。"
-    llm = FakeLLMProvider(json_outputs=[slot_output("setup"), slot_output("round"), bad, bad])
+    llm = FakeLLMProvider(json_outputs=[slot_output("setup"), slot_output("round"), bad, bad, bad])
     with pytest.raises(ScriptRejected) as exc:
         generate_whole_game(llm, _request(), tmp_path)
     assert any(e.startswith("「獲勝方式」") for e in exc.value.errors)
+
+
+def test_slot_rewrites_twice(tmp_path: Path):
+    # 2026-11-22 永傑決定：每格改寫增加到 2 次，第二次改寫通過就算成功
+    bad = slot_output("round")
+    bad["segments"][0]["beats"][0]["narration"] = "每人只有一次機會。"
+    llm = FakeLLMProvider(
+        json_outputs=[slot_output("setup"), bad, bad, slot_output("round"), slot_output("win")]
+    )
+    data = generate_whole_game(llm, _request(), tmp_path)
+    assert len(llm.calls) == 5
+    assert "上一次的輸出有以下問題" in llm.calls[3].kwargs["input"]
+    assert [s["chapter_key"] for s in data["segments"]] == ["setup", "round", "round", "win"]
 
 
 def test_whole_game_prompt_rules():
@@ -335,12 +349,37 @@ def test_page_without_place_triggers_rewrite():
 
 
 def test_page_still_without_place_fails():
+    # 改寫與漏頁補救（2026-11-22 永傑決定）都沒補上第 4 頁才失敗
     first = classify_output(excluded=[])
-    llm = FakeLLMProvider(json_outputs=[first, first])
+    llm = FakeLLMProvider(json_outputs=[first, first, first])
     with pytest.raises(ScopeIncomplete) as exc:
         classify_scope(llm, PAGES)
     assert exc.value.pages == [4]
     assert "4" in exc.value.detail
+
+
+def test_missing_pages_get_a_small_classification():
+    # 2026-11-22 永傑決定：改寫後仍漏頁，只拿漏掉的頁另外做一次小分類
+    first = classify_output(excluded=[])
+    small = {
+        "setup": [],
+        "round": [],
+        "win": [],
+        "excluded": [{"page": 4, "quote": VARIANT_QUOTE, "reason": "變體規則"}],
+        "places": [],
+    }
+    llm = FakeLLMProvider(json_outputs=[first, first, small])
+    result = classify_scope(llm, PAGES)
+    assert len(llm.calls) == 3
+    third = llm.calls[2].kwargs["input"]
+    assert "第 4 頁" in third and SETUP_QUOTE not in third  # 只送漏掉的頁
+    assert "漏掉" in llm.calls[2].kwargs["instructions"]
+    # 原本的三格與場地清單保留，第 4 頁補進排除清單
+    assert [e.text for e in next(s for s in result.slots if s.key == "setup").excerpts] == [
+        SETUP_QUOTE
+    ]
+    assert [e.page for e in result.excluded] == [4]
+    assert result.places
 
 
 def test_dropped_quote_does_not_count_as_place():
