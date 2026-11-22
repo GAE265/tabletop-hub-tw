@@ -246,17 +246,24 @@ void main() {
       expect(repo.updates, isEmpty);
     });
 
-    testWidgets('只靠它的段：說明不能略過，沒有略過按鈕', (tester) async {
+    // 2026-11-22 永傑決定：拍不了的素材（例如「身上有花香的玩家」）不能擋住產生影片：
+    // 只靠它的段改成顯示文字卡
+    testWidgets('只靠它的段：拍不了時可以改用文字卡', (tester) async {
       final repo = assetsRepo(
-        asset: sampleAsset(
-          key: 'red',
-          priority: 'optional',
-          regions: const {},
-        ).copyWith(skipAffectedSegments: [1, 2], skipBlockedSegments: [2]),
+        asset: sampleAsset(key: 'red', regions: const {}).copyWith(
+          label: '身上有花香的玩家',
+          skipAffectedSegments: [1, 2],
+          skipBlockedSegments: [2],
+        ),
       );
       await pumpVideo(tester, location: '/videos/p1/assets/red', repo: repo);
-      expect(find.text('第 2 段只靠這張，不能略過'), findsOneWidget);
-      expect(find.byKey(const Key('video-asset-skip')), findsNothing);
+      expect(find.textContaining('第 2 段只靠這張'), findsOneWidget);
+      expect(find.text('拍不了，改用文字卡'), findsOneWidget);
+      await tapKey(tester, 'video-asset-skip');
+      expect(find.textContaining('第 2 段會改成顯示文字「身上有花香的玩家」'), findsOneWidget);
+      await tapText(tester, '改用文字卡');
+      expect(repo.updates.single.$3.skipped, isTrue);
+      expect(find.text('已略過'), findsOneWidget);
     });
 
     testWidgets('不可略過：沒有略過按鈕', (tester) async {
