@@ -19,7 +19,8 @@ class FilePickerImagePicker implements ImagePicker {
   Future<List<PickedImage>?> pickImages() async {
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
-      allowedExtensions: ['jpg', 'jpeg', 'png'],
+      // HEIC 也讓店員選得到，選到時由畫面說明要改成 JPEG（不支援 HEIC）
+      allowedExtensions: ['jpg', 'jpeg', 'png', 'heic', 'heif'],
       allowMultiple: true,
       withData: true,
     );

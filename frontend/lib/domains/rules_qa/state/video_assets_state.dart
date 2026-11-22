@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/api/api_exception.dart';
 import '../../../core/platform/image_picker.dart';
+import '../data/video_image_size.dart';
 import '../data/video_studio_models.dart';
 import '../data/video_studio_repository.dart';
 import 'video_draft_state.dart';
@@ -100,6 +101,10 @@ class VideoAssetNotifier extends Notifier<VideoAssetState> {
       return;
     }
     if (images == null || images.isEmpty) return;
+    if (isHeicImage(images.first.name, images.first.bytes)) {
+      state = state.copyWith(error: heicUnsupportedMessage);
+      return;
+    }
     final before = state.asset;
     state = state.copyWith(busy: true, clearError: true);
     try {
