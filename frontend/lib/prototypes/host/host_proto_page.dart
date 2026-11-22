@@ -82,27 +82,53 @@ class _HostProtoPageState extends ConsumerState<HostProtoPage> {
     final state = ref.watch(hostControllerProvider);
     final controller = ref.read(hostControllerProvider.notifier);
     final hosting = state.isLive && state.live != null;
-    return Scaffold(
-      appBar: AppBar(title: const Text('語音主持')),
-      body: LayoutBuilder(
-        builder: (context, constraints) {
-          final wide =
-              screenSizeForWidth(constraints.maxWidth) == ScreenSize.desktop;
-          return ListView(
+    final notices = state.notices.isEmpty
+        ? null
+        : _Notices(state: state, controller: controller);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final wide =
+            screenSizeForWidth(constraints.maxWidth) == ScreenSize.desktop;
+        final layout = hosting
+            ? _HostingLayout(
+                state: state,
+                controller: controller,
+                notices: notices,
+                wide: wide,
+              )
+            : null;
+        return Scaffold(
+          appBar: AppBar(
+            title: const Text('語音主持'),
+            // 「結束主持」放在標題列，離流程鍵最遠，按「下一步」時不會誤按；
+            // 不再確認（30 分鐘內可以接著主持）
+            actions: [
+              if (hosting)
+                Padding(
+                  padding: const EdgeInsets.only(right: _smallGap),
+                  child: TextButton.icon(
+                    key: const Key('host-end'),
+                    onPressed: controller.end,
+                    icon: const Icon(Icons.stop_circle_outlined),
+                    label: const Text('結束主持'),
+                  ),
+                ),
+            ],
+          ),
+          body: ListView(
             padding: const EdgeInsets.all(_gap),
             children: [
-              if (state.notices.isNotEmpty) ...[
-                _Notices(state: state, controller: controller),
-                const SizedBox(height: _gap),
-              ],
-              if (hosting)
-                _Hosting(state: state, controller: controller, wide: wide)
-              else
+              if (layout != null)
+                layout.body()
+              else ...[
+                if (notices != null) ...[notices, const SizedBox(height: _gap)],
                 _Setup(state: state, controller: controller),
+              ],
             ],
-          );
-        },
-      ),
+          ),
+          bottomNavigationBar: layout?.bottomBar(),
+        );
+      },
     );
   }
 }
@@ -381,71 +407,66 @@ class _ResumeButtons extends StatelessWidget {
   }
 }
 
-/// 主持中。手機與平板由上往下：進度、主持人的狀態、接話方式、流程鍵、可以這樣說、結束主持。
-/// 筆電分左右兩欄：左欄進度與主持人的狀態，右欄其餘的按鍵與提示。
-class _Hosting extends StatelessWidget {
-  const _Hosting({
+/// 主持中的排版。按鍵放在提醒與進度改變時都不會被推動的位置，避免連按時按空：
+/// - 手機與平板：內容由上往下是提醒、進度、主持人的狀態、接話方式、可以這樣說；
+///   流程鍵（與按住說話鍵）固定在畫面底部，伸手就按得到。
+/// - 筆電：左欄提醒、進度與主持人的狀態；右欄接話方式、流程鍵、按住說話鍵、可以這樣說。
+class _HostingLayout {
+  const _HostingLayout({
     required this.state,
     required this.controller,
+    required this.notices,
     required this.wide,
   });
 
   final HostState state;
   final HostController controller;
+  final Widget? notices;
   final bool wide;
 
-  @override
-  Widget build(BuildContext context) {
-    final status = [
-      _Progress(state: state),
-      if (state.lookingUp)
-        const Card(
-          key: Key('host-section-host-status'),
-          margin: EdgeInsets.zero,
-          child: ListTile(leading: Icon(Icons.menu_book), title: Text('正在查規則')),
-        ),
-    ];
-    final controls = [
-      if (state.canResume) _ResumeButtons(state: state, controller: controller),
-      Card(
-        key: const Key('host-section-mode'),
+  List<Widget> get _status => [
+    ?notices,
+    _Progress(state: state),
+    if (state.lookingUp)
+      const Card(
+        key: Key('host-section-host-status'),
         margin: EdgeInsets.zero,
-        child: ListTile(
-          leading: Icon(_modeIcons[state.turnTakingMode]),
-          title: const Text('接話方式'),
-          subtitle: Text(
-            _modeNames[state.turnTakingMode]!,
-            key: const Key('host-mode-label'),
-          ),
-          trailing: OutlinedButton(
-            key: const Key('host-switch-mode'),
-            onPressed: controller.switchTurnTakingMode,
-            child: const Text('切換'),
-          ),
-        ),
+        child: ListTile(leading: Icon(Icons.menu_book), title: Text('正在查規則')),
       ),
-      if (state.showTalkButton)
-        Center(
+    // ✅ 這一局結束後，「接著主持」「重新開始」接在進度下面
+    if (state.canResume) _ResumeButtons(state: state, controller: controller),
+  ];
+
+  Widget get _mode => Card(
+    key: const Key('host-section-mode'),
+    margin: EdgeInsets.zero,
+    child: ListTile(
+      leading: Icon(_modeIcons[state.turnTakingMode]),
+      title: const Text('接話方式'),
+      subtitle: Text(
+        _modeNames[state.turnTakingMode]!,
+        key: const Key('host-mode-label'),
+      ),
+      trailing: OutlinedButton(
+        key: const Key('host-switch-mode'),
+        onPressed: controller.switchTurnTakingMode,
+        child: const Text('切換'),
+      ),
+    ),
+  );
+
+  Widget? get _talk => state.showTalkButton
+      ? Center(
           child: _TalkButton(state: state, controller: controller),
-        ),
-      _FlowButtons(state: state, controller: controller),
-      const _VoiceHints(),
-      // 「結束主持」離流程鍵遠一點，避免按「下一步」時誤按；不再確認（30 分鐘內可以接著主持）
-      Center(
-        key: const Key('host-section-end'),
-        child: TextButton.icon(
-          key: const Key('host-end'),
-          onPressed: controller.end,
-          icon: const Icon(Icons.stop_circle_outlined),
-          label: const Text('結束主持'),
-        ),
-      ),
-    ];
+        )
+      : null;
+
+  Widget body() {
     if (!wide) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         spacing: _gap,
-        children: [...status, ...controls],
+        children: [..._status, _mode, const _VoiceHints()],
       );
     }
     return Row(
@@ -458,7 +479,7 @@ class _Hosting extends StatelessWidget {
             key: const Key('host-column-status'),
             crossAxisAlignment: CrossAxisAlignment.stretch,
             spacing: _gap,
-            children: status,
+            children: _status,
           ),
         ),
         Expanded(
@@ -466,10 +487,48 @@ class _Hosting extends StatelessWidget {
             key: const Key('host-column-controls'),
             crossAxisAlignment: CrossAxisAlignment.stretch,
             spacing: _gap,
-            children: controls,
+            children: [
+              _mode,
+              Card(
+                margin: EdgeInsets.zero,
+                child: Padding(
+                  padding: const EdgeInsets.all(_gap),
+                  child: _FlowButtons(state: state, controller: controller),
+                ),
+              ),
+              // 按住說話鍵放在流程鍵下面：切換接話方式時流程鍵不移位
+              ?_talk,
+              const _VoiceHints(),
+            ],
           ),
         ),
       ],
+    );
+  }
+
+  /// 手機與平板固定在畫面底部的按鍵；筆電沒有。
+  Widget? bottomBar() {
+    if (wide) return null;
+    return SafeArea(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Divider(height: 1),
+          Padding(
+            padding: const EdgeInsets.all(_gap),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              spacing: _gap,
+              children: [
+                ?_talk,
+                _FlowButtons(state: state, controller: controller),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -558,50 +617,44 @@ class _FlowButtons extends StatelessWidget {
   Widget build(BuildContext context) {
     // 手機寬度放得下三顆含圖示的按鍵：左右內距縮成小間距
     const padding = EdgeInsets.symmetric(horizontal: _smallGap);
-    return Card(
+    return Row(
       key: const Key('host-section-flow'),
-      margin: EdgeInsets.zero,
-      child: Padding(
-        padding: const EdgeInsets.all(_gap),
-        child: Row(
-          spacing: _smallGap,
-          children: [
-            Expanded(
-              child: OutlinedButton.icon(
-                key: const Key('host-previous'),
-                style: _bigOutlined.copyWith(
-                  padding: const WidgetStatePropertyAll(padding),
-                ),
-                onPressed: controller.previous,
-                icon: const Icon(Icons.skip_previous),
-                label: const Text('上一步'),
-              ),
+      spacing: _smallGap,
+      children: [
+        Expanded(
+          child: OutlinedButton.icon(
+            key: const Key('host-previous'),
+            style: _bigOutlined.copyWith(
+              padding: const WidgetStatePropertyAll(padding),
             ),
-            Expanded(
-              child: OutlinedButton.icon(
-                key: const Key('host-pause'),
-                style: _bigOutlined.copyWith(
-                  padding: const WidgetStatePropertyAll(padding),
-                ),
-                onPressed: controller.togglePause,
-                icon: Icon(state.paused ? Icons.play_arrow : Icons.pause),
-                label: Text(pauseButtonLabel(state)),
-              ),
-            ),
-            Expanded(
-              child: FilledButton.icon(
-                key: const Key('host-next'),
-                style: _bigFilled.copyWith(
-                  padding: const WidgetStatePropertyAll(padding),
-                ),
-                onPressed: controller.next,
-                icon: const Icon(Icons.skip_next),
-                label: const Text('下一步'),
-              ),
-            ),
-          ],
+            onPressed: controller.previous,
+            icon: const Icon(Icons.skip_previous),
+            label: const Text('上一步'),
+          ),
         ),
-      ),
+        Expanded(
+          child: OutlinedButton.icon(
+            key: const Key('host-pause'),
+            style: _bigOutlined.copyWith(
+              padding: const WidgetStatePropertyAll(padding),
+            ),
+            onPressed: controller.togglePause,
+            icon: Icon(state.paused ? Icons.play_arrow : Icons.pause),
+            label: Text(pauseButtonLabel(state)),
+          ),
+        ),
+        Expanded(
+          child: FilledButton.icon(
+            key: const Key('host-next'),
+            style: _bigFilled.copyWith(
+              padding: const WidgetStatePropertyAll(padding),
+            ),
+            onPressed: controller.next,
+            icon: const Icon(Icons.skip_next),
+            label: const Text('下一步'),
+          ),
+        ),
+      ],
     );
   }
 }

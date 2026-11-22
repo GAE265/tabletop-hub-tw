@@ -497,8 +497,8 @@ void main() {
       );
     });
 
-    testWidgets('提醒出現或進度改變時，流程鍵不移位（手機與筆電）', (tester) async {
-      for (final size in [phone, laptop]) {
+    for (final (name, size) in [('手機', phone), ('筆電', laptop)]) {
+      testWidgets('$name：提醒出現或進度改變時，流程鍵不移位', (tester) async {
         final h = ProtoHarness();
         await h.pump(tester, size: size);
         await h.start(
@@ -532,8 +532,8 @@ void main() {
         // 查規則：多出「正在查規則」
         await h.emit(tester, HostStateMessage(liveState(lookingUp: true)));
         expect(pause(), before, reason: '$size 查規則');
-      }
-    });
+      });
+    }
 
     testWidgets('筆電：左欄進度與主持人的狀態，右欄接話方式、流程鍵、可以這樣說，「結束主持」在標題列', (tester) async {
       final h = ProtoHarness();
