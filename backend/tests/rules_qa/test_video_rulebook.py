@@ -158,6 +158,17 @@ def test_tiles_are_cropped_from_the_photo():
     assert all(size < whole for c in vision.calls[:4] for _, size in c.images)
 
 
+def test_usage_is_recorded_from_worker_threads():
+    # 同時讀兩張（執行緒）時，每次看圖呼叫的用量仍記在同一份紀錄
+    from app.integrations.llm.usage import collect_usage
+
+    generic = {"title": "", "text": "x", "figures": []}
+    vision = FakeVisionProvider([generic] * 10)
+    with collect_usage() as usage:
+        read_rulebook(vision, [page_image(), page_image()], workers=2)
+    assert usage.summary()["calls"] == 10
+
+
 def test_vision_unavailable_is_raised():
     vision = FakeVisionProvider([OCRUnavailable("連不上")])
     with pytest.raises(OCRUnavailable):

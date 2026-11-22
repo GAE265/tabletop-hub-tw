@@ -208,6 +208,10 @@ def test_draft_job_reads_photos_then_generates(api, as_shop_staff, rules_db, sto
     assert jobs[-1].status == "succeeded", jobs[-1].error
     assert jobs[-1].result["rulebook_photos"] == 4
     assert len(vision.calls) == 4 * 5
+    # 每次呼叫的用量都記在工作結果（2026-11-23 永傑要求）：看圖 20 次＋LLM 7 次
+    usage = jobs[-1].result["usage"]
+    assert usage["calls"] == 20 + 7
+    assert usage["by_name"]["rulebook_tile"]["calls"] == 16
     chapter_pages, page_texts = _pages(rules_db, project)
     assert chapter_pages == [1, 2, 3, 4]
     assert page_texts["1"]["text"].startswith("Setup.") and page_texts["1"]["photo"]
