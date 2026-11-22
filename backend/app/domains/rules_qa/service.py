@@ -77,7 +77,6 @@ from app.domains.rules_qa.video_assets import (
     photo_key,
     readiness,
     region_segments,
-    skip_blocked_message,
     skip_impact,
 )
 from app.domains.rules_qa.video_coverage import report_from_dict
@@ -1125,16 +1124,11 @@ class VideoAssetsService:
 
     @staticmethod
     def _check_skip(video: dict[str, Any], asset: dict[str, Any]) -> None:
-        """略過後某段的主畫面會空掉就不能略過；不看 AI 標的 priority（2026-11-22 永傑決定）。"""
-        label = asset_label(asset)
-        _, blocked = skip_impact(video, asset["asset_key"])
-        if blocked:
-            raise AppError(
-                422,
-                "RULES_VIDEO_SKIP_BLOCKED",
-                f"「{label}」：{skip_blocked_message(blocked)}",
-                {"segments": blocked},
-            )
+        """每個素材都可以略過（2026-11-22 永傑決定：拍不了的素材不能擋住產生影片）。
+
+        略過後某段的主畫面會空掉時，產生影片會把它換成寫著素材名稱的文字卡（video_render）；
+        素材明細的 skip_blocked_segments 列出是哪幾段，手機頁在略過前說明。
+        """
 
     def readiness(self, user: CurrentUser, project_id: uuid.UUID) -> VideoReadinessOut:
         state = self._state(user, project_id)

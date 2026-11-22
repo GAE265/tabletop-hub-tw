@@ -75,12 +75,19 @@ class _VideoAssetPageState extends ConsumerState<VideoAssetPage> {
   /// 略過前先說明會影響哪幾段（2026-11-22 永傑決定）。
   Future<void> _confirmSkip(BuildContext context, VideoAsset asset) async {
     final affected = asset.skipAffectedSegments;
+    final blocked = asset.skipBlockedSegments;
+    // 只靠它的段：改用文字卡（拍不了的素材不能擋住產生影片）
+    final card = !asset.skippable && blocked.isNotEmpty;
     final ok = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('略過這張素材？'),
+        title: Text(card ? '拍不了這個素材？' : '略過這張素材？'),
         content: Text(
-          affected.isEmpty ? '沒有段用到這張素材' : skipConfirmText(affected),
+          card
+              ? textCardConfirmText(blocked, asset.label ?? asset.reason)
+              : affected.isEmpty
+              ? '沒有段用到這張素材'
+              : skipConfirmText(affected),
         ),
         actions: [
           TextButton(
@@ -89,7 +96,7 @@ class _VideoAssetPageState extends ConsumerState<VideoAssetPage> {
           ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('略過'),
+            child: Text(card ? '改用文字卡' : '略過'),
           ),
         ],
       ),
@@ -293,9 +300,18 @@ class _SkipSection extends StatelessWidget {
       );
     }
     if (!asset.skippable) {
-      return Text(
-        skipBlockedText(asset.skipBlockedSegments),
-        style: text.bodyMedium,
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(textCardHint(asset.skipBlockedSegments), style: text.bodyMedium),
+          const SizedBox(height: AppSpacing.small),
+          OutlinedButton.icon(
+            key: const Key('video-asset-skip'),
+            onPressed: busy ? null : onSkip,
+            icon: const Icon(Icons.text_fields),
+            label: const Text('拍不了，改用文字卡'),
+          ),
+        ],
       );
     }
     return Align(

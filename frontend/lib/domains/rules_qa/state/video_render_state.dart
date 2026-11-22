@@ -29,3 +29,11 @@ String skipConfirmText(List<int> affected) =>
 /// 只靠這張素材的段：不能略過。和後端 RULES_VIDEO_SKIP_BLOCKED 的訊息一致。
 String skipBlockedText(List<int> blocked) =>
     '第 ${_segments(blocked)} 段只靠這張，不能略過';
+
+/// 只靠這張素材的段：拍不了時改用文字卡（2026-11-22 永傑決定，不再擋住產生影片）。
+String textCardHint(List<int> blocked) =>
+    '第 ${_segments(blocked)} 段只靠這張；拍不了的話，那一段可以改成顯示文字卡';
+
+/// 改用文字卡前的說明。
+String textCardConfirmText(List<int> blocked, String label) =>
+    '第 ${_segments(blocked)} 段會改成顯示文字「$label」，其他用到它的段會少一張圖。';

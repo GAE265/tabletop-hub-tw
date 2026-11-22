@@ -10,7 +10,9 @@
 整個工作仍受 JobRunner 的 30 分鐘限制。
 """
 
+import copy
 import csv
+import io
 import json
 import logging
 import uuid
@@ -18,13 +20,15 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from PIL import Image, ImageDraw
+
 from app.core.config import Settings
 from app.domains.rules_qa.repository import VideoDraftRepository
 from app.domains.rules_qa.video_assets import (
+    asset_label,
     is_skipped,
     photo_key,
     readiness,
-    skip_blocked_message,
     strip_skipped,
     strip_skipped_regions,
 )
@@ -43,6 +47,7 @@ from app.integrations.video import (
     load_video,
 )
 from app.integrations.video.ffmpeg import Ffmpeg
+from app.integrations.video.fonts import text_width, wrap
 from app.integrations.video.pipeline import render_video
 
 logger = logging.getLogger(__name__)
@@ -146,20 +151,31 @@ class RenderJobHandler:
         if not report["ready"]:
             raise JobFailed(not_ready_message(report))
         skipped = {a["asset_key"] for a in state.video.get("assets", []) if is_skipped(a)}
-        stripped = strip_skipped(state.video, skipped)
-        if stripped.blocked:
-            raise JobFailed(skip_blocked_message(stripped.blocked))
+        # 略過後某段的主畫面會空掉的素材（拍不了的，例如「身上有花香的玩家」）：不拿掉，
+        # 改成寫著素材名稱的文字卡（2026-11-22 永傑決定）；其他略過的照舊拿掉
+        cards = {k for k in skipped if strip_skipped(state.video, {k}).blocked}
+        stripped = strip_skipped(state.video, skipped - cards)
+        if stripped.blocked:  # 幾張一起略過才讓某段空掉：這幾張也改成文字卡
+            cards = set(skipped)
+            stripped = strip_skipped(state.video, set())
+        fonts, tts, estimated = self._tools()
+        output = with_text_cards(stripped.video, cards)
         # 照片拍不到、店員略過的區域：拿掉區域與指向它的框選、標籤、移動（2026-11-22 永傑決定）
-        output = strip_skipped_regions(stripped.video)
+        output = strip_skipped_regions(output)
 
         folder = self._config.work_dir / str(ctx.project_id)
+        (folder / "assets").mkdir(parents=True, exist_ok=True)
+        for asset in output.get("assets", []):
+            if asset["asset_key"] in cards:
+                (folder / "assets" / asset["file"]).write_bytes(
+                    text_card(asset_label(asset), fonts)
+                )
         self._expand(folder, ctx.project_id, output)
         try:
             video = load_video(folder)
         except VideoDataError as exc:
             # 錯誤列出段代號、highlight key 等內部代號：只放 error_detail
             raise JobFailed(RENDER_DATA_MESSAGE, detail=str(exc)) from exc
-        fonts, tts, estimated = self._tools()
 
         ffmpeg = Ffmpeg(
             self._config.ffmpeg_command, timeout_seconds=self._config.ffmpeg_timeout_seconds
@@ -206,6 +222,8 @@ class RenderJobHandler:
             "reencoded": [s.segment_key for s in result.segments if not s.reused],
             "reused": [s.segment_key for s in result.segments if s.reused],
             "skipped_assets": sorted(skipped),
+            # 改成文字卡的素材（略過後某段的主畫面會空掉）
+            "text_cards": sorted(cards),
             "estimated": estimated,
             "warnings": list(result.warnings),
             "video_version": state.video_version,
@@ -246,3 +264,42 @@ class RenderJobHandler:
             logger.warning("文字轉語音設定錯誤：%s", exc)
             raise JobFailed(RENDER_SETUP_MESSAGE) from exc
         return fonts, tts, config.tts.provider == "fake"
+
+
+# --------------------------------------------------------------------------- 文字卡
+
+CARD_SIZE = (1200, 900)
+CARD_BACKGROUND = (38, 38, 46)
+CARD_TEXT = (240, 240, 240)
+
+
+def with_text_cards(video: dict[str, Any], cards: set[str]) -> dict[str, Any]:
+    """這幾個素材改用文字卡：檔名換成 card-<asset_key>.png、取消略過、區域都拿掉
+    （文字卡上沒有那些區域）。不改傳入的資料。"""
+    result = copy.deepcopy(video)
+    for asset in result.get("assets", []):
+        if asset["asset_key"] not in cards:
+            continue
+        asset["file"] = f"card-{asset['asset_key']}.png"
+        asset.pop("usable", None)
+        asset["orientation"] = 0
+        asset["skipped_regions"] = list(asset.get("regions") or {})
+    return result
+
+
+def text_card(label: str, fonts: FontSet) -> bytes:
+    """深色底、置中寫著素材名稱的圖（PNG）。"""
+    image = Image.new("RGB", CARD_SIZE, CARD_BACKGROUND)
+    draw = ImageDraw.Draw(image)
+    font = fonts.get(96, bold=True)
+    lines = wrap(font, label, CARD_SIZE[0] - 160) or [label]
+    line_height = 120
+    top = (CARD_SIZE[1] - line_height * len(lines)) / 2
+    for i, line in enumerate(lines):
+        width = text_width(font, line)
+        draw.text(
+            ((CARD_SIZE[0] - width) / 2, top + i * line_height), line, font=font, fill=CARD_TEXT
+        )
+    out = io.BytesIO()
+    image.save(out, "PNG")
+    return out.getvalue()
