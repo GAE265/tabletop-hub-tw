@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Literal
 from uuid import UUID
 
-from pydantic import Field
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -88,9 +88,30 @@ class Settings(BaseSettings):
     video_music_volume: float = Field(default=0.25, ge=0, le=1)
     # 規則影片的背景工作（產生草稿、影片、修改）；false 時後端不啟動背景執行緒
     rules_video_worker: bool = True
+    # --- AI 語音主持的即時語音（integrations/realtime_voice） ---
+    # fake：不連外部服務（測試與開發用）；cloud：阿里雲，缺欄位就啟動失敗
+    host_realtime_provider: Literal["fake", "cloud"] = "fake"
+    host_realtime_api_key: str | None = None
+    # 主控台的整段 API Host，區域包含在裡面
+    host_realtime_api_host: str | None = None
+    host_realtime_model: str = "qwen-audio-3.1-realtime-flash"
+    # 主持人轉交難題用的思考模型部署名稱；沒填就用 llm_model
+    host_thinking_model: str | None = None
     # 允許跨來源呼叫 API 的前端網址，逗號分隔。預設是本機 Flutter Web 固定的 port；
     # 部署時必須改成實際的前端網址
     cors_allow_origins: str = "http://localhost:5000"
+
+    @model_validator(mode="after")
+    def _host_realtime_cloud_needs_credentials(self) -> "Settings":
+        if self.host_realtime_provider == "cloud":
+            required = {
+                "HOST_REALTIME_API_KEY": self.host_realtime_api_key,
+                "HOST_REALTIME_API_HOST": self.host_realtime_api_host,
+            }
+            missing = [name for name, value in required.items() if not value]
+            if missing:
+                raise ValueError(f"HOST_REALTIME_PROVIDER=cloud 缺少設定：{'、'.join(missing)}")
+        return self
 
     @property
     def cors_origins(self) -> list[str]:
