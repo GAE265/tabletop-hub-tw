@@ -42,6 +42,10 @@ class GroupsCalendarState {
   );
 }
 
+/// 今天（含）以後的日期才可以選；今天以前的格子停用，但照樣顯示團數。
+bool isSelectableDate(DateTime date, DateTime today) =>
+    !dateOnly(date).isBefore(dateOnly(today));
+
 /// 月曆的操作：切換月份、選日期、篩選開團主、重新載入。
 class GroupsCalendarNotifier extends Notifier<GroupsCalendarState> {
   Future<void> _pending = Future.value();
@@ -88,15 +92,23 @@ class GroupsCalendarNotifier extends Notifier<GroupsCalendarState> {
     _load(DateTime(day.year, day.month));
   }
 
-  void selectDate(DateTime date) =>
-      state = state.copyWith(selectedDate: dateOnly(date));
+  /// 選取某天；今天以前的日期不能選，選取維持不變。
+  void selectDate(DateTime date) {
+    if (!isSelectableDate(date, _today())) return;
+    state = state.copyWith(selectedDate: dateOnly(date));
+  }
 
   void setOrganizer(String? organizerId) =>
       state = state.copyWith(organizerId: () => organizerId);
 
   void _changeMonth(int delta) {
     final month = DateTime(state.month.year, state.month.month + delta);
-    state = state.copyWith(selectedDate: month);
+    // 預設選 1 號；1 號已經過了而這個月包含今天時，改選今天
+    final today = _today();
+    final sameMonth = today.year == month.year && today.month == month.month;
+    state = state.copyWith(
+      selectedDate: sameMonth && month.isBefore(today) ? today : month,
+    );
     _load(month);
   }
 

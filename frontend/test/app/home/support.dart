@@ -86,6 +86,12 @@ Future<void> pumpHome(
           path: path,
           builder: (context, state) => Scaffold(body: Text('到了 $path')),
         ),
+      // 揪團詳細頁（add-groups-notifications）
+      GoRoute(
+        path: '/groups/:id',
+        builder: (context, state) =>
+            Scaffold(body: Text('到了 ${state.uri.path}')),
+      ),
     ],
   );
   addTearDown(router.dispose);

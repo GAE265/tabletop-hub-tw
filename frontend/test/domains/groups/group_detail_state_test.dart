@@ -83,7 +83,7 @@ void main() {
       ]);
     });
 
-    test('開團主：編輯、訂位、填入戰績、取消揪團', () async {
+    test('開團主：編輯、訂位、填入戰績、確定成團、取消揪團', () async {
       expect(
         await actions(
           fakeGroup(
@@ -96,9 +96,53 @@ void main() {
           GroupAction.edit,
           GroupAction.book,
           GroupAction.recordMatch,
+          GroupAction.confirm,
           GroupAction.cancel,
         ],
       );
+    });
+
+    test('已成團：開團主的「確定成團」變成「已成團」', () async {
+      expect(
+        await actions(
+          fakeGroup(
+            startAt: start,
+            organizerId: 'u-player',
+            myStatus: 'member',
+            confirmedAt: nowUtc,
+          ),
+        ),
+        [
+          GroupAction.edit,
+          GroupAction.book,
+          GroupAction.recordMatch,
+          GroupAction.confirmed,
+          GroupAction.cancel,
+        ],
+      );
+    });
+
+    test('已成團：成員、候補、未報名的人也看到「已成團」', () async {
+      expect(
+        await actions(
+          fakeGroup(startAt: start, myStatus: 'member', confirmedAt: nowUtc),
+        ),
+        [GroupAction.leave, GroupAction.recordMatch, GroupAction.confirmed],
+      );
+      expect(
+        await actions(
+          fakeGroup(
+            startAt: start,
+            myStatus: 'waitlisted',
+            confirmedAt: nowUtc,
+          ),
+        ),
+        [GroupAction.leave, GroupAction.confirmed],
+      );
+      expect(await actions(fakeGroup(startAt: start, confirmedAt: nowUtc)), [
+        GroupAction.join,
+        GroupAction.confirmed,
+      ]);
     });
 
     test('已取消或已結束：沒有按鈕', () async {

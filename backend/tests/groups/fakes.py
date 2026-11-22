@@ -16,6 +16,8 @@ from app.domains.groups.repository import (
     GroupView,
     MemberRecord,
     MemberView,
+    NotificationRecord,
+    NotificationView,
 )
 
 
@@ -32,6 +34,17 @@ class _Group:
     fee: int | None
     status: str
     created_at: datetime
+    confirmed_at: datetime | None = None
+
+
+@dataclass
+class _Notification:
+    id: uuid.UUID
+    user_id: uuid.UUID
+    group_id: uuid.UUID
+    type: str
+    created_at: datetime
+    read_at: datetime | None = None
 
 
 class FakeGroupsRepository:
@@ -46,6 +59,8 @@ class FakeGroupsRepository:
         # 依寫入順序；同一團的順序就是報名先後
         self.members: list[MemberRecord] = []
         self._member_group: list[uuid.UUID] = []
+        # 依建立順序
+        self.notifications: list[_Notification] = []
         self.committed = 0
         self.rolled_back = 0
 
@@ -100,6 +115,7 @@ class FakeGroupsRepository:
             start_at=group.start_at,
             end_at=group.end_at,
             status=group.status,
+            confirmed_at=group.confirmed_at,
         )
 
     def update_group(self, group_id: uuid.UUID, values: Mapping[str, Any]) -> None:
@@ -137,11 +153,17 @@ class FakeGroupsRepository:
         rows = [(i, m) for i, m in self._rows(group_id) if m.status == "waitlisted"]
         return sorted(rows, key=lambda row: (row[1].joined_at, row[0]))
 
-    def promote_waitlisted(self, group_id: uuid.UUID, count: int) -> int:
+    def promote_waitlisted(self, group_id: uuid.UUID, count: int) -> list[uuid.UUID]:
         promoted = self._waitlisted(group_id)[: max(count, 0)]
         for i, m in promoted:
             self.members[i] = replace(m, status="member")
-        return len(promoted)
+        return [m.user_id for _, m in promoted]
+
+    def list_member_user_ids(
+        self, group_id: uuid.UUID, statuses: tuple[str, ...]
+    ) -> list[uuid.UUID]:
+        rows = sorted(self._rows(group_id), key=lambda row: (row[1].joined_at, row[0]))
+        return [m.user_id for _, m in rows if m.status in statuses]
 
     def waitlist_position(self, group_id: uuid.UUID, user_id: uuid.UUID) -> int | None:
         for position, (_, m) in enumerate(self._waitlisted(group_id), start=1):
@@ -173,6 +195,7 @@ class FakeGroupsRepository:
             waitlist_count=sum(1 for m in rows if m.status == "waitlisted"),
             my_status=mine,
             created_at=group.created_at,
+            confirmed_at=group.confirmed_at,
         )
 
     def get_group(self, group_id: uuid.UUID, viewer_id: uuid.UUID) -> GroupView | None:
@@ -219,3 +242,52 @@ class FakeGroupsRepository:
             )
             for _, m in ordered
         ]
+
+    # --- 通知 ---
+
+    def add_notifications(
+        self,
+        group_id: uuid.UUID,
+        user_ids: list[uuid.UUID],
+        type_: str,
+        created_at: datetime,
+    ) -> None:
+        for user_id in user_ids:
+            self.notifications.append(
+                _Notification(uuid.uuid4(), user_id, group_id, type_, created_at)
+            )
+
+    def _notification_view(self, n: _Notification) -> NotificationView:
+        group = self.groups[n.group_id]
+        return NotificationView(
+            id=n.id,
+            type=n.type,
+            group_id=group.id,
+            group_title=group.title,
+            group_start_at=group.start_at,
+            read_at=n.read_at,
+            created_at=n.created_at,
+        )
+
+    def list_notifications(
+        self, user_id: uuid.UUID, offset: int, limit: int
+    ) -> tuple[list[NotificationView], int, int]:
+        # 新的在前；同一時間建立的，後寫入的在前
+        mine = [n for n in reversed(self.notifications) if n.user_id == user_id]
+        mine.sort(key=lambda n: n.created_at, reverse=True)
+        unread = sum(1 for n in mine if n.read_at is None)
+        page = mine[offset : offset + limit]
+        return [self._notification_view(n) for n in page], len(mine), unread
+
+    def find_notification(self, notification_id: uuid.UUID) -> NotificationRecord | None:
+        n = next((n for n in self.notifications if n.id == notification_id), None)
+        return None if n is None else NotificationRecord(id=n.id, user_id=n.user_id)
+
+    def mark_read(self, notification_id: uuid.UUID, read_at: datetime) -> None:
+        for n in self.notifications:
+            if n.id == notification_id and n.read_at is None:
+                n.read_at = read_at
+
+    def get_notification(self, notification_id: uuid.UUID) -> NotificationView | None:
+        n = next((n for n in self.notifications if n.id == notification_id), None)
+        return None if n is None else self._notification_view(n)

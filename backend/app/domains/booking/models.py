@@ -295,3 +295,58 @@ class BookingReservationLog(Base):
     operator_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
     operator_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
     created_at: Mapped[datetime] = _created_at()
+
+
+# 訂位通知的種類（add-booking-notifications）
+NOTIFICATION_TYPES = (
+    # 訂位成功：通知訂位的玩家本人。例如玩家訂了週六 19:00 的 4 人桌，要玩《卡坦島》
+    "booking_confirmed",
+    # 新訂位：通知該店的每一位店家人員。例如有人訂了週六 19:00 的 4 人桌，店員要準備《卡坦島》
+    "shop_new_booking",
+)
+
+
+class BookingNotification(Base):
+    """訂位的站內通知；文字不儲存，由 type 與訂位目前的資料組成（add-booking-notifications D2）。"""
+
+    __tablename__ = "booking_notifications"
+    __table_args__ = (
+        CheckConstraint(
+            "type IN ('booking_confirmed', 'shop_new_booking')",
+            name="ck_booking_notifications_type",
+        ),
+        Index("ix_booking_notifications_user_created", "user_id", "created_at"),
+        {"comment": "訂位的站內通知：訂位成功時通知訂位的玩家與該店的店家人員"},
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        primary_key=True,
+        default=uuid.uuid4,
+        server_default=text("gen_random_uuid()"),
+        comment="通知編號（UUID）",
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        ForeignKey("auth_users.id"),
+        comment="收到通知的使用者（訂位的玩家，或該店的店家人員）",
+    )
+    reservation_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("reservations.id", ondelete="RESTRICT"),
+        comment="通知的訂位",
+    )
+    type: Mapped[str] = mapped_column(
+        Text,
+        comment="通知種類：booking_confirmed＝給訂位玩家的訂位成功；shop_new_booking＝給店家人員的新訂位",
+    )
+    read_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        comment="使用者標成已讀的時間；空值代表未讀",
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        comment="建立通知的時間",
+    )

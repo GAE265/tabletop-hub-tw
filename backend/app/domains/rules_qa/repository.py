@@ -6,13 +6,22 @@
 import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass
+from datetime import datetime, timedelta
+from typing import Any
 
-from sqlalchemy import delete, exists, func, insert, select
+from sqlalchemy import delete, exists, func, insert, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.exc import IntegrityError
 
 from app.core.db import SessionRepository
 from app.core.games.models import Game
-from app.domains.rules_qa.models import RulesQaChunk, RulesQaVideo
+from app.domains.rules_qa.models import (
+    ACTIVE_JOB_INDEX,
+    RulesQaChunk,
+    RulesQaVideo,
+    RulesQaVideoJob,
+    RulesQaVideoProject,
+)
 
 
 @dataclass(frozen=True)
@@ -140,3 +149,242 @@ class RulesQaRepository(SessionRepository):
             .limit(limit)
         )
         return [ChunkHit(id=r.id, page=r.page, content=r.content) for r in rows]
+
+
+# --------------------------------------------------------------------------- 規則影片專案
+
+
+@dataclass(frozen=True)
+class VideoProjectRecord:
+    id: uuid.UUID
+    game_id: int
+    game_name: str
+    shop_id: uuid.UUID
+    created_by: uuid.UUID
+    chapter_number: int
+    chapter_title: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class VideoProjectRepository(SessionRepository):
+    """rules_qa_video_projects（add-rules-video-mobile design.md D1）。遊戲名稱讀共用表 games。"""
+
+    def _select(self):
+        return select(RulesQaVideoProject, Game.name).join(
+            Game, Game.id == RulesQaVideoProject.game_id
+        )
+
+    @staticmethod
+    def _record(project: RulesQaVideoProject, game_name: str) -> VideoProjectRecord:
+        return VideoProjectRecord(
+            id=project.id,
+            game_id=project.game_id,
+            game_name=game_name,
+            shop_id=project.shop_id,
+            created_by=project.created_by,
+            chapter_number=project.chapter_number,
+            chapter_title=project.chapter_title,
+            created_at=project.created_at,
+            updated_at=project.updated_at,
+        )
+
+    def create(
+        self,
+        *,
+        game_id: int,
+        shop_id: uuid.UUID,
+        created_by: uuid.UUID,
+        chapter_number: int,
+        chapter_title: str,
+    ) -> uuid.UUID:
+        project = RulesQaVideoProject(
+            game_id=game_id,
+            shop_id=shop_id,
+            created_by=created_by,
+            chapter_number=chapter_number,
+            chapter_title=chapter_title,
+        )
+        self.session.add(project)
+        self.session.flush()
+        return project.id
+
+    def get(self, project_id: uuid.UUID) -> VideoProjectRecord | None:
+        row = self.session.execute(
+            self._select().where(RulesQaVideoProject.id == project_id)
+        ).one_or_none()
+        return None if row is None else self._record(*row)
+
+    def list_projects(
+        self, shop_id: uuid.UUID | None, offset: int, limit: int
+    ) -> tuple[list[VideoProjectRecord], int]:
+        """shop_id 為 None 時列出全部（管理員）；依 updated_at 由新到舊。"""
+        query = self._select()
+        count = select(func.count()).select_from(RulesQaVideoProject)
+        if shop_id is not None:
+            query = query.where(RulesQaVideoProject.shop_id == shop_id)
+            count = count.where(RulesQaVideoProject.shop_id == shop_id)
+        rows = self.session.execute(
+            query.order_by(
+                RulesQaVideoProject.updated_at.desc(),
+                RulesQaVideoProject.created_at.desc(),
+                RulesQaVideoProject.id,
+            )
+            .offset(offset)
+            .limit(limit)
+        ).all()
+        return [self._record(*row) for row in rows], self.session.scalar(count) or 0
+
+
+# --------------------------------------------------------------------------- 規則影片的非同步工作
+
+
+class ActiveJobExists(Exception):
+    """這個專案已經有等待中或處理中的工作（部分唯一索引擋下）。"""
+
+
+@dataclass(frozen=True)
+class VideoJobRecord:
+    id: uuid.UUID
+    project_id: uuid.UUID
+    kind: str
+    status: str
+    progress: float
+    message: str | None
+    error: str | None
+    result: dict[str, Any] | None
+    created_by: uuid.UUID
+    created_at: datetime
+    started_at: datetime | None
+    finished_at: datetime | None
+
+
+@dataclass(frozen=True)
+class ClaimedJob:
+    id: uuid.UUID
+    project_id: uuid.UUID
+    kind: str
+
+
+class VideoJobRepository(SessionRepository):
+    """rules_qa_video_jobs（add-rules-video-mobile design.md D2）。
+
+    結束與回報進度都只更新 running 的工作：逾時被中止後，原本的執行緒才做完也不會改寫狀態。
+    """
+
+    @staticmethod
+    def _record(job: RulesQaVideoJob) -> VideoJobRecord:
+        return VideoJobRecord(
+            id=job.id,
+            project_id=job.project_id,
+            kind=job.kind,
+            status=job.status,
+            progress=job.progress,
+            message=job.message,
+            error=job.error,
+            result=job.result,
+            created_by=job.created_by,
+            created_at=job.created_at,
+            started_at=job.started_at,
+            finished_at=job.finished_at,
+        )
+
+    def create(self, *, project_id: uuid.UUID, kind: str, created_by: uuid.UUID) -> uuid.UUID:
+        job = RulesQaVideoJob(project_id=project_id, kind=kind, created_by=created_by)
+        self.session.add(job)
+        try:
+            self.session.flush()
+        except IntegrityError as exc:
+            if ACTIVE_JOB_INDEX in str(exc.orig):
+                raise ActiveJobExists from exc
+            raise
+        return job.id
+
+    def active_job_id(self, project_id: uuid.UUID) -> uuid.UUID | None:
+        return self.session.scalar(
+            select(RulesQaVideoJob.id).where(
+                RulesQaVideoJob.project_id == project_id,
+                RulesQaVideoJob.status.in_(("queued", "running")),
+            )
+        )
+
+    def expire_stale(self, project_id: uuid.UUID, minutes: int, error: str) -> int:
+        """同專案 running 超過 minutes 分鐘的工作標為失敗；回傳筆數。"""
+        result = self.session.execute(
+            update(RulesQaVideoJob)
+            .where(
+                RulesQaVideoJob.project_id == project_id,
+                RulesQaVideoJob.status == "running",
+                RulesQaVideoJob.started_at < func.now() - timedelta(minutes=minutes),
+            )
+            .values(status="failed", error=error, finished_at=func.now())
+        )
+        return result.rowcount
+
+    def get(self, job_id: uuid.UUID) -> VideoJobRecord | None:
+        job = self.session.get(RulesQaVideoJob, job_id, populate_existing=True)
+        return None if job is None else self._record(job)
+
+    def list_for_project(
+        self, project_id: uuid.UUID, offset: int, limit: int
+    ) -> tuple[list[VideoJobRecord], int]:
+        jobs = self.session.scalars(
+            select(RulesQaVideoJob)
+            .where(RulesQaVideoJob.project_id == project_id)
+            .order_by(RulesQaVideoJob.created_at.desc(), RulesQaVideoJob.id)
+            .offset(offset)
+            .limit(limit)
+        ).all()
+        total = self.session.scalar(
+            select(func.count())
+            .select_from(RulesQaVideoJob)
+            .where(RulesQaVideoJob.project_id == project_id)
+        )
+        return [self._record(j) for j in jobs], total or 0
+
+    def claim_next(self) -> ClaimedJob | None:
+        """取最早建立的等待中工作並改成 running；多個執行緒同時取也不會取到同一筆。"""
+        next_id = (
+            select(RulesQaVideoJob.id)
+            .where(RulesQaVideoJob.status == "queued")
+            .order_by(RulesQaVideoJob.created_at, RulesQaVideoJob.id)
+            .limit(1)
+            .with_for_update(skip_locked=True)
+            .scalar_subquery()
+        )
+        row = self.session.execute(
+            update(RulesQaVideoJob)
+            .where(RulesQaVideoJob.id == next_id)
+            .values(status="running", started_at=func.now(), progress=0)
+            .returning(RulesQaVideoJob.id, RulesQaVideoJob.project_id, RulesQaVideoJob.kind)
+        ).one_or_none()
+        return None if row is None else ClaimedJob(*row)
+
+    def _update_running(self, job_id: uuid.UUID, **values: Any) -> None:
+        self.session.execute(
+            update(RulesQaVideoJob)
+            .where(RulesQaVideoJob.id == job_id, RulesQaVideoJob.status == "running")
+            .values(**values)
+        )
+
+    def report(self, job_id: uuid.UUID, progress: float, message: str | None) -> None:
+        self._update_running(job_id, progress=progress, message=message)
+
+    def finish_succeeded(self, job_id: uuid.UUID, result: dict[str, Any] | None) -> None:
+        self._update_running(
+            job_id, status="succeeded", progress=1, result=result, finished_at=func.now()
+        )
+
+    def finish_failed(self, job_id: uuid.UUID, error: str, detail: str | None) -> None:
+        self._update_running(
+            job_id, status="failed", error=error, error_detail=detail, finished_at=func.now()
+        )
+
+    def fail_running(self, error: str) -> int:
+        """伺服器重新啟動時：所有 running 的工作標為失敗；回傳筆數。"""
+        result = self.session.execute(
+            update(RulesQaVideoJob)
+            .where(RulesQaVideoJob.status == "running")
+            .values(status="failed", error=error, finished_at=func.now())
+        )
+        return result.rowcount

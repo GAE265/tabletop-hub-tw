@@ -11,6 +11,9 @@ from app.domains.booking.repository import BookingRepository
 from app.domains.booking.schemas import (
     BookingCreate,
     BookingList,
+    BookingNotificationList,
+    BookingNotificationOut,
+    BookingNotificationUpdate,
     BookingOut,
     BookingPatch,
     BookingQuote,
@@ -156,3 +159,25 @@ def get_tables_status(
     return [
         SeatingPlanOut(floor=floor, tables=tables) for floor, tables in sorted(by_floor.items())
     ]
+
+
+# --- 通知（add-booking-notifications）---
+
+
+@router.get("/booking-notifications", response_model=BookingNotificationList)
+def list_notifications(
+    user: CurrentUserDep, service: ServiceDep, page: Page = 1, page_size: PageSize = 20
+):
+    """自己的訂位通知，新的在前；附全部未讀數。"""
+    return service.list_notifications(user, page=page, page_size=page_size)
+
+
+@router.patch("/booking-notifications/{notification_id}", response_model=BookingNotificationOut)
+def update_notification(
+    notification_id: uuid.UUID,
+    body: BookingNotificationUpdate,
+    user: CurrentUserDep,
+    service: ServiceDep,
+):
+    """標成已讀（body 只能是 {"read": true}）。"""
+    return service.mark_notification_read(user, notification_id)

@@ -10,7 +10,12 @@ from typing import Any, Protocol
 
 from app.core.auth import CurrentUser
 from app.core.errors import AppError, PermissionDenied
-from app.domains.groups.repository import GroupRecord, GroupView
+from app.domains.groups.repository import (
+    GroupRecord,
+    GroupView,
+    NotificationRecord,
+    NotificationView,
+)
 from app.domains.groups.schemas import (
     GameRef,
     GroupCreate,
@@ -20,6 +25,9 @@ from app.domains.groups.schemas import (
     JoinResponse,
     MemberListResponse,
     MemberResponse,
+    NotificationGroupRef,
+    NotificationListResponse,
+    NotificationResponse,
     ShopRef,
     UserRef,
 )
@@ -41,7 +49,19 @@ class GroupsRepositoryProtocol(Protocol):
         self, group_id: uuid.UUID, user_id: uuid.UUID, status: str, joined_at: datetime
     ) -> None: ...
     def delete_member(self, group_id: uuid.UUID, user_id: uuid.UUID) -> None: ...
-    def promote_waitlisted(self, group_id: uuid.UUID, count: int) -> int: ...
+    def promote_waitlisted(self, group_id: uuid.UUID, count: int) -> list[uuid.UUID]: ...
+    def list_member_user_ids(
+        self, group_id: uuid.UUID, statuses: tuple[str, ...]
+    ) -> list[uuid.UUID]: ...
+    def add_notifications(
+        self, group_id: uuid.UUID, user_ids: list[uuid.UUID], type_: str, created_at: datetime
+    ) -> None: ...
+    def list_notifications(
+        self, user_id: uuid.UUID, offset: int, limit: int
+    ) -> tuple[list[NotificationView], int, int]: ...
+    def find_notification(self, notification_id: uuid.UUID) -> NotificationRecord | None: ...
+    def mark_read(self, notification_id: uuid.UUID, read_at: datetime) -> None: ...
+    def get_notification(self, notification_id: uuid.UUID) -> NotificationView | None: ...
     def waitlist_position(self, group_id: uuid.UUID, user_id: uuid.UUID) -> int | None: ...
     def get_group(self, group_id: uuid.UUID, viewer_id: uuid.UUID) -> GroupView | None: ...
     def list_groups(self, **filters: Any) -> tuple[list[GroupView], int]: ...
@@ -164,6 +184,8 @@ class GroupsService:
     ) -> GroupResponse:
         fields = data.model_dump(exclude_unset=True)
         game_ids: list[int] | None = fields.pop("game_ids", None)
+        confirm = fields.pop("confirmed", None) is True
+        cancel = fields.get("status") == "cancelled"
         with self._repo.transaction():
             record = self._lock(group_id)
             if not _can_manage(user, record):
@@ -181,6 +203,10 @@ class GroupsService:
                 )
             if game_ids is not None:
                 self._check_games(game_ids)
+            if confirm:
+                if record.confirmed_at is not None:
+                    raise AppError(409, "GROUP_ALREADY_CONFIRMED", "這個揪團已經確定成團")
+                fields["confirmed_at"] = now
 
             open_slots = 0
             if "capacity" in fields:
@@ -197,9 +223,17 @@ class GroupsService:
             self._repo.update_group(group_id, fields)
             if game_ids is not None:
                 self._repo.set_group_games(group_id, game_ids)
-            # 調高人數上限時，候補依報名先後遞補
-            if open_slots > 0 and fields.get("status") != "cancelled":
-                self._repo.promote_waitlisted(group_id, open_slots)
+            if cancel:
+                # 解散：通知成員與候補（add-groups-notifications）
+                self._notify(user, group_id, self._everyone(group_id), "group_cancelled", now)
+            else:
+                # 調高人數上限時，候補依報名先後遞補
+                if open_slots > 0:
+                    promoted = self._repo.promote_waitlisted(group_id, open_slots)
+                    self._notify(user, group_id, promoted, "waitlist_promoted", now)
+                if confirm:
+                    members = self._repo.list_member_user_ids(group_id, ("member",))
+                    self._notify(user, group_id, members, "group_confirmed", now)
         return self.get_group(user, group_id)
 
     # --- 報名 ---
@@ -240,9 +274,51 @@ class GroupsService:
             self._repo.delete_member(group_id, user_id)
             if member.status == "member":
                 open_slots = record.capacity - self._repo.count_members(group_id)
-                self._repo.promote_waitlisted(group_id, open_slots)
+                promoted = self._repo.promote_waitlisted(group_id, open_slots)
+                self._notify(user, group_id, promoted, "waitlist_promoted", self._now())
+
+    # --- 通知 ---
+
+    def list_notifications(
+        self, user: CurrentUser, *, page: int = 1, page_size: int = 20
+    ) -> NotificationListResponse:
+        views, total, unread = self._repo.list_notifications(
+            user.id, offset=(page - 1) * page_size, limit=page_size
+        )
+        return NotificationListResponse(
+            items=[_to_notification(v) for v in views], total=total, unread_count=unread
+        )
+
+    def mark_notification_read(
+        self, user: CurrentUser, notification_id: uuid.UUID
+    ) -> NotificationResponse:
+        with self._repo.transaction():
+            record = self._repo.find_notification(notification_id)
+            # 別人的通知視同不存在，不透露 id 是否存在
+            if record is None or record.user_id != user.id:
+                raise AppError(404, "GROUP_NOTIFICATION_NOT_FOUND", "找不到這則通知")
+            self._repo.mark_read(notification_id, self._now())
+        view = self._repo.get_notification(notification_id)
+        if view is None:
+            raise AppError(404, "GROUP_NOTIFICATION_NOT_FOUND", "找不到這則通知")
+        return _to_notification(view)
 
     # --- 內部 ---
+
+    def _everyone(self, group_id: uuid.UUID) -> list[uuid.UUID]:
+        return self._repo.list_member_user_ids(group_id, ("member", "waitlisted"))
+
+    def _notify(
+        self,
+        actor: CurrentUser,
+        group_id: uuid.UUID,
+        user_ids: list[uuid.UUID],
+        type_: str,
+        now: datetime,
+    ) -> None:
+        """在目前的交易裡替 user_ids 建立通知；做這個動作的人自己不收。"""
+        recipients = [u for u in user_ids if u != actor.id]
+        self._repo.add_notifications(group_id, recipients, type_, now)
 
     def _lock(self, group_id: uuid.UUID) -> GroupRecord:
         record = self._repo.lock_group(group_id)
@@ -288,5 +364,20 @@ class GroupsService:
             waitlist_count=view.waitlist_count,
             remaining_slots=max(view.capacity - view.member_count, 0),
             my_status=view.my_status,
+            confirmed_at=None if view.confirmed_at is None else view.confirmed_at.astimezone(UTC),
             created_at=view.created_at.astimezone(UTC),
         )
+
+
+def _to_notification(view: NotificationView) -> NotificationResponse:
+    return NotificationResponse(
+        id=view.id,
+        type=view.type,
+        group=NotificationGroupRef(
+            id=view.group_id,
+            title=view.group_title,
+            start_at=view.group_start_at.astimezone(UTC),
+        ),
+        read_at=None if view.read_at is None else view.read_at.astimezone(UTC),
+        created_at=view.created_at.astimezone(UTC),
+    )

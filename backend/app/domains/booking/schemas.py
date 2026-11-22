@@ -148,3 +148,38 @@ class SeatingPlanOut(BaseModel):
 
     floor: int
     tables: list[TableStatusOut]
+
+
+# --- 通知（add-booking-notifications）---
+
+NotificationType = Literal["booking_confirmed", "shop_new_booking"]
+
+
+class NotificationBookingRef(BaseModel):
+    id: int
+    reservation_code: str
+    shop_name: str
+    start_at: datetime
+    end_at: datetime
+    party_size: int
+
+
+class BookingNotificationOut(BaseModel):
+    id: uuid.UUID
+    type: NotificationType
+    booking: NotificationBookingRef
+    # null 代表未讀
+    read_at: datetime | None
+    created_at: datetime
+
+
+class BookingNotificationList(BaseModel):
+    items: list[BookingNotificationOut]
+    total: int
+    # 目前使用者全部未讀的數量，不受分頁影響
+    unread_count: int
+
+
+class BookingNotificationUpdate(BaseModel):
+    # 只能標成已讀
+    read: Literal[True]

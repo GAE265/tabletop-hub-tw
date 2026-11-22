@@ -240,7 +240,7 @@ void main() {
       );
       expect(upcomingTitle(clock, item), '揪團・阿瓦隆之夜');
       expect(upcomingSubtitle(item), '已報名 5 / 7 人');
-      expect(upcomingRoute(item), '/groups');
+      expect(upcomingRoute(item), '/groups/g-1');
     });
 
     test('揪團狀態：有名額是招募中、額滿是已額滿、我是候補是候補中', () {

@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../core/dev/state/dev_user_state.dart';
+import 'notifications/notification_bell.dart';
 import 'theme/app_colors.dart';
 import 'theme/app_spacing.dart';
 
@@ -67,12 +70,34 @@ const navItems = [
   ),
 ];
 
+/// 只有管理員看得到的項目，接在 [navItems] 後面（add-rules-ingest-page）。
+const adminNavItems = [
+  NavItem(
+    path: '/rules-ingest',
+    label: '匯入',
+    icon: Icons.upload_file_outlined,
+    selectedIcon: Icons.upload_file,
+    keyName: 'shell-nav-rules-ingest',
+  ),
+];
+
+/// 依角色決定要顯示的導覽項目：管理員多了 [adminNavItems]。
+List<NavItem> visibleNavItems(String? role) => [
+  ...navItems,
+  if (role == 'admin') ...adminNavItems,
+];
+
+/// 目前身分要顯示的導覽項目。
+final visibleNavItemsProvider = Provider<List<NavItem>>(
+  (ref) => visibleNavItems(ref.watch(currentDevUserProvider)?.role),
+);
+
 /// 目前路徑對應的導覽項目路徑；不屬於任何項目（例如 `/health`、`/proto/...`）時為 null。
 ///
 /// 首頁只在路徑剛好是 `/` 時選取；其他項目在路徑等於它或是它的子路徑時選取。
 String? selectedNavPath(String path) {
   if (path == '/') return '/';
-  for (final item in navItems.skip(1)) {
+  for (final item in [...navItems.skip(1), ...adminNavItems]) {
     if (path == item.path || path.startsWith('${item.path}/')) {
       return item.path;
     }
@@ -81,14 +106,15 @@ String? selectedNavPath(String path) {
 }
 
 /// 手機：畫面底部的導覽列。
-class BottomNavigation extends StatelessWidget {
+class BottomNavigation extends ConsumerWidget {
   const BottomNavigation({required this.location, super.key});
 
   final String location;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final selected = selectedNavPath(location);
+    final items = ref.watch(visibleNavItemsProvider);
     return Material(
       color: AppColors.surface,
       child: DecoratedBox(
@@ -103,7 +129,7 @@ class BottomNavigation extends StatelessWidget {
               padding: const EdgeInsets.all(AppSpacing.small),
               child: Row(
                 children: [
-                  for (final item in navItems)
+                  for (final item in items)
                     Expanded(
                       child: _NavButton(
                         item: item,
@@ -122,14 +148,15 @@ class BottomNavigation extends StatelessWidget {
 }
 
 /// 平板與桌機：畫面頂部的導覽列，含品牌與登入按鈕。
-class TopNavigation extends StatelessWidget {
+class TopNavigation extends ConsumerWidget {
   const TopNavigation({required this.location, super.key});
 
   final String location;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final selected = selectedNavPath(location);
+    final items = ref.watch(visibleNavItemsProvider);
     return Material(
       color: AppColors.surface,
       child: DecoratedBox(
@@ -156,7 +183,7 @@ class TopNavigation extends StatelessWidget {
                   Wrap(
                     spacing: AppSpacing.xSmall,
                     children: [
-                      for (final item in navItems)
+                      for (final item in items)
                         _NavButton(
                           item: item,
                           selected: item.path == selected,
@@ -164,10 +191,39 @@ class TopNavigation extends StatelessWidget {
                         ),
                     ],
                   ),
-                  const LoginButton(key: Key('shell-login')),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      NotificationBell(key: Key('shell-notification-bell')),
+                      SizedBox(width: AppSpacing.small),
+                      LoginButton(key: Key('shell-login')),
+                    ],
+                  ),
                 ],
               ),
             ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 手機：畫面頂部只放通知鈴鐺的窄列（底部導覽已經有六個項目）。
+class MobileTopBar extends StatelessWidget {
+  const MobileTopBar({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const Material(
+      color: AppColors.surface,
+      child: SafeArea(
+        bottom: false,
+        child: Align(
+          alignment: Alignment.centerRight,
+          child: Padding(
+            padding: EdgeInsets.symmetric(horizontal: AppSpacing.small),
+            child: NotificationBell(key: Key('shell-notification-bell')),
           ),
         ),
       ),
@@ -192,6 +248,9 @@ class _NavButton extends StatelessWidget {
     final textTheme = Theme.of(context).textTheme;
     final label = Text(
       item.label,
+      // 手機底部項目變多（管理員有七項）時不換行
+      maxLines: 1,
+      softWrap: false,
       style: (vertical ? textTheme.labelMedium : textTheme.labelLarge)!
           .copyWith(
             color: color,
@@ -214,8 +273,9 @@ class _NavButton extends StatelessWidget {
               minHeight: AppSizes.minTouchTarget,
             ),
             child: Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppSpacing.medium,
+              padding: EdgeInsets.symmetric(
+                // 手機底部每項較窄，左右留白縮小，文字才放得下
+                horizontal: vertical ? AppSpacing.xSmall : AppSpacing.medium,
                 vertical: AppSpacing.xSmall,
               ),
               child: vertical

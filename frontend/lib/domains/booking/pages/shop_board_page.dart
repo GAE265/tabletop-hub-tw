@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -5,12 +7,15 @@ import '../../../app/theme/app_spacing.dart';
 import '../../../core/dev/state/dev_user_state.dart';
 import '../../../core/layout/breakpoints.dart';
 import '../data/booking.dart';
+import '../state/booking_overtime.dart';
 import '../state/booking_state.dart';
 import 'widgets/booking_widgets.dart';
 import 'widgets/seating_plan.dart';
 
 /// 店家看板正式頁面：店家人員看自己店家某一天的座位圖與訂位，辦理客人到店、離店結帳、取消
 /// （`/booking/board`）。管理員要先選店家。
+///
+/// 已入座且超過結束時間的訂位標示「已超時」，每分鐘重新計算（add-booking-notifications D5）。
 class ShopBoardPage extends ConsumerStatefulWidget {
   const ShopBoardPage({super.key});
 
@@ -21,6 +26,9 @@ class ShopBoardPage extends ConsumerStatefulWidget {
 class _ShopBoardPageState extends ConsumerState<ShopBoardPage> {
   String? _shopId;
   late DateTime _date;
+
+  /// 每分鐘重畫一次，讓超時標示跟著時間更新（不重新查詢）。
+  Timer? _minuteTimer;
 
   BookingNotifier get _n => ref.read(bookingProvider.notifier);
 
@@ -35,13 +43,22 @@ class _ShopBoardPageState extends ConsumerState<ShopBoardPage> {
   @override
   void initState() {
     super.initState();
-    final now = taipeiNow();
+    final now = ref.read(bookingClockProvider)().add(taipeiOffset);
     _date = DateTime(now.year, now.month, now.day);
+    _minuteTimer = Timer.periodic(const Duration(minutes: 1), (_) {
+      if (mounted) setState(() {});
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!_allowed) return;
       if (ref.read(bookingProvider).shops.isEmpty) await _n.loadShops();
       await _search();
     });
+  }
+
+  @override
+  void dispose() {
+    _minuteTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _search() async {
@@ -77,6 +94,36 @@ class _ShopBoardPageState extends ConsumerState<ShopBoardPage> {
     if (ok && mounted) await _n.setStatus(b.id, 'cancelled');
   }
 
+  /// 在座位圖上點了一張桌：先顯示定位與換桌資訊請使用者確認，按確認才送請求。
+  /// 按「先不要」或關掉視窗只關閉確認視窗，仍停留在選桌模式，可改選別的桌子。
+  Future<void> _changeTable(Booking b, SeatGroup seat) async {
+    final current = b.tableCodes.isEmpty ? '無' : b.tableCodes.join('、');
+    final ok = await confirmBookingAction(
+      context,
+      title: '確定要換桌嗎？',
+      content:
+          '訂位代碼 ${b.reservationCode}\n'
+          '${formatBookingRange(b.startAt, b.endAt)}\n'
+          '定位：$current\n'
+          '換桌：${seat.table.tableCode}',
+      confirmLabel: '確認換桌',
+    );
+    if (!ok || !mounted) return;
+    await _n.changeTable(b.id, [seat.table.id]);
+    // 換桌失敗時保留錯誤訊息，不重新整理；成功才重查座位圖
+    if (mounted && !ref.read(bookingProvider).isError) await _search();
+  }
+
+  /// 換桌中的那筆訂位。
+  Booking? _changeTarget(BookingState state) {
+    final id = state.changeTableFor;
+    if (id == null) return null;
+    for (final b in state.board) {
+      if (b.id == id) return b;
+    }
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(bookingProvider);
@@ -103,6 +150,7 @@ class _ShopBoardPageState extends ConsumerState<ShopBoardPage> {
       );
     }
 
+    final now = ref.read(bookingClockProvider)();
     final isAdmin = user?.role == 'admin';
     final wide = context.screenSize != ScreenSize.mobile;
     final shopId = _shopId ?? user?.shopId;
@@ -127,12 +175,18 @@ class _ShopBoardPageState extends ConsumerState<ShopBoardPage> {
               key: Key('board-card-${b.id}'),
               booking: b,
               shopName: null,
+              overtimeMinutes: overtimeMinutes(b.status, b.endAt, now),
               actions: [
                 if (b.status == 'confirmed') ...[
                   TextButton(
                     key: Key('board-cancel-${b.id}'),
                     onPressed: act(() => _cancel(b)),
                     child: const Text('取消'),
+                  ),
+                  OutlinedButton(
+                    key: Key('board-change-table-${b.id}'),
+                    onPressed: act(() => _n.startChangeTable(b.id)),
+                    child: const Text('換桌'),
                   ),
                   FilledButton(
                     key: Key('board-seated-${b.id}'),
@@ -225,13 +279,13 @@ class _ShopBoardPageState extends ConsumerState<ShopBoardPage> {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(child: _seatingCard(state)),
+              Expanded(child: _seatingCard(state, now)),
               const SizedBox(width: AppSpacing.large),
               Expanded(child: Column(children: list)),
             ],
           )
         else ...[
-          _seatingCard(state),
+          _seatingCard(state, now),
           const SizedBox(height: AppSpacing.medium),
           ...list,
         ],
@@ -240,10 +294,24 @@ class _ShopBoardPageState extends ConsumerState<ShopBoardPage> {
   }
 
   /// 座位圖卡片：日期跟著看板，錯誤由上方的錯誤訊息顯示。
-  Widget _seatingCard(BookingState state) {
+  Widget _seatingCard(BookingState state, DateTime now) {
+    final changeFor = _changeTarget(state);
+    final selecting = state.changeTableFor != null;
     final Widget content;
     if (state.seatingPlan.isNotEmpty) {
-      content = SeatingPlanView(plans: state.seatingPlan, staffView: true);
+      content = SeatingPlanView(
+        plans: state.seatingPlan,
+        staffView: true,
+        now: now,
+        selecting: selecting,
+        onTapTable: selecting
+            ? (seat) {
+                if (changeFor != null && !state.loading) {
+                  _changeTable(changeFor, seat);
+                }
+              }
+            : null,
+      );
     } else if (state.loading) {
       content = const Padding(
         padding: EdgeInsets.all(AppSpacing.large),
@@ -265,6 +333,10 @@ class _ShopBoardPageState extends ConsumerState<ShopBoardPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('座位圖', style: Theme.of(context).textTheme.titleMedium),
+            if (selecting) ...[
+              const SizedBox(height: AppSpacing.small),
+              _changeTableHint(),
+            ],
             const SizedBox(height: AppSpacing.small),
             content,
           ],
@@ -272,4 +344,22 @@ class _ShopBoardPageState extends ConsumerState<ShopBoardPage> {
       ),
     );
   }
+
+  /// 選桌模式中的提示列：告訴使用者要選桌，並提供離開選桌模式的按鈕。
+  Widget _changeTableHint() => Row(
+    key: const Key('board-change-table-hint'),
+    children: [
+      Expanded(
+        child: Text(
+          '請在座位圖點選要換到的桌子',
+          style: Theme.of(context).textTheme.bodyMedium,
+        ),
+      ),
+      TextButton(
+        key: const Key('board-change-table-cancel'),
+        onPressed: _n.cancelChangeTable,
+        child: const Text('取消選桌'),
+      ),
+    ],
+  );
 }

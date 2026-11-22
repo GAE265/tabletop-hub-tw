@@ -159,7 +159,7 @@ UpcomingStatus upcomingStatus(UpcomingItem item) => switch (item) {
 /// 點這一列要去的頁面。
 String upcomingRoute(UpcomingItem item) => switch (item) {
   UpcomingBooking() => '/booking/mine',
-  UpcomingGroup() => '/groups',
+  UpcomingGroup(:final group) => '/groups/${group.id}',
 };
 
 /// 日期徽章的月份，例如「11月」。

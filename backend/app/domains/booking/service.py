@@ -9,17 +9,20 @@ from app.core.errors import AppError, PermissionDenied
 from app.domains.booking import pricing
 from app.domains.booking.allocation import allocate, is_conflict
 from app.domains.booking.errors import BookingRuleError, NoTableAvailable, TableConflict
-from app.domains.booking.records import ReservationRecord, TableStatus
+from app.domains.booking.records import NotificationView, ReservationRecord, TableStatus
 from app.domains.booking.repository import BookingRepository
 from app.domains.booking.rules import Slot, to_local, validate_slot
 from app.domains.booking.schemas import (
     BookingCreate,
     BookingList,
+    BookingNotificationList,
+    BookingNotificationOut,
     BookingOut,
     BookingPatch,
     BookingQuote,
     BookingQuoteRequest,
     FeeOut,
+    NotificationBookingRef,
     ShopList,
     ShopOut,
     TableOut,
@@ -43,6 +46,27 @@ MODIFIED_NOTICE = "訂位已修改，請確認新的時間與桌位。"
 def _status_invalid(current: str) -> AppError:
     return AppError(
         409, "BOOKING_STATUS_INVALID", "目前的訂位狀態不允許此操作", {"status": current}
+    )
+
+
+def _notification_not_found() -> AppError:
+    return AppError(404, "BOOKING_NOTIFICATION_NOT_FOUND", "找不到這則通知")
+
+
+def _to_notification(view: NotificationView) -> BookingNotificationOut:
+    return BookingNotificationOut(
+        id=view.id,
+        type=view.type,  # type: ignore[arg-type]
+        booking=NotificationBookingRef(
+            id=view.reservation_id,
+            reservation_code=view.reservation_code,
+            shop_name=view.shop_name,
+            start_at=view.start_at,
+            end_at=view.end_at,
+            party_size=view.party_size,
+        ),
+        read_at=view.read_at,
+        created_at=view.created_at,
     )
 
 
@@ -272,11 +296,46 @@ class BookingService:
                 table_ids=[t.id for t in chosen],
             )
             self._log(user, record, "create", None, self._snapshot(record))
+            self._notify_created(record)
             return record
 
         record = self._atomic(work)
         record = self._load(record.id)
         return self._out(record, rules)
+
+    def _notify_created(self, record: ReservationRecord) -> None:
+        """訂位成功：通知訂位的人與該店每一位店家人員（add-booking-notifications D2、D3）。"""
+        staff = self.repo.list_shop_staff_ids(record.shop_id)
+        recipients = [(record.user_id, "booking_confirmed")] + [
+            (staff_id, "shop_new_booking") for staff_id in staff if staff_id != record.user_id
+        ]
+        self.repo.add_notifications(record.id, recipients, self.now())
+
+    # --- 通知 ---
+
+    def list_notifications(
+        self, user: CurrentUser, *, page: int = 1, page_size: int = 20
+    ) -> BookingNotificationList:
+        views, total, unread = self.repo.list_notifications(
+            user.id, offset=(page - 1) * page_size, limit=page_size
+        )
+        return BookingNotificationList(
+            items=[_to_notification(v) for v in views], total=total, unread_count=unread
+        )
+
+    def mark_notification_read(
+        self, user: CurrentUser, notification_id: uuid.UUID
+    ) -> BookingNotificationOut:
+        with self.repo.transaction():
+            record = self.repo.find_notification(notification_id)
+            # 別人的通知視同不存在，不透露 id 是否存在
+            if record is None or record.user_id != user.id:
+                raise _notification_not_found()
+            self.repo.mark_read(notification_id, self.now())
+        view = self.repo.get_notification(notification_id)
+        if view is None:
+            raise _notification_not_found()
+        return _to_notification(view)
 
     @staticmethod
     def _summary(record: ReservationRecord) -> dict[str, Any]:

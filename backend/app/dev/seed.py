@@ -1,6 +1,7 @@
 """開發用 seed：建立固定 UUID 的測試帳號。可重複執行；AUTH_MODE 不是 dev 時拒絕執行。
 
 帳號已經存在時不改動，只在電話是空的時候補上假電話（舊資料庫重跑一次就能訂位）。
+所以「還沒有店的店員」新增店家之後，重跑 seed 不會把他和那間店的綁定拿掉。
 另外替 Demo 遊戲登記規則教學影片（清單在 lesson_videos.py）：已經有影片的遊戲不覆蓋，
 資料庫裡沒有的遊戲印出提示並略過。
 
@@ -40,6 +41,7 @@ def main(argv: list[str] | None = None) -> int:
     # 桌遊要在教學影片之前寫入；失敗不影響後面的步驟，最後才回報結束碼
     games_ok = _seed_games_data(settings.database_url, args.data_dir)
 
+    accounts = get_test_accounts(settings)
     engine = create_db_engine(settings.database_url)
     with Session(engine) as session, session.begin():
         session.execute(
@@ -47,7 +49,7 @@ def main(argv: list[str] | None = None) -> int:
             .values(id=TEST_SHOP_ID, name=TEST_SHOP_NAME)
             .on_conflict_do_nothing(index_elements=["id"])
         )
-        for account in get_test_accounts(settings):
+        for account in accounts:
             statement = insert(AuthUser).values(
                 id=account.id,
                 display_name=account.display_name,
@@ -63,7 +65,7 @@ def main(argv: list[str] | None = None) -> int:
             )
         missing = _seed_lesson_videos(session)
     engine.dispose()
-    print("已建立（或確認存在）3 個測試帳號與 1 間測試店家。")
+    print(f"已建立（或確認存在）{len(accounts)} 個測試帳號與 1 間測試店家。")
     print(f"已登記（或確認存在）{len(LESSON_VIDEOS) - len(missing)} 支規則教學影片。")
     for video in missing:
         print(

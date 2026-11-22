@@ -27,7 +27,7 @@ def _invalid_dev_user(value: str) -> AppError:
         400,
         "INVALID_DEV_USER",
         "X-Dev-User 格式必須是 <user_uuid>:<role>[:<shop_uuid>]，"
-        "shop_staff 必須帶 shop_uuid，其他角色不可帶",
+        "只有 shop_staff 可以帶 shop_uuid（還沒有店的店員不帶），其他角色不可帶",
         {"value": value, "roles": list(ROLES)},
     )
 
@@ -40,8 +40,8 @@ def parse_dev_user(value: str) -> CurrentUser:
     user_part, role, *shop_part = parts
     if role not in ROLES:
         raise _invalid_dev_user(value)
-    # shop_staff 必帶店家；其他角色不可帶
-    if (role == "shop_staff") != bool(shop_part):
+    # 只有 shop_staff 可以帶店家；還沒有店的店員不帶。店家以資料庫的 auth_users.shop_id 為準
+    if shop_part and role != "shop_staff":
         raise _invalid_dev_user(value)
     try:
         user_id = UUID(user_part)

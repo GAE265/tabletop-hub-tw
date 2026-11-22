@@ -29,7 +29,7 @@ class _ThemePreviewPageState extends State<ThemePreviewPage> {
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () {},
         icon: const Icon(Icons.add),
-        label: const Text('我要開團'),
+        label: const Text('我要揪團'),
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _tab,
