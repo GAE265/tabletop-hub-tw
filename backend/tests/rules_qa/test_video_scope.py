@@ -224,10 +224,52 @@ def test_new_regions_are_added_to_existing_asset(tmp_path: Path):
     setup, round_, win = slot_output("setup"), slot_output("round"), slot_output("win")
     board = next(a for a in win["assets"] if a["asset_key"] == "board")
     board["regions"] = ["zone_a", "zone_b"]
+    # 獲勝方式的段框選 zone_b（沒有被指到的區域會被刪掉，見下一個測試）
+    win["segments"][0]["highlights"] = [
+        {"key": "h_b", "target": "main@zone_b", "shape": "box", "style": "gold"}
+    ]
     llm = FakeLLMProvider(json_outputs=[setup, round_, win])
     data = generate_whole_game(llm, _request(), tmp_path)
     merged = next(a for a in data["assets"] if a["asset_key"] == "board")
     assert set(merged["regions"]) == {"zone_a", "zone_b"}
+
+
+def test_unused_regions_are_removed(tmp_path: Path):
+    # 2026-11-22 永傑決定：沒被任何高亮、標籤、移動指到的區域，程式固定刪掉，店員不用標
+    setup, round_, win = slot_output("setup"), slot_output("round"), slot_output("win")
+    for output in (setup, round_, win):
+        for asset in output["assets"]:
+            if asset["asset_key"] == "red":
+                asset["regions"] = ["牌面"]
+            if asset["asset_key"] == "board":
+                asset["regions"] = ["zone_a", "血刃區"]
+    llm = FakeLLMProvider(json_outputs=[setup, round_, win])
+    data = generate_whole_game(llm, _request(), tmp_path)
+    assets = {a["asset_key"]: a for a in data["assets"]}
+    assert assets["red"]["regions"] == {}
+    # zone_a 有 highlight 與 move 指到，留下
+    assert list(assets["board"]["regions"]) == ["zone_a"]
+    assert check_script(data, _request(), tmp_path) == []
+
+
+def test_label_target_keeps_region(tmp_path: Path):
+    setup, round_, win = slot_output("setup"), slot_output("round"), slot_output("win")
+    for output in (setup, round_, win):
+        board = next(a for a in output["assets"] if a["asset_key"] == "board")
+        board["regions"] = ["zone_a", "zone_c"]
+    win["segments"][0]["labels"] = [
+        {
+            "key": "l_c",
+            "text": "這裡",
+            "target": "main@zone_c",
+            "position": "below",
+            "style": "plain",
+        }
+    ]
+    llm = FakeLLMProvider(json_outputs=[setup, round_, win])
+    data = generate_whole_game(llm, _request(), tmp_path)
+    board = next(a for a in data["assets"] if a["asset_key"] == "board")
+    assert set(board["regions"]) == {"zone_a", "zone_c"}
 
 
 def test_beat_and_segment_keys_unique_across_slots(tmp_path: Path):
@@ -274,6 +316,8 @@ def test_whole_game_prompt_rules():
     assert "輔助" in text and "optional" in text
     assert "代表牌" in text
     assert "drawn" not in text
+    # 2026-11-22 永傑決定：牌類不需要區域，高亮直接框整張牌
+    assert "牌類不需要區域" in text
 
 
 # --- 分類的完整性：每一頁都要有去處 ---

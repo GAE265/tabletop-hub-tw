@@ -318,3 +318,11 @@ def test_draft_lists_marked_regions(api, as_shop_staff, rules_db, game):
     assert api.patch(f"{URL}/{project}/assets/board", json=body).status_code == 200
     board = {a["asset_key"]: a for a in api.get(f"{URL}/{project}/draft").json()["assets"]}["board"]
     assert board["marked_regions"] == ["zone_a"]
+
+
+def test_draft_assets_show_skippable(api, as_shop_staff, rules_db, game):
+    # 草稿摘要的「可略過」由程式判斷：blue 只是一排牌的其中一張；red、back、board 有段只靠它
+    project = _create(api, game)["id"]
+    _run(rules_db, whole_game_llm_outputs())
+    assets = {a["asset_key"]: a for a in api.get(f"{URL}/{project}/draft").json()["assets"]}
+    assert {key for key, a in assets.items() if a["skippable"]} == {"blue"}

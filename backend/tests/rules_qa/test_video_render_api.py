@@ -406,9 +406,28 @@ def test_cannot_skip_when_segment_relies_on_it(api, as_shop_staff, rules_db, pro
     assert red["skip_blocked_segments"] == [2]
 
 
-def test_cannot_skip_must_asset(api, as_shop_staff, project):
+def test_skippable_is_decided_by_program(api, as_shop_staff, project):
+    # 2026-11-22 永傑決定：可不可以略過由程式判斷（略過後每一段仍有主要內容），不看 AI 標的 priority
+    # 範例素材全部是 must：blue 只是 s1 三張牌之一 → 可略過；red 是 s2 主畫面唯一的圖 → 不可
+    blue = api.get(f"{URL}/{project}/assets/blue").json()
+    red = api.get(f"{URL}/{project}/assets/red").json()
+    assert blue["priority"] == "must" and blue["skippable"] is True
+    assert blue["skip_affected_segments"] == [1] and blue["skip_blocked_segments"] == []
+    assert red["skippable"] is False and red["skip_blocked_segments"] == [2]
+    missing = {
+        m["asset_key"]: m for m in api.get(f"{URL}/{project}/readiness").json()["missing_photos"]
+    }
+    assert missing["blue"]["skippable"] is True and missing["red"]["skippable"] is False
+    assert missing["red"]["skip_blocked_segments"] == [2]
+
+
+def test_can_skip_must_asset_when_segments_keep_content(api, as_shop_staff, project):
+    # 原本「必拍不能略過」（RULES_VIDEO_SKIP_NOT_OPTIONAL）改成只看略過後每一段仍有主要內容
     response = api.patch(f"{URL}/{project}/assets/blue", json={"skipped": True})
-    assert response.status_code == 422 and _code(response) == "RULES_VIDEO_SKIP_NOT_OPTIONAL"
+    assert response.status_code == 200, response.text
+    assert response.json()["skipped"] is True
+    response = api.patch(f"{URL}/{project}/assets/red", json={"skipped": True})
+    assert response.status_code == 422 and _code(response) == "RULES_VIDEO_SKIP_BLOCKED"
 
 
 def test_render_after_skip(api, as_shop_staff, rules_db, storage, project, tmp_path):
