@@ -268,6 +268,8 @@ class DraftAssetOut(BaseModel):
     # 泛稱的素材：reason 寫了「代表牌」，店員可以換成同類的任一張牌
     representative: bool
     regions: list[str]
+    # 已經標好座標的區域（重新產生草稿前提示「已標的區域會要重標」）
+    marked_regions: list[str] = []
     has_photo: bool
     # 店員略過的選拍素材（MR 9）
     skipped: bool = False

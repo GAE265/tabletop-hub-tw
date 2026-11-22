@@ -5,6 +5,8 @@
 並把兩次原始輸出交給呼叫端保存（與規則問答「改寫一次」的做法一致）。
 """
 
+import copy
+import dataclasses
 import json
 import re
 import shutil
@@ -69,6 +71,8 @@ class ScriptRequest:
     # 整個遊戲一支影片的三格（video_scope.ScopeSlot）；None＝單章模式（命令列與舊的單章專案）。
     # 整本模式時 pages 是三格用到的頁（source_pages 只能用這些頁）
     scope: list[Any] | None = None
+    # 每格各一次呼叫時，前面幾格已有的素材（video.json 的素材格式）；後面的格優先沿用
+    existing_assets: list[dict[str, Any]] = field(default_factory=list)
 
 
 # --------------------------------------------------------------------------- 輸入
@@ -201,11 +205,21 @@ def term_conflicts(terms: list[Term]) -> list[TermConflict]:
 
 
 def build_input(request: ScriptRequest) -> str:
-    header = (
-        ["範圍：整個遊戲（開局、走完一輪、獲勝方式三個章節）"]
-        if request.scope is not None
-        else [f"章節：第 {request.chapter_number} 章「{request.chapter_title}」"]
-    )
+    if request.scope is not None and len(request.scope) == 1:
+        slot = request.scope[0]
+        header = [f"這次只產生：{slot.key}（{slot.title}）"]
+    elif request.scope is not None:
+        header = ["範圍：整個遊戲（開局、走完一輪、獲勝方式三個章節）"]
+    else:
+        header = [f"章節：第 {request.chapter_number} 章「{request.chapter_title}」"]
+    if request.existing_assets:
+        header += ["", "已有的素材（前面幾格產生的；用到同樣的東西時優先沿用 asset_key）："]
+        for asset in request.existing_assets:
+            regions = "、".join(asset.get("regions") or {}) or "沒有"
+            header.append(
+                f"- {asset['asset_key']}（{asset.get('label') or asset.get('reason', '')}）"
+                f"：區域 {regions}"
+            )
     lines = [
         *header,
         "",
@@ -254,7 +268,7 @@ def generate_script(
     llm_input = build_input(request)
     whole_game = request.scope is not None
     instructions = (
-        video_prompts.WHOLE_GAME_INSTRUCTIONS if whole_game else video_prompts.INSTRUCTIONS
+        video_prompts.WHOLE_GAME_SLOT_INSTRUCTIONS if whole_game else video_prompts.INSTRUCTIONS
     )
     schema = video_prompts.WHOLE_GAME_SCHEMA if whole_game else video_prompts.SCRIPT_SCHEMA
     outputs: list[dict[str, Any]] = []
@@ -279,6 +293,66 @@ def generate_script(
         if not errors:
             return data
     raise ScriptRejected(errors, outputs)
+
+
+def generate_whole_game(
+    llm: LLMProvider,
+    request: ScriptRequest,
+    base_dir: Path,
+    cleanup_log: list["CleanupRecord"] | None = None,
+) -> dict[str, Any]:
+    """整個遊戲一支影片：每格各一次呼叫，依序開局、走完一輪、獲勝方式（2026-11-22 永傑決定）。
+
+    後面的格帶入前面已有的素材，優先沿用 asset_key；每格各自有自動清理、檢查與改寫一次
+    （generate_script）。段的 key 和前面的格撞名時加上格的 key。合起來後再檢查一次整份。
+    某一格改寫後仍不通過時拋 ScriptRejected，錯誤前面加上「〈格〉」。
+    """
+    assert request.scope is not None
+    assets: list[dict[str, Any]] = []
+    segments: list[dict[str, Any]] = []
+    outputs: list[dict[str, Any]] = []
+    used_keys: set[str] = set()
+    for number, slot in enumerate(request.scope, start=1):
+        slot_pages = {e.page for e in slot.excerpts}
+        slot_request = dataclasses.replace(
+            request,
+            chapter_number=number,  # 句的 key 依格編號，三格不會撞名
+            pages=[p for p in request.pages if p.page in slot_pages],
+            scope=[slot],
+            existing_assets=assets,
+        )
+        try:
+            data = generate_script(llm, slot_request, base_dir, cleanup_log)
+        except ScriptRejected as exc:
+            raise ScriptRejected(
+                [f"「{slot.title}」{error}" for error in exc.errors], exc.outputs
+            ) from exc
+        assets = data["assets"]
+        for segment in data["segments"]:
+            key = segment["segment_key"]
+            while key in used_keys:
+                key = f"{slot.key}_{key}"
+            segment["segment_key"] = key
+            used_keys.add(key)
+            segments.append(segment)
+        outputs.append(data)
+    merged: dict[str, Any] = {
+        "format_version": 1,
+        "game_key": request.game_key,
+        "title": request.title,
+        "chapters": [
+            {"chapter_key": slot.key, "number": number, "title": slot.title}
+            for number, slot in enumerate(request.scope, start=1)
+        ],
+        "assets": assets,
+        "segments": segments,
+    }
+    if request.voice:
+        merged["voice"] = request.voice
+    errors = check_script(merged, request, base_dir)
+    if errors:
+        raise ScriptRejected([f"合併後{error}" for error in errors], outputs)
+    return merged
 
 
 # --------------------------------------------------------------------------- 格式小錯的自動清理
@@ -397,7 +471,15 @@ def to_video_data(raw: dict[str, Any], request: ScriptRequest) -> dict[str, Any]
     }
     if request.voice:
         data["voice"] = request.voice
+    data["assets"] = copy.deepcopy(request.existing_assets)
+    known = {a["asset_key"]: a for a in data["assets"]}
     for asset in raw["assets"]:
+        if asset["asset_key"] in known:
+            # 沿用已有的素材：保留原本的內容，只加上這一格新用到的區域名稱
+            regions = known[asset["asset_key"]].setdefault("regions", {})
+            for name in asset["regions"]:
+                regions.setdefault(name, None)
+            continue
         entry: dict[str, Any] = {
             "asset_key": asset["asset_key"],
             "kind": asset["kind"],
@@ -420,9 +502,7 @@ def to_video_data(raw: dict[str, Any], request: ScriptRequest) -> dict[str, Any]
     for raw_segment in raw_segments:
         segment: dict[str, Any] = {
             "segment_key": raw_segment["segment_key"],
-            "chapter_key": raw_segment.get("chapter", chapter_key)
-            if request.scope is not None
-            else chapter_key,
+            "chapter_key": _segment_chapter(raw_segment, request, chapter_key),
             "source_pages": [
                 {"lang": page_lang.get(page, "?"), "page": page}
                 for page in raw_segment["source_pages"]
@@ -451,6 +531,14 @@ def to_video_data(raw: dict[str, Any], request: ScriptRequest) -> dict[str, Any]
         _hide_shown_targets(segment)
         data["segments"].append(segment)
     return data
+
+
+def _segment_chapter(raw_segment: dict[str, Any], request: ScriptRequest, chapter_key: str) -> str:
+    if request.scope is None:
+        return chapter_key
+    if len(request.scope) == 1:
+        return request.scope[0].key  # 每格各一次呼叫：這一格的段
+    return raw_segment.get("chapter", chapter_key)
 
 
 def _slots(raw_segment: dict[str, Any]) -> dict[str, Any]:

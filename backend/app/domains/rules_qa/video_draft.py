@@ -31,6 +31,7 @@ from app.domains.rules_qa.video_coverage import check_coverage
 from app.domains.rules_qa.video_jobs import JobContext, JobFailed
 from app.domains.rules_qa.video_scope import (
     ScopeEmpty,
+    ScopeIncomplete,
     ScopeResult,
     classify_scope,
     slot_pages,
@@ -43,6 +44,7 @@ from app.domains.rules_qa.video_script import (
     Term,
     TermIn,
     generate_script,
+    generate_whole_game,
 )
 from app.integrations.llm import LLMProvider
 from app.integrations.llm.errors import LLMError, LLMUnavailable
@@ -59,6 +61,14 @@ DRAFT_NO_RULEBOOK_MESSAGE = "這款遊戲的規則書還沒有匯入，請管理
 COVERAGE_LLM_MESSAGE = "涵蓋檢查沒有完成：AI 服務暫時無法使用"
 COVERAGE_FORMAT_MESSAGE = "涵蓋檢查沒有完成：AI 的回答格式不對"
 COVERAGE_EMPTY_MESSAGE = "涵蓋檢查無效：LLM 沒有拆出任何規則"
+
+
+def scope_incomplete_message(pages: list[int]) -> str:
+    listed = "、".join(str(page) for page in pages)
+    return (
+        f"規則書第 {listed} 頁沒有分到開局、走完一輪、獲勝方式，也不在不講的清單裡，無法產生影片；"
+        "請再產生一次，若一直發生請通知管理員"
+    )
 
 
 def scope_empty_message(slot_title: str) -> str:
@@ -182,6 +192,8 @@ class DraftJobHandler:
             raise JobFailed(DRAFT_LLM_UNAVAILABLE_MESSAGE, detail=str(exc)) from exc
         except LLMError as exc:
             raise JobFailed(DRAFT_LLM_REJECTED_MESSAGE, detail=str(exc)) from exc
+        except ScopeIncomplete as exc:
+            raise JobFailed(scope_incomplete_message(exc.pages), detail=exc.detail) from exc
         except ScopeEmpty as exc:
             raise JobFailed(scope_empty_message(exc.slot_title), detail=exc.detail) from exc
 
@@ -189,6 +201,9 @@ class DraftJobHandler:
         self, request: ScriptRequest, base_dir: Path, cleanup: list[CleanupRecord]
     ) -> dict[str, Any]:
         try:
+            if request.scope is not None:
+                # 整個遊戲：每格各一次呼叫（2026-11-22 永傑決定）
+                return generate_whole_game(self._llm, request, base_dir, cleanup_log=cleanup)
             return generate_script(self._llm, request, base_dir, cleanup_log=cleanup)
         except LLMUnavailable as exc:
             raise JobFailed(DRAFT_LLM_UNAVAILABLE_MESSAGE, detail=str(exc)) from exc

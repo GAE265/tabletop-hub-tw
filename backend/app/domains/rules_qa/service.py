@@ -866,6 +866,7 @@ def _draft_asset(asset: dict[str, Any]) -> DraftAssetOut:
         shot=asset.get("shot"),
         representative=REPRESENTATIVE in reason,
         regions=list((asset.get("regions") or {}).keys()),
+        marked_regions=[n for n, box in (asset.get("regions") or {}).items() if box is not None],
         has_photo=bool(asset.get("file")),
         skipped=is_skipped(asset),
     )

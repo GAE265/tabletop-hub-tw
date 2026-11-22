@@ -109,7 +109,14 @@ def test_quote_check_ignores_whitespace_differences():
 
 
 def test_empty_slot_fails_with_its_title():
-    output = classify_output(win=[{"page": 3, "quote": "Nobody ever wins this game."}])
+    # 第 3 頁放進了排除清單（每一頁都有去處），獲勝方式的片段又對不上原文：那一格空了
+    output = classify_output(
+        win=[{"page": 3, "quote": "Nobody ever wins this game."}],
+        excluded=[
+            {"page": 3, "quote": "The game ends when the deck is empty.", "reason": "r"},
+            {"page": 4, "quote": "Advanced players may add the Knight expansion.", "reason": "r"},
+        ],
+    )
     with pytest.raises(ScopeEmpty) as exc:
         _scope(output)
     assert exc.value.slot_title == "獲勝方式"

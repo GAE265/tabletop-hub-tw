@@ -205,7 +205,14 @@ def test_coverage_of_one_slot_not_done_keeps_draft(api, as_shop_staff, rules_db,
 
 def test_empty_slot_fails_job(api, as_shop_staff, rules_db, game):
     project = _create(api, game)["id"]
-    output = classify_output(win=[{"page": 3, "quote": "Nobody ever wins this game."}])
+    # 第 3 頁放進了排除清單（每一頁都有去處），獲勝方式的片段又對不上原文：那一格空了
+    output = classify_output(
+        win=[{"page": 3, "quote": "Nobody ever wins this game."}],
+        excluded=[
+            {"page": 3, "quote": "The game ends when the deck is empty.", "reason": "r"},
+            {"page": 4, "quote": "Advanced players may add the Knight expansion.", "reason": "r"},
+        ],
+    )
     _run(rules_db, [output])
     job = _job(rules_db, project)
     assert job.status == "failed"
