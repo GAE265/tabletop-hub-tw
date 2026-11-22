@@ -77,6 +77,13 @@ class BookingRepository(SessionRepository):
         row = self.session.get(BookingShop, shop_id)
         return None if row is None else ShopRef(row.id, row.name)
 
+    def create_shop(self, *, name: str, phone: str | None, address: str | None) -> ShopRef:
+        """新增一間店家（共用表 booking_shops，給 shops domain 使用）。呼叫端要用 transaction()。"""
+        shop = BookingShop(name=name, phone=phone, address=address)
+        self.session.add(shop)
+        self.session.flush()
+        return ShopRef(shop.id, shop.name)
+
     def get_shop_name(self, shop_id: uuid.UUID) -> str:
         name = self.session.scalar(select(BookingShop.name).where(BookingShop.id == shop_id))
         return name or ""

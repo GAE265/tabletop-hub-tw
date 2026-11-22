@@ -19,6 +19,7 @@ from app.domains.rules_ingest.router import router as rules_ingest_router
 from app.domains.rules_qa.router import router as rules_qa_router
 from app.domains.rules_qa.router import videos_router as rules_qa_videos_router
 from app.domains.rules_qa.video_jobs import JobRunner, recover_interrupted_jobs
+from app.domains.shops.router import router as shops_router
 from app.integrations.embedding import EmbeddingConfig, get_embedding_provider
 from app.integrations.llm import get_llm_provider
 from app.integrations.ocr.factory import get_vision_provider
@@ -102,6 +103,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(rules_qa_router, prefix=API_PREFIX)
     app.include_router(rules_qa_videos_router, prefix=API_PREFIX)
     app.include_router(matches_router, prefix=API_PREFIX)
+    app.include_router(shops_router, prefix=API_PREFIX)
 
     if settings.auth_mode == "dev":
         # app/dev 任何地方都不得 import（AGENTS.md 4.2），所以只在 dev 模式動態載入

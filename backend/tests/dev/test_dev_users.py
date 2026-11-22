@@ -26,10 +26,16 @@ def test_lists_seeded_accounts(
     response = dev_client.get("/api/v1/dev/users")
     assert response.status_code == 200
     body = response.json()
-    assert body["total"] == 3
-    assert sorted(item["role"] for item in body["items"]) == ["admin", "player", "shop_staff"]
-    staff = next(item for item in body["items"] if item["role"] == "shop_staff")
-    assert staff["shop_id"] is not None
+    assert body["total"] == 4
+    assert sorted(item["role"] for item in body["items"]) == [
+        "admin",
+        "player",
+        "shop_staff",
+        "shop_staff",
+    ]
+    # 一個店員屬於測試店家，一個還沒有店（add-shops-management）
+    staff_shops = [item["shop_id"] for item in body["items"] if item["role"] == "shop_staff"]
+    assert sum(shop is None for shop in staff_shops) == 1
 
 
 def test_response_matches_database(
@@ -65,7 +71,7 @@ def test_only_lists_seeded_accounts(
     assert run_seed().returncode == 0
     with db.begin() as conn:
         conn.execute(text("INSERT INTO auth_users (display_name, role) VALUES ('路人', 'player')"))
-    assert dev_client.get("/api/v1/dev/users").json()["total"] == 3
+    assert dev_client.get("/api/v1/dev/users").json()["total"] == 4
 
 
 def test_route_absent_in_jwt_mode(make_settings: Callable[..., Settings]) -> None:

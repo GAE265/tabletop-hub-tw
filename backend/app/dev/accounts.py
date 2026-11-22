@@ -10,6 +10,8 @@ TEST_SHOP_NAME = "測試桌遊店"
 
 SHOP_STAFF_ID = UUID("22222222-2222-4222-8222-222222222222")
 ADMIN_ID = UUID("33333333-3333-4333-8333-333333333333")
+# 還沒有店的店員：示範「店員新增店家」用（add-shops-management）
+NEW_SHOP_STAFF_ID = UUID("55555555-5555-4555-8555-555555555555")
 
 
 @dataclass(frozen=True)
@@ -30,4 +32,7 @@ def get_test_accounts(settings: Settings) -> list[TestAccount]:
         TestAccount(settings.dev_default_user_id, "測試玩家", "player", None, "0900000001"),
         TestAccount(SHOP_STAFF_ID, "測試店家人員", "shop_staff", TEST_SHOP_ID, "0900000002"),
         TestAccount(ADMIN_ID, "測試管理員", "admin", None, "0900000003"),
+        TestAccount(
+            NEW_SHOP_STAFF_ID, "測試店家人員（還沒有店）", "shop_staff", None, "0900000004"
+        ),
     ]
