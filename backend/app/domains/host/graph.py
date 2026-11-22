@@ -86,20 +86,28 @@ _TO_TRADITIONAL = str.maketrans(
 _HOST_PREFIX = "主持人"
 
 
-def match_voice_command(text: str) -> VoiceCommand | None:
-    """spec §5.2 的五個步驟。整句就是指令才算，回傳 None 代表這不是指令。"""
+def spoken_core(text: str) -> str | None:
+    """spec §5.2 的前四個步驟：一句話去掉標點與開頭的「主持人」之後剩下的字。問句回 None。"""
     # 1. 原句有問號：不算
     if "?" in text or "？" in text:
         return None
-    # 2. 簡體轉繁體
+    # 2. 簡體轉繁體（只轉說法清單上會出現的字）
     text = text.translate(_TO_TRADITIONAL)
     # 3. 去掉標點與空白（Unicode 的標點 P、分隔 Z、控制 C、符號 S）
     text = "".join(ch for ch in text if unicodedata.category(ch)[0] not in "PZCS")
     # 4. 開頭有「主持人」就去掉
     if text.startswith(_HOST_PREFIX):
         text = text[len(_HOST_PREFIX) :]
+    return text
+
+
+def match_voice_command(text: str) -> VoiceCommand | None:
+    """spec §5.2 的五個步驟。整句就是指令才算，回傳 None 代表這不是指令。"""
+    core = spoken_core(text)
+    if core is None:
+        return None
     # 5. 剩下的字要整句等於清單上的一個說法
-    return _PHRASES.get(text)
+    return _PHRASES.get(core)
 
 
 # --- 進來的事 ---
@@ -135,9 +143,12 @@ class HostEvent:
         return HostEvent("page_hidden")
 
     @staticmethod
-    def command(action: Action) -> "HostEvent":
-        """按鍵。效果和語音指令相同，不用核對；按鍵的結束不帶贏的一方。"""
-        return HostEvent("command", action=action)
+    def command(action: Action, *, winner: content.Winner | None = None) -> "HostEvent":
+        """不用核對就執行的指令：按鍵（結束不帶贏的一方），或轉送那一段已經決定要執行的結束。
+
+        winner 只有 end 會用到：語音模型聽出玩家說哪一方贏了（spec §5.2 的例外）。
+        """
+        return HostEvent("command", action=action, winner=winner)
 
     @staticmethod
     def voice_text(text: str) -> "HostEvent":
@@ -559,7 +570,7 @@ def _receive(state: HostMemory) -> dict[str, Any]:
     """入口：按鍵直接變成這次要執行的指令；其他的事交給各自的節點。"""
     event = state["event"]
     if event["type"] == "command":
-        return {"command": {"action": event["action"], "winner": None}}
+        return {"command": {"action": event["action"], "winner": event["winner"]}}
     return {"command": None}
 
 

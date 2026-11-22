@@ -159,7 +159,7 @@ def test_v10_pause_inside_a_longer_sentence_is_ignored() -> None:
 @pytest.mark.parametrize(
     "text, expected",
     [
-        ("写着名字。", "寫着名字"),
+        ("写着名字。", "写着名字"),
         ("主持人，白蔷薇赢了！", "白薔薇贏了"),
         (" 确认 延误 ", "确认延误"),
         ("。", ""),

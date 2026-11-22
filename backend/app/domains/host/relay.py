@@ -33,6 +33,7 @@ from app.domains.host.graph import (
     StateChanged,
     ToolOutput,
     match_voice_command,
+    spoken_core,
 )
 from app.domains.host.schemas import (
     CommandMessage,
@@ -82,6 +83,9 @@ RECONNECT_DELAYS = (1.0, 2.0, 4.0)
 # 請主持人開口被拒，隔這麼久重送（spec §10.3）
 SPEECH_RETRY_INTERVAL = 0.5
 
+# 結束這個動作相信語音模型（spec §5.2 的例外）：那句話不是問句，而且去掉標點後在這麼多字以內
+TRUSTED_END_MAX_CHARS = 8
+_WINNERS = ("white_rose", "blood_blade")
 _COMMAND_TOOLS = ("next_step", "previous_step", "pause_hosting", "resume_hosting", "end_hosting")
 _QUESTION_TOOLS = {"lookup_rules": "lookup", "ask_thinking_model": "thinking"}
 _NOT_A_COMMAND = "這不是指令，流程沒有動。請照一般情況處理這句話；如果不是在跟你說話，就不要出聲。"
@@ -359,7 +363,8 @@ class HostRelay:
         if waiting is not None:
             waiting.cancel()
         if event.is_final:
-            self._enqueue(lambda: self._voice_command(speech_id, text))
+            self._final_speech.add(speech_id)
+            self._enqueue(lambda: self._final_transcript(speech_id, text))
         elif match_voice_command(text) is not None:
             self._partial_timers[speech_id] = self._spawn(self._partial_command(speech_id, text))
 
@@ -368,6 +373,31 @@ class HostRelay:
         self._partial_timers.pop(speech_id, None)
         if self._texts.get(speech_id) == text:
             self._enqueue(lambda: self._voice_command(speech_id, text))
+
+    async def _final_transcript(self, speech_id: str, text: str) -> None:
+        """一句話完整的辨識文字到了：先照一般的核對；沒過的話，看有沒有在等它的「結束」。"""
+        waiting_end = speech_id in self._pending_ends
+        winner = self._pending_ends.pop(speech_id, None)
+        if await self._voice_command(speech_id, text) is None and waiting_end:
+            await self._trusted_end(speech_id, text, winner)
+
+    async def _trusted_end(self, speech_id: str | None, text: str, winner: str | None) -> bool:
+        """語音模型呼叫了「結束」，但辨識文字不是清單上的說法。
+
+        辨識文字常常認不出「血刃」這種遊戲裡的詞（實測「血刃贏了」30 句只有 2 句辨識正確），
+        語音模型自己聽聲音卻大多聽得懂。所以結束這個動作相信模型：那句話不是問句、
+        而且夠短就執行，誰贏用模型說的。結束後 30 分鐘內可以接著主持，誤判的傷害有限。
+        其他指令仍然要整句等於清單上的說法。
+        """
+        core = spoken_core(text)
+        if core is None or not 0 < len(core) <= TRUSTED_END_MAX_CHARS:
+            return False
+        if self._first_time(speech_id, "end"):
+            self._cut_segment = None
+            await self._run_graph(
+                HostEvent.command("end", winner=winner if winner in _WINNERS else None)  # type: ignore[arg-type]
+            )
+        return True
 
     async def _voice_command(self, speech_id: str | None, text: str) -> bool | None:
         """核對並執行語音指令。回傳 None：不是指令；True：這次執行了；False：同一句已經執行過。"""
@@ -415,11 +445,19 @@ class HostRelay:
     async def _on_command_tool(self, event: ToolRequested) -> None:
         """路 1：模型呼叫指令工具。核對用後端自己的辨識文字，不用模型填的字（spec §5.2）。"""
         text = self._texts.get(event.speech_id) if event.speech_id else self._last_text
-        if text is None:
-            # 辨識文字還沒到：等它到了走路 2
+        is_end = event.name == "end_hosting"
+        winner = event.arguments.get("winner") if is_end else None
+        complete = event.speech_id is None or event.speech_id in self._final_speech
+        if text is None or (is_end and not complete and match_voice_command(text) is None):
+            # 辨識文字還沒到（或只有片段）：等它到了走路 2；「結束」另外記著，到時候再判斷
+            if is_end and event.speech_id is not None:
+                self._pending_ends[event.speech_id] = winner
             await self._tool_result(event.call_id, _COMMAND_PENDING, respond=False)
             return
         if match_voice_command(text) is None:
+            if is_end and await self._trusted_end(event.speech_id, text, winner):
+                await self._tool_result(event.call_id, _COMMAND_DONE, respond=False)
+                return
             await self._tool_result(event.call_id, _NOT_A_COMMAND, respond=False)
             return
         await self._tool_result(event.call_id, _COMMAND_DONE, respond=False)
@@ -725,6 +763,9 @@ class HostRelay:
         # 已經執行過的（那句話的編號, 動作）；每個動作最近執行的時間
         self._executed: set[tuple[str, str]] = set()
         self._recent_actions: dict[str, float] = {}
+        # 完整的辨識文字已經到了的那些話；語音模型呼叫了「結束」、還在等辨識文字的那些話
+        self._final_speech: set[str] = set()
+        self._pending_ends: dict[str, str | None] = {}
 
     def _cancel_voice_timers(self) -> None:
         for task in self._partial_timers.values():
