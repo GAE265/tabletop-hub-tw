@@ -1646,8 +1646,14 @@ class FakeVideoStudioRepository implements VideoStudioRepository {
   Future<VideoProject> createProject(VideoProjectCreate input) async {
     created.add(input);
     if (createError != null) throw createError!;
-    // 整個遊戲一支影片：建立後後端自動開始產生草稿
-    final project = sampleVideoProject(id: 'p-new', gameId: input.gameId);
+    // 整個遊戲一支影片：建立後後端自動開始產生草稿；拍規則書時先停在「規則書」
+    final photos = input.rulebook == 'photos';
+    final project = sampleVideoProject(
+      id: 'p-new',
+      gameId: input.gameId,
+      step: photos ? 'rulebook' : 'draft',
+      rulebook: photos ? 'photos' : 'imported',
+    );
     projects = [project, ...projects];
     return project;
   }
@@ -1655,6 +1661,61 @@ class FakeVideoStudioRepository implements VideoStudioRepository {
   @override
   Future<VideoProject> getProject(String projectId) async =>
       projects.firstWhere((p) => p.id == projectId);
+
+  // --- 店員拍規則書 ---
+
+  /// 專案的規則書照片；沒有時是空的。
+  final rulebooks = <String, Rulebook>{};
+  final rulebookUploads = <(String, String)>[];
+  final rulebookDeletes = <(String, int)>[];
+  Object? rulebookUploadError;
+
+  /// 縮圖的內容（預設是有效的 1×1 PNG）。
+  Uint8List rulebookImage = base64Decode(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==',
+  );
+
+  @override
+  Future<Rulebook> getRulebook(String projectId) async =>
+      rulebooks[projectId] ?? const Rulebook(photos: [], read: false);
+
+  @override
+  Future<Rulebook> uploadRulebookPhoto(
+    String projectId,
+    PickedImage image,
+  ) async {
+    rulebookUploads.add((projectId, image.name));
+    if (rulebookUploadError != null) throw rulebookUploadError!;
+    final current = await getRulebook(projectId);
+    final index = current.photos.length + 1;
+    return rulebooks[projectId] = Rulebook(
+      photos: [
+        ...current.photos,
+        sampleRulebookPhoto(index: index, id: '${image.name}-$index'),
+      ],
+      read: false,
+    );
+  }
+
+  @override
+  Future<void> deleteRulebookPhoto(String projectId, int index) async {
+    rulebookDeletes.add((projectId, index));
+    final current = await getRulebook(projectId);
+    final kept = [
+      for (final photo in current.photos)
+        if (photo.index != index) photo,
+    ];
+    rulebooks[projectId] = Rulebook(
+      photos: [
+        for (final (i, photo) in kept.indexed) photo.copyWith(index: i + 1),
+      ],
+      read: false,
+    );
+  }
+
+  @override
+  Future<Uint8List> getRulebookPhoto(String projectId, int index) async =>
+      rulebookImage;
 
   @override
   Future<VideoJob> startDraft(String projectId) async {
@@ -1788,6 +1849,7 @@ VideoProject sampleVideoProject({
   int gameId = 1,
   String gameName = '假遊戲',
   String step = 'draft',
+  String rulebook = 'imported',
 }) => VideoProject(
   id: id,
   gameId: gameId,
@@ -1796,6 +1858,7 @@ VideoProject sampleVideoProject({
   createdBy: 'u1',
   title: '$gameName 規則教學',
   step: step,
+  rulebook: rulebook,
   createdAt: DateTime.utc(2026, 11, 21),
   updatedAt: DateTime.utc(2026, 11, 21),
 );
@@ -1882,3 +1945,17 @@ class FakeVideoPlayback extends ChangeNotifier implements VideoPlayback {
     notifyListeners();
   }
 }
+
+RulebookPhoto sampleRulebookPhoto({
+  int index = 1,
+  String? id,
+  String quality = 'ok',
+  String? qualityMessage,
+}) => RulebookPhoto(
+  id: id ?? 'f$index',
+  index: index,
+  width: 1512,
+  height: 2016,
+  quality: quality,
+  qualityMessage: qualityMessage,
+);
