@@ -363,6 +363,23 @@ void main() {
       expect(h.capture.capturing, isTrue);
     });
 
+    test('已結束就不顯示流程鍵與「結束主持」；還沒連上也不顯示', () async {
+      final h = HostHarness();
+      expect(h.state.showFlowControls, isFalse);
+      await h.startHosting();
+      h.stream.emit(HostStateMessage(liveState()));
+      await pumpEventQueue();
+      expect(h.state.showFlowControls, isTrue);
+
+      h.stream.emit(HostStateMessage(liveState(status: HostStatus.ended)));
+      await pumpEventQueue();
+      expect(h.state.showFlowControls, isFalse);
+      // 接著主持：狀態變回進行中，流程鍵回來
+      h.stream.emit(HostStateMessage(liveState()));
+      await pumpEventQueue();
+      expect(h.state.showFlowControls, isTrue);
+    });
+
     test('U-20 收到 status 是 ended：顯示「接著主持」與「重新開始」', () async {
       final h = HostHarness();
       await h.startHosting();

@@ -353,6 +353,52 @@ void main() {
       expect(find.text('接著主持（第 3 回合翻牌結算）'), findsOneWidget);
       expect(find.byKey(const Key('host-restart')), findsOneWidget);
     });
+
+    testWidgets('已結束：流程鍵與「結束主持」收起來（按了也不會動）', (tester) async {
+      final h = ProtoHarness();
+      await h.pump(tester);
+      await h.start(tester);
+      expect(find.byKey(const Key('host-next')), findsOneWidget);
+      expect(find.byKey(const Key('host-end')), findsOneWidget);
+
+      await h.emit(
+        tester,
+        HostStateMessage(liveState(status: HostStatus.ended)),
+      );
+
+      for (final key in [
+        'host-previous',
+        'host-pause',
+        'host-next',
+        'host-end',
+      ]) {
+        expect(find.byKey(Key(key)), findsNothing, reason: key);
+      }
+      expect(find.text('這一局已經結束'), findsOneWidget);
+      expect(find.byKey(const Key('host-resume')), findsOneWidget);
+    });
+
+    testWidgets('已結束、按住說話：按住說話鍵還在（結束後照常可以問規則）', (tester) async {
+      final h = ProtoHarness();
+      await h.pump(tester);
+      await tester.tap(find.text('按住說話'));
+      await tester.pump();
+      await h.start(
+        tester,
+        live: liveState(turnTakingMode: TurnTakingMode.pushToTalk),
+      );
+      await h.emit(
+        tester,
+        HostStateMessage(
+          liveState(
+            status: HostStatus.ended,
+            turnTakingMode: TurnTakingMode.pushToTalk,
+          ),
+        ),
+      );
+      expect(find.byKey(const Key('host-talk')), findsOneWidget);
+      expect(find.byKey(const Key('host-next')), findsNothing);
+    });
   });
 
   group('提醒（spec §14.5）', () {
