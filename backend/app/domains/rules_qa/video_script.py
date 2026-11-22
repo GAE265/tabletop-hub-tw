@@ -276,13 +276,18 @@ def build_input(request: ScriptRequest) -> str:
 # --------------------------------------------------------------------------- 產生
 
 
+# 整個遊戲一支影片：每格最多改寫 2 次（2026-11-22 永傑決定）；單章模式維持 1 次
+WHOLE_GAME_REWRITES = 2
+
+
 def generate_script(
     llm: LLMProvider,
     request: ScriptRequest,
     base_dir: Path,
     cleanup_log: list["CleanupRecord"] | None = None,
+    rewrites: int = 1,
 ) -> dict[str, Any]:
-    """回傳通過檢查的段資料（video.json 的內容）；改寫一次仍不通過時拋 ScriptRejected。
+    """回傳通過檢查的段資料（video.json 的內容）；改寫 rewrites 次仍不通過時拋 ScriptRejected。
 
     每次 LLM 輸出都先做格式小錯的自動清理（C1–C4），清了什麼記進 cleanup_log；清理後照樣檢查。
     """
@@ -294,7 +299,7 @@ def generate_script(
     schema = video_prompts.WHOLE_GAME_SCHEMA if whole_game else video_prompts.SCRIPT_SCHEMA
     outputs: list[dict[str, Any]] = []
     errors: list[str] = []
-    for attempt in range(2):
+    for attempt in range(1 + rewrites):
         prompt = llm_input
         if attempt:
             prompt += "\n\n" + video_prompts.rewrite_request(errors, outputs[-1])
@@ -343,7 +348,9 @@ def generate_whole_game(
             existing_assets=assets,
         )
         try:
-            data = generate_script(llm, slot_request, base_dir, cleanup_log)
+            data = generate_script(
+                llm, slot_request, base_dir, cleanup_log, rewrites=WHOLE_GAME_REWRITES
+            )
         except ScriptRejected as exc:
             raise ScriptRejected(
                 [f"「{slot.title}」{error}" for error in exc.errors], exc.outputs

@@ -202,12 +202,17 @@ REWRITE_REQUEST = """上一次的輸出漏了這幾頁：{pages}。
 上一次的輸出：
 {previous}"""
 
+MISSING_PAGES_NOTE = """
+
+這次只給你前一次分類時漏掉的頁。每一頁都要有去處：放進 setup、round、win 其中一格，
+或放進 excluded 並寫 reason。只能引用這幾頁的原文；places 沒有新的場地可以給空陣列。"""
+
 
 def classify_scope(llm: LLMProvider, pages: list[RulebookPage]) -> ScopeResult:
     """把整本分成三格；檢查引用；每一頁都要有去處（在某一格的片段裡，或在排除清單裡）。
 
-    有頁沒去處就改寫一次（2026-11-22 永傑決定），仍沒有拋 ScopeIncomplete；
-    某一格空了拋 ScopeEmpty。
+    有頁沒去處就改寫一次；仍漏頁就只拿漏掉的頁另外做一次小分類（2026-11-22 永傑決定），
+    還是沒有拋 ScopeIncomplete；某一格空了拋 ScopeEmpty。
     """
     llm_input = build_input(pages)
     raw = llm.generate_json(instructions=INSTRUCTIONS, input=llm_input, schema=SCHEMA)
@@ -223,12 +228,37 @@ def classify_scope(llm: LLMProvider, pages: list[RulebookPage]) -> ScopeResult:
         )
         result = _parse(raw, pages)
         missing = _pages_without_place(result, pages)
+    if missing:
+        # 改寫後仍漏頁：只拿漏掉的頁另外做一次小分類（2026-11-22 永傑決定）
+        result = _classify_missing(llm, pages, missing, result)
+        missing = _pages_without_place(result, pages)
         if missing:
             raise ScopeIncomplete(missing, result.dropped)
     for slot in result.slots:
         if not slot.excerpts:
             raise ScopeEmpty(slot.title, result.dropped)
     return result
+
+
+def _classify_missing(
+    llm: LLMProvider, pages: list[RulebookPage], missing: list[int], result: ScopeResult
+) -> ScopeResult:
+    """只送漏掉的頁做一次分類，結果併進原本的分類（三格、排除清單、場地清單都保留）。"""
+    subset = [page for page in pages if page.page in missing]
+    raw = llm.generate_json(
+        instructions=INSTRUCTIONS + MISSING_PAGES_NOTE, input=build_input(subset), schema=SCHEMA
+    )
+    extra = _parse(raw, subset)
+    known = {place_key(place.name) for place in result.places}
+    return ScopeResult(
+        slots=[
+            ScopeSlot(slot.key, slot.title, slot.excerpts + more.excerpts)
+            for slot, more in zip(result.slots, extra.slots, strict=True)
+        ],
+        excluded=result.excluded + extra.excluded,
+        dropped=result.dropped + extra.dropped,
+        places=result.places + [p for p in extra.places if place_key(p.name) not in known],
+    )
 
 
 def _parse(raw: dict[str, Any], pages: list[RulebookPage]) -> ScopeResult:

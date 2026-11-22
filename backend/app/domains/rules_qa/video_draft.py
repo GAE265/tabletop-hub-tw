@@ -100,6 +100,20 @@ def terms_status(stored: list[dict[str, Any]] | None) -> str:
     return "used" if stored else "empty"
 
 
+# 整本模式：「檢查沒過」與「分類漏頁」時整個工作自動重試的次數（2026-11-22 永傑決定）。
+# AI 服務連不上、某一格找不到內容不重試。
+JOB_RETRIES = 1
+RETRY_MESSAGE = "第一次沒有通過檢查，自動重新產生"
+
+
+class _Retryable(Exception):
+    """可以整個重來一次的失敗；failure 是重試後仍失敗時要回報的 JobFailed。"""
+
+    def __init__(self, failure: JobFailed) -> None:
+        super().__init__(failure.message)
+        self.failure = failure
+
+
 class DraftJobHandler:
     """草稿工作；後端啟動時註冊在 app.state.rules_video_job_handlers["draft"]。"""
 
@@ -120,27 +134,43 @@ class DraftJobHandler:
 
         chapter = _pages(state.chapter_pages, state.page_texts)
         terms_raw = None if stored_terms is None else stored_terms.terms
-        scope: ScopeResult | None = None
-        if whole_game:
-            ctx.report(0.1, "AI 分類規則（開局、走完一輪、獲勝方式）")
-            scope = self._classify(chapter)
-        request = ScriptRequest(
-            chapter_number=state.chapter_number or 1,
-            chapter_title=state.chapter_title or "",
-            pages=[p for p in chapter if p.page in scope.pages] if scope else chapter,
-            reference_pages=[] if scope else _pages(state.reference_pages, state.page_texts),
-            terms=_terms(terms_raw),
-            game_key=f"game-{state.game_id}",
-            title=f"{game_name or '規則'} 規則教學",
-            scope=scope.slots if scope else None,
-            places=scope.places if scope else None,
-        )
+
+        def build_request(scope: ScopeResult | None) -> ScriptRequest:
+            return ScriptRequest(
+                chapter_number=state.chapter_number or 1,
+                chapter_title=state.chapter_title or "",
+                pages=[p for p in chapter if p.page in scope.pages] if scope else chapter,
+                reference_pages=[] if scope else _pages(state.reference_pages, state.page_texts),
+                terms=_terms(terms_raw),
+                game_key=f"game-{state.game_id}",
+                title=f"{game_name or '規則'} 規則教學",
+                scope=scope.slots if scope else None,
+                places=scope.places if scope else None,
+            )
 
         with tempfile.TemporaryDirectory(prefix="rules-video-draft-") as work:
             base_dir = Path(work)
-            ctx.report(0.3 if scope else 0.15, "AI 產生草稿")
             cleanup: list[CleanupRecord] = []
-            data = self._generate(request, base_dir, cleanup)
+            retry_reason: str | None = None
+            for attempt in range(1 + (JOB_RETRIES if whole_game else 0)):
+                try:
+                    scope: ScopeResult | None = None
+                    if whole_game:
+                        ctx.report(0.1, "AI 分類規則（開局、走完一輪、獲勝方式）")
+                        scope = self._classify(chapter)
+                    request = build_request(scope)
+                    ctx.report(0.3 if scope else 0.15, "AI 產生草稿")
+                    data = self._generate(request, base_dir, cleanup)
+                    break
+                except _Retryable as exc:
+                    if attempt == JOB_RETRIES or not whole_game:
+                        first = f"第一次失敗：{retry_reason}\n" if retry_reason else ""
+                        raise JobFailed(
+                            exc.failure.message, detail=first + (exc.failure.detail or "")
+                        ) from exc
+                    retry_reason = exc.failure.message
+                    cleanup.clear()
+                    ctx.report(0.1, RETRY_MESSAGE)
             ctx.report(0.7, "規則涵蓋檢查")
             coverage = (
                 self._coverage_by_slot(data, base_dir, scope)
@@ -175,7 +205,11 @@ class DraftJobHandler:
             "cleanup": [asdict(record) for record in cleanup],
             "coverage": coverage["status"],
             "terms": terms_status(terms_raw),
+            # 整本模式自動重試過一次（2026-11-22 永傑決定）；retry_reason 是第一次失敗的原因
+            "retried": retry_reason is not None,
         }
+        if retry_reason is not None:
+            result["retry_reason"] = retry_reason
         if scope is not None:
             result["scope"] = {
                 **{
@@ -198,7 +232,9 @@ class DraftJobHandler:
         except LLMError as exc:
             raise JobFailed(DRAFT_LLM_REJECTED_MESSAGE, detail=str(exc)) from exc
         except ScopeIncomplete as exc:
-            raise JobFailed(scope_incomplete_message(exc.pages), detail=exc.detail) from exc
+            raise _Retryable(
+                JobFailed(scope_incomplete_message(exc.pages), detail=exc.detail)
+            ) from exc
         except ScopeEmpty as exc:
             raise JobFailed(scope_empty_message(exc.slot_title), detail=exc.detail) from exc
 
@@ -216,7 +252,9 @@ class DraftJobHandler:
             raise JobFailed(DRAFT_LLM_REJECTED_MESSAGE, detail=str(exc)) from exc
         except ScriptRejected as exc:
             # 檢查沒過的每一條含段代號等內部代號：只放 error_detail（2026-11-22 永傑決定）
-            raise JobFailed(DRAFT_SCRIPT_REJECTED_MESSAGE, detail="\n".join(exc.errors)) from exc
+            raise _Retryable(
+                JobFailed(DRAFT_SCRIPT_REJECTED_MESSAGE, detail="\n".join(exc.errors))
+            ) from exc
 
     def _coverage(
         self, data: dict[str, Any], base_dir: Path, chapter: list[RulebookPage]
