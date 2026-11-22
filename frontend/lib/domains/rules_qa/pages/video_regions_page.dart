@@ -11,6 +11,7 @@ import 'widgets/video_studio_widgets.dart';
 
 /// 標區域（`/videos/:id/assets/:key/regions`，外觀決定）：每次都顯示「用四個角對齊框線」；
 /// 區域清單顯示已標幾個與名稱；沒儲存就離開時先提示。
+/// 目前區域顯示白話說明與「第 N 段會用到」；照片拍不到時可以略過（2026-11-22 永傑決定）。
 class VideoRegionsPage extends ConsumerStatefulWidget {
   const VideoRegionsPage({
     required this.projectId,
@@ -70,6 +71,37 @@ class _VideoRegionsPageState extends ConsumerState<VideoRegionsPage> {
     if ((leave ?? false) && mounted) context.go(_assetPath);
   }
 
+  /// 略過前說明影響，並建議照片拍得到的話重拍。
+  Future<void> _confirmSkip(String name, List<int> segments) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('略過「$name」？'),
+        content: Text(
+          segments.isEmpty
+              ? '目前沒有段用到這個區域。照片拍得到的話，建議重拍。'
+              : '略過後，第 ${segments.join('、')} 段的框選、標籤或移動會拿掉。'
+                    '照片拍得到的話，建議重拍。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('略過'),
+          ),
+        ],
+      ),
+    );
+    if ((ok ?? false) && mounted) {
+      await ref
+          .read(videoRegionsProvider(_ref).notifier)
+          .setRegionSkipped(name, true);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(videoRegionsProvider(_ref));
@@ -123,7 +155,9 @@ class _VideoRegionsPageState extends ConsumerState<VideoRegionsPage> {
                     for (final name in state.names)
                       ChoiceChip(
                         key: Key('video-region-chip-$name'),
-                        avatar: state.boxes[name] != null
+                        avatar: state.skipped.contains(name)
+                            ? const Icon(Icons.block)
+                            : state.boxes[name] != null
                             ? const Icon(Icons.check)
                             : null,
                         label: Text(name),
@@ -132,6 +166,53 @@ class _VideoRegionsPageState extends ConsumerState<VideoRegionsPage> {
                       ),
                   ],
                 ),
+                if (state.current case final name?) ...[
+                  const SizedBox(height: AppSpacing.small),
+                  if (state.hints[name] case final hint? when hint.isNotEmpty)
+                    Text(
+                      hint,
+                      key: const Key('video-region-hint'),
+                      style: text.bodyMedium,
+                    ),
+                  Text(
+                    regionSegmentsText(state.segments[name] ?? const []),
+                    key: const Key('video-region-segments'),
+                    style: text.bodySmall!.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.xSmall),
+                  if (state.skipped.contains(name))
+                    Row(
+                      children: [
+                        const Icon(Icons.block),
+                        const SizedBox(width: AppSpacing.small),
+                        const Expanded(child: Text('已略過：照片拍不到這個區域')),
+                        TextButton(
+                          key: const Key('video-region-unskip'),
+                          onPressed: state.saving
+                              ? null
+                              : () => notifier.setRegionSkipped(name, false),
+                          child: const Text('取消略過'),
+                        ),
+                      ],
+                    )
+                  else
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: TextButton.icon(
+                        key: const Key('video-region-skip'),
+                        onPressed: state.saving
+                            ? null
+                            : () => _confirmSkip(
+                                name,
+                                state.segments[name] ?? const [],
+                              ),
+                        icon: const Icon(Icons.block),
+                        label: const Text('照片拍不到這個區域'),
+                      ),
+                    ),
+                ],
                 const SizedBox(height: AppSpacing.medium),
                 if (state.error != null) ...[
                   NoticeBanner(text: state.error!, isError: true),

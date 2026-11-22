@@ -182,11 +182,18 @@ final videoAssetProvider =
       VideoAssetNotifier.new,
     );
 
+/// 標區域畫面的「第 N 段會用到」。
+String regionSegmentsText(List<int> segments) =>
+    segments.isEmpty ? '目前沒有段用到這個區域' : '第 ${segments.join('、')} 段會用到';
+
 class VideoRegionsState {
   const VideoRegionsState({
     this.names = const [],
     this.boxes = const {},
     this.saved = const {},
+    this.hints = const {},
+    this.segments = const {},
+    this.skipped = const {},
     this.current,
     this.loading = false,
     this.saving = false,
@@ -202,13 +209,24 @@ class VideoRegionsState {
   /// 最近一次儲存（或讀取）時的框。
   final Map<String, Rect?> saved;
 
+  /// 區域名稱 → 給店員的白話說明（取自規則書的場地清單）。
+  final Map<String, String> hints;
+
+  /// 區域名稱 → 用到它的段。
+  final Map<String, List<int>> segments;
+
+  /// 照片拍不到、略過的區域（略過了就算處理好了）。
+  final Set<String> skipped;
+
   /// 目前在標的區域。
   final String? current;
   final bool loading;
   final bool saving;
   final String? error;
 
-  int get doneCount => names.where((name) => boxes[name] != null).length;
+  int get doneCount => names
+      .where((name) => boxes[name] != null || skipped.contains(name))
+      .length;
 
   /// 有還沒儲存的框。
   bool get dirty => names.any((name) => boxes[name] != saved[name]);
@@ -226,6 +244,7 @@ class VideoRegionsState {
     List<String>? names,
     Map<String, Rect?>? boxes,
     Map<String, Rect?>? saved,
+    Set<String>? skipped,
     String? current,
     bool? loading,
     bool? saving,
@@ -235,6 +254,9 @@ class VideoRegionsState {
     names: names ?? this.names,
     boxes: boxes ?? this.boxes,
     saved: saved ?? this.saved,
+    hints: hints,
+    segments: segments,
+    skipped: skipped ?? this.skipped,
     current: current ?? this.current,
     loading: loading ?? this.loading,
     saving: saving ?? this.saving,
@@ -264,12 +286,17 @@ class VideoRegionsNotifier extends Notifier<VideoRegionsState> {
           entry.key: entry.value == null ? null : _rect(entry.value!),
       };
       final names = asset.regions.keys.toList();
+      final skipped = asset.skippedRegions.toSet();
       state = VideoRegionsState(
         names: names,
         boxes: boxes,
         saved: boxes,
+        hints: asset.regionHints,
+        segments: asset.regionSegments,
+        skipped: skipped,
         current:
-            _nextUndone(names, boxes) ?? (names.isEmpty ? null : names.first),
+            _nextUndone(names, boxes, skipped) ??
+            (names.isEmpty ? null : names.first),
       );
     } on ApiException catch (error) {
       if (ref.mounted) {
@@ -292,7 +319,9 @@ class VideoRegionsNotifier extends Notifier<VideoRegionsState> {
     final wasNew = state.boxes[name] == null;
     state = state.copyWith(
       boxes: boxes,
-      current: wasNew ? _nextUndone(state.names, boxes) ?? name : name,
+      current: wasNew
+          ? _nextUndone(state.names, boxes, state.skipped) ?? name
+          : name,
       clearError: true,
     );
   }
@@ -334,9 +363,46 @@ class VideoRegionsNotifier extends Notifier<VideoRegionsState> {
   static Rect _rect(List<double> box) =>
       Rect.fromLTWH(box[0], box[1], box[2], box[3]);
 
-  static String? _nextUndone(List<String> names, Map<String, Rect?> boxes) {
+  /// 照片拍不到這個區域：略過（true）或取消略過（false），立刻存；成功回傳 true。
+  /// 產生影片時會拿掉指向它的框選、標籤與移動（2026-11-22 永傑決定）。
+  Future<bool> setRegionSkipped(String name, bool skip) async {
+    final skipped = {...state.skipped};
+    skip ? skipped.add(name) : skipped.remove(name);
+    state = state.copyWith(saving: true, clearError: true);
+    try {
+      await ref
+          .read(videoStudioRepositoryProvider)
+          .updateAsset(
+            target.projectId,
+            target.assetKey,
+            VideoAssetUpdate(
+              skippedRegions: [
+                for (final n in state.names)
+                  if (skipped.contains(n)) n,
+              ],
+            ),
+          );
+      if (!ref.mounted) return true;
+      state = state.copyWith(saving: false, skipped: skipped);
+      ref
+        ..invalidate(videoReadinessProvider(target.projectId))
+        ..invalidate(videoDraftProvider(target.projectId));
+      return true;
+    } on ApiException catch (error) {
+      if (ref.mounted) {
+        state = state.copyWith(saving: false, error: error.message);
+      }
+      return false;
+    }
+  }
+
+  static String? _nextUndone(
+    List<String> names,
+    Map<String, Rect?> boxes,
+    Set<String> skipped,
+  ) {
     for (final name in names) {
-      if (boxes[name] == null) return name;
+      if (boxes[name] == null && !skipped.contains(name)) return name;
     }
     return null;
   }

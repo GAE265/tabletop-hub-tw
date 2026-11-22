@@ -267,6 +267,12 @@ abstract class VideoAsset with _$VideoAsset {
     required bool hasPhoto,
     required int orientation,
     required Map<String, List<double>?> regions,
+    // 區域名稱 → 給店員的白話說明（只在標區域畫面顯示）；舊的草稿沒有
+    @Default({}) Map<String, String> regionHints,
+    // 區域名稱 → 用到它的段（段號從 1 開始）
+    @Default({}) Map<String, List<int>> regionSegments,
+    // 照片拍不到、店員略過的區域
+    @Default([]) List<String> skippedRegions,
     required int videoVersion,
     // 略過（MR 9）：可不可以略過由後端程式判斷（skippable，不看 priority）；
     // 略過後會少一張圖的段、只靠它而不能略過的段（段號從 1 開始）
@@ -289,6 +295,8 @@ abstract class VideoAssetUpdate with _$VideoAssetUpdate {
     Map<String, List<double>?>? regions,
     // true 略過、false 取消略過
     bool? skipped,
+    // 照片拍不到的區域（整份取代；[] 取消全部）
+    List<String>? skippedRegions,
   }) = _VideoAssetUpdate;
 
   factory VideoAssetUpdate.fromJson(Map<String, dynamic> json) =>
