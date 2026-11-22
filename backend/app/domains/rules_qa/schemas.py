@@ -271,8 +271,10 @@ class DraftAssetOut(BaseModel):
     # 已經標好座標的區域（重新產生草稿前提示「已標的區域會要重標」）
     marked_regions: list[str] = []
     has_photo: bool
-    # 店員略過的選拍素材（MR 9）
+    # 店員略過的素材（MR 9）
     skipped: bool = False
+    # 可以略過：略過後每一段仍有主要內容（程式判斷，不看 priority）
+    skippable: bool = False
 
 
 class CoverageIssueOut(BaseModel):
@@ -390,11 +392,13 @@ class VideoAssetOut(BaseModel):
     regions: dict[str, list[float] | None]
     # 寫入後的段資料版本
     video_version: int
-    # 店員略過這個選拍素材（MR 9）
+    # 店員略過這個素材（MR 9）
     skipped: bool = False
-    # 略過後會少一張圖的段（段號從 1 開始）；必拍是空的
+    # 可以略過：略過後每一段仍有主要內容（程式判斷，不看 priority）
+    skippable: bool = False
+    # 略過後會少一張圖的段（段號從 1 開始）
     skip_affected_segments: list[int] = []
-    # 只靠這張素材、所以不能略過的段；必拍是空的
+    # 只靠這張素材、所以不能略過的段
     skip_blocked_segments: list[int] = []
 
 
@@ -403,11 +407,14 @@ class MissingPhotoOut(BaseModel):
     # 給店員看的名稱（中文名稱；舊的草稿用 reason）
     label: str = ""
 
-    # must＝必拍、optional＝選拍（選拍沒有照片也會擋住產生影片，第 1 階段的限制）
+    # AI 標的 must／optional；可不可以略過改看 skippable
+    # （沒有照片都會擋住產生影片，第 1 階段的限制）
     priority: str
+    # 可以略過：略過後每一段仍有主要內容（程式判斷）
+    skippable: bool = False
     reason: str
     shot: str | None
-    # 選拍：略過後會少一張圖的段、只靠它而不能略過的段（MR 9）
+    # 略過後會少一張圖的段、只靠它而不能略過的段（MR 9）
     skip_affected_segments: list[int] = []
     skip_blocked_segments: list[int] = []
 

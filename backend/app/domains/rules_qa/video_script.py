@@ -349,10 +349,38 @@ def generate_whole_game(
     }
     if request.voice:
         merged["voice"] = request.voice
+    prune_unused_regions(merged)
     errors = check_script(merged, request, base_dir)
     if errors:
         raise ScriptRejected([f"合併後{error}" for error in errors], outputs)
     return merged
+
+
+def prune_unused_regions(data: dict[str, Any]) -> None:
+    """刪掉沒被任何 highlight、label、move 指到的區域（2026-11-22 永傑決定），店員不用標。
+
+    區域的寫法是 `<槽位>@<區域名稱>`，槽位是放了這個素材的 asset 槽位。直接改傳入的段資料。
+    """
+    used: set[tuple[str, str]] = set()
+    for segment in data.get("segments", []):
+        slots = segment.get("slots") or {}
+        refs = [h.get("target") for h in segment.get("highlights", [])]
+        refs += [lab.get("target") for lab in segment.get("labels", [])]
+        for beat in segment.get("beats", []):
+            for cue in beat.get("cues", []):
+                refs += [cue.get("target"), cue.get("to")]
+        for ref in refs:
+            if not ref or "@" not in ref:
+                continue
+            slot_name, _, region = ref.partition("@")
+            slot = slots.get(slot_name) or {}
+            if slot.get("kind") == "asset" and slot.get("asset_key"):
+                used.add((slot["asset_key"], region))
+    for asset in data.get("assets", []):
+        regions = asset.get("regions") or {}
+        asset["regions"] = {
+            name: box for name, box in regions.items() if (asset["asset_key"], name) in used
+        }
 
 
 # --------------------------------------------------------------------------- 格式小錯的自動清理

@@ -65,6 +65,7 @@ from app.domains.rules_qa.video_assets import (
     PhotoRejected,
     asset_label,
     find_asset,
+    is_skippable,
     is_skipped,
     new_photo_file,
     normalize_photo,
@@ -820,7 +821,7 @@ class VideoDraftService:
         return VideoDraftOut(
             video_version=state.video_version,
             segments=[_draft_segment(s) for s in state.video.get("segments", [])],
-            assets=[_draft_asset(a) for a in state.video.get("assets", [])],
+            assets=[_draft_asset(a, state.video) for a in state.video.get("assets", [])],
             coverage=_draft_coverage(state),
             terms=DraftTermsOut(
                 status=status, message=TERMS_MISSING_HINT if status == "missing" else None
@@ -855,7 +856,7 @@ def _draft_segment(segment: dict[str, Any]) -> DraftSegmentOut:
     )
 
 
-def _draft_asset(asset: dict[str, Any]) -> DraftAssetOut:
+def _draft_asset(asset: dict[str, Any], video: dict[str, Any]) -> DraftAssetOut:
     reason = asset.get("reason", "")
     return DraftAssetOut(
         asset_key=asset["asset_key"],
@@ -869,6 +870,7 @@ def _draft_asset(asset: dict[str, Any]) -> DraftAssetOut:
         marked_regions=[n for n, box in (asset.get("regions") or {}).items() if box is not None],
         has_photo=bool(asset.get("file")),
         skipped=is_skipped(asset),
+        skippable=is_skippable(video, asset["asset_key"]),
     )
 
 
@@ -1091,12 +1093,8 @@ class VideoAssetsService:
 
     @staticmethod
     def _check_skip(video: dict[str, Any], asset: dict[str, Any]) -> None:
-        """只有選拍可以略過；略過後某段的主畫面會空掉就不能略過（2026-11-22 永傑決定）。"""
+        """略過後某段的主畫面會空掉就不能略過；不看 AI 標的 priority（2026-11-22 永傑決定）。"""
         label = asset_label(asset)
-        if asset.get("priority") != "optional":
-            raise AppError(
-                422, "RULES_VIDEO_SKIP_NOT_OPTIONAL", f"「{label}」是必拍的素材，不能略過"
-            )
         _, blocked = skip_impact(video, asset["asset_key"])
         if blocked:
             raise AppError(
@@ -1154,8 +1152,7 @@ STORAGE_DOWN_MESSAGE = "照片存放空間暫時無法使用，請稍後再試"
 
 
 def _asset_out(asset: dict[str, Any], version: int, video: dict[str, Any]) -> VideoAssetOut:
-    optional = asset.get("priority") == "optional"
-    affected, blocked = skip_impact(video, asset["asset_key"]) if optional else ([], [])
+    affected, blocked = skip_impact(video, asset["asset_key"])
     return VideoAssetOut(
         asset_key=asset["asset_key"],
         label=asset.get("label"),
@@ -1168,6 +1165,7 @@ def _asset_out(asset: dict[str, Any], version: int, video: dict[str, Any]) -> Vi
         regions=dict(asset.get("regions") or {}),
         video_version=version,
         skipped=is_skipped(asset),
+        skippable=not blocked,
         skip_affected_segments=affected,
         skip_blocked_segments=blocked,
     )

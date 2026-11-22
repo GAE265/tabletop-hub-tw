@@ -110,7 +110,7 @@ def carry_over_assets(old: dict[str, Any] | None, new: dict[str, Any]) -> list[s
 
 
 def is_skipped(asset: dict[str, Any]) -> bool:
-    """店員略過的選拍素材（記在 usable=false；段資料原本就有的預留欄位）。"""
+    """店員略過的素材（記在 usable=false；段資料原本就有的預留欄位）。"""
     return asset.get("usable") is False
 
 
@@ -220,11 +220,17 @@ def skip_impact(video: dict[str, Any], asset_key: str) -> tuple[list[int], list[
     return affected, blocked
 
 
+def is_skippable(video: dict[str, Any], asset_key: str) -> bool:
+    """可以略過：略過後（加上已經略過的）每一段仍有主要內容（2026-11-22 永傑決定由程式判斷，
+    不看 AI 標的 priority）。"""
+    return not skip_impact(video, asset_key)[1]
+
+
 def readiness(video: dict[str, Any]) -> dict[str, Any]:
     """產生影片前還缺什麼：沒有照片的素材、沒有座標的區域、本版不支援的繪製素材。
 
-    略過的選拍素材不列。選拍沒有照片也會擋住（第 1 階段的段資料要求每個照片素材都有檔案），
-    但選拍附上略過的影響，讓店員可以選擇略過（MR 9）。
+    略過的素材不列。沒有照片都會擋住（第 1 階段的段資料要求每個照片素材都有檔案），
+    但每個素材都附上略過的影響與可不可以略過，讓店員可以選擇略過（MR 9）。
     """
     missing_photos = []
     missing_regions = []
@@ -239,13 +245,13 @@ def readiness(video: dict[str, Any]) -> dict[str, Any]:
             )
             continue
         if not asset.get("file"):
-            priority = asset.get("priority", "must")
-            affected, blocked = skip_impact(video, key) if priority == "optional" else ([], [])
+            affected, blocked = skip_impact(video, key)
             missing_photos.append(
                 {
                     "asset_key": key,
                     "label": asset_label(asset),
-                    "priority": priority,
+                    "priority": asset.get("priority", "must"),
+                    "skippable": not blocked,
                     "reason": asset.get("reason", ""),
                     "shot": asset.get("shot"),
                     "skip_affected_segments": affected,
