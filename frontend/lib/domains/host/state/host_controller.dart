@@ -137,6 +137,10 @@ class HostState {
 
   bool get ended => live?.status == HostStatus.ended;
 
+  /// 顯示流程鍵（上一步、暫停或繼續、下一步）與「結束主持」：連著而且這一局還沒結束。
+  /// 已結束後這些鍵按了不會動（spec §3.3），所以收起來；主持人仍連著，可以照常問規則。
+  bool get showFlowControls => isLive && live != null && !ended;
+
   /// 只在按住說話時出現按住說話鍵。
   bool get showTalkButton =>
       isLive && turnTakingMode == TurnTakingMode.pushToTalk;

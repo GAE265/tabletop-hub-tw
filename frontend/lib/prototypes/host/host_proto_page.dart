@@ -103,7 +103,7 @@ class _HostProtoPageState extends ConsumerState<HostProtoPage> {
             // 「結束主持」放在標題列，離流程鍵最遠，按「下一步」時不會誤按；
             // 不再確認（30 分鐘內可以接著主持）
             actions: [
-              if (hosting)
+              if (state.showFlowControls)
                 Padding(
                   padding: const EdgeInsets.only(right: _smallGap),
                   child: TextButton.icon(
@@ -489,13 +489,14 @@ class _HostingLayout {
             spacing: _gap,
             children: [
               _mode,
-              Card(
-                margin: EdgeInsets.zero,
-                child: Padding(
-                  padding: const EdgeInsets.all(_gap),
-                  child: _FlowButtons(state: state, controller: controller),
+              if (state.showFlowControls)
+                Card(
+                  margin: EdgeInsets.zero,
+                  child: Padding(
+                    padding: const EdgeInsets.all(_gap),
+                    child: _FlowButtons(state: state, controller: controller),
+                  ),
                 ),
-              ),
               // 按住說話鍵放在流程鍵下面：切換接話方式時流程鍵不移位
               ?_talk,
               const _VoiceHints(),
@@ -509,6 +510,8 @@ class _HostingLayout {
   /// 手機與平板固定在畫面底部的按鍵；筆電沒有。
   Widget? bottomBar() {
     if (wide) return null;
+    // ✅ 這一局已經結束：流程鍵收起來；按住說話時還留著按住說話鍵，可以照常問規則
+    if (!state.showFlowControls && _talk == null) return null;
     return SafeArea(
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -523,7 +526,8 @@ class _HostingLayout {
               spacing: _gap,
               children: [
                 ?_talk,
-                _FlowButtons(state: state, controller: controller),
+                if (state.showFlowControls)
+                  _FlowButtons(state: state, controller: controller),
               ],
             ),
           ),
