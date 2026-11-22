@@ -4,6 +4,8 @@ status: accepted
 
 # 桌遊基本資料改成所有 domain 共用的 `games` 表
 
+> 2026-11-19：資料怎麼發給組員（匯出檔不進 repo、推薦資料不同步）已由 [ADR 0005](0005-seed-data-in-repo.md) 取代，其餘照舊。
+
 規則書入庫（`rules_ingest`，8 大類各一款）、規則問答、戰績等功能都會提到同一批桌遊，需要統一的桌遊編號與名稱。因此桌遊的基本資料（`games`）、8 個類型（`genres`）與每款桌遊的類型（`game_genres`）改成所有 domain 共用的表。這也推翻了 games_advisor 原本「桌遊資料只供推薦，不給其他 domain 參照」的決定。
 
 2026-11-13 AGENTS.md 1.8 把共用資料表寫成正式規則，這三張表列在第 3 節「共用資料表」的清單裡。所以下面兩點不再是例外：表名不用 domain 名稱開頭（§4.4）；各 domain 的 service 可以直接使用共用表的 repository（§4.2）。`genres` 是固定的小型分類表，主鍵用流水號（bigint），也是 §4.4 允許的。類型的兩張表原本叫 `game_types`、`game_game_types`，同一天照 1.8 改名。
