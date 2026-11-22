@@ -105,10 +105,21 @@ def slot_coverage(
     )
 
 
+def slot_output(slot: str, data: dict[str, Any] | None = None) -> dict[str, Any]:
+    """每格各一次呼叫時，這一格的回傳：只有這一格的段；素材列出這一格用到的（含沿用的）。"""
+    data = data or whole_game_output()
+    return {
+        "assets": data["assets"],
+        "segments": [s for s in data["segments"] if s["chapter"] == slot],
+    }
+
+
 def whole_game_llm_outputs(*, coverage: list[dict] | None = None) -> list[dict[str, Any]]:
-    """草稿工作（整本）依序的 LLM 回傳：分類、產生、三格的涵蓋檢查。"""
+    """草稿工作（整本）依序的 LLM 回傳：分類、三格各產生一次、三格的涵蓋檢查。"""
     return [
         classify_output(),
-        whole_game_output(),
+        slot_output("setup"),
+        slot_output("round"),
+        slot_output("win"),
         *(coverage or [slot_coverage(), slot_coverage(), slot_coverage()]),
     ]

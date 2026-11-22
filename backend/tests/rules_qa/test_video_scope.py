@@ -11,15 +11,18 @@ from app.domains.rules_qa import video_prompts
 from app.domains.rules_qa.video_scope import (
     SLOTS,
     ScopeEmpty,
+    ScopeIncomplete,
     classify_scope,
     scope_from_dict,
 )
 from app.domains.rules_qa.video_script import (
     RulebookPage,
+    ScriptRejected,
     ScriptRequest,
     build_input,
     check_script,
     generate_script,
+    generate_whole_game,
     to_video_data,
 )
 from app.integrations.llm.fake import FakeLLMProvider
@@ -31,6 +34,7 @@ from tests.rules_qa.whole_game_support import (
     WHOLE_GAME_PAGES,
     WIN_QUOTE,
     classify_output,
+    slot_output,
     whole_game_output,
 )
 
@@ -171,25 +175,129 @@ def test_source_page_must_be_in_slots(tmp_path: Path):
     assert any("source_pages" in e for e in errors)
 
 
-def test_generate_uses_whole_game_prompt_and_schema(tmp_path: Path):
-    llm = FakeLLMProvider(json_outputs=[whole_game_output()])
-    generate_script(llm, _request(), tmp_path)
-    call = llm.calls[0].kwargs
-    assert call["instructions"] == video_prompts.WHOLE_GAME_INSTRUCTIONS
-    assert call["schema"].name == "rules_video_whole_game"
-    schema = call["schema"].schema
+def test_generate_one_call_per_slot_in_order(tmp_path: Path):
+    # 2026-11-22 永傑決定：每格各一次呼叫，依序開局、走完一輪、獲勝方式
+    llm = FakeLLMProvider(
+        json_outputs=[slot_output("setup"), slot_output("round"), slot_output("win")]
+    )
+    data = generate_whole_game(llm, _request(), tmp_path)
+    assert len(llm.calls) == 3
+    for call, (key, title) in zip(llm.calls, SLOTS, strict=True):
+        kwargs = call.kwargs
+        assert kwargs["instructions"] == video_prompts.WHOLE_GAME_SLOT_INSTRUCTIONS
+        assert kwargs["schema"].name == "rules_video_whole_game"
+        assert f"這次只產生：{key}（{title}）" in kwargs["input"]
+    schema = llm.calls[0].kwargs["schema"].schema
     asset = schema["properties"]["assets"]["items"]["properties"]
     assert asset["kind"]["enum"] == ["flat_photo"]  # 只能實拍
     assert "label" in asset
+    # 只送這一格的片段
+    assert SETUP_QUOTE in llm.calls[0].kwargs["input"]
+    assert WIN_QUOTE not in llm.calls[0].kwargs["input"]
+    # 合起來：三個 chapter、段依三格排好
+    assert [c["chapter_key"] for c in data["chapters"]] == ["setup", "round", "win"]
+    assert [s["chapter_key"] for s in data["segments"]] == ["setup", "round", "round", "win"]
+    assert check_script(data, _request(), tmp_path) == []
+
+
+def test_later_slots_get_existing_assets(tmp_path: Path):
+    llm = FakeLLMProvider(
+        json_outputs=[slot_output("setup"), slot_output("round"), slot_output("win")]
+    )
+    data = generate_whole_game(llm, _request(), tmp_path)
+    first, second = llm.calls[0].kwargs["input"], llm.calls[1].kwargs["input"]
+    assert "已有的素材" not in first
+    assert "已有的素材" in second and "red（紅牌）" in second
+    # 後面的格沿用同一個 asset_key，不會重複
+    keys = [a["asset_key"] for a in data["assets"]]
+    assert sorted(keys) == ["back", "blue", "board", "red"] and len(keys) == len(set(keys))
+
+
+def test_new_regions_are_added_to_existing_asset(tmp_path: Path):
+    setup, round_, win = slot_output("setup"), slot_output("round"), slot_output("win")
+    board = next(a for a in win["assets"] if a["asset_key"] == "board")
+    board["regions"] = ["zone_a", "zone_b"]
+    llm = FakeLLMProvider(json_outputs=[setup, round_, win])
+    data = generate_whole_game(llm, _request(), tmp_path)
+    merged = next(a for a in data["assets"] if a["asset_key"] == "board")
+    assert set(merged["regions"]) == {"zone_a", "zone_b"}
+
+
+def test_beat_and_segment_keys_unique_across_slots(tmp_path: Path):
+    setup, round_, win = slot_output("setup"), slot_output("round"), slot_output("win")
+    for output in (setup, win):
+        output["segments"][0]["segment_key"] = "s1"  # 和走完一輪的 s1 撞名
+    llm = FakeLLMProvider(json_outputs=[setup, round_, win])
+    data = generate_whole_game(llm, _request(), tmp_path)
+    segment_keys = [s["segment_key"] for s in data["segments"]]
+    beat_keys = [b["beat_key"] for s in data["segments"] for b in s["beats"]]
+    assert len(segment_keys) == len(set(segment_keys))
+    assert len(beat_keys) == len(set(beat_keys))
+    assert check_script(data, _request(), tmp_path) == []
+
+
+def test_each_slot_rewrites_once(tmp_path: Path):
+    bad = slot_output("round")
+    bad["segments"][0]["beats"][0]["narration"] = "每人只有一次機會。"
+    llm = FakeLLMProvider(
+        json_outputs=[slot_output("setup"), bad, slot_output("round"), slot_output("win")]
+    )
+    generate_whole_game(llm, _request(), tmp_path)
+    assert len(llm.calls) == 4
+    rewrite = llm.calls[2].kwargs["input"]
+    assert "上一次的輸出有以下問題" in rewrite and "次" in rewrite
+    assert "這次只產生：round（走完一輪）" in rewrite
+
+
+def test_slot_rejected_twice_names_the_slot(tmp_path: Path):
+    bad = slot_output("win")
+    bad["segments"][0]["beats"][0]["narration"] = "每人只有一次機會。"
+    llm = FakeLLMProvider(json_outputs=[slot_output("setup"), slot_output("round"), bad, bad])
+    with pytest.raises(ScriptRejected) as exc:
+        generate_whole_game(llm, _request(), tmp_path)
+    assert any(e.startswith("「獲勝方式」") for e in exc.value.errors)
 
 
 def test_whole_game_prompt_rules():
-    text = video_prompts.WHOLE_GAME_INSTRUCTIONS
+    text = video_prompts.WHOLE_GAME_SLOT_INSTRUCTIONS
     assert "「一次機會」" in text and "「一個機會」" in text
     assert "只能用素材 regions 列出的名稱" in text
+    assert "優先沿用" in text
+    assert "不限" in text  # 段數依這一格的規則量決定
     assert "輔助" in text and "optional" in text
     assert "代表牌" in text
     assert "drawn" not in text
+
+
+# --- 分類的完整性：每一頁都要有去處 ---
+
+
+def test_page_without_place_triggers_rewrite():
+    # 第一次漏了第 4 頁（既不在三格、也不在排除清單），改寫一次後補上
+    first = classify_output(excluded=[])
+    llm = FakeLLMProvider(json_outputs=[first, classify_output()])
+    result = classify_scope(llm, PAGES)
+    assert len(llm.calls) == 2
+    rewrite = llm.calls[1].kwargs["input"]
+    assert "第 4 頁" in rewrite and "每一頁" in rewrite
+    assert result.excluded[0].page == 4
+
+
+def test_page_still_without_place_fails():
+    first = classify_output(excluded=[])
+    llm = FakeLLMProvider(json_outputs=[first, first])
+    with pytest.raises(ScopeIncomplete) as exc:
+        classify_scope(llm, PAGES)
+    assert exc.value.pages == [4]
+    assert "4" in exc.value.detail
+
+
+def test_dropped_quote_does_not_count_as_place():
+    # 引用對不上原文的片段不算有去處
+    first = classify_output(excluded=[{"page": 4, "quote": "不存在的文字", "reason": "r"}])
+    llm = FakeLLMProvider(json_outputs=[first, classify_output()])
+    classify_scope(llm, PAGES)
+    assert len(llm.calls) == 2
 
 
 def test_chapter_mode_unchanged(tmp_path: Path):

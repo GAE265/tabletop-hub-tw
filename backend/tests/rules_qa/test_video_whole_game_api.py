@@ -139,9 +139,11 @@ def test_draft_job_classifies_and_generates(api, as_shop_staff, rules_db, game):
     llm = _run(rules_db, whole_game_llm_outputs())
     job = _job(rules_db, project)
     assert job.status == "succeeded", job.error
-    # 依序：分類 → 產生 → 三格各一個涵蓋檢查
+    # 依序：分類 → 三格各產生一次（2026-11-22 永傑決定）→ 三格各一個涵蓋檢查
     assert [c.kwargs["schema"].name for c in llm.calls] == [
         "rules_video_scope",
+        "rules_video_whole_game",
+        "rules_video_whole_game",
         "rules_video_whole_game",
         "rules_video_coverage",
         "rules_video_coverage",
@@ -281,3 +283,31 @@ def test_unknown_asset_message_has_no_internal_key(api, as_shop_staff, rules_db,
 
 def test_project_id_is_uuid(api, as_shop_staff, game):
     assert uuid.UUID(_create(api, game)["id"])
+
+
+# --- 分類的完整性、已標的區域 ---
+
+
+def test_page_without_place_fails_job(api, as_shop_staff, rules_db, game):
+    project = _create(api, game)["id"]
+    missing_page_4 = classify_output(excluded=[])
+    _run(rules_db, [missing_page_4, missing_page_4])
+    job = _job(rules_db, project)
+    assert job.status == "failed"
+    assert job.error == (
+        "規則書第 4 頁沒有分到開局、走完一輪、獲勝方式，也不在不講的清單裡，無法產生影片；"
+        "請再產生一次，若一直發生請通知管理員"
+    )
+    assert "4" in job.error_detail
+
+
+def test_draft_lists_marked_regions(api, as_shop_staff, rules_db, game):
+    # 重新產生前，手機頁要知道哪些區域已經標好（重新產生後可能要重標）
+    project = _create(api, game)["id"]
+    _run(rules_db, whole_game_llm_outputs())
+    board = {a["asset_key"]: a for a in api.get(f"{URL}/{project}/draft").json()["assets"]}["board"]
+    assert board["marked_regions"] == []
+    body = {"regions": {"zone_a": [0.1, 0.1, 0.4, 0.4]}}
+    assert api.patch(f"{URL}/{project}/assets/board", json=body).status_code == 200
+    board = {a["asset_key"]: a for a in api.get(f"{URL}/{project}/draft").json()["assets"]}["board"]
+    assert board["marked_regions"] == ["zone_a"]
