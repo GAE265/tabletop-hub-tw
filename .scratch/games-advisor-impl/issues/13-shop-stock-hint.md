@@ -1,9 +1,9 @@
 # 13：店家沒有推薦的桌遊時顯示提示
 
-Status: claimed
+Status: resolved
 Blocked by: PR [#73](https://github.com/GAE265/tabletop-hub-tw/pull/73)（店家管理：`shop_games` 資料表與 `shops` domain）
 Spec: [spec](../../games-advisor/spec.md) §19
-MR:
+MR: [#82](https://github.com/GAE265/tabletop-hub-tw/pull/82)
 
 ## 要做什麼
 
@@ -15,9 +15,9 @@ MR:
 
 ## 驗收條件
 
-- [ ] 開 Draft MR，MR 說明列出情境表格（AGENTS.md §7.2、§7.4）
+- [x] 開 Draft MR，MR 說明列出情境表格（AGENTS.md §7.2、§7.4）
 - [x] spec §19.4 的每一列都有測試而且通過
 - [x] AGENTS.md §2 第 7 點的檢查通過（後端三項、前端兩項）
 - [x] `docs/handoff/games_advisor.md` 補上 `shop_id`、`in_stock` 與提示文字
-- [ ] MR 說明 @ 永傑（改了正式頁面與 `app/router.dart`）
-- [ ] 合併前把本檔的 `Status` 改成 `resolved`、`MR` 填上連結
+- [x] MR 說明 @ 永傑（改了正式頁面與 `app/router.dart`）
+- [x] 合併前把本檔的 `Status` 改成 `resolved`、`MR` 填上連結
