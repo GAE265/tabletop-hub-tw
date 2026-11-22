@@ -155,6 +155,7 @@ def test_upload_list_and_delete_photos(api, as_shop_staff, game):
     assert _upload(api, project).status_code == 201
     body = api.get(f"{URL}/{project}/rulebook").json()
     assert [p["index"] for p in body["photos"]] == [1, 2]
+    assert body["photos"][0]["id"] != body["photos"][1]["id"]
     assert body["photos"][0]["quality"] == "ok" and body["photos"][0]["width"] == 300
     assert body["read"] is False
     image = api.get(f"{URL}/{project}/rulebook/photos/2")

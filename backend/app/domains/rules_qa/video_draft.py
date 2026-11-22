@@ -24,11 +24,19 @@ from typing import Any
 from app.domains.rules_qa.repository import (
     RulesQaRepository,
     VideoDraftRepository,
+    VideoPagesRepository,
     VideoTermsRepository,
 )
 from app.domains.rules_qa.video_assets import carry_over_assets
 from app.domains.rules_qa.video_coverage import check_coverage
 from app.domains.rules_qa.video_jobs import JobContext, JobFailed
+from app.domains.rules_qa.video_pages import text_hash
+from app.domains.rules_qa.video_rulebook import (
+    is_read,
+    load_manifest,
+    read_rulebook,
+    rulebook_photo_key,
+)
 from app.domains.rules_qa.video_scope import (
     ScopeEmpty,
     ScopeIncomplete,
@@ -49,6 +57,9 @@ from app.domains.rules_qa.video_script import (
 )
 from app.integrations.llm import LLMProvider
 from app.integrations.llm.errors import LLMError, LLMUnavailable
+from app.integrations.ocr.base import VisionProvider
+from app.integrations.ocr.errors import OCRError, OCRUnavailable
+from app.integrations.storage import FileStorage, StorageError
 from app.integrations.video import Video, VideoDataError, parse_video
 
 PAGE_LANG = "zh"  # games_manual 沒有語言欄位（design.md D3）
@@ -114,11 +125,38 @@ class _Retryable(Exception):
         self.failure = failure
 
 
-class DraftJobHandler:
-    """草稿工作；後端啟動時註冊在 app.state.rules_video_job_handlers["draft"]。"""
+# 店員拍規則書（2026-11-22 永傑決定）
+NO_RULEBOOK_PHOTOS_MESSAGE = "還沒有拍規則書：請先拍規則書的每一頁，再產生草稿"
+VISION_UNAVAILABLE_MESSAGE = "看圖服務暫時無法使用，請稍後再試"
+VISION_FAILED_MESSAGE = "讀取規則書照片失敗，請再試一次；若一直失敗，請通知管理員"
+RULEBOOK_STORAGE_MESSAGE = "照片存放空間暫時無法使用，請稍後再試"
+RULEBOOK_NOT_CONFIGURED_MESSAGE = "看圖服務沒有設定，無法讀取規則書照片，請通知管理員"
 
-    def __init__(self, llm: LLMProvider) -> None:
+
+def _photo_mode(page_texts: dict[str, Any], chapter_pages: list[int]) -> bool:
+    """照片模式：還沒有頁（建立時沒有讀匯入的規則書），或頁面文字是從照片讀出來的。"""
+    from_photos = any(isinstance(v, dict) and v.get("photo") for v in page_texts.values())
+    return from_photos or not chapter_pages
+
+
+class DraftJobHandler:
+    """草稿工作；後端啟動時註冊在 app.state.rules_video_job_handlers["draft"]。
+
+    照片模式的專案先讀規則書照片（切塊讀取、合併、圖說），寫成這個專案自己的頁面文字，
+    再照常分類與產生；照片沒變時不再讀。vision、storage 只有照片模式會用到。
+    """
+
+    def __init__(
+        self,
+        llm: LLMProvider,
+        vision: VisionProvider | None = None,
+        storage: FileStorage | None = None,
+        read_workers: int = 3,
+    ) -> None:
         self._llm = llm
+        self._vision = vision
+        self._storage = storage
+        self._read_workers = read_workers
 
     def __call__(self, ctx: JobContext) -> dict[str, Any]:
         ctx.report(0.05, "讀取規則書文字")
@@ -127,6 +165,11 @@ class DraftJobHandler:
             game_name = RulesQaRepository(session).game_name(state.game_id) if state else None
             stored_terms = VideoTermsRepository(session).get(state.game_id) if state else None
         whole_game = state is not None and state.chapter_number is None
+        rulebook: tuple[int, bool] | None = None
+        if whole_game and _photo_mode(state.page_texts, state.chapter_pages):
+            rulebook = self._read_rulebook(ctx, state.page_texts)
+            with ctx.session_factory() as session:
+                state = VideoDraftRepository(session).get_state(ctx.project_id)
         if state is None or not state.chapter_pages:
             raise JobFailed(
                 DRAFT_NO_RULEBOOK_MESSAGE if whole_game else DRAFT_PAGES_NOT_SET_MESSAGE
@@ -208,6 +251,9 @@ class DraftJobHandler:
             # 整本模式自動重試過一次（2026-11-22 永傑決定）；retry_reason 是第一次失敗的原因
             "retried": retry_reason is not None,
         }
+        if rulebook is not None:
+            # 照片模式：幾張照片、這次有沒有重新讀
+            result["rulebook_photos"], result["rulebook_read"] = rulebook
         if retry_reason is not None:
             result["retry_reason"] = retry_reason
         if scope is not None:
@@ -223,6 +269,57 @@ class DraftJobHandler:
             # 旁白與字幕裡不在場地清單的「X區」「X處」：只記錄、不擋（2026-11-22 永傑決定）
             result["unlisted_place_words"] = unlisted_place_words(data, scope.places, request.terms)
         return result
+
+    def _read_rulebook(self, ctx: JobContext, page_texts: dict[str, Any]) -> tuple[int, bool]:
+        """讀規則書照片並存成頁面文字；回傳（照片張數, 這次有沒有讀）。照片沒變就不讀。"""
+        if self._vision is None or self._storage is None:
+            raise JobFailed(RULEBOOK_NOT_CONFIGURED_MESSAGE)
+        try:
+            photos = load_manifest(self._storage, ctx.project_id)
+        except StorageError as exc:
+            raise JobFailed(RULEBOOK_STORAGE_MESSAGE, detail=str(exc)) from exc
+        if not photos:
+            raise JobFailed(NO_RULEBOOK_PHOTOS_MESSAGE)
+        if is_read(page_texts, photos):
+            return len(photos), False
+        total = len(photos)
+        ctx.report(0.05, f"讀取規則書照片 0／{total}")
+        try:
+            images = [
+                self._storage.get(rulebook_photo_key(ctx.project_id, p["file"])) for p in photos
+            ]
+        except StorageError as exc:
+            raise JobFailed(RULEBOOK_STORAGE_MESSAGE, detail=str(exc)) from exc
+        try:
+            pages = read_rulebook(
+                self._vision,
+                images,
+                workers=self._read_workers,
+                report=lambda done, n: ctx.report(0.05, f"讀取規則書照片 {done}／{n}"),
+            )
+        except OCRUnavailable as exc:
+            raise JobFailed(VISION_UNAVAILABLE_MESSAGE, detail=str(exc)) from exc
+        except OCRError as exc:
+            raise JobFailed(VISION_FAILED_MESSAGE, detail=str(exc)) from exc
+        texts = {
+            str(number): {
+                "text": page.text,
+                "original_hash": text_hash(page.text),
+                "photo": photo["file"],
+                "captions": page.captions,
+            }
+            for number, (page, photo) in enumerate(zip(pages, photos, strict=True), start=1)
+        }
+        with ctx.session_factory() as session:
+            repo = VideoPagesRepository(session)
+            with repo.transaction():
+                repo.save(
+                    ctx.project_id,
+                    chapter_pages=list(range(1, total + 1)),
+                    reference_pages=[],
+                    page_texts=texts,
+                )
+        return total, True
 
     def _classify(self, pages: list[RulebookPage]) -> ScopeResult:
         try:

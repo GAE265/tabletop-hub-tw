@@ -5,7 +5,7 @@
 
 import uuid
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -172,6 +172,20 @@ class VideoProjectRecord:
     video: dict[str, Any] | None = None
     # 有成功產生的影片（MR 9）
     has_render: bool = False
+    # 這支影片用到的頁；照片模式還沒讀照片時是空的
+    chapter_pages: list[int] = field(default_factory=list)
+    # 規則書來源：imported＝管理員匯入的（games_manual）；photos＝店員拍的照片
+    rulebook: str = "imported"
+
+
+def _rulebook(project: RulesQaVideoProject) -> str:
+    """照片模式不另存欄位（不用 migration）：整個遊戲的專案，還沒有頁（建立時就沒讀匯入的規則書），
+    或頁面文字是從照片讀出來的，就是照片模式。"""
+    if project.chapter_number is not None:
+        return "imported"
+    texts = project.page_texts or {}
+    from_photos = any(isinstance(v, dict) and v.get("photo") for v in texts.values())
+    return "photos" if from_photos or not project.chapter_pages else "imported"
 
 
 class VideoProjectRepository(SessionRepository):
@@ -208,6 +222,8 @@ class VideoProjectRepository(SessionRepository):
             has_draft=project.video is not None,
             video=project.video,
             has_render=bool(has_render),
+            chapter_pages=list(project.chapter_pages or []),
+            rulebook=_rulebook(project),
         )
 
     def create(

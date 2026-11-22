@@ -120,13 +120,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             container=settings.storage_container,
         )
     )
+    app.state.vision = get_vision_provider(settings.ocr_provider, settings)
     # 規則影片工作的處理函式（kind → 函式）；草稿、產生影片、修改的處理函式依序在這裡註冊
+    # 草稿工作要看圖、讀存放空間：照片模式的專案先讀店員拍的規則書（2026-11-22 永傑同意）
     app.state.rules_video_job_handlers = {
-        "draft": DraftJobHandler(app.state.llm),
+        "draft": DraftJobHandler(app.state.llm, vision=app.state.vision, storage=app.state.storage),
         "render": RenderJobHandler.from_settings(settings, app.state.storage),
     }
     app.state.rules_video_runner = None
-    app.state.vision = get_vision_provider(settings.ocr_provider, settings)
     app.state.games_advisor_embedding_config = EmbeddingConfig(
         provider=settings.games_advisor_embedding_provider,
         dim=settings.games_advisor_embedding_dim,

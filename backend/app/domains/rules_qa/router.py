@@ -22,6 +22,7 @@ from app.domains.rules_qa.repository import (
 from app.domains.rules_qa.schemas import (
     MessageRequest,
     MessageResponse,
+    RulebookOut,
     RulesLessonList,
     RulesLessonOut,
     VideoAssetOut,
@@ -50,6 +51,7 @@ from app.domains.rules_qa.service import (
     VideoPagesService,
     VideoProjectService,
     VideoRenderService,
+    VideoRulebookService,
     VideoTermsService,
 )
 from app.domains.rules_qa.video_assets import MAX_PHOTO_BYTES
@@ -386,3 +388,62 @@ def read_video_render(
 ) -> Response:
     """影片檔（帶身分讀取，權限同專案；整支讀出，見 design.md D13 待決 1）。"""
     return Response(content=service.video(user, project_id), media_type="video/mp4")
+
+
+# --------------------------------------------------------------------------- 店員拍規則書
+
+
+def get_video_rulebook_service(
+    request: Request, session: Annotated[Session, Depends(get_session)]
+) -> VideoRulebookService:
+    """照片放在後端啟動時建立的存放介面（main.py 的 app.state.storage）。"""
+    return VideoRulebookService(
+        VideoProjectRepository(session), VideoPagesRepository(session), request.app.state.storage
+    )
+
+
+VideoRulebookServiceDep = Annotated[VideoRulebookService, Depends(get_video_rulebook_service)]
+
+
+@videos_router.get("/{project_id}/rulebook", response_model=RulebookOut)
+def get_video_rulebook(
+    project_id: uuid.UUID, user: CurrentUserDep, service: VideoRulebookServiceDep
+) -> RulebookOut:
+    """照片模式專案的規則書照片（依頁的順序）、每張的清晰度、是否都讀過了。"""
+    return service.get(user, project_id)
+
+
+@videos_router.post(
+    "/{project_id}/rulebook/photos",
+    response_model=RulebookOut,
+    status_code=status.HTTP_201_CREATED,
+)
+def upload_video_rulebook_photo(
+    project_id: uuid.UUID,
+    file: Annotated[UploadFile, File()],
+    user: CurrentUserDep,
+    service: VideoRulebookServiceDep,
+) -> RulebookOut:
+    """加一張規則書照片（排在最後；JPEG、PNG，最多 15 MB；依 EXIF 轉正）。"""
+    data = file.file.read(MAX_PHOTO_BYTES + 1)
+    return service.upload(user, project_id, data)
+
+
+@videos_router.get("/{project_id}/rulebook/photos/{index}")
+def read_video_rulebook_photo(
+    project_id: uuid.UUID, index: int, user: CurrentUserDep, service: VideoRulebookServiceDep
+) -> Response:
+    """第 index 張規則書照片的圖檔（從 1 開始）。"""
+    data, content_type = service.read_photo(user, project_id, index)
+    return Response(content=data, media_type=content_type)
+
+
+@videos_router.delete(
+    "/{project_id}/rulebook/photos/{index}", status_code=status.HTTP_204_NO_CONTENT
+)
+def delete_video_rulebook_photo(
+    project_id: uuid.UUID, index: int, user: CurrentUserDep, service: VideoRulebookServiceDep
+) -> Response:
+    """刪掉第 index 張（後面的往前遞補）。"""
+    service.delete(user, project_id, index)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

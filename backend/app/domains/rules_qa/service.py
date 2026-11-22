@@ -4,11 +4,14 @@
 """
 
 import copy
+import io
 import logging
 import uuid
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import AbstractContextManager, contextmanager
 from typing import Any, Protocol
+
+from PIL import Image
 
 from app.core.auth import CurrentUser, require_role
 from app.core.errors import AppError, PermissionDenied
@@ -40,6 +43,8 @@ from app.domains.rules_qa.schemas import (
     MessageRequest,
     MessageResponse,
     RemovedBlockOut,
+    RulebookOut,
+    RulebookPhotoOut,
     RulesLessonItem,
     RulesLessonList,
     RulesLessonOut,
@@ -86,6 +91,15 @@ from app.domains.rules_qa.video_draft import (
 )
 from app.domains.rules_qa.video_jobs import JOB_TIMEOUT_MINUTES, TIMEOUT_MESSAGE
 from app.domains.rules_qa.video_pages import page_diff, text_hash
+from app.domains.rules_qa.video_rulebook import (
+    MAX_RULEBOOK_PHOTOS,
+    is_read,
+    load_manifest,
+    photo_quality,
+    rulebook_photo_key,
+    save_manifest,
+    sharpness,
+)
 from app.domains.rules_qa.video_script import REPRESENTATIVE, term_conflicts
 from app.domains.rules_qa.youtube import parse_youtube_id
 from app.integrations.embedding import EmbeddingError, EmbeddingProvider
@@ -410,8 +424,9 @@ class VideoProjectService:
         if self._games.game_name(body.game_id) is None:
             raise _game_not_found(body.game_id)
         whole_game = body.chapter_number is None
+        photos = body.rulebook == "photos"
         manual: list[tuple[int, str]] = []
-        if whole_game:
+        if whole_game and not photos:
             assert self._read_pages is not None
             manual = sorted((p, t) for p, t in self._read_pages(body.game_id) if t.strip())
             if not manual:
@@ -424,7 +439,7 @@ class VideoProjectService:
                 chapter_number=body.chapter_number,
                 chapter_title=body.chapter_title,
             )
-            if whole_game:
+            if whole_game and not photos:
                 assert self._pages is not None
                 self._pages.save(
                     project_id,
@@ -435,7 +450,8 @@ class VideoProjectService:
                         for page, text in manual
                     },
                 )
-        if whole_game:
+        if whole_game and not photos:
+            # 照片模式：店員拍好規則書後才產生草稿
             assert self._drafts is not None
             self._drafts.create(user, project_id, "draft")
         record = self._projects.get(project_id)
@@ -486,6 +502,8 @@ def _step(record: VideoProjectRecord) -> str:
     """
     video = record.video
     if video is None:
+        if record.rulebook == "photos" and not record.chapter_pages:
+            return "rulebook"  # 照片模式：還沒讀規則書照片
         # 整個遊戲：建立時就開始產生草稿；單章：要先選頁
         return "draft" if record.chapter_number is None else "pages"
     if record.has_render:
@@ -508,6 +526,7 @@ def _project_out(record: VideoProjectRecord) -> VideoProjectOut:
         chapter_title=record.chapter_title,
         title=record.chapter_title or f"{record.game_name} 規則教學",
         step=_step(record),
+        rulebook=record.rulebook,
         created_at=record.created_at,
         updated_at=record.updated_at,
     )
@@ -806,7 +825,8 @@ class VideoDraftService:
                     {k: v for k, v in report.items() if k != "ready"},
                 )
             return self._jobs.create(user, project_id, "render")
-        if not state.chapter_pages:
+        # 照片模式（整個遊戲、還沒有頁）可以開始：草稿工作會先讀店員拍的規則書照片
+        if not state.chapter_pages and state.chapter_number is not None:
             raise AppError(422, "RULES_VIDEO_PAGES_NOT_SET", DRAFT_PAGES_NOT_SET_MESSAGE)
         return self._jobs.create(user, project_id, "draft")
 
@@ -1237,3 +1257,117 @@ class VideoRenderService:
         if job is None:
             raise AppError(404, "RULES_VIDEO_RENDER_NOT_FOUND", "這個專案還沒有產生影片")
         return job
+
+
+# --------------------------------------------------------------------------- 店員拍規則書
+
+
+NOT_PHOTO_RULEBOOK_MESSAGE = "這個專案用的是已匯入的規則書，不能拍規則書"
+TOO_MANY_RULEBOOK_PHOTOS_MESSAGE = "規則書照片最多 40 張"
+
+
+class VideoRulebookService:
+    """照片模式專案的規則書照片（2026-11-22 永傑決定）：上傳、列出、讀圖、刪除。
+
+    照片與清單放在存放介面；讀取在草稿工作裡做（video_draft）。
+    """
+
+    def __init__(
+        self, projects: VideoProjectStore, pages: "PagesReader", storage: FileStorage
+    ) -> None:
+        self._projects = projects
+        self._pages = pages
+        self._storage = storage
+
+    def get(self, user: CurrentUser, project_id: uuid.UUID) -> RulebookOut:
+        self._project(user, project_id)
+        return self._out(project_id, self._manifest(project_id))
+
+    def upload(self, user: CurrentUser, project_id: uuid.UUID, data: bytes) -> RulebookOut:
+        self._project(user, project_id)
+        photos = self._manifest(project_id)
+        if len(photos) >= MAX_RULEBOOK_PHOTOS:
+            raise AppError(422, "RULES_VIDEO_RULEBOOK_TOO_MANY", TOO_MANY_RULEBOOK_PHOTOS_MESSAGE)
+        try:
+            content, ext, content_type = normalize_photo(data)
+        except PhotoRejected as exc:
+            raise AppError(422, exc.code, exc.message) from exc
+        file = f"{uuid.uuid4().hex[:12]}.{ext}"
+        width, height = Image.open(io.BytesIO(content)).size
+        try:
+            self._storage.put(rulebook_photo_key(project_id, file), content, content_type)
+            photos.append(
+                {"file": file, "width": width, "height": height, "sharpness": sharpness(content)}
+            )
+            save_manifest(self._storage, project_id, photos)
+        except StorageError as exc:
+            raise AppError(503, "RULES_VIDEO_STORAGE_UNAVAILABLE", STORAGE_DOWN_MESSAGE) from exc
+        return self._out(project_id, photos)
+
+    def delete(self, user: CurrentUser, project_id: uuid.UUID, index: int) -> None:
+        self._project(user, project_id)
+        photos = self._manifest(project_id)
+        if not 1 <= index <= len(photos):
+            raise _rulebook_photo_not_found()
+        removed = photos.pop(index - 1)
+        try:
+            save_manifest(self._storage, project_id, photos)
+        except StorageError as exc:
+            raise AppError(503, "RULES_VIDEO_STORAGE_UNAVAILABLE", STORAGE_DOWN_MESSAGE) from exc
+        try:
+            self._storage.delete(rulebook_photo_key(project_id, removed["file"]))
+        except StorageError:
+            logger.warning("刪除規則書照片失敗：%s", removed["file"], exc_info=True)
+
+    def read_photo(self, user: CurrentUser, project_id: uuid.UUID, index: int) -> tuple[bytes, str]:
+        self._project(user, project_id)
+        photos = self._manifest(project_id)
+        if not 1 <= index <= len(photos):
+            raise _rulebook_photo_not_found()
+        file = photos[index - 1]["file"]
+        try:
+            data = self._storage.get(rulebook_photo_key(project_id, file))
+        except FileNotFound as exc:
+            raise _rulebook_photo_not_found() from exc
+        except StorageError as exc:
+            raise AppError(503, "RULES_VIDEO_STORAGE_UNAVAILABLE", STORAGE_DOWN_MESSAGE) from exc
+        return data, "image/png" if file.endswith(".png") else "image/jpeg"
+
+    def _project(self, user: CurrentUser, project_id: uuid.UUID) -> None:
+        require_role(user, "shop_staff", "admin")
+        record = self._projects.get(project_id)
+        if record is None or not _can_access(user, record):
+            raise _project_not_found()
+        if record.rulebook != "photos":
+            raise AppError(409, "RULES_VIDEO_NOT_PHOTO_RULEBOOK", NOT_PHOTO_RULEBOOK_MESSAGE)
+
+    def _manifest(self, project_id: uuid.UUID) -> list[dict[str, Any]]:
+        try:
+            return load_manifest(self._storage, project_id)
+        except StorageError as exc:
+            raise AppError(503, "RULES_VIDEO_STORAGE_UNAVAILABLE", STORAGE_DOWN_MESSAGE) from exc
+
+    def _out(self, project_id: uuid.UUID, photos: list[dict[str, Any]]) -> RulebookOut:
+        pages = self._pages.get(project_id)
+        items = []
+        for i, p in enumerate(photos, start=1):
+            level, message = photo_quality(p.get("sharpness", 0))
+            items.append(
+                RulebookPhotoOut(
+                    id=p["file"].rsplit(".", 1)[0],
+                    index=i,
+                    width=p["width"],
+                    height=p["height"],
+                    quality=level,
+                    quality_message=message,
+                )
+            )
+        return RulebookOut(photos=items, read=is_read(pages.page_texts if pages else {}, photos))
+
+
+class PagesReader(Protocol):
+    def get(self, project_id: uuid.UUID) -> Any: ...
+
+
+def _rulebook_photo_not_found() -> AppError:
+    return AppError(404, "RULES_VIDEO_RULEBOOK_PHOTO_NOT_FOUND", "找不到這張規則書照片")

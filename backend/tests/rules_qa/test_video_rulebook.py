@@ -64,17 +64,19 @@ def test_four_tiles_with_six_percent_overlap():
 
 
 def test_merge_drops_lines_cut_at_tile_edges_and_keeps_the_complete_one():
+    # 左右切開的同一行：左邊那塊讀到前半、右邊那塊從重疊處讀到後半，接成一行
+    # 上下切開的同一行：上下兩塊都讀到，留一行
     parts = {
         "左上": tile("開店準備", "1.把收銀機放在櫃台左邊。\n2.每位店員領取1件圍裙"),
-        "右上": tile("", "每位店員領取1件圍裙、1頂帽子。"),
-        "左下": tile("", "2.每位店員領取1件圍裙\n3.把1盒零錢放在櫃台右邊。"),
+        "右上": tile("", "1件圍裙、1頂帽子。"),
+        "左下": tile("", "2.每位店員領取1件圍\n3.把1盒零錢放在櫃台右邊。"),
         "右下": tile("", "第二項"),
     }
     text = merge_tiles(parts)
     lines = text.split("\n")
     assert lines[0] == "開店準備"
-    assert "每位店員領取1件圍裙、1頂帽子。" in lines  # 比較完整的那一行留下
-    assert sum("每位店員領取1件圍裙" in line for line in lines) == 1
+    assert "2.每位店員領取1件圍裙、1頂帽子。" in lines
+    assert sum("每位店員領取1件圍" in line for line in lines) == 1
     assert "3.把1盒零錢放在櫃台右邊。" in lines and "第二項" in lines
 
 

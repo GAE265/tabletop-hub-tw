@@ -88,6 +88,9 @@ class VideoProjectCreate(BaseModel):
     chapter_title: ChapterTitle | None = None
     # 店家人員不用填（用登入身分的店家，填別家店回 403）；管理員必填
     shop_id: uuid.UUID | None = None
+    # 規則書來源：imported＝管理員匯入的（預設，建立後自動產生草稿）；
+    # photos＝店員拍規則書（2026-11-22 永傑決定；只限整個遊戲，先拍照，再產生草稿）
+    rulebook: Literal["imported", "photos"] = "imported"
 
     @model_validator(mode="after")
     def _both_or_neither(self) -> "VideoProjectCreate":
@@ -95,6 +98,8 @@ class VideoProjectCreate(BaseModel):
             raise ValueError(
                 "chapter_number 與 chapter_title 要一起給（單章），或都不給（整個遊戲）"
             )
+        if self.rulebook == "photos" and self.chapter_number is not None:
+            raise ValueError("拍規則書只能用在整個遊戲一支影片")
         return self
 
 
@@ -112,10 +117,31 @@ class VideoProjectOut(BaseModel):
     # 目前步驟：不存欄位，由專案的狀態推出（design.md D1、D11）：
     # pages＝單章專案還沒有草稿（選頁、編輯文字）；draft＝整個遊戲在產生草稿，或有草稿、
     # 還沒拍照也沒略過；
-    # assets＝素材還沒齊；render＝齊了、還沒有成品；done＝有成功產生的影片（D15）
-    step: Literal["pages", "draft", "assets", "render", "done"]
+    # assets＝素材還沒齊；render＝齊了、還沒有成品；done＝有成功產生的影片（D15）；
+    # rulebook＝照片模式還沒讀規則書照片（店員拍規則書）
+    step: Literal["rulebook", "pages", "draft", "assets", "render", "done"]
+    # 規則書來源：imported＝管理員匯入的；photos＝店員拍的照片
+    rulebook: Literal["imported", "photos"] = "imported"
     created_at: datetime
     updated_at: datetime
+
+
+class RulebookPhotoOut(BaseModel):
+    # 不隨刪除改變的代號（手機頁的縮圖快取用）
+    id: str
+    # 第幾張（從 1 開始），就是頁的順序
+    index: int
+    width: int
+    height: int
+    # 清晰度：ok｜warn（可能讀錯，建議重拍）｜bad（太模糊，請重拍）
+    quality: Literal["ok", "warn", "bad"]
+    quality_message: str | None = None
+
+
+class RulebookOut(BaseModel):
+    photos: list[RulebookPhotoOut]
+    # 這些照片都讀過了（之後重新產生草稿不用再讀）
+    read: bool
 
 
 class VideoProjectList(BaseModel):
