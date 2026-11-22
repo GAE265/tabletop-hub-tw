@@ -3,8 +3,8 @@
 店員建立專案時只選遊戲，不選章節；AI 先把整本規則書分成「開局、走完一輪、獲勝方式」三格與
 排除清單（add-rules-video-mobile 整本範圍）。舊的單章專案（命令列與既有資料）照舊有章節。
 
-Revision ID: 0020
-Revises: 0019
+Revision ID: 0021
+Revises: 0020
 Create Date: 2026-11-22
 """
 
@@ -14,8 +14,8 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
-revision: str = "0020"
-down_revision: str | None = "0019"
+revision: str = "0021"
+down_revision: str | None = "0020"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
