@@ -467,6 +467,36 @@ void main() {
       await stopPolling(tester);
     });
 
+    testWidgets('有已標好的區域：重新產生前先提示「已標的區域會要重標」', (tester) async {
+      final base = draftOf();
+      final marked = base.copyWith(
+        assets: [
+          base.assets.first.copyWith(markedRegions: const ['白薔薇區']),
+          ...base.assets.skip(1),
+        ],
+      );
+      final repo = draftRepo(marked)
+        ..jobSequence = [sampleVideoJob(status: VideoJobStatus.succeeded)];
+      await pumpVideo(tester, location: '/videos/p1/draft', repo: repo);
+      await tapKey(tester, 'video-draft-regenerate');
+      expect(find.textContaining('已標的區域會要重標'), findsOneWidget);
+      await tapText(tester, '取消');
+      expect(repo.startedDrafts, isEmpty);
+
+      await tapKey(tester, 'video-draft-regenerate');
+      await tapKey(tester, 'video-draft-regenerate-confirm');
+      expect(repo.startedDrafts, ['p1']);
+    });
+
+    testWidgets('沒有已標的區域：直接重新產生，不提示', (tester) async {
+      final repo = draftRepo(draftOf())
+        ..jobSequence = [sampleVideoJob(status: VideoJobStatus.succeeded)];
+      await pumpVideo(tester, location: '/videos/p1/draft', repo: repo);
+      await tapKey(tester, 'video-draft-regenerate');
+      expect(find.textContaining('已標的區域會要重標'), findsNothing);
+      expect(repo.startedDrafts, ['p1']);
+    });
+
     testWidgets('沒有「選頁與編輯文字」的路由', (tester) async {
       await pumpVideo(
         tester,
