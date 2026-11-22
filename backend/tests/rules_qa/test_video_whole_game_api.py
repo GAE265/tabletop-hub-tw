@@ -18,8 +18,10 @@ from app.integrations.llm.fake import FakeLLMProvider
 from tests.rules_qa.video_script_support import coverage_output
 from tests.rules_qa.video_support import seed_people
 from tests.rules_qa.whole_game_support import (
+    LEGEND_QUOTE,
     VARIANT_QUOTE,
     WHOLE_GAME_PAGES,
+    ZONE_A_HINT,
     classify_output,
     slot_coverage,
     whole_game_llm_outputs,
@@ -326,3 +328,56 @@ def test_draft_assets_show_skippable(api, as_shop_staff, rules_db, game):
     _run(rules_db, whole_game_llm_outputs())
     assets = {a["asset_key"]: a for a in api.get(f"{URL}/{project}/draft").json()["assets"]}
     assert {key for key, a in assets.items() if a["skippable"]} == {"blue"}
+
+
+# --- 場地清單、區域的白話說明、略過區域（2026-11-22 永傑決定） ---
+
+
+def test_draft_job_stores_places_and_unlisted_words(api, as_shop_staff, rules_db, game):
+    project = _create(api, game)["id"]
+    outputs = whole_game_llm_outputs()
+    # 開局的字幕出現規則書場地清單裡沒有的「中央區」：只記錄，不擋
+    outputs[1]["segments"][0]["beats"][0]["subtitle"] = "每位玩家拿一張紅牌、一張藍牌，放在中央區。"
+    _run(rules_db, outputs)
+    job = _job(rules_db, project)
+    assert job.status == "succeeded", job.error
+    assert job.result["unlisted_place_words"] == ["中央區"]
+    places = _classification(rules_db, project)["places"]
+    assert [(p["name"], p["page"], p["kind"]) for p in places] == [("zone_a", 4, "board")]
+    # 店員看得到的 API 不回傳場地清單的原文片段
+    assert LEGEND_QUOTE not in api.get(f"{URL}/{project}/draft").text
+
+
+def test_asset_detail_has_region_hint_and_segments(api, as_shop_staff, rules_db, game):
+    # 標區域畫面要顯示白話說明與「第 N 段會用到」
+    project = _create(api, game)["id"]
+    _run(rules_db, whole_game_llm_outputs())
+    board = api.get(f"{URL}/{project}/assets/board").json()
+    assert board["region_hints"] == {"zone_a": ZONE_A_HINT}
+    # 段的順序：s_setup、s1、s2、s_win；s1 框選 zone_a 並把牌移進去
+    assert board["region_segments"] == {"zone_a": [2]}
+    assert board["skipped_regions"] == []
+
+
+def test_skip_region_that_photo_cannot_show(api, as_shop_staff, rules_db, game):
+    project = _create(api, game)["id"]
+    _run(rules_db, whole_game_llm_outputs())
+    readiness = api.get(f"{URL}/{project}/readiness").json()
+    assert {"asset_key": "board", "region": "zone_a"} in readiness["missing_regions"]
+    response = api.patch(f"{URL}/{project}/assets/board", json={"skipped_regions": ["zone_a"]})
+    assert response.status_code == 200, response.text
+    assert response.json()["skipped_regions"] == ["zone_a"]
+    readiness = api.get(f"{URL}/{project}/readiness").json()
+    assert readiness["missing_regions"] == []
+    # 取消略過
+    response = api.patch(f"{URL}/{project}/assets/board", json={"skipped_regions": []})
+    assert response.json()["skipped_regions"] == []
+    assert api.get(f"{URL}/{project}/readiness").json()["missing_regions"]
+
+
+def test_skip_unknown_region_is_422(api, as_shop_staff, rules_db, game):
+    project = _create(api, game)["id"]
+    _run(rules_db, whole_game_llm_outputs())
+    response = api.patch(f"{URL}/{project}/assets/board", json={"skipped_regions": ["nope"]})
+    assert response.status_code == 422 and _code(response) == "RULES_VIDEO_REGION_UNKNOWN"
+    assert "「盤面」" in response.json()["error"]["message"]

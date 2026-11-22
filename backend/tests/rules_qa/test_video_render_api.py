@@ -483,3 +483,25 @@ def test_bad_video_data_message_hides_internal_codes(api, ready, rules_db, stora
     assert job.error == RENDER_DATA_MESSAGE
     assert "h1" not in job.error and "s1" not in job.error
     assert "no_such_zone" in job.error_detail
+
+
+def test_render_after_skipping_region(api, as_shop_staff, rules_db, storage, project, tmp_path):
+    # 照片拍不到 zone_a（2026-11-22 永傑決定）：略過這個區域，產生影片時拿掉指向它的框選、
+    # 標籤與移動；資料庫的草稿不改
+    body = {"skipped_regions": ["zone_a"]}
+    assert api.patch(f"{URL}/{project}/assets/board", json=body).status_code == 200
+    for key in ASSETS:
+        _upload(api, project, key)
+    assert api.get(f"{URL}/{project}/readiness").json()["ready"] is True
+    job = _render(rules_db, storage, project, tmp_path)
+    assert job.status == "succeeded", job.error
+    rendered = load_video(tmp_path / "work" / str(project))
+    assert rendered.assets["board"].regions == {}
+    for seg in rendered.segments:
+        assert all("zone_a" not in h.target for h in seg.highlights)
+        assert all("zone_a" not in lab.target for lab in seg.labels)
+        assert all("zone_a" not in (c.to or "") for b in seg.beats for c in b.cues)
+    board = next(
+        a for a in project_row(rules_db, project).video["assets"] if a["asset_key"] == "board"
+    )
+    assert "zone_a" in board["regions"]

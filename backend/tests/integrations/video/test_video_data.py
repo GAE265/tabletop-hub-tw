@@ -301,3 +301,14 @@ def test_region_outside_crop_rejected(tmp_path: Path) -> None:
     s1["slots"]["sidebar"]["crop"] = [0.5, 0.5, 0.5, 0.5]
     message = _errors(tmp_path, data)
     assert "zone_a" in message and "crop" in message
+
+
+def test_region_hints_and_skipped_regions_accepted(tmp_path: Path) -> None:
+    # 標區域畫面用的白話說明與略過的區域（add-rules-video-mobile D17）：只給店員看，不進影片
+    data = base_data()
+    board = next(a for a in data["assets"] if a["asset_key"] == "board")
+    board["region_hints"] = {"zone_a": "盤面左邊的方框"}
+    board["skipped_regions"] = []
+    write_game(tmp_path, data)
+    video = load_video(tmp_path)
+    assert "board" in video.assets

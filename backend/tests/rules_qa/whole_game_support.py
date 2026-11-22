@@ -21,7 +21,8 @@ ROUND_PAGE = FAKE_PAGE
 WIN_PAGE = """Game end. The game ends when the deck is empty.
 The player who placed the most Red cards into Zone A wins."""
 VARIANT_PAGE = """Variant. Advanced players may add the Knight expansion.
-Designer notes and thanks."""
+Designer notes and thanks.
+Legend: zone_a is the box on the left of the board."""
 
 WHOLE_GAME_PAGES = [(1, SETUP_PAGE), (2, ROUND_PAGE), (3, WIN_PAGE), (4, VARIANT_PAGE)]
 
@@ -30,6 +31,9 @@ ROUND_QUOTE = "Shuffle the played cards face down, then reveal them together."
 ROUND_QUOTE_2 = "Case 1: no Blade card. Remove every Blue card; put Red cards into Zone A."
 WIN_QUOTE = "The game ends when the deck is empty."
 VARIANT_QUOTE = "Advanced players may add the Knight expansion."
+# 圖例頁（被排除的頁）才寫出場地名稱：場地清單要掃整本（2026-11-22 永傑決定）
+LEGEND_QUOTE = "Legend: zone_a is the box on the left of the board."
+ZONE_A_HINT = "盤面左邊的方框"
 
 
 def classify_output(
@@ -38,8 +42,9 @@ def classify_output(
     round_: list[dict[str, Any]] | None = None,
     win: list[dict[str, Any]] | None = None,
     excluded: list[dict[str, Any]] | None = None,
+    places: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    """分類呼叫的回傳：三格引用原文片段，排除的附原因。"""
+    """分類呼叫的回傳：三格引用原文片段，排除的附原因；場地清單（主板上的格子／桌上的位置）。"""
     return {
         "setup": setup if setup is not None else [{"page": 1, "quote": SETUP_QUOTE}],
         "round": round_
@@ -49,6 +54,17 @@ def classify_output(
         "excluded": excluded
         if excluded is not None
         else [{"page": 4, "quote": VARIANT_QUOTE, "reason": "變體規則，第一次玩不需要"}],
+        "places": places
+        if places is not None
+        else [
+            {
+                "name": "zone_a",
+                "page": 4,
+                "quote": LEGEND_QUOTE,
+                "kind": "board",
+                "hint": ZONE_A_HINT,
+            }
+        ],
     }
 
 
