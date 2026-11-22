@@ -368,8 +368,10 @@ class VideoAssetUpdate(BaseModel):
 
     orientation: Orientation | None = None
     regions: dict[str, list[float] | None] | None = None
-    # 略過這個選拍素材（true）或取消略過（false）；必拍不能略過（MR 9）
+    # 略過這個素材（true）或取消略過（false）；只靠它的段不能略過（MR 9）
     skipped: bool | None = None
+    # 照片拍不到的區域（整份取代；[] 取消全部）。產生影片時拿掉指向它們的框選、標籤與移動
+    skipped_regions: list[str] | None = None
 
     @model_validator(mode="after")
     def _regions_in_range(self) -> "VideoAssetUpdate":
@@ -390,6 +392,12 @@ class VideoAssetOut(BaseModel):
     orientation: int
     # 區域名稱 → [x, y, w, h]；null＝待量測
     regions: dict[str, list[float] | None]
+    # 區域名稱 → 給店員的白話說明（只在標區域畫面顯示，不進影片）；舊的草稿沒有
+    region_hints: dict[str, str] = {}
+    # 區域名稱 → 用到它的段（段號從 1 開始）
+    region_segments: dict[str, list[int]] = {}
+    # 照片拍不到、店員略過的區域
+    skipped_regions: list[str] = []
     # 寫入後的段資料版本
     video_version: int
     # 店員略過這個素材（MR 9）

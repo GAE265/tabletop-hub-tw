@@ -35,6 +35,7 @@ from app.domains.rules_qa.video_scope import (
     ScopeResult,
     classify_scope,
     slot_pages,
+    unlisted_place_words,
 )
 from app.domains.rules_qa.video_script import (
     CleanupRecord,
@@ -132,6 +133,7 @@ class DraftJobHandler:
             game_key=f"game-{state.game_id}",
             title=f"{game_name or '規則'} 規則教學",
             scope=scope.slots if scope else None,
+            places=scope.places if scope else None,
         )
 
         with tempfile.TemporaryDirectory(prefix="rules-video-draft-") as work:
@@ -183,6 +185,9 @@ class DraftJobHandler:
                 "excluded": len(scope.excluded),
             }
             result["dropped_quotes"] = len(scope.dropped)
+            result["places"] = len(scope.places)
+            # 旁白與字幕裡不在場地清單的「X區」「X處」：只記錄、不擋（2026-11-22 永傑決定）
+            result["unlisted_place_words"] = unlisted_place_words(data, scope.places, request.terms)
         return result
 
     def _classify(self, pages: list[RulebookPage]) -> ScopeResult:

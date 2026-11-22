@@ -341,7 +341,9 @@ def test_draft_job_stores_places_and_unlisted_words(api, as_shop_staff, rules_db
     _run(rules_db, outputs)
     job = _job(rules_db, project)
     assert job.status == "succeeded", job.error
-    assert job.result["unlisted_place_words"] == ["中央區"]
+    # 範例字幕本來就有「紅牌放進甲區」，這個遊戲沒有上傳用語對照表，所以「甲區」也記下來
+    # （取「區」前面兩個字）
+    assert job.result["unlisted_place_words"] == ["中央區", "進甲區"]
     places = _classification(rules_db, project)["places"]
     assert [(p["name"], p["page"], p["kind"]) for p in places] == [("zone_a", 4, "board")]
     # 店員看得到的 API 不回傳場地清單的原文片段

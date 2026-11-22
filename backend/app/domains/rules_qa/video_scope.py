@@ -11,7 +11,7 @@ import re
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
-from app.domains.rules_qa.video_script import RulebookPage
+from app.domains.rules_qa.video_script import RulebookPage, place_key
 from app.integrations.llm import LLMProvider
 from app.integrations.llm.types import JsonSchema
 
@@ -41,7 +41,17 @@ INSTRUCTIONS = """你要把一款桌遊的整本規則書分成三格，作為�
 2. 不可改寫、摘要或補充原文沒有的內容；不可把不同頁的文字合成一筆。
 3. 同一段文字只放進一格。三格都要有內容；真的找不到某一格的內容時，那一格給空陣列。
 4. 依原文的順序列出。
-5. 每一頁都要有去處：至少有一筆放進某一格或 excluded（圖例、配件清單也一樣，放進 excluded）。"""
+5. 每一頁都要有去處：至少有一筆放進某一格或 excluded（圖例、配件清單也一樣，放進 excluded）。
+
+場地清單（places）：
+6. 掃整本規則書（包含圖例頁、會被排除的頁），列出所有出現過的場地或區域名稱，同一個名稱只列一筆。
+   不是場地的詞（牌名、配件名、角色名）不要列。
+   - name：規則書原文裡的名稱，一字不改（例如「死亡區」）。
+   - page、quote：名稱出現的那一頁，以及包含這個名稱的原文片段（一字不改地照抄）。
+   - kind：board＝印在遊戲板或圖版上、拍照後可以框出來的格子或區域；
+     table＝桌上的位置（例如桌面中央、自己面前），不在任何配件上。
+   - hint：給店員的一句白話說明，告訴他在照片上要框哪裡；依原文片段寫，不可以猜。
+     原文只有圖例、看不出位置時，寫「對照規則書第 N 頁的圖」（N 是那一頁）。"""
 
 _QUOTE = {
     "type": "object",
@@ -59,6 +69,18 @@ _EXCLUDED = {
     "required": ["page", "quote", "reason"],
     "additionalProperties": False,
 }
+_PLACE = {
+    "type": "object",
+    "properties": {
+        "name": {"type": "string"},
+        "page": {"type": "integer"},
+        "quote": {"type": "string"},
+        "kind": {"type": "string", "enum": ["board", "table"]},
+        "hint": {"type": "string"},
+    },
+    "required": ["name", "page", "quote", "kind", "hint"],
+    "additionalProperties": False,
+}
 SCHEMA = JsonSchema(
     name="rules_video_scope",
     schema={
@@ -68,8 +90,9 @@ SCHEMA = JsonSchema(
             "round": {"type": "array", "items": _QUOTE},
             "win": {"type": "array", "items": _QUOTE},
             "excluded": {"type": "array", "items": _EXCLUDED},
+            "places": {"type": "array", "items": _PLACE},
         },
-        "required": ["setup", "round", "win", "excluded"],
+        "required": ["setup", "round", "win", "excluded", "places"],
         "additionalProperties": False,
     },
 )
@@ -89,6 +112,21 @@ class ExcludedExcerpt:
 
 
 @dataclass(frozen=True)
+class Place:
+    """規則書出現過的場地或區域名稱（2026-11-22 永傑決定）。
+
+    kind：board＝主板上的格子（可以當區域）；table＝桌上的位置（不能當區域）。
+    hint：給店員的白話說明，只出現在標區域畫面，不進影片。
+    """
+
+    name: str
+    page: int
+    quote: str
+    kind: str
+    hint: str
+
+
+@dataclass(frozen=True)
 class ScopeSlot:
     key: str  # setup | round | win
     title: str  # 開局 | 走完一輪 | 獲勝方式
@@ -101,6 +139,8 @@ class ScopeResult:
     excluded: list[ExcludedExcerpt]
     # 引用不到原文而沒採用的（{slot, page, quote, problem}），給開發者看
     dropped: list[dict[str, Any]] = field(default_factory=list)
+    # 場地清單（掃整本，含被排除的頁）
+    places: list[Place] = field(default_factory=list)
 
     @property
     def pages(self) -> list[int]:
@@ -112,6 +152,7 @@ class ScopeResult:
             "slots": [asdict(slot) for slot in self.slots],
             "excluded": [asdict(e) for e in self.excluded],
             "dropped": self.dropped,
+            "places": [asdict(place) for place in self.places],
         }
 
 
@@ -208,6 +249,8 @@ def _parse(raw: dict[str, Any], pages: list[RulebookPage]) -> ScopeResult:
             return False
         return True
 
+    places, dropped_places = parse_places(raw.get("places", []), pages)
+    dropped += dropped_places
     slots = []
     for key, title in SLOTS:
         excerpts = [
@@ -221,7 +264,70 @@ def _parse(raw: dict[str, Any], pages: list[RulebookPage]) -> ScopeResult:
         for item in raw.get("excluded", [])
         if accept("excluded", item)
     ]
-    return ScopeResult(slots, excluded, dropped)
+    return ScopeResult(slots, excluded, dropped, places)
+
+
+def parse_places(
+    raw: list[dict[str, Any]], pages: list[RulebookPage]
+) -> tuple[list[Place], list[dict[str, Any]]]:
+    """檢查場地清單：引用的片段在那一頁，名稱在片段裡（「區」與「處」視為相同）。
+
+    名稱與片段改用規則書的寫法（例如 AI 寫「水晶放置區」、規則書是「水晶放置處」）。
+    同一個名稱只留第一筆；hint 空白時寫「對照規則書第 N 頁的圖」。
+    """
+    texts = {page.page: _squash(page.text) for page in pages}
+    places: list[Place] = []
+    dropped: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for item in raw:
+        page, name = item.get("page"), _squash(item.get("name") or "")
+        quote = (item.get("quote") or "").strip()
+        problem = None
+        if page not in texts:
+            problem = "頁碼不在規則書裡"
+        elif len(name) < 2:
+            problem = "名稱太短"
+        else:
+            book_quote = _find_in(texts[page], quote)
+            book_name = _find_in(_squash(book_quote or ""), name)
+            if book_quote is None:
+                problem = "片段不在那一頁"
+            elif book_name is None:
+                problem = "名稱不在片段裡"
+        if problem:
+            dropped.append(
+                {
+                    "slot": "places",
+                    "page": page,
+                    "quote": quote,
+                    "problem": problem,
+                    "name": item.get("name"),
+                }
+            )
+            continue
+        if place_key(book_name) in seen:
+            continue
+        seen.add(place_key(book_name))
+        hint = (item.get("hint") or "").strip() or f"對照規則書第 {page} 頁的圖"
+        book_quote = _respell(quote, book_quote)
+        places.append(Place(book_name, page, book_quote, item.get("kind", "board"), hint))
+    return places, dropped
+
+
+def _respell(original: str, book: str) -> str:
+    """保留原本的空白，字改用規則書的寫法（只會差在「區／處」）。"""
+    chars = iter(book)
+    return "".join(c if c.isspace() else next(chars, c) for c in original)
+
+
+def _find_in(haystack: str, needle: str) -> str | None:
+    """在 haystack（已去空白）找 needle，「區」與「處」視為相同；回傳 haystack 裡的寫法。"""
+    needle = _squash(needle)
+    if not needle:
+        return None
+    key = place_key(needle)
+    index = place_key(haystack).find(key)
+    return haystack[index : index + len(needle)] if index >= 0 else None
 
 
 def _pages_without_place(result: ScopeResult, pages: list[RulebookPage]) -> list[int]:
@@ -240,6 +346,7 @@ def scope_from_dict(data: dict[str, Any]) -> ScopeResult:
         ],
         excluded=[ExcludedExcerpt(**e) for e in data.get("excluded", [])],
         dropped=list(data.get("dropped", [])),
+        places=[Place(**place) for place in data.get("places", [])],
     )
 
 
@@ -249,3 +356,47 @@ def slot_pages(slot: ScopeSlot, lang: str) -> list[RulebookPage]:
     for excerpt in slot.excerpts:
         by_page.setdefault(excerpt.page, []).append(excerpt.text)
     return [RulebookPage(lang, page, "\n".join(texts)) for page, texts in sorted(by_page.items())]
+
+
+# 「此處」這類一般用語不是場地
+_COMMON_WORDS = (
+    "此處",
+    "好處",
+    "用處",
+    "到處",
+    "之處",
+    "各處",
+    "何處",
+    "相處",
+    "處理",
+    "處於",
+    "區分",
+    "區別",
+)
+
+
+def unlisted_place_words(data: dict[str, Any], places: list[Place], terms: list[Any]) -> list[str]:
+    """旁白與字幕裡出現、但不在場地清單（也不在用語對照表）的「X區」「X處」詞。
+
+    只記錄、不擋（2026-11-22 永傑決定），供之後觀察。一般用語（此處、處理…）不算。
+    詞取「區／處」前面兩個字加上它；前面接著清單裡的名稱就算有在清單。
+    """
+    known = {place_key(p.name) for p in places}
+    known |= {place_key(getattr(t, "zh", "") or "") for t in terms} - {""}
+    found: list[str] = []
+    for segment in data.get("segments", []):
+        for beat in segment.get("beats", []):
+            for text in (beat.get("narration", ""), beat.get("subtitle", "")):
+                text = _squash(text)
+                for i, char in enumerate(text):
+                    if char not in "區處":
+                        continue
+                    if any(text[max(0, i - 1) : i + 2].find(w) >= 0 for w in _COMMON_WORDS):
+                        continue
+                    prefix = place_key(text[: i + 1])
+                    if any(prefix.endswith(k) for k in known):
+                        continue
+                    word = text[max(0, i - 2) : i + 1]
+                    if word not in found:
+                        found.append(word)
+    return found

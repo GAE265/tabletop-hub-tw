@@ -71,6 +71,13 @@
 
 - [ ] 伺服器部署待辦（2026-11-21 永傑決定）：**部署時必須設定真正的雲端儲存**（`STORAGE_PROVIDER=cloud` 與 `STORAGE_CONNECTION_STRING`、`STORAGE_CONTAINER`）。預設的 `fake` 存在記憶體，後端一重啟素材照片與影片就消失；目前 `feature/deploy` 的 `docker-compose-app.yml` 預設是 `fake`，部署前要改。存放設定寫錯會讓整個後端起不來（啟動時就檢查）。
 
+**整本範圍（D17）的待辦**（2026-11-22 永傑驗收時提出）：
+
+- [x] 標區域畫面顯示一行白話說明（`hint`）與「第 N 段會用到」（後端 `feature/rules_qa-video-whole-game-api`、手機頁 `feature/rules_qa-video-whole-game-page`）
+- [x] 照片拍不到某個區域時，標區域畫面可以略過那個區域並提示影響（同上）
+- [ ] 用語對照表與規則書不一致，等永傑確認採哪個詞再改用語表：主板／主圖版、血刃區／血刃角色放置區、水晶放置處（OCR 是「處」，紙本待確認）
+- [ ] 歸檔：本機分支 `docs/archive-add-rules-video-maker`（2026-11-21 建立，沒有 push，沒有遠端備份）已歸檔 `add-rules-video-maker`；永傑決定等影片產生器做好後，和其他已完成的 change 一起歸檔、一起開一個 PR。上傳前先合併最新的 `dev`
+
 **排在修改頁之後**（2026-11-21 永傑暫定 Q1，推 MR 4 前與團隊確認）：
 
 | 順序 | 分支 | 內容 | 契約 |

@@ -26,6 +26,7 @@ from app.domains.rules_qa.video_assets import (
     readiness,
     skip_blocked_message,
     strip_skipped,
+    strip_skipped_regions,
 )
 from app.domains.rules_qa.video_jobs import JobContext, JobFailed
 from app.integrations.storage.base import FileStorage
@@ -148,9 +149,11 @@ class RenderJobHandler:
         stripped = strip_skipped(state.video, skipped)
         if stripped.blocked:
             raise JobFailed(skip_blocked_message(stripped.blocked))
+        # 照片拍不到、店員略過的區域：拿掉區域與指向它的框選、標籤、移動（2026-11-22 永傑決定）
+        output = strip_skipped_regions(stripped.video)
 
         folder = self._config.work_dir / str(ctx.project_id)
-        self._expand(folder, ctx.project_id, stripped.video)
+        self._expand(folder, ctx.project_id, output)
         try:
             video = load_video(folder)
         except VideoDataError as exc:

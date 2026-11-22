@@ -387,6 +387,8 @@ def _parse_assets(
                 "orientation",
                 "usable",
                 "quality",
+                "region_hints",
+                "skipped_regions",
             ),
         )
         kind = item.get("kind")

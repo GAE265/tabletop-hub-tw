@@ -73,9 +73,20 @@ class ScriptRequest:
     scope: list[Any] | None = None
     # 每格各一次呼叫時，前面幾格已有的素材（video.json 的素材格式）；後面的格優先沿用
     existing_assets: list[dict[str, Any]] = field(default_factory=list)
+    # 場地清單（video_scope.Place）；整本模式才有。區域名稱只能用 kind=board 的名稱。
+    # None＝不檢查區域名稱（單章模式）
+    places: list[Any] | None = None
 
 
 # --------------------------------------------------------------------------- 輸入
+
+
+def place_key(name: str) -> str:
+    """場地名稱的比對用 key：忽略空白，「區」與「處」視為相同（2026-11-22 永傑決定）。
+
+    只處理這兩個字，不做其他寬鬆比對。
+    """
+    return re.sub(r"\s+", "", name).replace("處", "區")
 
 
 def load_pages(folder: Path, names: list[str]) -> list[RulebookPage]:
@@ -220,6 +231,16 @@ def build_input(request: ScriptRequest) -> str:
                 f"- {asset['asset_key']}（{asset.get('label') or asset.get('reason', '')}）"
                 f"：區域 {regions}"
             )
+    if request.places is not None:
+        board = [p.name for p in request.places if p.kind == "board"]
+        table = [p.name for p in request.places if p.kind == "table"]
+        header += [
+            "",
+            "可以當區域的名稱（規則書裡主板上的格子；regions 只能用這些名稱）："
+            + ("、".join(board) or "沒有，這一格不要有任何區域"),
+            "桌上的位置（不能當區域；要提到時，高亮直接指整張素材）："
+            + ("、".join(table) or "沒有"),
+        ]
     lines = [
         *header,
         "",
@@ -350,10 +371,21 @@ def generate_whole_game(
     if request.voice:
         merged["voice"] = request.voice
     prune_unused_regions(merged)
+    if request.places is not None:
+        add_region_hints(merged, request.places)
     errors = check_script(merged, request, base_dir)
     if errors:
         raise ScriptRejected([f"合併後{error}" for error in errors], outputs)
     return merged
+
+
+def add_region_hints(data: dict[str, Any], places: list[Any]) -> None:
+    """每個區域加上給店員的白話說明（取自場地清單的 hint）；只出現在標區域畫面，不進影片。"""
+    hints = {place_key(p.name): p.hint for p in places}
+    for asset in data.get("assets", []):
+        regions = asset.get("regions") or {}
+        if regions:
+            asset["region_hints"] = {name: hints.get(place_key(name), "") for name in regions}
 
 
 def prune_unused_regions(data: dict[str, Any]) -> None:
@@ -638,6 +670,8 @@ def check_script(data: dict[str, Any], request: ScriptRequest, base_dir: Path) -
     errors += _check_assets(data, request)
     if request.scope is not None:
         errors += _check_whole_game(data, request)
+    if request.places is not None:
+        errors += _check_region_names(data, request.places)
 
     chapter_pages = {p.page for p in request.pages}
     reference_pages = {p.page for p in request.reference_pages} - chapter_pages
@@ -676,6 +710,30 @@ def _check_whole_game(data: dict[str, Any], request: ScriptRequest) -> list[str]
             errors.append(
                 f"「{slot.title}」（chapter={slot.key}）沒有任何一段：三個章節都至少要有一段"
             )
+    return errors
+
+
+def _check_region_names(data: dict[str, Any], places: list[Any]) -> list[str]:
+    """區域名稱只能用場地清單裡「主板上的格子」（「區」與「處」視為相同）。"""
+    board = {place_key(p.name): p.name for p in places if p.kind == "board"}
+    table = {place_key(p.name) for p in places if p.kind == "table"}
+    allowed = "、".join(board.values()) or "沒有（不要有任何區域）"
+    errors = []
+    for asset in data.get("assets", []):
+        for name in asset.get("regions") or {}:
+            key = place_key(name)
+            if key in board:
+                continue
+            if key in table:
+                errors.append(
+                    f"素材 {asset.get('asset_key')} 的區域「{name}」是桌上的位置，不能當區域："
+                    "請拿掉這個區域，要提到它時，高亮直接指整張素材"
+                )
+            else:
+                errors.append(
+                    f"素材 {asset.get('asset_key')} 的區域「{name}」不是規則書裡主板上的格子名稱，"
+                    f"區域只能用：{allowed}"
+                )
     return errors
 
 

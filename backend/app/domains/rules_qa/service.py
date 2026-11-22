@@ -71,6 +71,7 @@ from app.domains.rules_qa.video_assets import (
     normalize_photo,
     photo_key,
     readiness,
+    region_segments,
     skip_blocked_message,
     skip_impact,
 )
@@ -1082,6 +1083,17 @@ class VideoAssetsService:
                     regions[name] = None
         for name, box in (body.regions or {}).items():
             regions[name] = box
+        if body.skipped_regions is not None:
+            unknown = sorted(set(body.skipped_regions) - set(regions))
+            if unknown:
+                raise AppError(
+                    422,
+                    "RULES_VIDEO_REGION_UNKNOWN",
+                    f"「{asset_label(asset)}」沒有這些區域：{'、'.join(unknown)}",
+                    {"unknown": unknown},
+                )
+            # 照片拍不到的區域（2026-11-22 永傑決定）；依草稿列出的順序存
+            asset["skipped_regions"] = [n for n in regions if n in set(body.skipped_regions)]
         if body.skipped is True:
             self._check_skip(video, asset)
             asset["usable"] = False
@@ -1163,6 +1175,9 @@ def _asset_out(asset: dict[str, Any], version: int, video: dict[str, Any]) -> Vi
         has_photo=bool(asset.get("file")),
         orientation=asset.get("orientation", 0),
         regions=dict(asset.get("regions") or {}),
+        region_hints=dict(asset.get("region_hints") or {}),
+        region_segments=region_segments(video, asset["asset_key"]),
+        skipped_regions=list(asset.get("skipped_regions") or []),
         video_version=version,
         skipped=is_skipped(asset),
         skippable=not blocked,

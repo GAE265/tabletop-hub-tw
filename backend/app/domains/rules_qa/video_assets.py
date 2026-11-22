@@ -220,6 +220,72 @@ def skip_impact(video: dict[str, Any], asset_key: str) -> tuple[list[int], list[
     return affected, blocked
 
 
+def region_segments(video: dict[str, Any], asset_key: str) -> dict[str, list[int]]:
+    """這個素材的每個區域被哪幾段用到（highlight、label、move；段號從 1 開始）。"""
+    used: dict[str, list[int]] = {}
+    for number, segment in enumerate(video.get("segments", []), start=1):
+        for slot_name, region in _region_refs(segment):
+            slot = (segment.get("slots") or {}).get(slot_name) or {}
+            if slot.get("kind") == "asset" and slot.get("asset_key") == asset_key:
+                numbers = used.setdefault(region, [])
+                if number not in numbers:
+                    numbers.append(number)
+    return used
+
+
+def _region_refs(segment: dict[str, Any]) -> list[tuple[str, str]]:
+    """一段裡指向區域的（槽位, 區域名稱）：highlight、label 的 target，cue 的 target 與 to。"""
+    refs = [h.get("target") for h in segment.get("highlights", [])]
+    refs += [lab.get("target") for lab in segment.get("labels", [])]
+    for beat in segment.get("beats", []):
+        for cue in beat.get("cues", []):
+            refs += [cue.get("target"), cue.get("to")]
+    return [tuple(ref.partition("@")[::2]) for ref in refs if ref and "@" in ref]
+
+
+def strip_skipped_regions(video: dict[str, Any]) -> dict[str, Any]:
+    """拿掉店員略過的區域（照片拍不到），以及指向它們的 highlight、label、cue。不改傳入的資料。
+
+    指向被拿掉的 highlight、label 的 cue 也一起拿掉。
+    """
+    result = copy.deepcopy(video)
+    skipped = {
+        (a["asset_key"], name)
+        for a in result.get("assets", [])
+        for name in a.get("skipped_regions") or []
+    }
+    if not skipped:
+        return result
+    for asset in result.get("assets", []):
+        for name in asset.get("skipped_regions") or []:
+            (asset.get("regions") or {}).pop(name, None)
+    for segment in result.get("segments", []):
+        slots = segment.get("slots") or {}
+
+        def gone(target: str | None, slots: dict[str, Any] = slots) -> bool:
+            if not target or "@" not in target:
+                return False
+            slot_name, _, region = target.partition("@")
+            return ((slots.get(slot_name) or {}).get("asset_key"), region) in skipped
+
+        removed: set[str] = set()
+        for field in ("highlights", "labels"):
+            if field not in segment:
+                continue
+            removed |= {o.get("key", "") for o in segment[field] if gone(o.get("target"))}
+            segment[field] = [o for o in segment[field] if not gone(o.get("target"))]
+        for beat in segment.get("beats", []):
+            if "cues" in beat:
+                beat["cues"] = [
+                    cue
+                    for cue in beat["cues"]
+                    if not gone(cue.get("target"))
+                    and not gone(cue.get("to"))
+                    and cue.get("target") not in removed
+                ]
+    return result
+
+
 def is_skippable(video: dict[str, Any], asset_key: str) -> bool:
     """可以略過：略過後（加上已經略過的）每一段仍有主要內容（2026-11-22 永傑決定由程式判斷，
     不看 AI 標的 priority）。"""
@@ -258,8 +324,9 @@ def readiness(video: dict[str, Any]) -> dict[str, Any]:
                     "skip_blocked_segments": blocked,
                 }
             )
+        skipped_regions = set(asset.get("skipped_regions") or [])
         for name, box in (asset.get("regions") or {}).items():
-            if box is None:
+            if box is None and name not in skipped_regions:
                 missing_regions.append({"asset_key": key, "region": name})
     return {
         "ready": not (missing_photos or missing_regions or unsupported),
