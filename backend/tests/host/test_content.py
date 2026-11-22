@@ -345,3 +345,6 @@ def test_winner_lines_have_a_beat_between_the_two_sentences() -> None:
         line = content.fixed_line(code)
         assert "獲勝" in line
         assert "辛苦" not in line
+        # 停頓寫在字句裡：陣營名稱前後各一個破折號，兩句之間一個刪節號
+        assert line.count("——") == 2
+        assert "！……" in line

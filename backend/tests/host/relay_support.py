@@ -242,6 +242,9 @@ def rule_points(turn_number: int, phase_number: int) -> str:
 
 
 def line(code: str, **kwargs: Any) -> str:
+    if not kwargs and code in ("end_white_rose", "end_blood_blade"):
+        # 宣布哪一方獲勝的兩句另外帶語氣與節奏的指示
+        return content.line_request(code)
     return content.verbatim_request(content.fixed_line(code, **kwargs))
 
 

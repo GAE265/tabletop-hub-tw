@@ -89,8 +89,9 @@ _STATIC_LINES: dict[str, str] = {
         "現在請大家一起敲桌子。雙刃，請把手上的幽魂換成桌上的雙刃牌。"
         "十、九、八、七、六、五、四、三、二、一，停。天亮了，請睜開眼睛。"
     ),
-    "end_white_rose": "恭喜白薔薇陣營獲勝！刀光散去，白薔薇依然盛開。",
-    "end_blood_blade": "恭喜血刃陣營獲勝！今夜，白薔薇凋零在刀刃之下。",
+    # 破折號與刪節號是寫給語音模型的停頓：實測只給語氣指示節奏不會變，把停頓寫進字句才有效
+    "end_white_rose": "恭喜——白薔薇陣營——獲勝！……刀光散去，白薔薇，依然盛開。",
+    "end_blood_blade": "恭喜——血刃陣營——獲勝！……今夜，白薔薇，凋零在刀刃之下。",
     "end_plain": "這一局結束了。",
     "answer_magic_book": "魔法之書的效果要看書上的說明，我不能為你解釋。",
     "answer_deduction": "這個要靠你們自己判斷，我只負責流程和規則。",
@@ -142,6 +143,23 @@ def fixed_line(
 def verbatim_request(line: str) -> str:
     """請主持人照唸一句固定台詞時，交給語音模型的文字。"""
     return f"請照唸下面這段固定台詞，一個字都不要加、不要改，唸完就停：\n{line}"
+
+
+# 宣布哪一方獲勝的兩句要有儀式感（立倫 2026-11-22 試聽後要求）：字句不變，語氣與節奏另外指示
+_CEREMONY_CODES = ("end_white_rose", "end_blood_blade")
+_CEREMONY_DIRECTION = (
+    "這是整局最重要的一刻，請像頒獎典禮宣布得主那樣，用隆重、莊嚴、有戲劇感的語氣唸。"
+    "節奏：開口前先停頓一拍；整段放慢；「恭喜」之後停頓一下，陣營的名字一個字一個字加重，"
+    "「獲勝」兩個字拉長、聲音揚起來；然後停頓兩拍，第二句壓低聲音、慢慢說完。"
+)
+
+
+def line_request(code: str) -> str:
+    """請主持人說一句不用帶資料的固定台詞時，交給語音模型的文字。"""
+    line = _STATIC_LINES[code]
+    if code in _CEREMONY_CODES:
+        return f"{_CEREMONY_DIRECTION}\n字句一個字都不要加、不要改，唸完就停：\n{line}"
+    return verbatim_request(line)
 
 
 # --- 規則要點（spec §4.2；條目出自 D23 §3，用自己的話寫） ---

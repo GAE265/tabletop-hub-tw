@@ -492,7 +492,7 @@ def _line_segment(code: str, *, auto_advance: bool = False) -> dict[str, Any]:
     return {
         "kind": "line",
         "code": code,
-        "text": content.verbatim_request(content.fixed_line(code)),
+        "text": content.line_request(code),
         "phase_number": None,
         "version": None,
         "auto_advance": auto_advance,
