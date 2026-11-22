@@ -1,7 +1,7 @@
 """開發用 seed 的桌遊步驟：寫入共用桌遊資料與推薦 Agent 的資料。
 
 資料檔放在 seed_data/（來源與重新產生的方法見 seed_data/README.md、
-docs/adr/0004-seed-data-in-repo.md）：
+docs/adr/0005-seed-data-in-repo.md）：
 
 - games-export.json：共用桌遊資料（games、game_genres 與 games.id 的計數器），export-games 的輸出。
 - games_advisor_data.sql：推薦 Agent 自己的 4 張表（標籤、每款桌遊的標籤、心得摘要、心得片段），

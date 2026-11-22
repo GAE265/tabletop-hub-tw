@@ -1,4 +1,4 @@
-"""開發用 seed 會寫入共用桌遊資料與推薦 Agent 的資料（docs/adr/0004-seed-data-in-repo.md）。
+"""開發用 seed 會寫入共用桌遊資料與推薦 Agent 的資料（docs/adr/0005-seed-data-in-repo.md）。
 
 跑一次 seed，games、game_genres 與 4 張 games_advisor_ 表就和 repo 的資料檔
 （app/dev/seed_data/）一致。桌遊步驟自成一個交易：失敗時整個退回、結束碼非 0，

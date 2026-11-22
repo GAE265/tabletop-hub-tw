@@ -3,7 +3,7 @@
 遊戲依 bgg_id 尋找（games 唯一不重複的欄位，見 docs/adr/0003-shared-games-table.md）。
 測試自己寫入只有必填欄位的假遊戲，結束後刪除，不動其他測試的資料。
 
-seed 現在也會寫入共用桌遊資料（docs/adr/0004-seed-data-in-repo.md）：假遊戲用和資料檔相同的
+seed 現在也會寫入共用桌遊資料（docs/adr/0005-seed-data-in-repo.md）：假遊戲用和資料檔相同的
 編號，seed 才會把它們當成同一款、原地更新，掛在上面的影片不受影響。
 """
 

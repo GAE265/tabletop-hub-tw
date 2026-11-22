@@ -1,6 +1,6 @@
 # seed_data：開發用 seed 寫入的桌遊與推薦 Agent 資料
 
-`uv run python -m app.dev.seed` 會讀這個資料夾的兩個檔，讓資料庫的 7 張表和立倫的本機資料庫相同。為什麼放在 repo、有什麼後果，見 [ADR 0004](../../../../docs/adr/0004-seed-data-in-repo.md)。
+`uv run python -m app.dev.seed` 會讀這個資料夾的兩個檔，讓資料庫的 7 張表和立倫的本機資料庫相同。為什麼放在 repo、有什麼後果，見 [ADR 0005](../../../../docs/adr/0005-seed-data-in-repo.md)。
 
 | 檔案 | 寫入的資料表 | 筆數 |
 |---|---|---|
