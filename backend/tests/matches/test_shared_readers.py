@@ -141,7 +141,8 @@ def test_get_user_missing_returns_none(session: Session):
     assert AuthUserRepository(session).get_user(uuid.uuid4()) is None
 
 
-def test_auth_user_repository_is_read_only():
+def test_auth_user_repository_only_has_the_agreed_methods():
+    """matches 只用 get_user；shops 另外加了店員綁定店家用的 get_shop_id、set_shop_id。"""
     from app.domains.auth.repository import AuthUserRepository
 
-    assert public_methods(AuthUserRepository) == {"get_user"}
+    assert public_methods(AuthUserRepository) == {"get_user", "get_shop_id", "set_shop_id"}

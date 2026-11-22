@@ -52,6 +52,7 @@ Domain 是依業務切出來的範圍（概念接近 DDD 的 bounded context）�
 | `host` | #3 AI 遊戲主持（語音） | 應做 | 立倫 | — |
 | `parts` | #4 配件辨識與缺件回報 | 應做 | 新善 | — |
 | `tips` | #14 推薦遊玩技巧建議 | 加分 | 瑋鋐 | 新善 |
+| `shops` | 店家管理：新增店家、店家的桌遊庫存 | 必做 | 立倫 | — |
 | `auth` | 帳號登入與 JWT（階段 3 最後做，規則見 4.5） | 必做 | 立倫 | — |
 | `health` | 服務健康檢查，也是分層寫法的示範 domain，正式 domain 開始後可刪除 | 必做 | 立倫 | — |
 
@@ -171,7 +172,7 @@ router → service → repository → models
   - 例外：固定的小型分類表（例如 `genres`）可以用自動流水號（`bigint` identity）。
   - 被其他表引用、需要在種子資料或測試中找到的資料，要有一個加上唯一限制（unique）的名稱欄位可以查詢，例如 `games` 的英文名稱。種子資料與測試用這個欄位找資料，不寫死 `id`；這個欄位建立後不隨意修改。
 - 資料庫存取一律使用同步寫法（SQLAlchemy 同步 session + psycopg），不使用 async。
-- 開發用的測試帳號（固定 UUID 的 player、shop_staff、admin 各一）由開發用 seed 指令建立，**不寫進 migration**。
+- 開發用的測試帳號（固定 UUID 的 player、admin 各一，shop_staff 兩個：一個屬於測試店家、一個還沒有店）由開發用 seed 指令建立，**不寫進 migration**。
 - **每張資料表、每個欄位都要寫中文說明**，用 SQLAlchemy 的 `comment=`（例如 `mapped_column(..., comment="玩家在這局的座位編號")`、`__table_args__ = {"comment": "每一局遊戲"}`），說明會一起存進資料庫，在資料庫工具裡也看得到。說明要寫出這個欄位記錄什麼，可以為空時寫出空值代表什麼。既有的資料表由擁有者補上，補說明也要用 migration。
 - **Enum 的每個值都要寫中文註解**，說明這個值代表什麼、什麼情況使用、舉一款遊戲當例子。
 - 向量欄位使用 pgvector，維度寫在設定裡，不要寫死在程式中。
@@ -222,7 +223,7 @@ router                         service
 #### 開發期間不需要登入
 
 - `.env` 的 `AUTH_MODE` 決定 `get_current_user` 的行為：
-  - `AUTH_MODE=dev`：從請求標頭 `X-Dev-User`（格式 `<user_uuid>:<role>[:<shop_uuid>]`，`role` 為 `shop_staff` 時 `shop_uuid` 必填，其他角色不帶）讀取使用者，沒帶就使用預設的測試玩家。前端在開發環境自動帶上這個標頭，並在 `frontend/lib/core/dev/` 提供只在開發環境出現的身分切換器。切換器從後端 `GET /api/v1/dev/users` 讀取測試帳號清單，不需手動輸入 UUID，前端也不寫死 UUID。
+  - `AUTH_MODE=dev`：從請求標頭 `X-Dev-User`（格式 `<user_uuid>:<role>[:<shop_uuid>]`，只有 `shop_staff` 可以帶 `shop_uuid`，還沒有店的店員不帶，其他角色不帶）讀取使用者，沒帶就使用預設的測試玩家。前端在開發環境自動帶上這個標頭，並在 `frontend/lib/core/dev/` 提供只在開發環境出現的身分切換器。切換器從後端 `GET /api/v1/dev/users` 讀取測試帳號清單，不需手動輸入 UUID，前端也不寫死 UUID。
   - `AUTH_MODE=jwt`：驗證 `Authorization: Bearer <token>`，token 內含 `sub`（使用者 UUID）、`role`、`shop_id`。正式環境一律使用此模式，`X-Dev-User` 完全無效。
 - 密碼一律雜湊後儲存（`argon2` 或 `bcrypt`），不存明碼。
 - `CurrentUser` 一律從請求帶來的資訊（開發標頭或 JWT）建立，`core/` 不查詢任何 domain 的資料表。
@@ -475,6 +476,7 @@ scope 的寫法：
 | 版本 | 日期 | 修改內容 |
 |---|---|---|
 | 1.13 | 2026-11-22 | 第 3 節共用區新增 `integrations/realtime_voice/`，由立倫負責（AI 語音主持的即時語音使用） |
+| 1.12 | 2026-11-20 | 第 3 節新增 `shops` domain（店家管理，立倫主責）；4.4 開發用測試帳號多一個還沒有店的 shop_staff；4.5 `X-Dev-User` 的 shop_staff 可以不帶 `shop_uuid`（代表還沒有店） |
 | 1.11 | 2026-11-17 | 第 3 節共用區新增 `integrations/tts/`、`storage/`、`video/`，由永傑負責（規則影片生產器使用） |
 | 1.10 | 2026-11-17 | 4.4 新增規則：每張資料表、每個欄位都要用 SQLAlchemy 的 `comment=` 寫中文說明；Enum 的每個值都要寫中文註解；第 9 節規定 AI 產出的 MR 說明存在 `docs/mr_info/`，不 commit |
 | 1.9 | 2026-11-14 | 4.3 錯誤狀態碼新增 503（外部服務暫時無法使用） |

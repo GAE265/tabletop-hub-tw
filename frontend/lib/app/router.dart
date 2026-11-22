@@ -18,6 +18,9 @@ import '../domains/rules_ingest/pages/rules_ingest_page.dart';
 import '../prototypes/booking/booking_list_proto_page.dart';
 import '../prototypes/booking/booking_proto_page.dart';
 import '../prototypes/host/host_proto_page.dart';
+import '../prototypes/shops/shop_create_proto_page.dart';
+import '../prototypes/shops/shop_inventory_proto_page.dart';
+import '../prototypes/shops/shops_entry_proto_page.dart';
 import 'home/pages/home_page.dart';
 import 'notifications/notifications_page.dart';
 import 'shell.dart';
@@ -119,6 +122,20 @@ GoRouter createRouter(AppConfig config) => GoRouter(
           GoRoute(
             path: '/proto/host',
             builder: (context, state) => const HostProtoPage(),
+          ),
+          // 店家管理的參考畫面：新增店家、管理店家的桌遊庫存
+          GoRoute(
+            path: '/proto/shops',
+            builder: (context, state) => const ShopsEntryProtoPage(),
+          ),
+          GoRoute(
+            path: '/proto/shops/new',
+            builder: (context, state) => const ShopCreateProtoPage(),
+          ),
+          GoRoute(
+            path: '/proto/shops/:shopId/games',
+            builder: (context, state) =>
+                ShopInventoryProtoPage(shopId: state.pathParameters['shopId']!),
           ),
         ],
       ],

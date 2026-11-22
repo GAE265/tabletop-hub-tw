@@ -41,6 +41,8 @@ import 'package:tabletop_hub/domains/health/data/health_status.dart';
 import 'package:tabletop_hub/domains/matches/data/game_match.dart';
 import 'package:tabletop_hub/domains/matches/data/match_input.dart';
 import 'package:tabletop_hub/domains/matches/data/matches_repository.dart';
+import 'package:tabletop_hub/domains/shops/data/shop_models.dart';
+import 'package:tabletop_hub/domains/shops/data/shops_repository.dart';
 
 /// 測試用字型：只換字型名稱，不連網路下載。
 class FakeAppFonts implements AppFonts {
@@ -1527,5 +1529,69 @@ class FakeHostStreamConnector implements HostStreamConnector {
     final stream = FakeHostStream(sessionId: sessionId, ticket: ticket);
     streams.add(stream);
     return stream;
+  }
+}
+
+/// 店家與庫存：資料放記憶體。[error] 有值時所有操作都拋出它，[gate] 未完成時列出庫存會等待。
+class FakeShopsRepository implements ShopsRepository {
+  FakeShopsRepository({
+    this.inventory = const [],
+    this.choices = const [
+      GameChoice(id: 1, name: '卡坦島'),
+      GameChoice(id: 2, name: '狼人殺'),
+    ],
+    this.error,
+  });
+
+  List<ShopGame> inventory;
+  List<GameChoice> choices;
+  Object? error;
+  Completer<void>? gate;
+  final createCalls = <({String name, String? phone, String? address})>[];
+
+  void _check() {
+    if (error != null) throw error!;
+  }
+
+  @override
+  Future<CreatedShop> createShop({
+    required String name,
+    String? phone,
+    String? address,
+  }) async {
+    _check();
+    createCalls.add((name: name, phone: phone, address: address));
+    return CreatedShop(id: 's-new', name: name, phone: phone, address: address);
+  }
+
+  @override
+  Future<List<ShopGame>> listGames(String shopId) async {
+    await gate?.future;
+    _check();
+    return List.of(inventory);
+  }
+
+  @override
+  Future<ShopGame> addGame(String shopId, int gameId) async {
+    _check();
+    final choice = choices.firstWhere((c) => c.id == gameId);
+    final added = ShopGame(gameId: gameId, name: choice.name);
+    inventory = [...inventory, added];
+    return added;
+  }
+
+  @override
+  Future<void> removeGame(String shopId, int gameId) async {
+    _check();
+    inventory = [
+      for (final g in inventory)
+        if (g.gameId != gameId) g,
+    ];
+  }
+
+  @override
+  Future<List<GameChoice>> listGameChoices() async {
+    _check();
+    return List.of(choices);
   }
 }
