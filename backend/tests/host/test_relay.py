@@ -1118,3 +1118,133 @@ def test_relay_does_not_import_vendor_sdks_or_know_vendor_event_names() -> None:
         text = path.read_text(encoding="utf-8")
         for vendor_word in ("dashscope", "response.audio", "input_audio_buffer", "session.update"):
             assert vendor_word not in text, f"{path.name} 出現 {vendor_word}"
+
+
+# --- 結束這個動作相信語音模型（2026-11-22 立倫決定，spec §5.2） ---
+#
+# 實測：語音模型的辨識文字幾乎認不出「血刃」（「血刃贏了」30 句只有 2 句辨識正確，
+# 其他變成「写着名字」「确认延误」等），但模型自己聽聲音有 21 句呼叫了結束。
+
+
+@pytest.mark.parametrize(
+    "heard, winner, line_code",
+    [
+        ("写着名字。", "blood_blade", "end_blood_blade"),
+        ("确认延误。", "blood_blade", "end_blood_blade"),
+        ("现任郑盈盈了。", "blood_blade", "end_blood_blade"),
+        ("白墙为赢了", "white_rose", "end_white_rose"),
+        ("确认无误了。", None, "end_plain"),
+    ],
+)
+def test_end_tool_is_trusted_when_the_transcript_is_garbled(
+    heard: str, winner: str | None, line_code: str
+) -> None:
+    async def scenario() -> None:
+        rig = Rig()
+        rig.advance_to(2, 3)
+        await rig.connect()
+        await rig.hears(heard)
+        assert rig.snapshot.status == "active"
+
+        arguments = {"winner": winner} if winner else {}
+        await rig.tool("end_hosting", **arguments)
+
+        assert rig.snapshot.status == "ended"
+        assert rig.snapshot.winner == winner
+        assert rig.conn.speech_requests[-1] == line(line_code)
+        assert rig.tool_results("c1")[0][3] is False
+
+    run(scenario)
+
+
+@pytest.mark.parametrize(
+    "heard",
+    [
+        "血刃赢了吗？",
+        "这局是不是快要结束了",
+        "我觉得血刃这次应该会赢了吧",
+    ],
+)
+def test_end_tool_is_not_trusted_for_questions_or_long_sentences(heard: str) -> None:
+    async def scenario() -> None:
+        rig = Rig()
+        rig.advance_to(2, 3)
+        await rig.connect()
+        await rig.hears(heard)
+        await rig.tool("end_hosting", winner="blood_blade")
+        assert rig.snapshot.status == "active"
+        assert "不是指令" in rig.tool_results("c1")[0][2]
+
+    run(scenario)
+
+
+def test_end_tool_waits_for_the_transcript_when_it_has_not_arrived() -> None:
+    async def scenario() -> None:
+        rig = Rig()
+        rig.advance_to(2, 3)
+        await rig.connect()
+        # 工具請求先到：還不知道那句話是不是問句、有多長，先不動
+        await rig.tool("end_hosting", winner="blood_blade")
+        assert rig.snapshot.status == "active"
+
+        await rig.hears("写着名字。")
+
+        assert rig.snapshot.status == "ended"
+        assert rig.snapshot.winner == "blood_blade"
+
+    run(scenario)
+
+
+def test_end_tool_waiting_for_the_transcript_is_dropped_for_a_question() -> None:
+    async def scenario() -> None:
+        rig = Rig()
+        rig.advance_to(2, 3)
+        await rig.connect()
+        await rig.tool("end_hosting", winner="blood_blade")
+        await rig.hears("血刃赢了吗？")
+        assert rig.snapshot.status == "active"
+
+    run(scenario)
+
+
+def test_end_tool_with_an_unknown_winner_ends_without_a_winner() -> None:
+    async def scenario() -> None:
+        rig = Rig()
+        rig.advance_to(2, 3)
+        await rig.connect()
+        await rig.hears("写着名字。")
+        await rig.tool("end_hosting", winner="everyone")
+        assert rig.snapshot.status == "ended"
+        assert rig.snapshot.winner is None
+
+    run(scenario)
+
+
+def test_other_command_tools_still_need_the_exact_words() -> None:
+    async def scenario() -> None:
+        rig = Rig()
+        rig.advance_to(1, 1)
+        await rig.connect()
+        await rig.hears("写着名字。")
+        for index, tool in enumerate(
+            ["next_step", "previous_step", "pause_hosting", "resume_hosting"]
+        ):
+            await rig.tool(tool, call_id=f"c{index}")
+            assert "不是指令" in rig.tool_results(f"c{index}")[0][2]
+        assert rig.position() == ("turn", 1, 1)
+        assert rig.snapshot.paused is False
+
+    run(scenario)
+
+
+def test_trusted_end_is_only_executed_once_per_sentence() -> None:
+    async def scenario() -> None:
+        rig = Rig()
+        rig.advance_to(2, 3)
+        await rig.connect()
+        await rig.hears("写着名字。")
+        await rig.tool("end_hosting", call_id="c1", winner="blood_blade")
+        await rig.tool("end_hosting", call_id="c2", winner="blood_blade")
+        assert rig.conn.speech_requests.count(line("end_blood_blade")) == 1
+
+    run(scenario)

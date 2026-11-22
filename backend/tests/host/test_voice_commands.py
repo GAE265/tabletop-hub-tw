@@ -151,3 +151,43 @@ def test_v10_pause_inside_a_longer_sentence_is_ignored() -> None:
     to_turn(graph, sid, 2, 1)
     say(graph, sid, "暫停一下，我去上廁所")
     assert graph.snapshot(sid).paused is False
+
+
+# --- 結束改成相信語音模型時用得到的兩樣東西（2026-11-22 立倫決定，spec §5.2） ---
+
+
+@pytest.mark.parametrize(
+    "text, expected",
+    [
+        ("写着名字。", "寫着名字"),
+        ("主持人，白蔷薇赢了！", "白薔薇贏了"),
+        (" 确认 延误 ", "确认延误"),
+        ("。", ""),
+    ],
+)
+def test_spoken_core_strips_punctuation_prefix_and_converts(text: str, expected: str) -> None:
+    from app.domains.host.graph import spoken_core
+
+    assert spoken_core(text) == expected
+
+
+@pytest.mark.parametrize("text", ["血刃贏了嗎？", "结束了?"])
+def test_spoken_core_is_none_for_questions(text: str) -> None:
+    from app.domains.host.graph import spoken_core
+
+    assert spoken_core(text) is None
+
+
+@pytest.mark.parametrize(
+    "winner, code", [("blood_blade", "end_blood_blade"), ("white_rose", "end_white_rose")]
+)
+def test_end_command_can_carry_a_winner(winner: str, code: str) -> None:
+    from app.domains.host.graph import HostEvent
+    from tests.host.graph_support import only_speak
+
+    graph, sid = new_hosting(7)
+    to_turn(graph, sid, 2, 3)
+    outcome = graph.handle(sid, HostEvent.command("end", winner=winner))
+    assert graph.snapshot(sid).status == "ended"
+    assert graph.snapshot(sid).winner == winner
+    assert only_speak(outcome).code == code
