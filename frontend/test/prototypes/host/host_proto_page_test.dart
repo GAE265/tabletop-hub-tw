@@ -474,7 +474,7 @@ void main() {
     Finder inside(String key, Finder matching) =>
         find.descendant(of: find.byKey(Key(key)), matching: matching);
 
-    testWidgets('手機：單欄，由上往下是進度、流程鍵、結束主持', (tester) async {
+    testWidgets('手機：單欄，進度在上面，流程鍵固定在畫面底部，「結束主持」在標題列', (tester) async {
       final h = ProtoHarness();
       await h.pump(tester, size: phone);
       await h.start(tester, live: liveState(turnNumber: 2, phaseNumber: 2));
@@ -482,12 +482,60 @@ void main() {
       expect(find.byKey(const Key('host-wide-layout')), findsNothing);
       final round = tester.getCenter(find.text('第 2 回合')).dy;
       final next = tester.getCenter(find.byKey(const Key('host-next'))).dy;
-      final end = tester.getCenter(find.byKey(const Key('host-end'))).dy;
       expect(round, lessThan(next));
-      expect(next, lessThan(end));
+      // 伸手就按得到：流程鍵貼著畫面底部
+      expect(
+        tester.getRect(find.byKey(const Key('host-section-flow'))).bottom,
+        greaterThan(phone.height - 100),
+      );
+      expect(
+        find.descendant(
+          of: find.byType(AppBar),
+          matching: find.byKey(const Key('host-end')),
+        ),
+        findsOneWidget,
+      );
     });
 
-    testWidgets('筆電：左欄進度與主持人的狀態，右欄接話方式、流程鍵、可以這樣說、結束主持', (tester) async {
+    testWidgets('提醒出現或進度改變時，流程鍵不移位（手機與筆電）', (tester) async {
+      for (final size in [phone, laptop]) {
+        final h = ProtoHarness();
+        await h.pump(tester, size: size);
+        await h.start(
+          tester,
+          live: liveState(
+            step: HostStep.opening,
+            turnNumber: null,
+            phaseNumber: null,
+          ),
+        );
+        Rect pause() => tester.getRect(find.byKey(const Key('host-pause')));
+        final before = pause();
+
+        // 從開場進到回合內：進度區塊變高
+        await h.emit(
+          tester,
+          HostStateMessage(liveState(turnNumber: 1, phaseNumber: 1)),
+        );
+        expect(pause(), before, reason: '$size 進到回合內');
+
+        // 按暫停：上方出現「主持暫停中」橫幅
+        await h.emit(
+          tester,
+          HostStateMessage(
+            liveState(paused: true, pauseReason: HostPauseReason.command),
+          ),
+        );
+        expect(find.text('主持暫停中'), findsOneWidget);
+        expect(pause(), before, reason: '$size 暫停中');
+
+        // 查規則：多出「正在查規則」
+        await h.emit(tester, HostStateMessage(liveState(lookingUp: true)));
+        expect(pause(), before, reason: '$size 查規則');
+      }
+    });
+
+    testWidgets('筆電：左欄進度與主持人的狀態，右欄接話方式、流程鍵、可以這樣說，「結束主持」在標題列', (tester) async {
       final h = ProtoHarness();
       await h.pump(tester, size: laptop);
       await h.start(
@@ -504,7 +552,6 @@ void main() {
         'host-pause',
         'host-next',
         'host-voice-hints',
-        'host-end',
       ]) {
         expect(
           inside('host-column-controls', find.byKey(Key(key))),
@@ -515,6 +562,13 @@ void main() {
       expect(
         tester.getCenter(find.text('第 2 回合')).dx,
         lessThan(tester.getCenter(find.byKey(const Key('host-next'))).dx),
+      );
+      expect(
+        find.descendant(
+          of: find.byType(AppBar),
+          matching: find.byKey(const Key('host-end')),
+        ),
+        findsOneWidget,
       );
     });
 
@@ -564,11 +618,13 @@ void main() {
         inside('host-section-flow', find.byKey(const Key('host-end'))),
         findsNothing,
       );
-      final flowBottom = tester
-          .getRect(find.byKey(const Key('host-section-flow')))
-          .bottom;
-      final endTop = tester.getRect(find.byKey(const Key('host-end'))).top;
-      expect(endTop - flowBottom, greaterThanOrEqualTo(32));
+      // 不論誰在上面，兩者之間至少隔 32
+      final flow = tester.getRect(find.byKey(const Key('host-section-flow')));
+      final end = tester.getRect(find.byKey(const Key('host-end')));
+      final gap = end.top >= flow.bottom
+          ? end.top - flow.bottom
+          : flow.top - end.bottom;
+      expect(gap, greaterThanOrEqualTo(32));
     });
 
     testWidgets('開主持前：接話方式與聲線用分段按鍵，「開始主持」是整排的主要按鍵', (tester) async {
