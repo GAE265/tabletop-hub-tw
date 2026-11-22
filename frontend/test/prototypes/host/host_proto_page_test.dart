@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tabletop_hub/app/router.dart';
 import 'package:tabletop_hub/core/config/app_config.dart';
+import 'package:tabletop_hub/core/layout/breakpoints.dart';
 import 'package:tabletop_hub/core/platform/audio_capture.dart';
 import 'package:tabletop_hub/core/platform/audio_playback.dart';
 import 'package:tabletop_hub/core/platform/page_visibility.dart';
@@ -32,8 +33,12 @@ class ProtoHarness {
 
   FakeHostStream get stream => connector.current;
 
-  Future<void> pump(WidgetTester tester) async {
-    await tester.binding.setSurfaceSize(const Size(900, 1600));
+  /// 預設 900 寬（平板，單欄）；排版測試另外指定手機或筆電的寬度。
+  Future<void> pump(
+    WidgetTester tester, {
+    Size size = const Size(900, 1600),
+  }) async {
+    await tester.binding.setSurfaceSize(size);
     addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(
       ProviderScope(
@@ -459,6 +464,206 @@ void main() {
       for (final notice in HostNotice.values) {
         expect(hostNoticeText(notice), expected[notice], reason: '$notice');
       }
+    });
+  });
+
+  group('排版', () {
+    const phone = Size(390, 1600);
+    const laptop = Size(1280, 900);
+
+    Finder inside(String key, Finder matching) =>
+        find.descendant(of: find.byKey(Key(key)), matching: matching);
+
+    testWidgets('手機：單欄，由上往下是進度、流程鍵、結束主持', (tester) async {
+      final h = ProtoHarness();
+      await h.pump(tester, size: phone);
+      await h.start(tester, live: liveState(turnNumber: 2, phaseNumber: 2));
+
+      expect(find.byKey(const Key('host-wide-layout')), findsNothing);
+      final round = tester.getCenter(find.text('第 2 回合')).dy;
+      final next = tester.getCenter(find.byKey(const Key('host-next'))).dy;
+      final end = tester.getCenter(find.byKey(const Key('host-end'))).dy;
+      expect(round, lessThan(next));
+      expect(next, lessThan(end));
+    });
+
+    testWidgets('筆電：左欄進度與主持人的狀態，右欄接話方式、流程鍵、可以這樣說、結束主持', (tester) async {
+      final h = ProtoHarness();
+      await h.pump(tester, size: laptop);
+      await h.start(
+        tester,
+        live: liveState(turnNumber: 2, phaseNumber: 2, lookingUp: true),
+      );
+
+      expect(find.byKey(const Key('host-wide-layout')), findsOneWidget);
+      expect(inside('host-column-status', find.text('第 2 回合')), findsOneWidget);
+      expect(inside('host-column-status', find.text('正在查規則')), findsOneWidget);
+      for (final key in [
+        'host-switch-mode',
+        'host-previous',
+        'host-pause',
+        'host-next',
+        'host-voice-hints',
+        'host-end',
+      ]) {
+        expect(
+          inside('host-column-controls', find.byKey(Key(key))),
+          findsOneWidget,
+          reason: key,
+        );
+      }
+      expect(
+        tester.getCenter(find.text('第 2 回合')).dx,
+        lessThan(tester.getCenter(find.byKey(const Key('host-next'))).dx),
+      );
+    });
+
+    testWidgets('目前進度最醒目：回合字最大，進行中的階段比其他階段大', (tester) async {
+      final h = ProtoHarness();
+      await h.pump(tester, size: phone);
+      await h.start(tester, live: liveState(turnNumber: 2, phaseNumber: 2));
+
+      double height(String text) => tester.getSize(find.text(text)).height;
+      expect(height('第 2 回合'), greaterThan(height('決定出牌')));
+      expect(height('決定出牌'), greaterThan(height('傳金幣、放水晶')));
+      expect(height('決定出牌'), greaterThan(height('翻牌結算')));
+    });
+
+    testWidgets('流程鍵：三顆同一列、一樣高、夠大，「下一步」是主要按鍵', (tester) async {
+      final h = ProtoHarness();
+      await h.pump(tester, size: phone);
+      await h.start(tester);
+
+      final keys = ['host-previous', 'host-pause', 'host-next'];
+      final rects = [for (final k in keys) tester.getRect(find.byKey(Key(k)))];
+      for (final rect in rects) {
+        expect(rect.height, greaterThanOrEqualTo(56));
+        expect(rect.center.dy, rects.first.center.dy);
+        expect(rect.height, rects.first.height);
+      }
+      expect(
+        tester.widget(find.byKey(const Key('host-next'))),
+        isA<FilledButton>(),
+      );
+      expect(
+        tester.widget(find.byKey(const Key('host-previous'))),
+        isNot(isA<FilledButton>()),
+      );
+    });
+
+    testWidgets('「結束主持」和流程鍵分開，不在同一個區塊', (tester) async {
+      final h = ProtoHarness();
+      await h.pump(tester, size: phone);
+      await h.start(tester);
+
+      expect(
+        inside('host-section-flow', find.byKey(const Key('host-next'))),
+        findsOneWidget,
+      );
+      expect(
+        inside('host-section-flow', find.byKey(const Key('host-end'))),
+        findsNothing,
+      );
+      final flowBottom = tester
+          .getRect(find.byKey(const Key('host-section-flow')))
+          .bottom;
+      final endTop = tester.getRect(find.byKey(const Key('host-end'))).top;
+      expect(endTop - flowBottom, greaterThanOrEqualTo(32));
+    });
+
+    testWidgets('開主持前：接話方式與聲線用分段按鍵，「開始主持」是整排的主要按鍵', (tester) async {
+      final h = ProtoHarness();
+      await h.pump(tester, size: phone);
+
+      expect(find.byType(SegmentedButton<TurnTakingMode>), findsOneWidget);
+      expect(find.byType(SegmentedButton<HostVoice>), findsOneWidget);
+      final start = find.byKey(const Key('host-start'));
+      expect(tester.widget(start), isA<FilledButton>());
+      expect(tester.getSize(start).height, greaterThanOrEqualTo(56));
+      // 整排：和接話方式的分段按鍵一樣寬
+      expect(
+        tester.getSize(start).width,
+        greaterThanOrEqualTo(
+          tester.getSize(find.byType(SegmentedButton<TurnTakingMode>)).width,
+        ),
+      );
+    });
+
+    testWidgets('筆電開主持前：設定不拉滿整個畫面，寬度不超過手機斷點', (tester) async {
+      final h = ProtoHarness();
+      await h.pump(tester, size: laptop);
+      expect(
+        tester.getSize(find.byKey(const Key('host-start'))).width,
+        lessThanOrEqualTo(mobileMaxWidth),
+      );
+    });
+
+    group('提醒分三種', () {
+      Finder ancestorOf(String text, Type type) =>
+          find.ancestor(of: find.text(text), matching: find.byType(type));
+
+      testWidgets('擋住主持的用橫幅：麥克風被拒絕、被別的裝置取代、主持暫停中', (tester) async {
+        final h = ProtoHarness();
+        h.capture.permissionGranted = false;
+        await h.pump(tester);
+        await tester.tap(find.byKey(const Key('host-start')));
+        await tester.pumpAndSettle();
+        expect(
+          ancestorOf('需要麥克風才能主持，請到瀏覽器設定允許', MaterialBanner),
+          findsOneWidget,
+        );
+
+        h.capture.permissionGranted = true;
+        await h.start(tester);
+        await h.emit(
+          tester,
+          HostStateMessage(
+            liveState(paused: true, pauseReason: HostPauseReason.command),
+          ),
+        );
+        expect(ancestorOf('主持暫停中', MaterialBanner), findsOneWidget);
+        await h.emit(
+          tester,
+          const HostErrorMessage(
+            code: HostErrorCodes.sessionTakenOver,
+            message: '已在別的裝置接著主持',
+          ),
+        );
+        expect(ancestorOf('已在別的裝置接著主持', MaterialBanner), findsOneWidget);
+      });
+
+      testWidgets('只是告知的用一行：請關掉自動鎖定、重新連線中', (tester) async {
+        final h = ProtoHarness();
+        h.wakeLock.granted = false;
+        await h.pump(tester);
+        await h.start(tester);
+        await h.emit(tester, const HostConnectionMessage(ready: false));
+
+        for (final text in ['請關掉自動鎖定', '重新連線中']) {
+          expect(ancestorOf(text, ListTile), findsOneWidget, reason: text);
+          expect(ancestorOf(text, MaterialBanner), findsNothing, reason: text);
+        }
+      });
+
+      testWidgets('要玩家點一下的是大按鈕：點一下繼續、點一下開啟聲音', (tester) async {
+        final h = ProtoHarness();
+        h.playback.unlockResult = false;
+        await h.pump(tester);
+        await h.start(tester);
+        h.visibility.hide();
+        await tester.pumpAndSettle();
+        h.visibility.show();
+        await tester.pumpAndSettle();
+
+        for (final text in ['點一下繼續', '點一下開啟聲音']) {
+          expect(ancestorOf(text, FilledButton), findsOneWidget, reason: text);
+          expect(
+            tester.getSize(ancestorOf(text, FilledButton)).height,
+            greaterThanOrEqualTo(56),
+            reason: text,
+          );
+        }
+      });
     });
   });
 }
