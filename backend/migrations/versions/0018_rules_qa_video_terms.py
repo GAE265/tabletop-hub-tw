@@ -3,8 +3,8 @@
 每款遊戲一份、所有店家共用，由管理員上傳；AI 產生草稿時照表用詞
 （openspec/changes/add-rules-video-mobile，design.md D4）。
 
-Revision ID: 0017
-Revises: 0016
+Revision ID: 0018
+Revises: 0017
 Create Date: 2026-11-21
 """
 
@@ -14,8 +14,8 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
-revision: str = "0017"
-down_revision: str | None = "0016"
+revision: str = "0018"
+down_revision: str | None = "0017"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

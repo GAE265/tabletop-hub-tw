@@ -1,4 +1,4 @@
-"""0017：rules_qa_video_terms（add-rules-video-mobile MR 3，design.md D4）。"""
+"""0018：rules_qa_video_terms（add-rules-video-mobile MR 3，design.md D4）。"""
 
 from collections.abc import Iterator
 
@@ -16,7 +16,7 @@ TABLE = "rules_qa_video_terms"
 @pytest.fixture(scope="module")
 def url() -> str:
     url = recreate_database(Settings().database_url, "rules_qa_video_terms")
-    migrate(url, "upgrade", "0017")
+    migrate(url, "upgrade", "0018")
     return url
 
 
@@ -88,11 +88,11 @@ def test_game_with_terms_cannot_be_deleted(engine: Engine):
 
 def test_downgrade_removes_table(url: str):
     try:
-        migrate(url, "downgrade", "0016")
+        migrate(url, "downgrade", "0017")
         engine = create_engine(url)
         try:
             assert TABLE not in inspect(engine).get_table_names()
         finally:
             engine.dispose()
     finally:
-        migrate(url, "upgrade", "0017")
+        migrate(url, "upgrade", "0018")
