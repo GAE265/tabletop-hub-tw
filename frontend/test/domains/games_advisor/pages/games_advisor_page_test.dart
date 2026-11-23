@@ -250,18 +250,32 @@ void main() {
     });
 
     for (final withMessages in [false, true]) {
-      testWidgets(withMessages ? '對話區上下邊緣淡出，捲動時不會被硬切' : '空畫面上下邊緣淡出，捲動時不會被硬切', (
-        tester,
-      ) async {
-        final repo = await pumpPage(tester);
-        if (withMessages) await ask(tester, repo, '我們 4 個人', cards());
-        final fade = find.byKey(const Key('advisor-scroll-fade'));
-        expect(fade, findsOneWidget);
-        expect(
-          find.descendant(of: fade, matching: find.byType(Scrollable)),
-          findsWidgets,
-        );
-      });
+      testWidgets(
+        withMessages
+            ? '對話：內容從輸入區後面滑過去，捲到底時最後一張卡片停在輸入區上方'
+            : '空畫面：內容從輸入區後面滑過去，捲到底時規則連結停在輸入區上方',
+        (tester) async {
+          final repo = await pumpPage(tester, size: const Size(400, 700));
+          if (withMessages) await ask(tester, repo, '我們 4 個人', cards());
+          final composer = find.byKey(const Key('advisor-composer'));
+          final scroll = find.byType(Scrollable).first;
+          // 捲動區延伸到輸入區後面
+          expect(
+            tester.getBottomLeft(scroll).dy,
+            greaterThan(tester.getTopLeft(composer).dy),
+          );
+          await tester.drag(scroll, const Offset(0, -5000));
+          await tester.pumpAndSettle();
+          expect(
+            tester
+                .getBottomLeft(find.byKey(const Key('advisor-rules-link')))
+                .dy,
+            lessThanOrEqualTo(tester.getTopLeft(composer).dy),
+          );
+          // 上緣碰到頁首的地方維持淡出
+          expect(find.byKey(const Key('advisor-scroll-fade')), findsOneWidget);
+        },
+      );
     }
 
     testWidgets('手機底部被導覽列蓋住：輸入區停在導覽列上方', (tester) async {
