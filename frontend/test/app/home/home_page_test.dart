@@ -28,10 +28,11 @@ Offset topLeftOf(WidgetTester tester, String key) =>
     tester.getTopLeft(find.byKey(Key(key)));
 
 void main() {
-  testWidgets('開啟首頁：品牌、登入、主標、副標、四張入口卡片與行程區', (tester) async {
+  // 品牌與登入改由手機頂部列顯示（navigation_test 的「Stitch 版面（手機）」）
+  testWidgets('開啟首頁：主標、副標、四張入口卡片與行程區', (tester) async {
     await pumpHome(tester);
-    expect(find.text('遊任有娛'), findsOneWidget);
-    expect(find.byKey(const Key('home-login')), findsOneWidget);
+    expect(find.text('遊任有娛'), findsNothing);
+    expect(find.byKey(const Key('home-login')), findsNothing);
     expect(find.text('今天想怎麼玩？'), findsOneWidget);
     expect(find.text('找遊戲、揪人、訂位、學規則，一個地方搞定。'), findsOneWidget);
     for (final MapEntry(key: key, value: (title, body, _)) in cards.entries) {
@@ -71,13 +72,6 @@ void main() {
     });
   }
 
-  testWidgets('登入尚未開放：提示「登入功能即將推出」，停留在首頁', (tester) async {
-    await pumpHome(tester);
-    await tapKey(tester, 'home-login');
-    expect(find.text('登入功能即將推出'), findsOneWidget);
-    expect(find.text('今天想怎麼玩？'), findsOneWidget);
-  });
-
   testWidgets('手機：入口卡片排成兩欄兩列', (tester) async {
     await pumpHome(tester, size: const Size(400, 900));
     final advisor = topLeftOf(tester, 'home-card-advisor');
@@ -109,7 +103,6 @@ void main() {
       );
       Finder inside(String key, String text) =>
           find.descendant(of: find.byKey(Key(key)), matching: find.text(text));
-      expect(inside('home-header', '遊任有娛'), findsOneWidget);
       expect(inside('home-hero', '今天想怎麼玩？'), findsOneWidget);
       expect(inside('home-hero', '找遊戲、揪人、訂位、學規則，一個地方搞定。'), findsOneWidget);
       expect(inside('home-section-entries', '快速入口'), findsOneWidget);

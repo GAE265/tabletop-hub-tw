@@ -5,7 +5,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tabletop_hub/app/navigation.dart';
 import 'package:tabletop_hub/app/shell.dart';
+import 'package:tabletop_hub/app/theme/app_colors.dart';
 import 'package:tabletop_hub/app/theme/app_theme.dart';
+import 'package:tabletop_hub/app/theme/wood_background.dart';
 import 'package:tabletop_hub/core/config/app_config.dart';
 import 'package:tabletop_hub/core/dev/data/dev_user.dart';
 import 'package:tabletop_hub/core/dev/state/dev_user_state.dart';
@@ -207,6 +209,61 @@ void main() {
     await pumpShell(tester, location: '/matches/m-1');
     expect(isSelected(tester, 'shell-nav-matches'), isTrue);
     expect(isSelected(tester, 'shell-nav-home'), isFalse);
+  });
+
+  group('Stitch 版面（手機）', () {
+    testWidgets('頂部列：品牌、副標、鈴鐺與登入', (tester) async {
+      await pumpShell(tester, size: const Size(400, 900));
+      final bar = find.byType(MobileTopBar);
+      Finder inBar(Finder f) => find.descendant(of: bar, matching: f);
+      expect(inBar(find.text('遊任有娛')), findsOneWidget);
+      expect(inBar(find.text('智慧桌遊助理與同好社群')), findsOneWidget);
+      expect(
+        inBar(find.byKey(const Key('shell-notification-bell'))),
+        findsOneWidget,
+      );
+      expect(inBar(find.byKey(const Key('shell-login'))), findsOneWidget);
+    });
+
+    testWidgets('頂部列的登入：提示「登入功能即將推出」', (tester) async {
+      await pumpShell(tester, size: const Size(400, 900));
+      await tester.tap(find.byKey(const Key('shell-login')));
+      await tester.pump();
+      expect(find.text('登入功能即將推出'), findsOneWidget);
+    });
+
+    testWidgets('頂部列與底部導覽列放在木紋上', (tester) async {
+      await pumpShell(tester, size: const Size(400, 900));
+      final wood = find.byType(WoodBackground);
+      expect(wood, findsOneWidget);
+      for (final type in [MobileTopBar, BottomNavigation]) {
+        expect(
+          find.descendant(of: wood, matching: find.byType(type)),
+          findsOneWidget,
+        );
+      }
+    });
+
+    testWidgets('桌機：沒有木紋框（版面不變）', (tester) async {
+      await pumpShell(tester, size: const Size(1280, 900));
+      expect(find.byType(WoodBackground), findsNothing);
+    });
+
+    testWidgets('底部導覽列：選取的項目是深色底，其他是透明', (tester) async {
+      await pumpShell(tester, location: '/groups', size: const Size(400, 900));
+      Color? fill(String key) => tester
+          .widget<Material>(
+            find
+                .descendant(
+                  of: find.byKey(Key(key)),
+                  matching: find.byType(Material),
+                )
+                .first,
+          )
+          .color;
+      expect(fill('shell-nav-groups'), AppColors.ink);
+      expect(fill('shell-nav-home'), Colors.transparent);
+    });
   });
 
   group('通知鈴鐺（add-groups-notifications）', () {
