@@ -52,6 +52,31 @@ abstract final class AppColors {
   /// 副標與說明文字：暖灰。
   static const inkMuted = Color(0xFF6B635B);
 
+  /// 深色卡片（[ink] 底）上的說明文字。
+  static const onInkMuted = Color(0xFFD6CBBE);
+
+  // 背景圖
+  /// 木紋背景的平均色：木紋圖載入前先顯示這個顏色。
+  static const woodFallback = Color(0xFFC07D3B);
+
+  /// 卡片的邊（底部較粗，看起來有厚度）。
+  static const cardEdge = Color(0xFFE2D5C5);
+
+  /// 深色卡片的邊。
+  static const inkEdge = Color(0xFF110E0C);
+
+  /// 白底條（頁首、區塊標題）：放在木紋上的半透明白。
+  static const surfaceGlass = Color(0xEBFFFFFF);
+
+  /// 手機頂部列：放在木紋上的半透明暖米色。
+  static const headerGlass = Color(0xF2F6EEE7);
+
+  /// 手機底部導覽列：浮在木紋上的半透明米白膠囊。
+  static const navGlass = Color(0xF5FBF8F4);
+
+  /// 對話框、底部面板後面的遮罩：暖炭色 45%。
+  static const scrim = Color(0x7327221E);
+
   // 狀態
   static const success = sage;
   static const warning = amberText;

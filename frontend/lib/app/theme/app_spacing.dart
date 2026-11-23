@@ -10,6 +10,7 @@ abstract final class AppSpacing {
   static const double medium = 16;
   static const double large = 24;
   static const double xLarge = 32;
+  static const double xxLarge = 48;
 
   /// 內容區最大寬度：手機佔滿，平板與桌機各自限制寬度。
   static double? contentMaxWidth(ScreenSize size) => switch (size) {
@@ -27,6 +28,9 @@ abstract final class AppRadius {
   /// 卡片、對話框。
   static const double card = 16;
 
+  /// 首頁的大標題卡片。
+  static const double hero = 24;
+
   /// 按鈕、輸入框、SnackBar。
   static const double button = 12;
 
@@ -38,6 +42,12 @@ abstract final class AppRadius {
 }
 
 /// 尺寸。
+/// 動畫時間。
+abstract final class AppDurations {
+  /// 按下有厚度的按鈕時往下沉的時間。
+  static const press = Duration(milliseconds: 80);
+}
+
 abstract final class AppSizes {
   /// 單手好按的最小觸控高度（規格要求 44 以上，取 Material 建議的 48）。
   static const double minTouchTarget = 48;
@@ -51,8 +61,11 @@ abstract final class AppSizes {
   /// 頭像（例如推薦 Agent 的圖示）。
   static const double avatar = 40;
 
-  /// 品牌標誌的方塊（導覽列與首頁頂部）。
-  static const double brandMark = 36;
+  /// 品牌 logo 的高度：平板與桌機的頂部導覽列。
+  static const double logoHeight = 44;
+
+  /// 品牌 logo 的高度：手機頂部列（較高，logo 裡的英文小字才看得清楚）。
+  static const double logoHeightMobile = 56;
 
   /// 首頁入口卡片的圖示方塊。
   static const double entryIconBox = 48;
@@ -62,6 +75,22 @@ abstract final class AppSizes {
 
   /// 首頁行程列的日期徽章。
   static const double dateBadge = 52;
+
+  /// 跟著文字的小圖示（日期、人數、箭頭）。
+  static const double inlineIcon = 18;
+
+  /// 首頁卡片底部較粗的邊（卡片的厚度）。
+  static const double cardThickness = 4;
+
+  /// 按下有厚度的按鈕時，剩下的底邊厚度（其餘的變成往下沉的距離）。
+  static const double pressedThickness = 1;
+
+  /// 行程卡片的虛線：每一段的長度與間隔。
+  static const double dashLength = 6;
+  static const double dashGap = 4;
+
+  /// 區塊標題左邊的小圓點。
+  static const double sectionDot = 8;
 
   /// 戰績「記錄回合」的回合編號欄位寬度。
   static const double turnNumberFieldWidth = 120;
@@ -96,23 +125,71 @@ abstract final class AppSizes {
   static const double regionBorder = 2;
 }
 
-/// 暖色柔和懸浮陰影。
+/// 暖色柔和陰影，分四層（Stitch 設計系統）。
 abstract final class AppShadows {
-  /// 卡片等浮在背景上的容器。
+  /// 第 1 層：卡片等浮在背景上的容器。
   static List<BoxShadow> get card => [
     BoxShadow(
-      color: AppColors.shadow.withValues(alpha: 0.08),
-      blurRadius: 24,
-      offset: const Offset(0, 8),
+      color: AppColors.shadow.withValues(alpha: 0.06),
+      blurRadius: 8,
+      spreadRadius: -1,
+      offset: const Offset(0, 2),
+    ),
+    BoxShadow(
+      color: AppColors.shadow.withValues(alpha: 0.04),
+      blurRadius: 3,
+      spreadRadius: -1,
+      offset: const Offset(0, 1),
     ),
   ];
 
-  /// 底部導覽列等更靠近使用者的元件。
+  /// 第 2 層：滑過或按住可以點的卡片。
+  static List<BoxShadow> get hover => [
+    BoxShadow(
+      color: AppColors.shadow.withValues(alpha: 0.10),
+      blurRadius: 20,
+      spreadRadius: -3,
+      offset: const Offset(0, 8),
+    ),
+    BoxShadow(
+      color: AppColors.shadow.withValues(alpha: 0.06),
+      blurRadius: 6,
+      spreadRadius: -2,
+      offset: const Offset(0, 3),
+    ),
+  ];
+
+  /// 首頁有厚度的卡片與按鈕：比 [hover] 深、擴散得更開，像放在木桌上的木牌。
+  static List<BoxShadow> get raised => [
+    BoxShadow(
+      color: AppColors.shadow.withValues(alpha: 0.30),
+      blurRadius: 32,
+      spreadRadius: 2,
+      offset: const Offset(0, 14),
+    ),
+    BoxShadow(
+      color: AppColors.shadow.withValues(alpha: 0.16),
+      blurRadius: 10,
+      offset: const Offset(0, 4),
+    ),
+  ];
+
+  /// 第 3 層：底部導覽列等固定在畫面上的列。
   static List<BoxShadow> get floating => [
     BoxShadow(
-      color: AppColors.shadow.withValues(alpha: 0.12),
-      blurRadius: 32,
-      offset: const Offset(0, 12),
+      color: AppColors.shadow.withValues(alpha: 0.08),
+      blurRadius: 12,
+      offset: const Offset(0, -2),
+    ),
+  ];
+
+  /// 第 4 層：對話框、底部面板。
+  static List<BoxShadow> get modal => [
+    BoxShadow(
+      color: AppColors.shadow.withValues(alpha: 0.18),
+      blurRadius: 36,
+      spreadRadius: -4,
+      offset: const Offset(0, 16),
     ),
   ];
 }

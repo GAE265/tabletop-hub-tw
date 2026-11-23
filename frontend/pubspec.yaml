@@ -73,6 +73,12 @@ flutter:
   # the material Icons class.
   uses-material-design: true
 
+  assets:
+    # 背景木紋（Gemini 產生，已處理成可以無縫拼接）
+    - assets/images/wood.webp
+    # 品牌 logo 橫式完整版（ChatGPT 產生，已去背）
+    - assets/images/logo-full.webp
+
   # To add assets to your application, add an assets section, like this:
   # assets:
   #   - images/a_dot_burr.jpeg

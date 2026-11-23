@@ -7,6 +7,7 @@ import '../../../domains/groups/data/group.dart';
 import '../../../domains/groups/data/groups_repository.dart';
 import '../../../domains/groups/state/current_user.dart';
 import '../../../domains/groups/state/group_clock.dart';
+import '../../../domains/groups/state/group_labels.dart';
 
 /// 首頁「接下來的行程」最多顯示幾筆。
 const upcomingLimit = 5;
@@ -130,22 +131,81 @@ String _taipeiDate(DateTime utc) {
 
 String _two(int n) => n.toString().padLeft(2, '0');
 
-/// 第一行：「訂位・19:00・4 人」或「揪團・<名稱>」。
-String upcomingTitle(GroupClock clock, UpcomingItem item) => switch (item) {
-  UpcomingBooking(:final booking) =>
-    '訂位・${_time(clock.toLocal(item.startAt))}・${booking.partySize} 人',
-  UpcomingGroup(:final group) => '揪團・${group.title}',
-};
+/// 一張行程卡片要顯示的文字（Stitch 版面）。
+class UpcomingCard {
+  const UpcomingCard({
+    required this.kind,
+    required this.title,
+    required this.subtitle,
+    required this.when,
+    required this.people,
+    required this.footer,
+    required this.action,
+  });
 
-/// 第二行：訂位是「店家・桌號 T1、T2」（缺的部分省略）；揪團是「已報名 5 / 7 人」。
-String upcomingSubtitle(UpcomingItem item) => switch (item) {
-  UpcomingBooking(:final booking, :final shopName) => [
-    ?shopName,
-    if (booking.tableCodes.isNotEmpty) '桌號 ${booking.tableCodes.join('、')}',
-  ].join('・'),
-  UpcomingGroup(:final group) =>
-    '已報名 ${group.memberCount} / ${group.capacity} 人',
-};
+  /// 最上面的小標：「訂位」或「揪團」。
+  final String kind;
+
+  /// 大標題：訂位是店家名稱（對不到時是「訂位」），揪團是揪團名稱。
+  final String title;
+
+  /// 標題下方：訂位是「桌號 T1、T2」（沒有桌號時是空字串），揪團是「開團主：名字・店家」。
+  final String subtitle;
+
+  /// 台灣時間，例如「11/21（六）19:00–21:00」。
+  final String when;
+
+  /// 訂位是「4 人」，揪團是「5 / 7 人」。
+  final String people;
+
+  /// 卡片最下面左邊：訂位代碼；揪團是剩餘名額，額滿時是候補人數。
+  final String footer;
+
+  /// 卡片最下面右邊的連結文字。
+  final String action;
+}
+
+UpcomingCard upcomingCard(GroupClock clock, UpcomingItem item) {
+  final when = _range(
+    clock.toLocal(item.startAt),
+    clock.toLocal(switch (item) {
+      UpcomingBooking(:final booking) => DateTime.parse(booking.endAt).toUtc(),
+      UpcomingGroup(:final group) => group.endAt.toUtc(),
+    }),
+  );
+  return switch (item) {
+    UpcomingBooking(:final booking, :final shopName) => UpcomingCard(
+      kind: '訂位',
+      title: shopName ?? '訂位',
+      subtitle: booking.tableCodes.isEmpty
+          ? ''
+          : '桌號 ${booking.tableCodes.join('、')}',
+      when: when,
+      people: '${booking.partySize} 人',
+      footer: '訂位代碼 ${booking.reservationCode}',
+      action: '查看我的訂位',
+    ),
+    UpcomingGroup(:final group) => UpcomingCard(
+      kind: '揪團',
+      title: group.title,
+      subtitle: '開團主：${group.organizer.displayName}・${group.shop.name}',
+      when: when,
+      people: '${group.memberCount} / ${group.capacity} 人',
+      footer: group.remainingSlots > 0
+          ? '還有 ${group.remainingSlots} 個名額'
+          // 「已額滿」已經在狀態標籤上，這裡只寫候補人數
+          : group.waitlistCount > 0
+          ? '候補 ${group.waitlistCount} 人'
+          : '目前沒有候補',
+      action: '查看揪團',
+    ),
+  };
+}
+
+/// 例如「11/21（六）19:00–21:00」。
+String _range(DateTime start, DateTime end) =>
+    '${start.month}/${start.day}（${weekdayLabel(start)}）'
+    '${_time(start)}–${_time(end)}';
 
 UpcomingStatus upcomingStatus(UpcomingItem item) => switch (item) {
   UpcomingBooking() => UpcomingStatus.confirmed,
@@ -161,13 +221,5 @@ String upcomingRoute(UpcomingItem item) => switch (item) {
   UpcomingBooking() => '/booking/mine',
   UpcomingGroup(:final group) => '/groups/${group.id}',
 };
-
-/// 日期徽章的月份，例如「11月」。
-String upcomingMonthLabel(GroupClock clock, UpcomingItem item) =>
-    '${clock.toLocal(item.startAt).month}月';
-
-/// 日期徽章的日，例如「21」。
-String upcomingDayLabel(GroupClock clock, UpcomingItem item) =>
-    '${clock.toLocal(item.startAt).day}';
 
 String _time(DateTime local) => '${_two(local.hour)}:${_two(local.minute)}';
