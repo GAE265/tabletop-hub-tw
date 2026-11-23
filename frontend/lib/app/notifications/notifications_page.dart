@@ -5,9 +5,15 @@ import '../../domains/booking/pages/widgets/booking_notifications_list.dart';
 import '../../domains/booking/state/booking_notifications_state.dart';
 import '../../domains/groups/pages/widgets/group_notifications_list.dart';
 import '../../domains/groups/state/group_notifications_state.dart';
+import '../../core/widgets/pill_badge.dart';
+import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
+import '../theme/thick_widgets.dart';
+import '../theme/wood_background.dart';
 
 /// 通知頁 `/notifications`：「揪團」「訂位」兩個分頁（add-booking-notifications D4）。
+///
+/// Stitch 版面：木紋背景，頁首白底條有「通知」、總未讀數與分頁膠囊；每則通知一張厚卡片，依日期分段。
 class NotificationsPage extends StatelessWidget {
   const NotificationsPage({super.key});
 
@@ -60,53 +66,165 @@ class _NotificationsScaffoldState
     final bookings = ref.watch(bookingUnreadCountProvider);
     ref.listen(groupUnreadCountProvider, (_, _) => _selectPreferred());
     ref.listen(bookingUnreadCountProvider, (_, _) => _selectPreferred());
+    final total = (groups ?? 0) + (bookings ?? 0);
+    final body = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.medium,
+            AppSpacing.medium,
+            AppSpacing.medium,
+            0,
+          ),
+          child: GlassBar(
+            key: const Key('notifications-header'),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.notifications_outlined,
+                      color: AppColors.primaryText,
+                    ),
+                    const SizedBox(width: AppSpacing.small),
+                    Text(
+                      '通知',
+                      style: Theme.of(context).textTheme.headlineSmall!
+                          .copyWith(fontWeight: FontWeight.w700),
+                    ),
+                    const SizedBox(width: AppSpacing.small),
+                    if (total > 0)
+                      PillBadge(label: '$total 則未讀', tone: PillTone.accent),
+                  ],
+                ),
+                const SizedBox(height: AppSpacing.small),
+                Row(
+                  children: [
+                    _TabPill(
+                      key: const Key('notifications-tab-groups'),
+                      index: 0,
+                      label: '揪團',
+                      count: groups,
+                      onTap: () => _touched = true,
+                    ),
+                    const SizedBox(width: AppSpacing.small),
+                    _TabPill(
+                      key: const Key('notifications-tab-booking'),
+                      index: 1,
+                      label: '訂位',
+                      count: bookings,
+                      onTap: () => _touched = true,
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+        const Expanded(
+          child: TabBarView(
+            children: [GroupNotificationsList(), BookingNotificationsList()],
+          ),
+        ),
+      ],
+    );
     return Scaffold(
       key: const Key('notifications-page'),
-      appBar: AppBar(
-        title: const Text('通知'),
-        bottom: TabBar(
-          onTap: (_) => _touched = true,
-          tabs: [
-            _TabLabel(
-              key: const Key('notifications-tab-groups'),
-              label: '揪團',
-              count: groups,
-            ),
-            _TabLabel(
-              key: const Key('notifications-tab-booking'),
-              label: '訂位',
-              count: bookings,
-            ),
-          ],
-        ),
-      ),
-      body: const TabBarView(
-        children: [GroupNotificationsList(), BookingNotificationsList()],
+      backgroundColor: Colors.transparent,
+      body: SafeArea(
+        bottom: false,
+        child: WoodBackground.isPaintedAbove(context)
+            ? body
+            : WoodBackground(child: body),
       ),
     );
   }
 }
 
-class _TabLabel extends StatelessWidget {
-  const _TabLabel({required this.label, required this.count, super.key});
+/// 分頁膠囊：選中的是深炭底白字，旁邊是未讀數（沒有未讀時不顯示）。
+class _TabPill extends StatelessWidget {
+  const _TabPill({
+    required this.index,
+    required this.label,
+    required this.count,
+    required this.onTap,
+    super.key,
+  });
 
+  final int index;
   final String label;
   final int? count;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
+    final controller = DefaultTabController.of(context);
     final badge = unreadBadgeLabel(count);
-    return Tab(
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(label),
-          if (badge != null) ...[
-            const SizedBox(width: AppSpacing.xSmall),
-            Badge(label: Text(badge)),
-          ],
-        ],
-      ),
+    return AnimatedBuilder(
+      animation: controller,
+      builder: (context, _) {
+        final selected = controller.index == index;
+        final fg = selected ? AppColors.surface : AppColors.ink;
+        return Semantics(
+          selected: selected,
+          button: true,
+          child: Material(
+            color: selected ? AppColors.ink : AppColors.surface,
+            shape: StadiumBorder(
+              side: BorderSide(
+                color: selected ? AppColors.ink : AppColors.border,
+              ),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
+              onTap: () {
+                onTap();
+                controller.animateTo(index);
+              },
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.medium,
+                  vertical: AppSpacing.small,
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      label,
+                      style: Theme.of(
+                        context,
+                      ).textTheme.labelLarge!.copyWith(color: fg),
+                    ),
+                    if (badge != null) ...[
+                      const SizedBox(width: AppSpacing.small),
+                      DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: selected
+                              ? AppColors.surface
+                              : AppColors.primaryTint,
+                          borderRadius: BorderRadius.circular(AppRadius.pill),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: AppSpacing.small,
+                          ),
+                          child: Text(
+                            badge,
+                            style: Theme.of(context).textTheme.labelMedium!
+                                .copyWith(color: AppColors.primaryText),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }
