@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:tabletop_hub/app/theme/app_spacing.dart';
 import 'package:tabletop_hub/app/theme/app_theme.dart';
 import 'package:tabletop_hub/app/theme/wood_background.dart';
 import 'package:tabletop_hub/core/api/api_exception.dart';
@@ -258,6 +259,21 @@ void main() {
         find.descendant(of: danger, matching: find.text('退出這場揪團')),
         findsOneWidget,
       );
+    });
+
+    testWidgets('操作台的按鈕用淡陰影（不像大按鈕那麼重）', (tester) async {
+      await pumpGroupsWidget(
+        tester,
+        const GroupDetailPage(groupId: 'g-1'),
+        repo: repoWith(myStatus: 'member'),
+      );
+      final frame = find
+          .ancestor(of: find.text('填入戰績'), matching: find.byType(DecoratedBox))
+          .first;
+      final shadow =
+          (tester.widget<DecoratedBox>(frame).decoration as BoxDecoration)
+              .boxShadow!;
+      expect(shadow, AppShadows.soft);
     });
 
     testWidgets('未報名：沒有操作台，報名在底部固定列', (tester) async {
