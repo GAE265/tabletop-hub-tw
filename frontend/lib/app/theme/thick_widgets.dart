@@ -144,12 +144,14 @@ class ThickCard extends StatefulWidget {
     required this.child,
     this.onTap,
     this.color = AppColors.surface,
+    this.radius = AppRadius.hero,
     super.key,
   });
 
   final Widget child;
   final VoidCallback? onTap;
   final Color color;
+  final double radius;
 
   @override
   State<ThickCard> createState() => _ThickCardState();
@@ -165,10 +167,10 @@ class _ThickCardState extends State<ThickCard> {
       pressed: _pressed,
       color: color,
       edge: color == AppColors.ink ? AppColors.inkEdge : AppColors.cardEdge,
-      radius: AppRadius.hero,
+      radius: widget.radius,
       child: Material(
         type: MaterialType.transparency,
-        borderRadius: BorderRadius.circular(AppRadius.hero),
+        borderRadius: BorderRadius.circular(widget.radius),
         clipBehavior: Clip.antiAlias,
         child: widget.onTap == null
             ? widget.child

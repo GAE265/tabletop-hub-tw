@@ -53,9 +53,11 @@ class AppShell extends StatelessWidget {
 
 /// 哪些頁面的內容延伸到浮動導覽列後面（Stitch 設計）。
 ///
-/// 目前只有首頁：它的背景透明（直接看到木紋），內容捲到導覽列後面才不會在導覽列上緣被切成一條線。
+/// 目前是首頁與揪團月曆：背景透明（直接看到木紋），內容捲到導覽列後面才不會在導覽列上緣被切成一條線，
+/// 頁面也已經在捲動內容最下面留出導覽列的高度。
 /// 其他頁面還是米白背景，底部的按鈕也還沒留出導覽列的空間，所以維持內容停在導覽列上方。
-bool _floatsNavigation(String location) => location == '/';
+bool _floatsNavigation(String location) =>
+    location == '/' || location == '/groups';
 
 /// 導覽列浮在頁面上面；用 MediaQuery 的底部 padding 告訴頁面被蓋住多高，
 /// 頁面自己在捲動內容的最下面留出這段空間。
