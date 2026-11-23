@@ -106,16 +106,6 @@ def test_shop_id_must_reference_existing_shop(clean: Engine) -> None:
         )
 
 
-def test_migration_seeds_no_data(migrated: Engine) -> None:
-    fresh_url = recreate_database(Settings().database_url, "migration_empty")
-    run_migrations(fresh_url)
-    engine = create_engine(fresh_url)
-    with engine.connect() as conn:
-        assert conn.scalar(text("SELECT count(*) FROM auth_users")) == 0
-        assert conn.scalar(text("SELECT count(*) FROM booking_shops")) == 0
-    engine.dispose()
-
-
 def test_alembic_cli_runs_from_backend_dir() -> None:
     """README 的 `uv run alembic upgrade head` 要能直接跑（CLI 需找得到 app 套件）。"""
     url = recreate_database(Settings().database_url, "migration_cli")

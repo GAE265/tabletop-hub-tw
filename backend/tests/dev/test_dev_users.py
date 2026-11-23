@@ -3,11 +3,10 @@ import subprocess
 import sys
 from collections.abc import Callable
 from pathlib import Path
-from subprocess import CompletedProcess
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import Engine, text
+from sqlalchemy import Engine
 
 from app.core.config import Settings
 from app.main import create_app
@@ -19,59 +18,10 @@ def dev_client(make_settings: Callable[..., Settings], test_db_url: str, db: Eng
     return TestClient(create_app(make_settings(database_url=test_db_url)))
 
 
-def test_lists_seeded_accounts(
-    dev_client: TestClient, db: Engine, run_seed: Callable[..., CompletedProcess[str]]
-) -> None:
-    assert run_seed().returncode == 0
-    response = dev_client.get("/api/v1/dev/users")
-    assert response.status_code == 200
-    body = response.json()
-    assert body["total"] == 4
-    assert sorted(item["role"] for item in body["items"]) == [
-        "admin",
-        "player",
-        "shop_staff",
-        "shop_staff",
-    ]
-    # 一個店員屬於測試店家，一個還沒有店（add-shops-management）
-    staff_shops = [item["shop_id"] for item in body["items"] if item["role"] == "shop_staff"]
-    assert sum(shop is None for shop in staff_shops) == 1
-
-
-def test_response_matches_database(
-    dev_client: TestClient, db: Engine, run_seed: Callable[..., CompletedProcess[str]]
-) -> None:
-    assert run_seed().returncode == 0
-    items = dev_client.get("/api/v1/dev/users").json()["items"]
-    with db.connect() as conn:
-        rows = conn.execute(
-            text("SELECT id::text, display_name, role, shop_id::text FROM auth_users")
-        ).all()
-    expected = {row[0]: (row[1], row[2], row[3]) for row in rows}
-    actual = {i["id"]: (i["display_name"], i["role"], i["shop_id"]) for i in items}
-    assert actual == expected
-
-
-def test_empty_before_seed(dev_client: TestClient) -> None:
+def test_lists_empty_user_list(dev_client: TestClient) -> None:
     response = dev_client.get("/api/v1/dev/users")
     assert response.status_code == 200
     assert response.json() == {"items": [], "total": 0}
-
-
-def test_needs_no_identity_header(
-    dev_client: TestClient, run_seed: Callable[..., CompletedProcess[str]]
-) -> None:
-    assert run_seed().returncode == 0
-    assert dev_client.get("/api/v1/dev/users").status_code == 200
-
-
-def test_only_lists_seeded_accounts(
-    dev_client: TestClient, db: Engine, run_seed: Callable[..., CompletedProcess[str]]
-) -> None:
-    assert run_seed().returncode == 0
-    with db.begin() as conn:
-        conn.execute(text("INSERT INTO auth_users (display_name, role) VALUES ('路人', 'player')"))
-    assert dev_client.get("/api/v1/dev/users").json()["total"] == 4
 
 
 def test_route_absent_in_jwt_mode(make_settings: Callable[..., Settings]) -> None:

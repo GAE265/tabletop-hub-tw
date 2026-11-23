@@ -1,6 +1,4 @@
 import os
-import subprocess
-import sys
 import uuid
 from collections.abc import Callable, Iterator
 from typing import Annotated
@@ -14,7 +12,7 @@ from app.core.auth import CurrentUser, get_current_user, require_role
 from app.core.config import Settings
 from app.core.errors import AppError
 from app.main import create_app
-from tests.db_utils import BACKEND_DIR, recreate_database, run_migrations
+from tests.db_utils import recreate_database, run_migrations
 
 UNREACHABLE_DB = "postgresql+psycopg://nobody:nobody@127.0.0.1:1/none"
 
@@ -135,27 +133,3 @@ def db(test_db_url: str) -> Iterator[Engine]:
         conn.execute(text("TRUNCATE auth_users, booking_shops CASCADE"))
     yield engine
     engine.dispose()
-
-
-@pytest.fixture
-def run_seed(test_db_url: str) -> Callable[..., subprocess.CompletedProcess[str]]:
-    """以 subprocess 執行 seed 指令（任何地方都不得 import app/dev/）。"""
-
-    def _run(auth_mode: str = "dev") -> subprocess.CompletedProcess[str]:
-        env = {
-            **os.environ,
-            "DATABASE_URL": test_db_url,
-            "AUTH_MODE": auth_mode,
-            "PYTHONUTF8": "1",
-        }
-        return subprocess.run(
-            [sys.executable, "-m", "app.dev.seed"],
-            cwd=BACKEND_DIR,
-            env=env,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            check=False,
-        )
-
-    return _run

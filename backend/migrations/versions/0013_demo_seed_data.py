@@ -28,9 +28,11 @@ def upgrade() -> None:
     op.execute(
         f"""
         INSERT INTO business_hours (shop_id, weekday, open_time, close_time)
-        VALUES {", ".join(
-            f"('{SHOP_ID}', {weekday}, '13:00', '22:00')" for weekday in (0, 1, 3, 4, 5, 6)
-        )}
+        VALUES {
+            ", ".join(
+                f"('{SHOP_ID}', {weekday}, '13:00', '22:00')" for weekday in (0, 1, 3, 4, 5, 6)
+            )
+        }
         ON CONFLICT (shop_id, weekday) DO NOTHING
         """
     )
@@ -102,8 +104,10 @@ def upgrade() -> None:
             "hourly",
             60.00,
             "person_hour",
-            ("適用星期一至星期五。依每位客人計費；不足一小時以一小時計算；"
-             "超過 5 小時以 5 小時計算。"),
+            (
+                "適用星期一至星期五。依每位客人計費；不足一小時以一小時計算；"
+                "超過 5 小時以 5 小時計算。"
+            ),
         ),
         (
             "WEEKEND_HOURLY_FEE",
@@ -111,8 +115,10 @@ def upgrade() -> None:
             "hourly",
             80.00,
             "person_hour",
-            ("適用星期六及星期日。依每位客人計費；不足一小時以一小時計算；"
-             "超過 5 小時以 5 小時計算。"),
+            (
+                "適用星期六及星期日。依每位客人計費；不足一小時以一小時計算；"
+                "超過 5 小時以 5 小時計算。"
+            ),
         ),
         (
             "WEEKEND_MINIMUM_DRINK_PER_PERSON",
