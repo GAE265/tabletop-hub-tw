@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../app/theme/app_spacing.dart';
+import '../../../app/theme/thick_widgets.dart';
 import '../../../core/api/api_exception.dart';
 import '../../../core/platform/video_file_player.dart';
 import '../data/video_studio_models.dart';
@@ -38,13 +39,23 @@ class _VideoWatchPageState extends ConsumerState<VideoWatchPage> {
   }) => Center(
     child: Padding(
       padding: const EdgeInsets.all(AppSpacing.large),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(text, textAlign: TextAlign.center),
-          const SizedBox(height: AppSpacing.medium),
-          FilledButton(onPressed: onPressed, child: Text(action)),
-        ],
+      child: ThickCard(
+        child: Padding(
+          padding: videoCardInset,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(text, textAlign: TextAlign.center),
+              const SizedBox(height: AppSpacing.medium),
+              ThickButton(
+                style: ThickStyle.primary,
+                label: action,
+                shadow: AppShadows.soft,
+                onPressed: onPressed,
+              ),
+            ],
+          ),
+        ),
       ),
     ),
   );
@@ -52,9 +63,9 @@ class _VideoWatchPageState extends ConsumerState<VideoWatchPage> {
   @override
   Widget build(BuildContext context) {
     final render = ref.watch(videoRenderProvider(_id));
-    return Scaffold(
+    return VideoScaffold(
       key: const Key('video-watch-page'),
-      appBar: AppBar(title: const Text('看影片')),
+      title: '看影片',
       body: VideoPageBody(
         child: render.when(
           skipLoadingOnRefresh: false,
@@ -103,34 +114,59 @@ class _Watch extends ConsumerWidget {
             skipLoadingOnRefresh: false,
             loading: () => const Center(child: CircularProgressIndicator()),
             error: (error, _) => Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(error is ApiException ? error.message : '影片下載失敗'),
-                  const SizedBox(height: AppSpacing.small),
-                  FilledButton(
-                    onPressed: () =>
-                        ref.invalidate(videoRenderVideoProvider(projectId)),
-                    child: const Text('重試'),
+              child: ThickCard(
+                child: Padding(
+                  padding: videoCardInset,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(error is ApiException ? error.message : '影片下載失敗'),
+                      const SizedBox(height: AppSpacing.small),
+                      ThickButton(
+                        style: ThickStyle.primary,
+                        label: '重試',
+                        shadow: AppShadows.soft,
+                        onPressed: () =>
+                            ref.invalidate(videoRenderVideoProvider(projectId)),
+                      ),
+                    ],
                   ),
-                ],
+                ),
               ),
             ),
             data: (data) => player.build(context, bytes: data, seek: seek),
           ),
         ),
-        const SizedBox(height: AppSpacing.small),
-        Text(
-          '總長 ${render.totalSeconds.toStringAsFixed(1)} 秒',
-          style: text.bodyMedium,
-        ),
-        if (render.segments.isNotEmpty) ...[
-          const SizedBox(height: AppSpacing.medium),
-          Text('段清單', style: text.titleSmall),
-          const SizedBox(height: AppSpacing.xSmall),
-          Card(
+        const SizedBox(height: AppSpacing.medium),
+        ThickCard(
+          key: const Key('video-watch-info'),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: AppSpacing.small),
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.medium,
+                    vertical: AppSpacing.small,
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          render.segments.isEmpty ? '影片資訊' : '段清單',
+                          style: text.titleMedium!.copyWith(
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                      Text(
+                        '總長 ${render.totalSeconds.toStringAsFixed(1)} 秒',
+                        style: text.bodyMedium,
+                      ),
+                    ],
+                  ),
+                ),
                 for (final (i, segment) in render.segments.indexed)
                   ListTile(
                     key: Key('video-watch-segment-${segment.segmentKey}'),
@@ -152,7 +188,7 @@ class _Watch extends ConsumerWidget {
               ],
             ),
           ),
-        ],
+        ),
       ],
     );
   }
