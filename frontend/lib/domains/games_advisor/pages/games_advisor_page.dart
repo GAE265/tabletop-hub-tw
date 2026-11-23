@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -40,6 +41,9 @@ class GamesAdvisorPage extends ConsumerStatefulWidget {
 class _GamesAdvisorPageState extends ConsumerState<GamesAdvisorPage> {
   final _input = TextEditingController();
   final _scroll = ScrollController();
+
+  /// 輸入區的高度：對話內容最下面要留出這麼多，捲到底時才不會被輸入區蓋住。
+  double _composerHeight = 0;
 
   @override
   void dispose() {
@@ -122,26 +126,49 @@ class _GamesAdvisorPageState extends ConsumerState<GamesAdvisorPage> {
               ),
             ),
             if (state.notice case final notice?) _NoticeBanner(notice),
+            // 輸入區浮在對話上面：內容從輸入區後面滑過去，不會在上緣被切成一條線
             Expanded(
-              child: _EdgeFade(
-                child: state.messages.isEmpty && !sending
-                    ? _EmptyView(onExample: _advisor.sendMessage)
-                    : _MessageList(
-                        controller: _scroll,
-                        messages: state.messages,
+              child: Stack(
+                children: [
+                  Positioned.fill(
+                    child: _EdgeFade(
+                      child: state.messages.isEmpty && !sending
+                          ? _EmptyView(
+                              onExample: _advisor.sendMessage,
+                              bottomSpace: _composerHeight,
+                            )
+                          : _MessageList(
+                              controller: _scroll,
+                              messages: state.messages,
+                              sending: sending,
+                              bottomSpace: _composerHeight,
+                            ),
+                    ),
+                  ),
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    child: _SizeReporter(
+                      onHeight: (height) {
+                        if (height != _composerHeight) {
+                          setState(() => _composerHeight = height);
+                        }
+                      },
+                      child: _Composer(
+                        controller: _input,
+                        onKey: _onKey,
                         sending: sending,
+                        canSend: state.canSend,
+                        draftLength: state.draftLength,
+                        onChanged: _advisor.editDraft,
+                        onSend: () => _advisor.sendMessage(state.draft),
+                        bottomInset: MediaQuery.paddingOf(context).bottom,
                       ),
+                    ),
+                  ),
+                ],
               ),
-            ),
-            _Composer(
-              controller: _input,
-              onKey: _onKey,
-              sending: sending,
-              canSend: state.canSend,
-              draftLength: state.draftLength,
-              onChanged: _advisor.editDraft,
-              onSend: () => _advisor.sendMessage(state.draft),
-              bottomInset: MediaQuery.paddingOf(context).bottom,
             ),
           ],
         ),
@@ -161,7 +188,8 @@ class _GamesAdvisorPageState extends ConsumerState<GamesAdvisorPage> {
   }
 }
 
-/// 捲動區上下邊緣淡出：卡片捲到頁首或輸入區旁邊時慢慢消失在木紋裡，不會被切成一條直線。
+/// 捲動區上緣淡出：卡片捲到頁首下面時慢慢消失在木紋裡，不會被切成一條直線。
+/// 下緣不用淡出：內容會從輸入區後面滑過去。
 class _EdgeFade extends StatelessWidget {
   const _EdgeFade({required this.child});
 
@@ -175,21 +203,51 @@ class _EdgeFade extends StatelessWidget {
       shaderCallback: (bounds) {
         final edge = bounds.height == 0
             ? 0.0
-            : (AppSizes.scrollFade / bounds.height).clamp(0.0, 0.5);
+            : (AppSizes.scrollFade / bounds.height).clamp(0.0, 1.0);
         return LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: const [
-            Colors.transparent,
-            Colors.black,
-            Colors.black,
-            Colors.transparent,
-          ],
-          stops: [0, edge, 1 - edge, 1],
+          colors: const [Colors.transparent, Colors.black, Colors.black],
+          stops: [0, edge, 1],
         ).createShader(bounds);
       },
       child: child,
     );
+  }
+}
+
+/// 量出 [child] 的高度，變了就呼叫 [onHeight]（排版完成後才呼叫，避免在排版途中改狀態）。
+class _SizeReporter extends SingleChildRenderObjectWidget {
+  const _SizeReporter({required this.onHeight, required super.child});
+
+  final ValueChanged<double> onHeight;
+
+  @override
+  RenderObject createRenderObject(BuildContext context) =>
+      _RenderSizeReporter(onHeight);
+
+  @override
+  void updateRenderObject(
+    BuildContext context,
+    _RenderSizeReporter renderObject,
+  ) {
+    renderObject.onHeight = onHeight;
+  }
+}
+
+class _RenderSizeReporter extends RenderProxyBox {
+  _RenderSizeReporter(this.onHeight);
+
+  ValueChanged<double> onHeight;
+  double? _last;
+
+  @override
+  void performLayout() {
+    super.performLayout();
+    final height = size.height;
+    if (height == _last) return;
+    _last = height;
+    WidgetsBinding.instance.addPostFrameCallback((_) => onHeight(height));
   }
 }
 
@@ -275,65 +333,107 @@ class _NoticeBanner extends StatelessWidget {
 }
 
 class _EmptyView extends StatelessWidget {
-  const _EmptyView({required this.onExample});
+  const _EmptyView({required this.onExample, required this.bottomSpace});
 
   final void Function(String content) onExample;
 
+  /// 最下面要留出的空間（浮在上面的輸入區高度）。
+  final double bottomSpace;
+
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final text = Theme.of(context).textTheme;
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(AppSpacing.medium),
+      padding: EdgeInsets.fromLTRB(
+        AppSpacing.medium,
+        AppSpacing.medium,
+        AppSpacing.medium,
+        bottomSpace,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          ThickCard(
-            key: const Key('advisor-empty'),
-            child: Padding(
-              padding: const EdgeInsets.all(AppSpacing.large),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const Icon(
-                    Icons.casino_outlined,
-                    size: AppSizes.emptyStateIcon,
-                    color: AppColors.primary,
+          // 空畫面就是推薦助理的第一句話，和之後的對話同一個樣子
+          _AdvisorRow(
+            bubbleKey: const Key('advisor-empty'),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '我幫你挑桌遊',
+                  style: text.titleMedium!.copyWith(
+                    fontWeight: FontWeight.w700,
                   ),
-                  const SizedBox(height: AppSpacing.medium),
-                  Text(
-                    '我幫你挑桌遊',
-                    textAlign: TextAlign.center,
-                    style: theme.textTheme.headlineMedium,
-                  ),
-                  const SizedBox(height: AppSpacing.small),
-                  Text(
-                    '告訴我幾個人、想玩多久、喜歡什麼感覺。',
-                    textAlign: TextAlign.center,
-                    style: theme.textTheme.bodyLarge!.copyWith(
-                      color: AppColors.inkMuted,
-                    ),
-                  ),
-                  const SizedBox(height: AppSpacing.large),
-                  Wrap(
-                    alignment: WrapAlignment.center,
-                    spacing: AppSpacing.small,
-                    runSpacing: AppSpacing.small + AppSpacing.xSmall,
-                    children: [
-                      for (final example in _examples)
-                        ThickButton(
-                          style: ThickStyle.light,
-                          onPressed: () => onExample(example),
-                          label: example,
-                        ),
-                    ],
-                  ),
-                ],
-              ),
+                ),
+                const SizedBox(height: AppSpacing.xSmall),
+                Text('告訴我幾個人、想玩多久、喜歡什麼感覺。', style: text.bodyLarge),
+              ],
             ),
           ),
-          const SizedBox(height: AppSpacing.medium),
+          const SizedBox(height: AppSpacing.small + AppSpacing.xSmall),
+          // 範例像聊天 App 的「建議回覆」，點了直接送出
+          Wrap(
+            spacing: AppSpacing.small,
+            runSpacing: AppSpacing.small + AppSpacing.xSmall,
+            children: [
+              for (final example in _examples)
+                _SuggestionChip(
+                  label: example,
+                  onTap: () => onExample(example),
+                ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.large),
           const _RulesLink(),
         ],
+      ),
+    );
+  }
+}
+
+/// 建議回覆的小膠囊：白底、薄厚邊、淡陰影，按住時往下沉。
+class _SuggestionChip extends StatefulWidget {
+  const _SuggestionChip({required this.label, required this.onTap});
+
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  State<_SuggestionChip> createState() => _SuggestionChipState();
+}
+
+class _SuggestionChipState extends State<_SuggestionChip> {
+  var _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return PressFrame(
+      pressed: _pressed,
+      color: AppColors.surface,
+      edge: AppColors.cardEdge,
+      radius: AppRadius.pill,
+      thickness: AppSizes.smallThickness,
+      shadow: AppShadows.soft,
+      child: Material(
+        type: MaterialType.transparency,
+        shape: const StadiumBorder(),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: widget.onTap,
+          onHighlightChanged: (pressed) => setState(() => _pressed = pressed),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.medium,
+              vertical: AppSpacing.small,
+            ),
+            child: Text(
+              widget.label,
+              style: Theme.of(
+                context,
+              ).textTheme.labelLarge!.copyWith(color: AppColors.ink),
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -388,17 +488,26 @@ class _MessageList extends StatelessWidget {
     required this.controller,
     required this.messages,
     required this.sending,
+    required this.bottomSpace,
   });
 
   final ScrollController controller;
   final List<AdvisorChatMessage> messages;
   final bool sending;
 
+  /// 最下面要留出的空間（浮在上面的輸入區高度）。
+  final double bottomSpace;
+
   @override
   Widget build(BuildContext context) {
     return ListView(
       controller: controller,
-      padding: const EdgeInsets.all(AppSpacing.medium),
+      padding: EdgeInsets.fromLTRB(
+        AppSpacing.medium,
+        AppSpacing.medium,
+        AppSpacing.medium,
+        bottomSpace,
+      ),
       children: [
         for (final message in messages)
           Padding(
@@ -445,6 +554,25 @@ class _MessageList extends StatelessWidget {
   }
 }
 
+/// 對話泡泡的外框：四邊細線、底部較粗（厚度），加上陰影；圓角可以每個角不同。
+BoxDecoration _bubble({
+  required Color color,
+  required Color edge,
+  required BorderRadius radius,
+  double thickness = AppSizes.cardThickness,
+  List<BoxShadow>? shadow,
+}) => BoxDecoration(
+  color: color,
+  borderRadius: radius,
+  border: Border(
+    top: BorderSide(color: edge),
+    left: BorderSide(color: edge),
+    right: BorderSide(color: edge),
+    bottom: BorderSide(color: edge, width: thickness),
+  ),
+  boxShadow: shadow ?? AppShadows.raised,
+);
+
 /// 玩家的訊息：靠右、主色底。
 class _PlayerBubble extends StatelessWidget {
   const _PlayerBubble(this.message);
@@ -462,15 +590,15 @@ class _PlayerBubble extends StatelessWidget {
         child: Align(
           alignment: Alignment.centerRight,
           child: DecoratedBox(
-            decoration: BoxDecoration(
+            decoration: _bubble(
               color: scheme.primary,
-              borderRadius: const BorderRadius.only(
+              edge: AppColors.primaryText,
+              radius: const BorderRadius.only(
                 topLeft: Radius.circular(AppRadius.card),
                 topRight: Radius.circular(AppRadius.card),
                 bottomLeft: Radius.circular(AppRadius.card),
                 bottomRight: Radius.circular(AppSpacing.xSmall),
               ),
-              boxShadow: AppShadows.soft,
             ),
             child: Padding(
               padding: const EdgeInsets.symmetric(
@@ -491,31 +619,45 @@ class _PlayerBubble extends StatelessWidget {
   }
 }
 
-/// 推薦 Agent 那一側：上面是頭像與「推薦助理」，下面是白色泡泡。
+/// 推薦 Agent 那一側：上面是頭像與「推薦助理」，下面是白色泡泡；都有厚度與陰影。
 class _AdvisorRow extends StatelessWidget {
-  const _AdvisorRow({required this.child});
+  const _AdvisorRow({required this.child, this.bubbleKey});
 
   final Widget child;
 
+  /// 掛在白色泡泡上的 Key。
+  final Key? bubbleKey;
+
   @override
   Widget build(BuildContext context) {
+    final small = BorderRadius.circular(AppRadius.pill);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           children: [
-            const CircleAvatar(
-              radius: AppSizes.avatar / 2,
-              backgroundColor: AppColors.primaryTint,
-              foregroundColor: AppColors.primaryText,
-              child: Icon(Icons.auto_awesome),
+            DecoratedBox(
+              decoration: _bubble(
+                color: AppColors.primaryTint,
+                edge: AppColors.cardEdge,
+                radius: small,
+                thickness: AppSizes.smallThickness,
+                shadow: AppShadows.soft,
+              ),
+              child: const SizedBox.square(
+                dimension: AppSizes.avatar,
+                child: Icon(Icons.auto_awesome, color: AppColors.primaryText),
+              ),
             ),
             const SizedBox(width: AppSpacing.small),
             // 名字放在白底膠囊裡，不直接壓在木紋上
             DecoratedBox(
-              decoration: BoxDecoration(
-                color: AppColors.surfaceGlass,
-                borderRadius: BorderRadius.circular(AppRadius.pill),
+              decoration: _bubble(
+                color: AppColors.surface,
+                edge: AppColors.cardEdge,
+                radius: small,
+                thickness: AppSizes.smallThickness,
+                shadow: AppShadows.soft,
               ),
               child: Padding(
                 padding: const EdgeInsets.symmetric(
@@ -531,24 +673,26 @@ class _AdvisorRow extends StatelessWidget {
           ],
         ),
         const SizedBox(height: AppSpacing.small),
-        DecoratedBox(
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: const BorderRadius.only(
-              topLeft: Radius.circular(AppSpacing.xSmall),
-              topRight: Radius.circular(AppRadius.card),
-              bottomLeft: Radius.circular(AppRadius.card),
-              bottomRight: Radius.circular(AppRadius.card),
+        KeyedSubtree(
+          key: bubbleKey,
+          child: DecoratedBox(
+            decoration: _bubble(
+              color: AppColors.surface,
+              edge: AppColors.cardEdge,
+              radius: const BorderRadius.only(
+                topLeft: Radius.circular(AppSpacing.xSmall),
+                topRight: Radius.circular(AppRadius.card),
+                bottomLeft: Radius.circular(AppRadius.card),
+                bottomRight: Radius.circular(AppRadius.card),
+              ),
             ),
-            border: Border.all(color: AppColors.border),
-            boxShadow: AppShadows.soft,
-          ),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: AppSpacing.medium,
-              vertical: AppSpacing.small + AppSpacing.xSmall,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.medium,
+                vertical: AppSpacing.small + AppSpacing.xSmall,
+              ),
+              child: child,
             ),
-            child: child,
           ),
         ),
       ],
