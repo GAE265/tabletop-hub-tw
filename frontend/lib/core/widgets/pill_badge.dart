@@ -130,7 +130,8 @@ class PillBadge extends StatelessWidget {
               Icon(icon, size: style.fontSize, color: colors.foreground),
               SizedBox(width: theme.iconGap),
             ],
-            Text(label, style: style),
+            // 空間不夠時換行，不要超出外框
+            Flexible(child: Text(label, style: style)),
           ],
         ),
       ),

@@ -2,21 +2,32 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_spacing.dart';
+import '../../../app/theme/thick_widgets.dart';
+import '../../../app/theme/wood_background.dart';
 import '../../../core/layout/breakpoints.dart';
 import '../../../core/widgets/pill_badge.dart';
 import '../data/group.dart';
 import '../state/current_user.dart';
 import '../state/group_booking_link.dart';
-import '../state/group_match_link.dart';
 import '../state/group_clock.dart';
 import '../state/group_detail_state.dart';
 import '../state/group_form_state.dart';
 import '../state/group_labels.dart';
+import '../state/group_match_link.dart';
 import 'group_form_page.dart';
 import 'widgets/group_widgets.dart';
 
-/// 揪團詳細資料：資訊、操作按鈕（報名／候補／退出／編輯／訂位／填入戰績／取消）與名單。
+/// 揪團詳細資料（Stitch 版面，docs/ui/stitch/）：
+///
+/// - 資訊卡：狀態、時數、名稱與分項（聚會時間、桌遊店家、包含桌遊、費用）。
+/// - 開團主卡、揪團說明卡（有簡介時）。
+/// - 操作台：報名以外的操作（編輯／訂位／填入戰績／確定成團／退出／取消揪團）與我的身分。
+/// - 名單：成員與候補分開，自己標「我」，有空位時顯示剩幾個。
+/// - 底部固定報名列：還沒報名時才有（報名／加入候補）。
+///
+/// 木紋背景，文字放在卡片上；手機的浮動導覽列蓋住的高度（MediaQuery 底部 padding）留在畫面最下面。
 class GroupDetailPage extends ConsumerWidget {
   const GroupDetailPage({required this.groupId, super.key});
 
@@ -26,45 +37,116 @@ class GroupDetailPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(groupDetailProvider(groupId));
     final notifier = ref.read(groupDetailProvider(groupId).notifier);
+    final userId = ref.watch(currentUserIdProvider);
     final maxWidth =
         AppSpacing.contentMaxWidth(context.screenSize) ?? double.infinity;
-    return Scaffold(
-      key: const Key('group-detail-page'),
-      appBar: AppBar(title: const Text('揪團詳細')),
-      body: state.group.when(
-        skipLoadingOnRefresh: false,
-        loading: () => const LoadingIndicator(),
-        error: (error, _) => Center(
-          child: LoadError(error: error, onRetry: notifier.reload),
+    final bottomInset = MediaQuery.paddingOf(context).bottom;
+
+    Widget content(Group group) {
+      final actions = state.actionsFor(userId);
+      final joinAction = actions
+          .where((a) => a == GroupAction.join || a == GroupAction.joinWaitlist)
+          .firstOrNull;
+      final tiles = actions
+          .where((a) => a != GroupAction.join && a != GroupAction.joinWaitlist)
+          .toList();
+      const gap = SizedBox(height: AppSpacing.medium);
+      final list = ListView(
+        padding: EdgeInsets.fromLTRB(
+          AppSpacing.medium,
+          AppSpacing.medium,
+          AppSpacing.medium,
+          // 有底部報名列時，導覽列的高度由報名列留
+          AppSpacing.medium + (joinAction == null ? bottomInset : 0),
         ),
-        data: (group) => Align(
-          alignment: Alignment.topCenter,
-          child: ConstrainedBox(
-            constraints: BoxConstraints(maxWidth: maxWidth),
-            child: ListView(
-              padding: const EdgeInsets.all(AppSpacing.medium),
-              children: [
-                _GroupInfo(group: group),
-                const SizedBox(height: AppSpacing.medium),
-                if (state.message case final message?) ...[
-                  StatusBanner(text: message),
-                  const SizedBox(height: AppSpacing.medium),
-                ],
-                if (state.error case final error?) ...[
-                  StatusBanner(text: error, isError: true),
-                  const SizedBox(height: AppSpacing.medium),
-                ],
-                _Actions(groupId: groupId, state: state),
-                const SizedBox(height: AppSpacing.large),
-                _Members(group: group, members: state.members),
-              ],
+        children: [
+          _GroupInfo(group: group),
+          gap,
+          _Organizer(group: group),
+          if (group.description?.trim() case final description?
+              when description.isNotEmpty) ...[
+            gap,
+            _Description(text: description),
+          ],
+          if (state.message case final message?) ...[
+            gap,
+            StatusBanner(text: message),
+          ],
+          if (state.error case final error?) ...[
+            gap,
+            StatusBanner(text: error, isError: true),
+          ],
+          if (tiles.isNotEmpty) ...[
+            gap,
+            _ActionDesk(
+              groupId: groupId,
+              state: state,
+              tiles: tiles,
+              role: myGroupRoleLabel(group, userId),
+              // 有底部報名列時，處理中的轉圈顯示在報名列
+              showBusy: joinAction == null,
             ),
+          ],
+          gap,
+          _Members(group: group, members: state.members, userId: userId),
+        ],
+      );
+      return Align(
+        alignment: Alignment.topCenter,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: maxWidth),
+          child: Column(
+            children: [
+              Expanded(child: list),
+              if (joinAction != null)
+                _JoinBar(
+                  group: group,
+                  waitlist: joinAction == GroupAction.joinWaitlist,
+                  busy: state.busy,
+                  onJoin: state.busy ? null : notifier.join,
+                  bottomInset: bottomInset,
+                ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final body = state.group.when(
+      skipLoadingOnRefresh: false,
+      loading: () => const LoadingIndicator(),
+      error: (error, _) => Center(
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.medium),
+          child: ThickCard(
+            child: LoadError(error: error, onRetry: notifier.reload),
           ),
         ),
       ),
+      data: content,
+    );
+    return Scaffold(
+      key: const Key('group-detail-page'),
+      backgroundColor: Colors.transparent,
+      appBar: AppBar(
+        title: const Text('揪團詳細'),
+        // 放在木紋上，用半透明白底，文字才看得清楚
+        backgroundColor: AppColors.headerGlass,
+      ),
+      body: WoodBackground.isPaintedAbove(context)
+          ? body
+          : WoodBackground(child: body),
     );
   }
 }
+
+/// 有厚度卡片的標準內距。
+const _inset = EdgeInsets.all(AppSpacing.medium + AppSpacing.xSmall);
+
+/// 卡片標題的樣式。
+TextStyle _cardTitle(BuildContext context) => Theme.of(
+  context,
+).textTheme.headlineSmall!.copyWith(fontWeight: FontWeight.w700);
 
 class _GroupInfo extends ConsumerWidget {
   const _GroupInfo({required this.group});
@@ -75,76 +157,194 @@ class _GroupInfo extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final clock = ref.watch(groupClockProvider);
     final day = clock.toLocal(group.startAt);
-    final text = Theme.of(context).textTheme;
     final fee = feeLabel(group.fee);
-    return Card(
+    return ThickCard(
+      key: const Key('group-info'),
       child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.medium),
+        padding: _inset,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(group.title, style: text.headlineSmall),
-            const SizedBox(height: AppSpacing.small),
             Wrap(
               spacing: AppSpacing.small,
               runSpacing: AppSpacing.xSmall,
               children: [
+                if (isConfirmedOpen(group)) const GroupConfirmedBadge(),
                 GroupSlotBadge(group: group),
                 PillBadge(
                   label: '${group.memberCount}／${group.capacity} 人',
                   tone: PillTone.players,
                   icon: Icons.group_outlined,
                 ),
-                if (fee != null) PillBadge(label: fee, tone: PillTone.accent),
+                PillBadge(
+                  label: groupDurationLabel(group),
+                  tone: PillTone.duration,
+                  icon: Icons.schedule,
+                ),
               ],
             ),
+            const SizedBox(height: AppSpacing.small),
+            Text(
+              group.title,
+              style: Theme.of(
+                context,
+              ).textTheme.headlineMedium!.copyWith(fontWeight: FontWeight.w700),
+            ),
             const SizedBox(height: AppSpacing.medium),
-            _InfoRow(
-              icon: Icons.event_outlined,
-              text:
-                  '${formatDate(day)}（${weekdayLabel(day)}） '
-                  '${formatTimeRange(clock, group)}',
-            ),
-            _InfoRow(icon: Icons.storefront_outlined, text: group.shop.name),
-            _InfoRow(
-              icon: Icons.person_outline,
-              text: '開團主：${group.organizer.displayName}',
-            ),
-            if (group.waitlistCount > 0)
-              _InfoRow(
-                icon: Icons.hourglass_empty,
-                text: '候補 ${group.waitlistCount} 人',
+            // 分項放在米白的小框裡
+            DecoratedBox(
+              decoration: BoxDecoration(
+                color: AppColors.backgroundAlt,
+                borderRadius: BorderRadius.circular(AppRadius.button),
+                border: Border.all(color: AppColors.border),
               ),
-            if (group.games.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(
-                  vertical: AppSpacing.xSmall,
+              child: Padding(
+                padding: const EdgeInsets.all(
+                  AppSpacing.small + AppSpacing.xSmall,
                 ),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Icon(
-                      Icons.casino_outlined,
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
-                    const SizedBox(width: AppSpacing.small),
-                    Expanded(
-                      child: Wrap(
-                        spacing: AppSpacing.small,
-                        runSpacing: AppSpacing.xSmall,
-                        children: [
-                          for (final game in group.games)
-                            PillBadge(label: game.name),
-                        ],
+                    _InfoItem(
+                      icon: Icons.event_outlined,
+                      label: '聚會時間',
+                      child: _value(
+                        context,
+                        '${formatDate(day)}（${weekdayLabel(day)}） '
+                        '${formatTimeRange(clock, group)}',
                       ),
                     ),
+                    _InfoItem(
+                      icon: Icons.storefront_outlined,
+                      label: '桌遊店家',
+                      child: _value(context, group.shop.name),
+                    ),
+                    if (group.games.isNotEmpty)
+                      _InfoItem(
+                        icon: Icons.casino_outlined,
+                        label: '包含桌遊',
+                        child: Wrap(
+                          spacing: AppSpacing.small,
+                          runSpacing: AppSpacing.xSmall,
+                          children: [
+                            for (final game in group.games)
+                              PillBadge(label: game.name),
+                          ],
+                        ),
+                      ),
+                    if (fee != null)
+                      _InfoItem(
+                        icon: Icons.payments_outlined,
+                        label: '費用',
+                        child: _value(context, fee),
+                      ),
                   ],
                 ),
               ),
-            if (group.description case final description?) ...[
-              const SizedBox(height: AppSpacing.small),
-              Text(description, style: text.bodyMedium),
-            ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _value(BuildContext context, String text) => Text(
+    text,
+    style: Theme.of(
+      context,
+    ).textTheme.titleSmall!.copyWith(fontWeight: FontWeight.w700),
+  );
+}
+
+/// 一個分項：左邊圖示方塊，右邊小標與內容。
+class _InfoItem extends StatelessWidget {
+  const _InfoItem({
+    required this.icon,
+    required this.label,
+    required this.child,
+  });
+
+  final IconData icon;
+  final String label;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: AppSpacing.xSmall),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: AppSizes.avatar,
+            height: AppSizes.avatar,
+            decoration: BoxDecoration(
+              color: AppColors.primaryTint,
+              borderRadius: BorderRadius.circular(AppRadius.button),
+            ),
+            child: Icon(
+              icon,
+              size: AppSizes.inlineIcon,
+              color: AppColors.primaryText,
+            ),
+          ),
+          const SizedBox(width: AppSpacing.small + AppSpacing.xSmall),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label, style: Theme.of(context).textTheme.bodySmall),
+                const SizedBox(height: AppSpacing.xSmall / 2),
+                child,
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 頭像：名字的第一個字。
+class _Avatar extends StatelessWidget {
+  const _Avatar({required this.name, required this.color});
+
+  final String name;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => CircleAvatar(
+    radius: AppSizes.avatar / 2,
+    backgroundColor: color,
+    foregroundColor: AppColors.surface,
+    child: Text(name.isEmpty ? '？' : name.characters.first),
+  );
+}
+
+class _Organizer extends StatelessWidget {
+  const _Organizer({required this.group});
+
+  final Group group;
+
+  @override
+  Widget build(BuildContext context) {
+    return ThickCard(
+      key: const Key('group-organizer'),
+      child: Padding(
+        padding: _inset,
+        child: Row(
+          children: [
+            _Avatar(
+              name: group.organizer.displayName,
+              color: AppColors.primaryText,
+            ),
+            const SizedBox(width: AppSpacing.small + AppSpacing.xSmall),
+            Expanded(
+              child: Text(
+                '開團主：${group.organizer.displayName}',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+            ),
           ],
         ),
       ),
@@ -152,38 +352,64 @@ class _GroupInfo extends ConsumerWidget {
   }
 }
 
-class _InfoRow extends StatelessWidget {
-  const _InfoRow({required this.icon, required this.text});
+class _Description extends StatelessWidget {
+  const _Description({required this.text});
 
-  final IconData icon;
   final String text;
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: AppSpacing.xSmall),
-      child: Row(
-        children: [
-          Icon(icon, color: Theme.of(context).colorScheme.onSurfaceVariant),
-          const SizedBox(width: AppSpacing.small),
-          Expanded(child: Text(text)),
-        ],
+    return ThickCard(
+      key: const Key('group-description'),
+      child: Padding(
+        padding: _inset,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(
+                  Icons.campaign_outlined,
+                  color: AppColors.primaryText,
+                ),
+                const SizedBox(width: AppSpacing.small),
+                Text('揪團說明', style: _cardTitle(context)),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.small),
+            Text(
+              text,
+              style: Theme.of(
+                context,
+              ).textTheme.bodyLarge!.copyWith(color: AppColors.inkMuted),
+            ),
+          ],
+        ),
       ),
     );
   }
 }
 
-class _Actions extends ConsumerWidget {
-  const _Actions({required this.groupId, required this.state});
+/// 操作台（團務操作）：頁首顯示我的身分；一般操作在「揪團動作」，退出與取消在「退出與取消」。
+/// 每個操作一列：左邊圖示方塊、中間一句白話標題與說明、右邊按鈕（按鈕文字維持原本的操作名稱）。
+class _ActionDesk extends ConsumerWidget {
+  const _ActionDesk({
+    required this.groupId,
+    required this.state,
+    required this.tiles,
+    required this.role,
+    required this.showBusy,
+  });
 
   final String groupId;
   final GroupDetailState state;
+  final List<GroupAction> tiles;
+  final String role;
+  final bool showBusy;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final notifier = ref.read(groupDetailProvider(groupId).notifier);
-    final actions = state.actionsFor(ref.watch(currentUserIdProvider));
-    if (actions.isEmpty) return const SizedBox.shrink();
     // 操作進行中：按鈕停用，避免重複送出
     VoidCallback? enabled(VoidCallback action) => state.busy ? null : action;
 
@@ -222,111 +448,546 @@ class _Actions extends ConsumerWidget {
       );
     }
 
-    return Wrap(
-      spacing: AppSpacing.small,
-      runSpacing: AppSpacing.small,
-      crossAxisAlignment: WrapCrossAlignment.center,
-      children: [
-        for (final action in actions)
-          switch (action) {
-            GroupAction.join => FilledButton(
-              onPressed: enabled(notifier.join),
-              child: const Text('報名'),
+    _ActionRow row(GroupAction action) => switch (action) {
+      GroupAction.confirm => _ActionRow(
+        icon: Icons.check_circle_outline,
+        iconColors: (AppColors.ink, AppColors.surface),
+        title: '人到齊了嗎？',
+        description: '成團後大家會收到通知',
+        button: ThickButton(
+          shadow: AppShadows.soft,
+          buttonKey: const Key('group-confirm'),
+          style: ThickStyle.dark,
+          onPressed: enabled(
+            () => confirm('確定成團後會通知所有成員，之後不能取消成團。確定嗎？', notifier.confirm),
+          ),
+          label: '確定成團',
+        ),
+      ),
+      GroupAction.confirmed => _ActionRow(
+        icon: Icons.check_circle,
+        iconColors: (AppColors.sageTint, AppColors.sage),
+        title: '已經成團了',
+        description: '成員都收到通知了',
+        button: ThickButton(
+          shadow: AppShadows.soft,
+          buttonKey: const Key('group-confirmed'),
+          style: ThickStyle.dark,
+          onPressed: null,
+          label: '已成團',
+        ),
+      ),
+      GroupAction.book => _ActionRow(
+        icon: Icons.event_seat_outlined,
+        iconColors: (AppColors.sageTint, AppColors.sage),
+        title: '幫大家訂位子',
+        description: '帶著揪團資料去訂位',
+        button: ThickButton(
+          shadow: AppShadows.soft,
+          style: ThickStyle.primary,
+          onPressed: enabled(
+            () => context.go(
+              groupBookingLink(
+                ref.read(groupClockProvider),
+                state.group.value!,
+              ).toString(),
             ),
-            GroupAction.joinWaitlist => FilledButton(
-              onPressed: enabled(notifier.join),
-              child: const Text('加入候補'),
-            ),
-            GroupAction.leave => FilledButton(
-              onPressed: enabled(() => confirm('確定要退出這個揪團嗎？', notifier.leave)),
-              child: const Text('退出'),
-            ),
-            GroupAction.edit => OutlinedButton.icon(
-              onPressed: enabled(edit),
-              icon: const Icon(Icons.edit_outlined),
-              label: const Text('編輯'),
-            ),
-            GroupAction.book => FilledButton.icon(
-              onPressed: enabled(
-                () => context.go(
-                  groupBookingLink(
-                    ref.read(groupClockProvider),
-                    state.group.value!,
-                  ).toString(),
+          ),
+          label: '訂位',
+        ),
+      ),
+      GroupAction.recordMatch => _ActionRow(
+        icon: Icons.emoji_events_outlined,
+        iconColors: (AppColors.amberTint, AppColors.amberText),
+        title: '記錄這一局',
+        description: '玩完記下結果',
+        button: ThickButton(
+          shadow: AppShadows.soft,
+          style: ThickStyle.light,
+          onPressed: enabled(
+            () => context.go(groupMatchLink(state.group.value!).toString()),
+          ),
+          label: '填入戰績',
+        ),
+      ),
+      GroupAction.edit => _ActionRow(
+        icon: Icons.edit_outlined,
+        iconColors: (AppColors.primaryTint, AppColors.primaryText),
+        title: '修改揪團資料',
+        description: '時間、人數與說明',
+        button: ThickButton(
+          shadow: AppShadows.soft,
+          style: ThickStyle.light,
+          onPressed: enabled(edit),
+          label: '編輯',
+        ),
+      ),
+      GroupAction.leave => _ActionRow(
+        danger: true,
+        icon: Icons.logout,
+        iconColors: (AppColors.surface, AppColors.error),
+        title: '退出這場揪團',
+        tag: '成員',
+        description: '名額會讓給候補',
+        button: ThickButton(
+          shadow: AppShadows.soft,
+          style: ThickStyle.dangerFilled,
+          onPressed: enabled(() => confirm('確定要退出這個揪團嗎？', notifier.leave)),
+          label: '退出',
+        ),
+      ),
+      GroupAction.cancel => _ActionRow(
+        danger: true,
+        icon: Icons.event_busy_outlined,
+        iconColors: (AppColors.surface, AppColors.error),
+        title: '解散這個揪團',
+        tag: '開團主',
+        description: '成員與候補都會收到通知',
+        button: ThickButton(
+          shadow: AppShadows.soft,
+          style: ThickStyle.dangerFilled,
+          onPressed: enabled(
+            () => confirm('確定要取消這個揪團嗎？取消後無法復原。', notifier.cancel),
+          ),
+          label: '取消揪團',
+        ),
+      ),
+      // 報名與加入候補在底部固定列，不會出現在這裡
+      GroupAction.join ||
+      GroupAction.joinWaitlist => throw StateError('報名不在操作台'),
+    };
+
+    bool isDanger(GroupAction a) =>
+        a == GroupAction.leave || a == GroupAction.cancel;
+    // 一般操作的順序：確定成團、訂位、填入戰績、編輯
+    const order = [
+      GroupAction.confirm,
+      GroupAction.confirmed,
+      GroupAction.book,
+      GroupAction.recordMatch,
+      GroupAction.edit,
+    ];
+    final main = [
+      for (final a in order)
+        if (tiles.contains(a)) a,
+    ];
+    final danger = tiles.where(isDanger).toList();
+    final text = Theme.of(context).textTheme;
+    const gap = SizedBox(height: AppSpacing.small + AppSpacing.xSmall);
+
+    Widget sectionTitle(IconData icon, String title) => Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.small),
+      child: Row(
+        children: [
+          Icon(icon, size: AppSizes.inlineIcon, color: AppColors.primaryText),
+          const SizedBox(width: AppSpacing.small),
+          Text(title, style: text.titleSmall),
+        ],
+      ),
+    );
+
+    return ThickCard(
+      key: const Key('group-actions'),
+      child: Padding(
+        padding: _inset,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: AppSizes.avatar,
+                  height: AppSizes.avatar,
+                  decoration: BoxDecoration(
+                    color: AppColors.primaryTint,
+                    borderRadius: BorderRadius.circular(AppRadius.button),
+                  ),
+                  child: const Icon(
+                    Icons.dashboard_customize_outlined,
+                    color: AppColors.primaryText,
+                  ),
                 ),
+                const SizedBox(width: AppSpacing.small + AppSpacing.xSmall),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('團務操作', style: _cardTitle(context)),
+                      Text('開團、訂位、記錄戰績都在這裡', style: text.bodySmall),
+                    ],
+                  ),
+                ),
+                if (showBusy && state.busy) ...[
+                  const SizedBox.square(
+                    dimension: AppSizes.inlineIcon,
+                    child: CircularProgressIndicator(),
+                  ),
+                  const SizedBox(width: AppSpacing.small),
+                ],
+                _RolePill(role),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.medium),
+            const Divider(),
+            const SizedBox(height: AppSpacing.medium),
+            if (main.isNotEmpty)
+              Column(
+                key: const Key('group-actions-main'),
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  sectionTitle(Icons.play_circle_outline, '揪團動作'),
+                  for (final (i, a) in main.indexed) ...[
+                    if (i > 0) gap,
+                    row(a),
+                  ],
+                ],
               ),
-              icon: const Icon(Icons.event_seat_outlined),
-              label: const Text('訂位'),
-            ),
-            GroupAction.recordMatch => OutlinedButton.icon(
-              onPressed: enabled(
-                () => context.go(groupMatchLink(state.group.value!).toString()),
+            if (danger.isNotEmpty) ...[
+              if (main.isNotEmpty) ...[
+                const SizedBox(height: AppSpacing.medium),
+                const Divider(),
+                const SizedBox(height: AppSpacing.medium),
+              ],
+              Column(
+                key: const Key('group-actions-danger'),
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  sectionTitle(Icons.settings_outlined, '退出與取消'),
+                  for (final (i, a) in danger.indexed) ...[
+                    if (i > 0) gap,
+                    row(a),
+                  ],
+                ],
               ),
-              icon: const Icon(Icons.emoji_events_outlined),
-              label: const Text('填入戰績'),
-            ),
-            GroupAction.confirm => FilledButton.icon(
-              key: const Key('group-confirm'),
-              onPressed: enabled(
-                () => confirm('確定成團後會通知所有成員，之後不能取消成團。確定嗎？', notifier.confirm),
-              ),
-              icon: const Icon(Icons.check_circle_outline),
-              label: const Text('確定成團'),
-            ),
-            GroupAction.confirmed => FilledButton.icon(
-              key: const Key('group-confirmed'),
-              onPressed: null,
-              icon: const Icon(Icons.check_circle),
-              label: const Text('已成團'),
-            ),
-            GroupAction.cancel => TextButton(
-              onPressed: enabled(
-                () => confirm('確定要取消這個揪團嗎？取消後無法復原。', notifier.cancel),
-              ),
-              child: const Text('取消揪團'),
-            ),
-          },
-        if (state.busy) const CircularProgressIndicator(),
-      ],
+            ],
+          ],
+        ),
+      ),
     );
   }
 }
 
-class _Members extends StatelessWidget {
-  const _Members({required this.group, required this.members});
+/// 我在這個揪團的身分：綠色膠囊，前面一個小圓點。
+class _RolePill extends StatelessWidget {
+  const _RolePill(this.role);
 
-  final Group group;
-  final List<GroupMember> members;
+  final String role;
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          ListTile(
-            title: Text(
-              '名單（${members.length} 人）',
-              style: Theme.of(context).textTheme.titleMedium,
+    return DecoratedBox(
+      key: const Key('group-role'),
+      decoration: BoxDecoration(
+        color: AppColors.sageTint,
+        borderRadius: BorderRadius.circular(AppRadius.pill),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.small + AppSpacing.xSmall,
+          vertical: AppSpacing.xSmall,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: AppSizes.sectionDot,
+              height: AppSizes.sectionDot,
+              decoration: const BoxDecoration(
+                color: AppColors.sage,
+                shape: BoxShape.circle,
+              ),
             ),
-          ),
-          for (final member in members)
-            ListTile(
-              leading: const Icon(Icons.person_outline),
-              title: Text(member.displayName),
-              trailing: member.status == 'member'
-                  ? PillBadge(
-                      label: member.userId == group.organizer.id ? '開團主' : '成員',
-                      tone: member.userId == group.organizer.id
-                          ? PillTone.accent
-                          : PillTone.players,
-                    )
-                  : PillBadge(
-                      label: '候補第 ${member.waitlistPosition} 位',
-                      tone: PillTone.duration,
+            const SizedBox(width: AppSpacing.small),
+            Text(
+              role,
+              style: Theme.of(
+                context,
+              ).textTheme.labelLarge!.copyWith(color: AppColors.sage),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 操作台的一列：左邊圖示方塊，中間標題（危險操作是紅字，可以加小標籤）與說明，右邊按鈕。
+class _ActionRow extends StatelessWidget {
+  const _ActionRow({
+    required this.icon,
+    required this.iconColors,
+    required this.title,
+    required this.description,
+    required this.button,
+    this.tag,
+    this.danger = false,
+  });
+
+  final IconData icon;
+
+  /// 圖示方塊的（底色, 圖示顏色）。
+  final (Color, Color) iconColors;
+  final String title;
+  final String description;
+  final Widget button;
+  final String? tag;
+  final bool danger;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    final (iconBg, iconFg) = iconColors;
+    return DecoratedBox(
+      decoration: thickDecoration(
+        color: danger ? AppColors.errorTint : AppColors.background,
+        edge: danger ? AppColors.errorEdge : AppColors.cardEdge,
+        radius: AppRadius.card,
+        thickness: AppSizes.smallThickness + 1,
+        shadow: const [],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.small + AppSpacing.xSmall),
+        child: Row(
+          children: [
+            Container(
+              width: AppSizes.avatar,
+              height: AppSizes.avatar,
+              decoration: BoxDecoration(
+                color: iconBg,
+                borderRadius: BorderRadius.circular(AppRadius.button),
+                border: iconBg == AppColors.surface
+                    ? Border.all(color: AppColors.errorEdge)
+                    : null,
+              ),
+              child: Icon(icon, size: AppSizes.inlineIcon + 2, color: iconFg),
+            ),
+            const SizedBox(width: AppSpacing.small + AppSpacing.xSmall),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Wrap(
+                    spacing: AppSpacing.small,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      Text(
+                        title,
+                        style: text.titleSmall!.copyWith(
+                          color: danger ? AppColors.error : AppColors.ink,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      if (tag case final tag?)
+                        PillBadge(label: tag, tone: PillTone.accent),
+                    ],
+                  ),
+                  const SizedBox(height: AppSpacing.xSmall / 2),
+                  Text(description, style: text.bodySmall),
+                ],
+              ),
+            ),
+            const SizedBox(width: AppSpacing.small),
+            button,
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 名單：成員與候補分開，自己標「我」，有空位時顯示剩幾個。
+class _Members extends StatelessWidget {
+  const _Members({
+    required this.group,
+    required this.members,
+    required this.userId,
+  });
+
+  final Group group;
+  final List<GroupMember> members;
+  final String? userId;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    final joined = members.where((m) => m.status == 'member').toList();
+    final waiting = members.where((m) => m.status != 'member').toList();
+    final openSlots = group.status == 'open' ? group.remainingSlots : 0;
+
+    Widget row(GroupMember member) {
+      final organizer = member.userId == group.organizer.id;
+      return Padding(
+        padding: const EdgeInsets.only(
+          top: AppSpacing.small + AppSpacing.xSmall,
+        ),
+        child: Row(
+          children: [
+            _Avatar(
+              name: member.displayName,
+              color: organizer
+                  ? AppColors.primaryText
+                  : member.status == 'member'
+                  ? AppColors.sage
+                  : AppColors.inkMuted,
+            ),
+            const SizedBox(width: AppSpacing.small + AppSpacing.xSmall),
+            Expanded(
+              child: Row(
+                children: [
+                  Flexible(
+                    child: Text(member.displayName, style: text.titleSmall),
+                  ),
+                  if (member.userId == userId) ...[
+                    const SizedBox(width: AppSpacing.small),
+                    const PillBadge(label: '我', tone: PillTone.accent),
+                  ],
+                ],
+              ),
+            ),
+            if (member.status == 'member')
+              PillBadge(
+                label: organizer ? '開團主' : '成員',
+                tone: organizer ? PillTone.accent : PillTone.players,
+              )
+            else
+              PillBadge(
+                label: '候補第 ${member.waitlistPosition} 位',
+                tone: PillTone.duration,
+              ),
+          ],
+        ),
+      );
+    }
+
+    return ThickCard(
+      key: const Key('group-members'),
+      child: Padding(
+        padding: _inset,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text('名單（${joined.length} 人）', style: _cardTitle(context)),
+            for (final member in joined) row(member),
+            if (openSlots > 0) ...[
+              const SizedBox(height: AppSpacing.small + AppSpacing.xSmall),
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  color: AppColors.primaryTint,
+                  borderRadius: BorderRadius.circular(AppRadius.button),
+                  border: Border.all(color: AppColors.cardEdge),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(
+                    AppSpacing.small + AppSpacing.xSmall,
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.event_seat_outlined,
+                        color: AppColors.primaryText,
+                      ),
+                      const SizedBox(width: AppSpacing.small),
+                      Text(
+                        '尚有 $openSlots 個空位',
+                        style: text.titleSmall!.copyWith(
+                          color: AppColors.primaryText,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+            if (waiting.isNotEmpty) ...[
+              const SizedBox(height: AppSpacing.large),
+              Row(
+                children: [
+                  const Icon(Icons.hourglass_empty, color: AppColors.amberText),
+                  const SizedBox(width: AppSpacing.small),
+                  Text('候補（${waiting.length} 人等待中）', style: text.titleMedium),
+                ],
+              ),
+              for (final member in waiting) row(member),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 底部固定報名列：左邊費用與名額，右邊「報名」或「加入候補」。
+class _JoinBar extends StatelessWidget {
+  const _JoinBar({
+    required this.group,
+    required this.waitlist,
+    required this.busy,
+    required this.onJoin,
+    required this.bottomInset,
+  });
+
+  final Group group;
+  final bool waitlist;
+  final bool busy;
+  final VoidCallback? onJoin;
+
+  /// 手機浮動導覽列蓋住的高度：報名列要停在它上方。
+  final double bottomInset;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    final fee = switch (group.fee) {
+      null => null,
+      0 => '免費參加',
+      final fee => '每人 \$$fee',
+    };
+    return Padding(
+      key: const Key('group-join-bar'),
+      padding: EdgeInsets.fromLTRB(
+        AppSpacing.medium,
+        AppSpacing.small,
+        AppSpacing.medium,
+        AppSpacing.medium + bottomInset,
+      ),
+      child: ThickCard(
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.small + AppSpacing.xSmall),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (fee != null)
+                      Text(
+                        fee,
+                        style: text.titleMedium!.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    Text(
+                      waitlist ? '已額滿' : '剩 ${group.remainingSlots} 席',
+                      style: text.bodyMedium!.copyWith(
+                        color: AppColors.primaryText,
+                      ),
                     ),
-            ),
-        ],
+                  ],
+                ),
+              ),
+              if (busy) ...[
+                const CircularProgressIndicator(),
+                const SizedBox(width: AppSpacing.small),
+              ],
+              ThickButton(
+                style: ThickStyle.primary,
+                onPressed: onJoin,
+                label: waitlist ? '加入候補' : '報名',
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

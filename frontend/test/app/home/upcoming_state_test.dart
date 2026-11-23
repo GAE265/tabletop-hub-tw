@@ -208,39 +208,73 @@ void main() {
     expect(bookings.mineCalls, hasLength(2));
   });
 
-  group('每一列的文字', () {
-    test('訂位：「訂位・時間・人數」、店家與桌號、已確認', () {
+  // Stitch 版面：店家或揪團名稱當標題，下面是時間與人數，最下面是代碼或名額
+  group('每一張卡片的文字', () {
+    test('訂位：店家當標題、桌號、時間、人數、訂位代碼', () {
       final item = UpcomingBooking(
         homeBooking(id: 1, startAt: taipei(11, 21, 19), partySize: 4),
         shopName: '乙店',
       );
-      expect(upcomingTitle(clock, item), '訂位・19:00・4 人');
-      expect(upcomingSubtitle(item), '乙店・桌號 T1、T2');
-      expect(upcomingStatus(item), UpcomingStatus.confirmed);
+      final card = upcomingCard(clock, item);
+      expect(card.kind, '訂位');
+      expect(card.title, '乙店');
+      expect(card.subtitle, '桌號 T1、T2');
+      expect(card.when, '11/21（六）19:00–21:00');
+      expect(card.people, '4 人');
+      expect(card.footer, '訂位代碼 BK1');
+      expect(card.action, '查看我的訂位');
       expect(upcomingStatus(item).label, '已確認');
       expect(upcomingRoute(item), '/booking/mine');
     });
 
-    test('訂位：沒有店家名稱或桌號時省略', () {
-      final item = UpcomingBooking(
-        homeBooking(id: 1, startAt: taipei(11, 21), tableCodes: const []),
+    test('訂位：對不到店家時標題是「訂位」，沒有桌號時不顯示桌號', () {
+      final card = upcomingCard(
+        clock,
+        UpcomingBooking(
+          homeBooking(id: 1, startAt: taipei(11, 21), tableCodes: const []),
+        ),
       );
-      expect(upcomingSubtitle(item), '');
+      expect(card.title, '訂位');
+      expect(card.subtitle, '');
     });
 
-    test('揪團：「揪團・名稱」、已報名人數', () {
+    test('揪團：名稱當標題、開團主與店家、時間、已報名人數、剩餘名額', () {
       final item = UpcomingGroup(
         fakeGroup(
           title: '阿瓦隆之夜',
-          startAt: taipei(11, 22),
+          startAt: taipei(11, 22, 19),
           capacity: 7,
           memberCount: 5,
+          organizerName: '小明',
           myStatus: 'member',
         ),
       );
-      expect(upcomingTitle(clock, item), '揪團・阿瓦隆之夜');
-      expect(upcomingSubtitle(item), '已報名 5 / 7 人');
+      final card = upcomingCard(clock, item);
+      expect(card.kind, '揪團');
+      expect(card.title, '阿瓦隆之夜');
+      expect(card.subtitle, '開團主：小明・測試桌遊店');
+      expect(card.when, '11/22（日）19:00–21:00');
+      expect(card.people, '5 / 7 人');
+      expect(card.footer, '還有 2 個名額');
+      expect(card.action, '查看揪團');
       expect(upcomingRoute(item), '/groups/g-1');
+    });
+
+    test('揪團額滿：底部顯示候補人數（「已額滿」在狀態標籤上，不重複）', () {
+      String footer({int waitlist = 0}) => upcomingCard(
+        clock,
+        UpcomingGroup(
+          fakeGroup(
+            startAt: taipei(11, 22),
+            capacity: 4,
+            memberCount: 4,
+            waitlistCount: waitlist,
+            myStatus: 'member',
+          ),
+        ),
+      ).footer;
+      expect(footer(), '目前沒有候補');
+      expect(footer(waitlist: 3), '候補 3 人');
     });
 
     test('揪團狀態：有名額是招募中、額滿是已額滿、我是候補是候補中', () {
@@ -260,13 +294,15 @@ void main() {
       expect(status(members: 4, my: 'waitlisted').label, '候補中');
     });
 
-    test('日期徽章：台灣時間的月與日', () {
-      final item = UpcomingGroup(
-        // 台灣 11/22 00:30＝UTC 11/21 16:30
-        fakeGroup(startAt: taipei(11, 22, 0, 30), myStatus: 'member'),
+    test('時間用台灣時間', () {
+      final card = upcomingCard(
+        clock,
+        UpcomingGroup(
+          // 台灣 11/22 00:30＝UTC 11/21 16:30
+          fakeGroup(startAt: taipei(11, 22, 0, 30), myStatus: 'member'),
+        ),
       );
-      expect(upcomingMonthLabel(clock, item), '11月');
-      expect(upcomingDayLabel(clock, item), '22');
+      expect(card.when, '11/22（日）00:30–02:30');
     });
   });
 }

@@ -5,7 +5,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tabletop_hub/app/navigation.dart';
 import 'package:tabletop_hub/app/shell.dart';
+import 'package:tabletop_hub/app/theme/app_colors.dart';
 import 'package:tabletop_hub/app/theme/app_theme.dart';
+import 'package:tabletop_hub/app/theme/wood_background.dart';
 import 'package:tabletop_hub/core/config/app_config.dart';
 import 'package:tabletop_hub/core/dev/data/dev_user.dart';
 import 'package:tabletop_hub/core/dev/state/dev_user_state.dart';
@@ -91,6 +93,14 @@ Future<GoRouter> pumpShell(
   await tester.pumpAndSettle();
   return router;
 }
+
+/// 品牌 logo 圖片（橫式完整版：魚＋遊任有娛＋PLAY · GAME · FUN）。
+final logoImage = find.byWidgetPredicate(
+  (widget) =>
+      widget is Image &&
+      widget.image is AssetImage &&
+      (widget.image as AssetImage).assetName == BrandMark.asset,
+);
 
 /// 每個導覽項目的 Key 掛在它的 [Semantics] 上，選取狀態也由 Semantics 對外表達。
 bool isSelected(WidgetTester tester, String key) =>
@@ -207,6 +217,155 @@ void main() {
     await pumpShell(tester, location: '/matches/m-1');
     expect(isSelected(tester, 'shell-nav-matches'), isTrue);
     expect(isSelected(tester, 'shell-nav-home'), isFalse);
+  });
+
+  group('Stitch 版面（手機）', () {
+    testWidgets('頂部列：品牌 logo（讀屏唸「遊任有娛」）、鈴鐺與登入', (tester) async {
+      await pumpShell(tester, size: const Size(400, 900));
+      final bar = find.byType(MobileTopBar);
+      Finder inBar(Finder f) => find.descendant(of: bar, matching: f);
+      expect(inBar(logoImage), findsOneWidget);
+      expect(tester.widget<Image>(inBar(logoImage)).semanticLabel, '遊任有娛');
+      expect(
+        inBar(find.byKey(const Key('shell-notification-bell'))),
+        findsOneWidget,
+      );
+      expect(inBar(find.byKey(const Key('shell-login'))), findsOneWidget);
+    });
+
+    testWidgets('頂部列的登入：提示「登入功能即將推出」', (tester) async {
+      await pumpShell(tester, size: const Size(400, 900));
+      await tester.tap(find.byKey(const Key('shell-login')));
+      await tester.pump();
+      expect(find.text('登入功能即將推出'), findsOneWidget);
+    });
+
+    testWidgets('頂部列：白色滿版，底部有較粗的邊與陰影；logo 高 60', (tester) async {
+      await pumpShell(tester, size: const Size(400, 900));
+      final bar = find.byType(MobileTopBar);
+      final decoration =
+          tester
+                  .widget<DecoratedBox>(
+                    find
+                        .descendant(
+                          of: bar,
+                          matching: find.byType(DecoratedBox),
+                        )
+                        .first,
+                  )
+                  .decoration
+              as BoxDecoration;
+      expect(decoration.color, AppColors.surface);
+      final border = decoration.border! as Border;
+      expect(border.bottom.width, greaterThan(border.top.width));
+      expect(decoration.boxShadow, isNotEmpty);
+      expect(
+        tester.getSize(find.descendant(of: bar, matching: logoImage)).height,
+        60,
+      );
+    });
+
+    testWidgets('頂部列：鈴鐺與登入一樣大，右邊留白和左邊一樣 16', (tester) async {
+      await pumpShell(tester, size: const Size(400, 900));
+      final bell = find.byKey(const Key('shell-notification-bell'));
+      final login = find.byKey(const Key('shell-login'));
+      expect(tester.getSize(bell), tester.getSize(login));
+      expect(tester.getTopRight(login).dx, 400 - 16);
+      final logo = find.descendant(
+        of: find.byType(MobileTopBar),
+        matching: logoImage,
+      );
+      expect(tester.getTopLeft(logo).dx, 16);
+    });
+
+    for (final key in ['shell-notification-bell', 'shell-login']) {
+      testWidgets('按住頂部列的「$key」：底邊變薄、往下沉，移開後彈回', (tester) async {
+        await pumpShell(tester, size: const Size(400, 900));
+        final button = find.byKey(Key(key));
+        final frame = find
+            .descendant(of: button, matching: find.byType(DecoratedBox))
+            .first;
+        double edge() =>
+            ((tester.widget<DecoratedBox>(frame).decoration as BoxDecoration)
+                        .border!
+                    as Border)
+                .bottom
+                .width;
+        final icon = find
+            .descendant(of: button, matching: find.byType(Icon))
+            .first;
+        final restEdge = edge();
+        final restTop = tester.getTopLeft(icon).dy;
+        final gesture = await tester.startGesture(tester.getCenter(button));
+        await tester.pumpAndSettle();
+        expect(edge(), lessThan(restEdge));
+        expect(tester.getTopLeft(icon).dy, greaterThan(restTop));
+        await gesture.cancel();
+        await tester.pumpAndSettle();
+        expect(edge(), restEdge);
+        expect(tester.getTopLeft(icon).dy, restTop);
+      });
+    }
+
+    testWidgets('頂部列與底部導覽列放在木紋上', (tester) async {
+      await pumpShell(tester, size: const Size(400, 900));
+      final wood = find.byType(WoodBackground);
+      expect(wood, findsOneWidget);
+      for (final type in [MobileTopBar, BottomNavigation]) {
+        expect(
+          find.descendant(of: wood, matching: find.byType(type)),
+          findsOneWidget,
+        );
+      }
+    });
+
+    for (final location in ['/', '/groups']) {
+      testWidgets('$location：內容延伸到導覽列後面，並告訴頁面底部要留多少空間', (tester) async {
+        await pumpShell(tester, location: location, size: const Size(400, 900));
+        final page = find.byType(Scaffold).last;
+        expect(tester.getBottomLeft(page).dy, 900);
+        final nav = tester.getTopLeft(find.byType(BottomNavigation)).dy;
+        final padding = MediaQuery.paddingOf(tester.element(page)).bottom;
+        expect(padding, greaterThanOrEqualTo(900 - nav));
+      });
+    }
+
+    testWidgets('其他頁面：內容停在導覽列上方', (tester) async {
+      // 揪團頁（add：Stitch 揪團月曆）也改成浮動導覽列，這裡改用還沒換版面的訂位頁
+      await pumpShell(tester, location: '/booking', size: const Size(400, 900));
+      final page = find.byType(Scaffold).last;
+      final nav = tester.getTopLeft(find.byType(BottomNavigation)).dy;
+      expect(tester.getBottomLeft(page).dy, lessThanOrEqualTo(nav));
+    });
+
+    testWidgets('桌機：沒有木紋框（版面不變）', (tester) async {
+      await pumpShell(tester, size: const Size(1280, 900));
+      expect(find.byType(WoodBackground), findsNothing);
+    });
+
+    testWidgets('底部導覽列：選取的項目是深色底，其他是透明', (tester) async {
+      await pumpShell(tester, location: '/groups', size: const Size(400, 900));
+      Color? fill(String key) => tester
+          .widget<Material>(
+            find
+                .descendant(
+                  of: find.byKey(Key(key)),
+                  matching: find.byType(Material),
+                )
+                .first,
+          )
+          .color;
+      expect(fill('shell-nav-groups'), AppColors.ink);
+      expect(fill('shell-nav-home'), Colors.transparent);
+    });
+  });
+
+  testWidgets('桌機：頂部導覽列左邊是品牌 logo', (tester) async {
+    await pumpShell(tester, size: const Size(1280, 900));
+    expect(
+      find.descendant(of: find.byType(TopNavigation), matching: logoImage),
+      findsOneWidget,
+    );
   });
 
   group('通知鈴鐺（add-groups-notifications）', () {

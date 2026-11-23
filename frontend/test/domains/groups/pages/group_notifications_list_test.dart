@@ -20,6 +20,68 @@ void main() {
     Future<void> pumpPage(WidgetTester tester, FakeGroupsRepository repo) =>
         pumpGroupsWidget(tester, listPage, repo: repo);
 
+    // Stitch 版面：每則一張厚卡片，左上是種類標籤；依日期分段（今天／昨天／更早之前）
+    testWidgets('依日期分段，標題旁寫幾則；卡片有厚度與種類標籤', (tester) async {
+      final repo = FakeGroupsRepository()
+        ..notifications = [
+          fakeNotification(
+            id: 'n-3',
+            type: 'waitlist_promoted',
+            createdAt: taipei(11, 14, 11, 5),
+          ),
+          fakeNotification(
+            id: 'n-2',
+            type: 'group_confirmed',
+            createdAt: taipei(11, 13, 20),
+          ),
+          fakeNotification(
+            id: 'n-1',
+            type: 'group_cancelled',
+            createdAt: taipei(11, 10, 9),
+          ),
+        ];
+      await pumpPage(tester, repo);
+      for (final (label, count) in [
+        ('今天', '1 則'),
+        ('昨天', '1 則'),
+        ('更早之前', '1 則'),
+      ]) {
+        final header = find.byKey(Key('notification-day-$label'));
+        expect(header, findsOneWidget, reason: label);
+        expect(
+          find.descendant(of: header, matching: find.text(label)),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(of: header, matching: find.text(count)),
+          findsOneWidget,
+        );
+      }
+      expect(
+        tester.getTopLeft(find.byKey(const Key('notification-day-今天'))).dy,
+        lessThan(
+          tester.getTopLeft(find.byKey(const Key('notification-day-昨天'))).dy,
+        ),
+      );
+      for (final (id, tag) in [
+        ('n-3', '遞補成功'),
+        ('n-2', '已成團'),
+        ('n-1', '揪團已取消'),
+      ]) {
+        final card = find.byKey(Key('notification-$id'));
+        expect(
+          find.descendant(of: card, matching: find.text(tag)),
+          findsOneWidget,
+          reason: id,
+        );
+        final box = tester.widget<DecoratedBox>(
+          find.descendant(of: card, matching: find.byType(DecoratedBox)).first,
+        );
+        final border = (box.decoration as BoxDecoration).border! as Border;
+        expect(border.bottom.width, greaterThan(border.top.width));
+      }
+    });
+
     testWidgets('三種通知的文字、揪團時間與通知時間', (tester) async {
       final repo = FakeGroupsRepository()
         ..notifications = [

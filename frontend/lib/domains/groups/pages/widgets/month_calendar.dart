@@ -3,11 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
+import '../../../../app/theme/thick_widgets.dart';
 import '../../state/group_clock.dart';
 import '../../state/groups_calendar_state.dart';
 import 'group_widgets.dart';
 
-/// 月曆卡片：月份切換、開團主篩選，以及每天的團數。
+/// 月曆卡片：月份切換與每天的團數（開團主篩選在頁首，見 [OrganizerFilter]）。
 class MonthCalendar extends ConsumerWidget {
   const MonthCalendar({super.key});
 
@@ -15,7 +16,7 @@ class MonthCalendar extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(groupsCalendarProvider);
     final notifier = ref.read(groupsCalendarProvider.notifier);
-    return Card(
+    return ThickCard(
       child: Padding(
         padding: const EdgeInsets.all(AppSpacing.medium),
         child: Column(
@@ -43,12 +44,15 @@ class MonthCalendar extends ConsumerWidget {
                 ),
                 TextButton(
                   onPressed: notifier.goToToday,
+                  style: TextButton.styleFrom(
+                    backgroundColor: AppColors.amberTint,
+                    foregroundColor: AppColors.amberText,
+                    shape: const StadiumBorder(),
+                  ),
                   child: const Text('今天'),
                 ),
               ],
             ),
-            const SizedBox(height: AppSpacing.small),
-            const _OrganizerFilter(),
             const SizedBox(height: AppSpacing.medium),
             state.groups.when(
               skipLoadingOnRefresh: false,
@@ -64,8 +68,9 @@ class MonthCalendar extends ConsumerWidget {
   }
 }
 
-class _OrganizerFilter extends ConsumerWidget {
-  const _OrganizerFilter();
+/// 開團主篩選：「全部開團主」或某位開團主（N 場），月曆與當日列表都只算該開團主。
+class OrganizerFilter extends ConsumerWidget {
+  const OrganizerFilter({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -122,7 +127,15 @@ class _CalendarGrid extends ConsumerWidget {
           children: [
             for (final name in _weekdays)
               Expanded(
-                child: Center(child: Text(name, style: muted)),
+                child: Center(
+                  child: Text(
+                    name,
+                    // 週末用焦糖橘標出來
+                    style: name == '日' || name == '六'
+                        ? muted.copyWith(color: AppColors.primaryText)
+                        : muted,
+                  ),
+                ),
               ),
           ],
         ),
@@ -182,21 +195,21 @@ class _DayCell extends ConsumerWidget {
         : enabled
         ? scheme.onSurface
         : AppColors.inkMuted;
-    final countColor = selected
-        ? scheme.onPrimary
+    // 團數用膠囊：選取時白底橘字，其他是橘色淡底；已過的是灰字（格子本身灰底）
+    final countColor = enabled ? AppColors.primaryText : AppColors.inkMuted;
+    final countBackground = selected
+        ? AppColors.surface
         : enabled
-        ? scheme.onPrimaryContainer
-        : AppColors.inkMuted;
+        ? AppColors.primaryTint
+        : Colors.transparent;
     final radius = BorderRadius.circular(AppRadius.button);
     return Material(
       // 已過的揪團用灰底，和之後的揪團區別
       color: selected
           ? scheme.primary
-          : count == 0
-          ? Colors.transparent
-          : enabled
-          ? scheme.primaryContainer
-          : AppColors.border,
+          : count > 0 && !enabled
+          ? AppColors.border
+          : Colors.transparent,
       shape: RoundedRectangleBorder(
         borderRadius: radius,
         side: isToday && !selected
@@ -223,11 +236,22 @@ class _DayCell extends ConsumerWidget {
                   ),
                 ),
                 if (count > 0)
-                  Text(
-                    '$count 團',
-                    style: text.labelSmall!.copyWith(
-                      color: countColor,
-                      fontWeight: FontWeight.w600,
+                  DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: countBackground,
+                      borderRadius: BorderRadius.circular(AppRadius.pill),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.xSmall,
+                      ),
+                      child: Text(
+                        '$count 團',
+                        style: text.labelSmall!.copyWith(
+                          color: countColor,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
                     ),
                   ),
               ],

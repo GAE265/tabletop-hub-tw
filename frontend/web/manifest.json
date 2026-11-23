@@ -1,11 +1,11 @@
 {
-    "name": "tabletop_hub",
-    "short_name": "tabletop_hub",
+    "name": "遊任有娛",
+    "short_name": "遊任有娛",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#FAF7F2",
+    "theme_color": "#27221E",
+    "description": "找遊戲、揪人、訂位、學規則，一個地方搞定。",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

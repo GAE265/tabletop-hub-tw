@@ -50,7 +50,9 @@ void main() {
       '副標／卡片': (AppColors.inkMuted, AppColors.surface),
       '文字按鈕／卡片': (AppColors.primaryText, AppColors.surface),
       '文字按鈕／背景': (AppColors.primaryText, AppColors.background),
-      '一般標籤': (AppColors.inkMuted, AppColors.neutralTint),
+      '一般標籤': (AppColors.ink, AppColors.neutralTint),
+      '深色卡片上的文字': (AppColors.surface, AppColors.ink),
+      '深色卡片上的說明': (AppColors.onInkMuted, AppColors.ink),
       '人數標籤': (AppColors.sage, AppColors.sageTint),
       '時間標籤': (AppColors.amberText, AppColors.amberTint),
       '重點標籤': (AppColors.primaryText, AppColors.primaryTint),
@@ -108,12 +110,33 @@ void main() {
 
     const disabled = {WidgetState.disabled};
 
-    test('外框按鈕：可以按時是焦糖橘，停用時文字與外框變成暖灰', () {
+    test('外框按鈕（次要按鈕）：米白底、細邊框、深色字，停用時文字變成暖灰', () {
       final style = theme.outlinedButtonTheme.style!;
-      expect(style.foregroundColor!.resolve({}), AppColors.primaryText);
-      expect(style.side!.resolve({})!.color, AppColors.primary);
+      expect(style.backgroundColor!.resolve({}), AppColors.background);
+      expect(style.foregroundColor!.resolve({}), AppColors.ink);
+      expect(style.side!.resolve({})!.color, AppColors.border);
       expect(style.foregroundColor!.resolve(disabled), AppColors.inkMuted);
       expect(style.side!.resolve(disabled)!.color, AppColors.border);
+    });
+
+    test('主色按鈕按下時變深', () {
+      final style = theme.filledButtonTheme.style!;
+      expect(
+        style.backgroundColor!.resolve({WidgetState.pressed}),
+        AppColors.primaryText,
+      );
+    });
+
+    test('輸入框：米白底，選取時亮橘色外框', () {
+      final input = theme.inputDecorationTheme;
+      expect(input.fillColor, AppColors.backgroundAlt);
+      final focused = input.focusedBorder! as OutlineInputBorder;
+      expect(focused.borderSide.color, AppColors.primaryBright);
+      expect(focused.borderRadius, BorderRadius.circular(AppRadius.button));
+    });
+
+    test('對話框遮罩是暖炭色', () {
+      expect(theme.dialogTheme.barrierColor, AppColors.scrim);
     });
 
     test('文字按鈕：可以按時是焦糖橘，停用時文字變成暖灰', () {
@@ -160,7 +183,7 @@ void main() {
 
   group('膠囊標籤', () {
     for (final (tone, bg, fg) in [
-      (PillTone.neutral, AppColors.neutralTint, AppColors.inkMuted),
+      (PillTone.neutral, AppColors.neutralTint, AppColors.ink),
       (PillTone.players, AppColors.sageTint, AppColors.sage),
       (PillTone.duration, AppColors.amberTint, AppColors.amberText),
       (PillTone.accent, AppColors.primaryTint, AppColors.primaryText),

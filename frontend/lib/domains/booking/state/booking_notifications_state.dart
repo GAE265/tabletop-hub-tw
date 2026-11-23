@@ -20,6 +20,9 @@ String _two(int n) => n.toString().padLeft(2, '0');
 
 DateTime _taipei(DateTime utc) => utc.toUtc().add(_taipeiOffset);
 
+/// 台灣時間（通知依日期分段用）。
+DateTime bookingTaipeiTime(DateTime utc) => _taipei(utc);
+
 /// `11/22（日）`（台灣時間）
 String bookingNotificationDate(DateTime utc) {
   final d = _taipei(utc);

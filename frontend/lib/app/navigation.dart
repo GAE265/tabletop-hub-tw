@@ -6,6 +6,7 @@ import '../core/dev/state/dev_user_state.dart';
 import 'notifications/notification_bell.dart';
 import 'theme/app_colors.dart';
 import 'theme/app_spacing.dart';
+import 'theme/thick_widgets.dart';
 
 /// 主要導覽列的一個項目。[keyName] 掛在項目的 [Semantics] 上（測試與無障礙都用它判斷選取狀態）。
 class NavItem {
@@ -131,24 +132,38 @@ String? selectedNavPath(String path) {
 class BottomNavigation extends ConsumerWidget {
   const BottomNavigation({required this.location, super.key});
 
+  /// 導覽列佔的總高度（膠囊加上下留白，不含系統的安全區域）。
+  static const extent =
+      AppSizes.navigationBarHeight + AppSpacing.small + AppSpacing.medium;
+
   final String location;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final selected = selectedNavPath(location);
     final items = ref.watch(visibleNavItemsProvider);
-    return Material(
-      color: AppColors.surface,
-      child: DecoratedBox(
-        decoration: const BoxDecoration(
-          border: Border(top: BorderSide(color: AppColors.border)),
+    // 浮在木紋上的米白膠囊（Stitch 設計）
+    return SafeArea(
+      top: false,
+      child: Padding(
+        // 上下留白加起來要和 [extent] 一致
+        padding: const EdgeInsets.fromLTRB(
+          AppSpacing.medium,
+          AppSpacing.small,
+          AppSpacing.medium,
+          AppSpacing.medium,
         ),
-        child: SafeArea(
-          top: false,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: AppColors.navGlass,
+            borderRadius: BorderRadius.circular(AppRadius.pill),
+            border: Border.all(color: AppColors.border),
+            boxShadow: AppShadows.floating,
+          ),
           child: SizedBox(
             height: AppSizes.navigationBarHeight,
             child: Padding(
-              padding: const EdgeInsets.all(AppSpacing.small),
+              padding: const EdgeInsets.all(AppSpacing.small - 2),
               child: Row(
                 children: [
                   for (final item in items)
@@ -231,21 +246,46 @@ class TopNavigation extends ConsumerWidget {
   }
 }
 
-/// 手機：畫面頂部只放通知鈴鐺的窄列（底部導覽已經有六個項目）。
+/// 手機：畫面頂部列，左邊品牌與副標，右邊通知鈴鐺與登入（Stitch 設計）。
 class MobileTopBar extends StatelessWidget {
   const MobileTopBar({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return const Material(
-      color: AppColors.surface,
-      child: SafeArea(
+    // 白色滿版，底部較粗的邊與陰影，像其他卡片一樣有厚度
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        border: const Border(
+          bottom: BorderSide(
+            color: AppColors.cardEdge,
+            width: AppSizes.cardThickness,
+          ),
+        ),
+        boxShadow: AppShadows.hover,
+      ),
+      child: const SafeArea(
         bottom: false,
-        child: Align(
-          alignment: Alignment.centerRight,
-          child: Padding(
-            padding: EdgeInsets.symmetric(horizontal: AppSpacing.small),
-            child: NotificationBell(key: Key('shell-notification-bell')),
+        child: Padding(
+          padding: EdgeInsets.symmetric(
+            horizontal: AppSpacing.medium,
+            vertical: AppSpacing.small,
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: BrandMark(height: AppSizes.logoHeightMobile),
+                ),
+              ),
+              NotificationBell(
+                key: Key('shell-notification-bell'),
+                thick: true,
+              ),
+              SizedBox(width: AppSpacing.small),
+              LoginButton(key: Key('shell-login'), compact: true),
+            ],
           ),
         ),
       ),
@@ -266,7 +306,17 @@ class _NavButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = selected ? AppColors.primaryText : AppColors.inkMuted;
+    // 手機底部：選取時深色底白字；平板與桌機頂部：選取時橘色淡底橘字
+    final color = !selected
+        ? AppColors.inkMuted
+        : vertical
+        ? AppColors.surface
+        : AppColors.primaryText;
+    final fill = !selected
+        ? Colors.transparent
+        : vertical
+        ? AppColors.ink
+        : AppColors.primaryTint;
     final textTheme = Theme.of(context).textTheme;
     final label = Text(
       item.label,
@@ -285,8 +335,10 @@ class _NavButton extends StatelessWidget {
       selected: selected,
       button: true,
       child: Material(
-        color: selected ? AppColors.primaryTint : Colors.transparent,
-        borderRadius: BorderRadius.circular(AppRadius.button),
+        color: fill,
+        borderRadius: BorderRadius.circular(
+          vertical ? AppRadius.pill : AppRadius.button,
+        ),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
           onTap: () => context.go(item.path),
@@ -321,42 +373,30 @@ class _NavButton extends StatelessWidget {
   }
 }
 
-/// 品牌標誌與名稱「遊任有娛」。
+/// 品牌 logo（橫式完整版：魚＋遊任有娛＋PLAY · GAME · FUN），讀屏唸「遊任有娛」。
 class BrandMark extends StatelessWidget {
-  const BrandMark({super.key});
+  const BrandMark({this.height = AppSizes.logoHeight, super.key});
+
+  /// logo 圖片的路徑（`pubspec.yaml` 的 assets）。ChatGPT 產生，已去背。
+  static const asset = 'assets/images/logo-full.webp';
+
+  final double height;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          width: AppSizes.brandMark,
-          height: AppSizes.brandMark,
-          decoration: BoxDecoration(
-            color: AppColors.primary,
-            borderRadius: BorderRadius.circular(AppRadius.button),
-          ),
-          child: Icon(
-            Icons.casino_outlined,
-            color: theme.colorScheme.onPrimary,
-          ),
-        ),
-        const SizedBox(width: AppSpacing.small),
-        Text(
-          '遊任有娛',
-          style: theme.textTheme.titleLarge!.copyWith(
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-      ],
+    return Image.asset(
+      asset,
+      height: height,
+      fit: BoxFit.contain,
+      alignment: Alignment.centerLeft,
+      semanticLabel: '遊任有娛',
+      filterQuality: FilterQuality.medium,
     );
   }
 }
 
 /// 登入按鈕。`auth` 尚未完成，按下只提示「登入功能即將推出」。
-/// [compact] 時只有圖示（手機首頁頂部）。
+/// [compact] 時是米白的圓形按鈕＋橘色人形（手機頂部列），和鈴鐺一樣大、按得下去。
 class LoginButton extends StatelessWidget {
   const LoginButton({this.compact = false, super.key});
 
@@ -368,10 +408,11 @@ class LoginButton extends StatelessWidget {
       context,
     ).showSnackBar(const SnackBar(content: Text('登入功能即將推出')));
     if (compact) {
-      return IconButton.outlined(
+      return ThickIconButton(
         tooltip: '登入',
+        color: AppColors.background,
         onPressed: onPressed,
-        icon: const Icon(Icons.person_outline),
+        icon: const Icon(Icons.person_outline, color: AppColors.primaryText),
       );
     }
     return OutlinedButton.icon(

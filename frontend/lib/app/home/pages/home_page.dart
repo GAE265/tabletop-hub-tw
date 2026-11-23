@@ -1,69 +1,65 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/layout/breakpoints.dart';
-import '../../navigation.dart';
-import '../../theme/app_colors.dart';
 import '../../theme/app_spacing.dart';
+import '../../theme/thick_widgets.dart';
+import '../../theme/wood_background.dart';
 import 'widgets/home_widgets.dart';
 
 /// 首頁（`/`）：所有角色同一個畫面，把人最快送到下一步。
 ///
-/// 手機版在頁面頂部顯示品牌與登入按鈕；平板與桌機由頂部導覽列顯示。
+/// 版面依 Stitch 設計（docs/ui/stitch/）：木紋背景，文字一律放在卡片或白底條上。
+/// 品牌與登入由畫面框架顯示（手機頂部列、平板與桌機頂部導覽列）。
+/// 手機的畫面框架已經畫了木紋，首頁就不再畫一次，免得兩層木紋接不起來。
 class HomePage extends StatelessWidget {
   const HomePage({super.key});
 
   @override
   Widget build(BuildContext context) {
     final mobile = context.screenSize == ScreenSize.mobile;
-    final textTheme = Theme.of(context).textTheme;
-    return Scaffold(
-      key: const Key('home-page'),
-      body: SafeArea(
-        child: Align(
-          alignment: Alignment.topCenter,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(
-              maxWidth: AppSpacing.splitContentMaxWidth,
-            ),
-            child: ListView(
-              padding: EdgeInsets.all(
-                mobile ? AppSpacing.medium : AppSpacing.large,
-              ),
+    final gap = mobile ? AppSpacing.medium : AppSpacing.large;
+    // 底部不用 SafeArea：手機的浮動導覽列蓋住的高度放進捲動內容的留白，
+    // 內容才能從導覽列後面捲過去，捲到最底時最後的按鈕停在導覽列上方
+    final bottomInset = MediaQuery.paddingOf(context).bottom;
+    final content = SafeArea(
+      bottom: false,
+      child: Align(
+        alignment: Alignment.topCenter,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(
+            maxWidth: AppSpacing.splitContentMaxWidth,
+          ),
+          // 內容不多，一次全部建立（ListView 只建畫面上看得到的部分）
+          child: SingleChildScrollView(
+            padding: EdgeInsets.fromLTRB(gap, gap, gap, gap + bottomInset),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                if (mobile) ...[
-                  const Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      BrandMark(),
-                      LoginButton(key: Key('home-login'), compact: true),
-                    ],
-                  ),
-                  const SizedBox(height: AppSpacing.large),
-                ] else
-                  const SizedBox(height: AppSpacing.large),
-                Text(
-                  '今天想怎麼玩？',
-                  style:
-                      (mobile
-                              ? textTheme.headlineMedium
-                              : textTheme.displaySmall)!
-                          .copyWith(fontWeight: FontWeight.w700),
+                const HomeHero(),
+                SizedBox(height: gap),
+                const SectionBar(
+                  key: Key('home-section-entries'),
+                  title: '快速入口',
                 ),
                 const SizedBox(height: AppSpacing.small),
-                Text(
-                  '找遊戲、揪人、訂位、學規則，一個地方搞定。',
-                  style: (mobile ? textTheme.bodyLarge : textTheme.titleMedium)!
-                      .copyWith(color: AppColors.inkMuted),
-                ),
-                const SizedBox(height: AppSpacing.large),
                 const EntryCards(),
-                SizedBox(height: mobile ? AppSpacing.large : AppSpacing.xLarge),
+                SizedBox(height: gap),
                 const UpcomingSection(),
+                SizedBox(height: gap),
+                const HomeActions(),
+                const SizedBox(height: AppSpacing.small),
               ],
             ),
           ),
         ),
       ),
+    );
+    return Scaffold(
+      key: const Key('home-page'),
+      backgroundColor: Colors.transparent,
+      body: WoodBackground.isPaintedAbove(context)
+          ? content
+          : WoodBackground(child: content),
     );
   }
 }

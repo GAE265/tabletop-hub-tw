@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
+import '../../../../app/theme/notification_widgets.dart';
+import '../../../../core/notifications/notification_day.dart';
+import '../../../../core/widgets/pill_badge.dart';
 import '../../../../core/layout/breakpoints.dart';
 import '../../data/group_notification.dart';
 import '../../state/group_clock.dart';
@@ -20,6 +22,7 @@ class GroupNotificationsList extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(groupNotificationsProvider);
     final notifier = ref.read(groupNotificationsProvider.notifier);
+    final clock = ref.watch(groupClockProvider);
     final maxWidth =
         AppSpacing.contentMaxWidth(context.screenSize) ?? double.infinity;
     return KeyedSubtree(
@@ -45,15 +48,27 @@ class GroupNotificationsList extends ConsumerWidget {
                       }
                       return false;
                     },
-                    child: ListView.separated(
-                      padding: const EdgeInsets.symmetric(
-                        vertical: AppSpacing.small,
+                    child: ListView(
+                      padding: EdgeInsets.fromLTRB(
+                        AppSpacing.medium,
+                        AppSpacing.medium,
+                        AppSpacing.medium,
+                        AppSpacing.medium +
+                            MediaQuery.paddingOf(context).bottom,
                       ),
-                      itemCount: items.length + (state.hasMore ? 1 : 0),
-                      separatorBuilder: (_, _) => const Divider(height: 1),
-                      itemBuilder: (context, index) => index == items.length
-                          ? const LoadingIndicator()
-                          : _NotificationTile(notification: items[index]),
+                      children: [
+                        // 依日期分段：今天／昨天／更早之前（台灣時間）
+                        ...groupNotificationsByDay(
+                          items: items,
+                          dayOf: (n) => notificationDay(
+                            clock.toLocal(n.createdAt),
+                            clock.toLocal(clock.now()),
+                          ),
+                          itemBuilder: (n) =>
+                              _NotificationTile(notification: n),
+                        ),
+                        if (state.hasMore) const LoadingIndicator(),
+                      ],
                     ),
                   ),
                 ),
@@ -71,10 +86,7 @@ class _NotificationTile extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final clock = ref.watch(groupClockProvider);
-    final unread = notification.readAt == null;
-    final text = Theme.of(context).textTheme;
     final start = clock.toLocal(notification.group.startAt);
-    final muted = text.bodySmall!.copyWith(color: AppColors.inkMuted);
 
     Future<void> open() async {
       await ref.read(groupNotificationsProvider.notifier).open(notification);
@@ -86,72 +98,29 @@ class _NotificationTile extends ConsumerWidget {
       );
     }
 
-    return Material(
+    return NotificationCard(
       key: Key('notification-${notification.id}'),
-      color: unread ? AppColors.primaryTint : AppColors.surface,
-      child: InkWell(
-        onTap: open,
-        child: Padding(
-          padding: const EdgeInsets.all(AppSpacing.medium),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(_iconFor(notification.type), color: AppColors.inkMuted),
-              const SizedBox(width: AppSpacing.medium),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      notificationText(notification),
-                      style: text.bodyLarge!.copyWith(
-                        fontWeight: unread ? FontWeight.w700 : FontWeight.w400,
-                      ),
-                    ),
-                    const SizedBox(height: AppSpacing.xSmall),
-                    // 兩段各自換行，不會把日期和時間拆到兩行
-                    Wrap(
-                      spacing: AppSpacing.medium,
-                      children: [
-                        Text(
-                          '揪團時間 ${formatDate(start)}（${weekdayLabel(start)}） '
-                          '${formatClockTime(clock, notification.group.startAt)}',
-                          style: muted,
-                        ),
-                        Text(
-                          '通知時間 '
-                          '${formatShortDateTime(clock, notification.createdAt)}',
-                          style: muted,
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              if (unread)
-                Padding(
-                  padding: const EdgeInsets.only(left: AppSpacing.small),
-                  child: Container(
-                    key: Key('notification-unread-${notification.id}'),
-                    width: AppSizes.unreadDot,
-                    height: AppSizes.unreadDot,
-                    decoration: const BoxDecoration(
-                      color: AppColors.primary,
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                ),
-            ],
-          ),
+      unread: notification.readAt == null,
+      unreadDotKey: Key('notification-unread-${notification.id}'),
+      tag: _tagFor(notification.type),
+      title: notificationText(notification),
+      chips: [
+        (
+          Icons.schedule,
+          '揪團時間 ${formatDate(start)}（${weekdayLabel(start)}） '
+              '${formatClockTime(clock, notification.group.startAt)}',
         ),
-      ),
+      ],
+      footnote: '通知時間 ${formatShortDateTime(clock, notification.createdAt)}',
+      onTap: open,
     );
   }
 }
 
-IconData _iconFor(String type) => switch (type) {
-  'group_confirmed' => Icons.check_circle_outline,
-  'group_cancelled' => Icons.event_busy_outlined,
-  'waitlist_promoted' => Icons.how_to_reg_outlined,
-  _ => Icons.notifications_outlined,
+/// 種類標籤：（文字, 色調, 圖示）。
+(String, PillTone, IconData) _tagFor(String type) => switch (type) {
+  'group_confirmed' => ('已成團', PillTone.players, Icons.check_circle_outline),
+  'group_cancelled' => ('揪團已取消', PillTone.neutral, Icons.event_busy_outlined),
+  'waitlist_promoted' => ('遞補成功', PillTone.accent, Icons.how_to_reg_outlined),
+  _ => ('揪團消息', PillTone.neutral, Icons.notifications_outlined),
 };

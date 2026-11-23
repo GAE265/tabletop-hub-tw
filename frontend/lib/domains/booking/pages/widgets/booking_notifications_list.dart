@@ -2,12 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
+import '../../../../app/theme/notification_widgets.dart';
+import '../../../../core/notifications/notification_day.dart';
+import '../../../../core/widgets/pill_badge.dart';
 import '../../../../core/api/api_exception.dart';
 import '../../../../core/layout/breakpoints.dart';
 import '../../data/booking_notification.dart';
 import '../../state/booking_notifications_state.dart';
+import '../../state/booking_overtime.dart';
 
 /// 訂位通知列表（通知頁的「訂位」分頁，add-booking-notifications D4）：
 /// 新的在前，捲到底自動載入下一頁；點一則標成已讀，玩家前往我的訂位、店家人員前往店家看板。
@@ -18,6 +21,7 @@ class BookingNotificationsList extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(bookingNotificationsProvider);
     final notifier = ref.read(bookingNotificationsProvider.notifier);
+    final now = ref.watch(bookingClockProvider)();
     final maxWidth =
         AppSpacing.contentMaxWidth(context.screenSize) ?? double.infinity;
     const loading = Padding(
@@ -63,15 +67,27 @@ class BookingNotificationsList extends ConsumerWidget {
                       }
                       return false;
                     },
-                    child: ListView.separated(
-                      padding: const EdgeInsets.symmetric(
-                        vertical: AppSpacing.small,
+                    child: ListView(
+                      padding: EdgeInsets.fromLTRB(
+                        AppSpacing.medium,
+                        AppSpacing.medium,
+                        AppSpacing.medium,
+                        AppSpacing.medium +
+                            MediaQuery.paddingOf(context).bottom,
                       ),
-                      itemCount: items.length + (state.hasMore ? 1 : 0),
-                      separatorBuilder: (_, _) => const Divider(height: 1),
-                      itemBuilder: (context, index) => index == items.length
-                          ? loading
-                          : _NotificationTile(notification: items[index]),
+                      children: [
+                        // 依日期分段：今天／昨天／更早之前（台灣時間）
+                        ...groupNotificationsByDay(
+                          items: items,
+                          dayOf: (n) => notificationDay(
+                            bookingTaipeiTime(n.createdAt),
+                            bookingTaipeiTime(now),
+                          ),
+                          itemBuilder: (n) =>
+                              _NotificationTile(notification: n),
+                        ),
+                        if (state.hasMore) loading,
+                      ],
                     ),
                   ),
                 ),
@@ -88,9 +104,6 @@ class _NotificationTile extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final unread = notification.readAt == null;
-    final text = Theme.of(context).textTheme;
-    final muted = text.bodySmall!.copyWith(color: AppColors.inkMuted);
     final b = notification.booking;
 
     Future<void> open() async {
@@ -99,71 +112,29 @@ class _NotificationTile extends ConsumerWidget {
       context.go(bookingNotificationRoute(notification));
     }
 
-    return Material(
+    final shopNew = notification.type == 'shop_new_booking';
+    return NotificationCard(
       key: Key('booking-notification-${notification.id}'),
-      color: unread ? AppColors.primaryTint : AppColors.surface,
-      child: InkWell(
-        onTap: open,
-        child: Padding(
-          padding: const EdgeInsets.all(AppSpacing.medium),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(
-                notification.type == 'shop_new_booking'
-                    ? Icons.storefront_outlined
-                    : Icons.event_available_outlined,
-                color: AppColors.inkMuted,
-              ),
-              const SizedBox(width: AppSpacing.medium),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      bookingNotificationText(notification),
-                      style: text.bodyLarge!.copyWith(
-                        fontWeight: unread ? FontWeight.w700 : FontWeight.w400,
-                      ),
-                    ),
-                    const SizedBox(height: AppSpacing.xSmall),
-                    // 兩段各自換行，不會把日期和時間拆到兩行
-                    Wrap(
-                      spacing: AppSpacing.medium,
-                      children: [
-                        Text(
-                          '訂位時間 ${bookingNotificationDate(b.startAt)}'
-                          '${bookingNotificationClock(b.startAt)}–'
-                          '${bookingNotificationClock(b.endAt)}',
-                          style: muted,
-                        ),
-                        Text(
-                          '通知時間 '
-                          '${bookingNotificationShortDateTime(notification.createdAt)}',
-                          style: muted,
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              if (unread)
-                Padding(
-                  padding: const EdgeInsets.only(left: AppSpacing.small),
-                  child: Container(
-                    key: Key('booking-notification-unread-${notification.id}'),
-                    width: AppSizes.unreadDot,
-                    height: AppSizes.unreadDot,
-                    decoration: const BoxDecoration(
-                      color: AppColors.primary,
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                ),
-            ],
-          ),
+      unread: notification.readAt == null,
+      unreadDotKey: Key('booking-notification-unread-${notification.id}'),
+      tag: shopNew
+          ? ('新訂位', PillTone.duration, Icons.storefront_outlined)
+          : ('訂位成功', PillTone.players, Icons.event_available_outlined),
+      title: bookingNotificationText(notification),
+      chips: [
+        (
+          Icons.schedule,
+          '訂位時間 ${bookingNotificationDate(b.startAt)}'
+              '${bookingNotificationClock(b.startAt)}–'
+              '${bookingNotificationClock(b.endAt)}',
         ),
-      ),
+        (Icons.storefront_outlined, b.shopName),
+        (Icons.group_outlined, '${b.partySize} 人'),
+        (Icons.confirmation_number_outlined, b.reservationCode),
+      ],
+      footnote:
+          '通知時間 ${bookingNotificationShortDateTime(notification.createdAt)}',
+      onTap: open,
     );
   }
 }

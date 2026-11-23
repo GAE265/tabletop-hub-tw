@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:tabletop_hub/app/theme/wood_background.dart';
+import 'package:go_router/go_router.dart';
 import 'package:tabletop_hub/app/theme/app_theme.dart';
 import 'package:tabletop_hub/core/api/api_exception.dart';
 import 'package:tabletop_hub/domains/games_advisor/data/advisor_message.dart';
@@ -73,6 +75,9 @@ Future<FakeAdvisorRepository> pumpPage(
   WidgetTester tester, {
   Size size = const Size(400, 900),
   Widget page = const GamesAdvisorPage(),
+
+  /// 畫面底部被蓋住的高度（手機的浮動導覽列，見 AppShell）。
+  double bottomInset = 0,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
@@ -83,6 +88,12 @@ Future<FakeAdvisorRepository> pumpPage(
       overrides: [advisorRepositoryProvider.overrideWithValue(repo)],
       child: MaterialApp(
         theme: buildAppTheme(const FakeAppFonts()),
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(
+            context,
+          ).copyWith(padding: EdgeInsets.only(bottom: bottomInset)),
+          child: child!,
+        ),
         home: page,
       ),
     ),
@@ -118,7 +129,195 @@ Future<void> ask(
   await tester.pumpAndSettle();
 }
 
+/// [box] 的外框底邊比上邊粗，而且有陰影（有厚度）。
+void expectThick(WidgetTester tester, Finder box, [String? reason]) {
+  final decoration =
+      tester.widget<DecoratedBox>(box).decoration as BoxDecoration;
+  final border = decoration.border! as Border;
+  expect(border.bottom.width, greaterThan(border.top.width), reason: reason);
+  expect(decoration.boxShadow, isNotEmpty, reason: reason);
+}
+
+Finder firstBoxIn(Finder of) =>
+    find.descendant(of: of, matching: find.byType(DecoratedBox)).first;
+
 void main() {
+  // Stitch 版面：木紋背景，文字放在卡片或泡泡裡，卡片與按鈕有厚度
+  group('Stitch 版面', () {
+    testWidgets('木紋背景；頁首白底條有「桌遊推薦」與「開始新對話」', (tester) async {
+      await pumpPage(tester);
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('games-advisor-page')),
+          matching: find.byType(WoodBackground),
+        ),
+        findsOneWidget,
+      );
+      final header = find.byKey(const Key('advisor-header'));
+      expect(
+        find.descendant(of: header, matching: find.text('桌遊推薦')),
+        findsOneWidget,
+      );
+      expect(find.descendant(of: header, matching: newButton), findsOneWidget);
+    });
+
+    testWidgets('空畫面：推薦助理的第一句話，下面是小膠囊範例，都有厚度', (tester) async {
+      await pumpPage(tester);
+      final greeting = find.byKey(const Key('advisor-empty'));
+      expect(
+        find.descendant(of: greeting, matching: find.text('我幫你挑桌遊')),
+        findsOneWidget,
+      );
+      expect(find.text('推薦助理'), findsOneWidget);
+      expectThick(tester, firstBoxIn(greeting));
+      final chip = find
+          .ancestor(
+            of: find.text('2 個人約會玩'),
+            matching: find.byType(DecoratedBox),
+          )
+          .first;
+      expectThick(tester, chip);
+      // 小膠囊：比一般按鈕矮
+      expect(tester.getSize(chip).height, lessThan(48));
+    });
+
+    testWidgets('對話泡泡（我的訊息、推薦助理的回覆）都有厚度', (tester) async {
+      final repo = await pumpPage(tester);
+      await ask(tester, repo, '我們 4 個人', textOnly);
+      expectThick(
+        tester,
+        find
+            .ancestor(
+              of: find.text('我們 4 個人'),
+              matching: find.byType(DecoratedBox),
+            )
+            .first,
+        '我的訊息',
+      );
+      expectThick(
+        tester,
+        find
+            .ancestor(
+              of: find.text('你們大概想玩多久呢？'),
+              matching: find.byType(DecoratedBox),
+            )
+            .first,
+        '推薦助理',
+      );
+    });
+
+    testWidgets('推薦回覆：頭像旁寫「推薦助理」；卡片有厚度，理由前有「推薦理由」', (tester) async {
+      final repo = await pumpPage(tester);
+      await ask(tester, repo, '我們 4 個人', cards());
+      expect(find.text('推薦助理'), findsOneWidget);
+      final card = find.byKey(const Key('advisor-game-card')).first;
+      expectThick(tester, firstBoxIn(card));
+      expect(
+        find.descendant(of: card, matching: find.text('推薦理由')),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('「想問規則或玩法？到規則問答」可以點，前往規則頁', (tester) async {
+      tester.view.physicalSize = const Size(400, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final router = GoRouter(
+        routes: [
+          GoRoute(
+            path: '/',
+            builder: (context, state) => const GamesAdvisorPage(),
+          ),
+          GoRoute(
+            path: '/rules',
+            builder: (context, state) => const Scaffold(body: Text('規則頁')),
+          ),
+        ],
+      );
+      addTearDown(router.dispose);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            advisorRepositoryProvider.overrideWithValue(
+              FakeAdvisorRepository(),
+            ),
+          ],
+          child: MaterialApp.router(
+            theme: buildAppTheme(const FakeAppFonts()),
+            routerConfig: router,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final link = find.byKey(const Key('advisor-rules-link'));
+      await tester.ensureVisible(link);
+      expect(
+        find.descendant(of: link, matching: find.text('想問規則或玩法？到規則問答')),
+        findsOneWidget,
+      );
+      await tester.tap(link);
+      await tester.pumpAndSettle();
+      expect(find.text('規則頁'), findsOneWidget);
+    });
+
+    testWidgets('輸入區有厚度；左下是操作說明，右下是字數', (tester) async {
+      await pumpPage(tester);
+      final composer = find.byKey(const Key('advisor-composer'));
+      expectThick(tester, firstBoxIn(composer));
+      expect(
+        find.descendant(
+          of: composer,
+          matching: find.text('Enter 送出、Shift+Enter 換行'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: composer,
+          matching: find.text('0 / $advisorMaxContentLength 字'),
+        ),
+        findsOneWidget,
+      );
+    });
+
+    for (final withMessages in [false, true]) {
+      testWidgets(
+        withMessages
+            ? '對話：內容從輸入區後面滑過去，捲到底時最後一張卡片停在輸入區上方'
+            : '空畫面：內容從輸入區後面滑過去，捲到底時規則連結停在輸入區上方',
+        (tester) async {
+          final repo = await pumpPage(tester, size: const Size(400, 700));
+          if (withMessages) await ask(tester, repo, '我們 4 個人', cards());
+          final composer = find.byKey(const Key('advisor-composer'));
+          final scroll = find.byType(Scrollable).first;
+          // 捲動區延伸到輸入區後面
+          expect(
+            tester.getBottomLeft(scroll).dy,
+            greaterThan(tester.getTopLeft(composer).dy),
+          );
+          await tester.drag(scroll, const Offset(0, -5000));
+          await tester.pumpAndSettle();
+          expect(
+            tester
+                .getBottomLeft(find.byKey(const Key('advisor-rules-link')))
+                .dy,
+            lessThanOrEqualTo(tester.getTopLeft(composer).dy),
+          );
+          // 上緣碰到頁首的地方維持淡出
+          expect(find.byKey(const Key('advisor-scroll-fade')), findsOneWidget);
+        },
+      );
+    }
+
+    testWidgets('手機底部被導覽列蓋住：輸入區停在導覽列上方', (tester) async {
+      await pumpPage(tester, bottomInset: 120);
+      expect(
+        tester.getBottomLeft(find.byKey(const Key('advisor-composer'))).dy,
+        lessThanOrEqualTo(900 - 120),
+      );
+    });
+  });
+
   group('空畫面', () {
     testWidgets('說明文字、3 個範例，「開始新對話」停用', (tester) async {
       await pumpPage(tester);

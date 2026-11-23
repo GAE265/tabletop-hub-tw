@@ -2,6 +2,7 @@
 // 下拉選單見 update-groups-shop-game-pickers）。
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:tabletop_hub/app/theme/wood_background.dart';
 import 'package:tabletop_hub/core/api/api_exception.dart';
 import 'package:tabletop_hub/domains/groups/data/group.dart';
 import 'package:tabletop_hub/domains/groups/pages/group_form_page.dart';
@@ -58,7 +59,144 @@ Future<void> submit(WidgetTester tester, String label) async {
   await tester.pumpAndSettle();
 }
 
+/// [box] 的外框底邊比上邊粗，而且有陰影（有厚度）。
+void expectThick(WidgetTester tester, Finder box, [String? reason]) {
+  final decoration =
+      tester.widget<DecoratedBox>(box).decoration as BoxDecoration;
+  final border = decoration.border! as Border;
+  expect(border.bottom.width, greaterThan(border.top.width), reason: reason);
+  expect(decoration.boxShadow, isNotEmpty, reason: reason);
+}
+
+Finder inKey(String key, Finder f) =>
+    find.descendant(of: find.byKey(Key(key)), matching: f);
+
 void main() {
+  // Stitch 版面：木紋背景，每個欄位各一張有厚度的卡片
+  group('Stitch 版面', () {
+    testWidgets('開團：木紋背景，說明卡與每個欄位的卡片都有厚度', (tester) async {
+      await openForm(tester, FakeGroupsRepository(), valid());
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('group-form-page')),
+          matching: find.byType(WoodBackground),
+        ),
+        findsOneWidget,
+      );
+      for (final key in [
+        'group-form-intro',
+        'group-form-shop',
+        'group-form-title',
+        'group-form-time',
+        'group-form-capacity',
+        'group-form-fee',
+        'group-form-games',
+        'group-form-description',
+      ]) {
+        final card = find.byKey(Key(key));
+        await tester.ensureVisible(card);
+        expectThick(
+          tester,
+          find.descendant(of: card, matching: find.byType(DecoratedBox)).first,
+          key,
+        );
+      }
+    });
+
+    testWidgets('開團說明卡：寫實際流程，不提自動訂位或自動成團', (tester) async {
+      await openForm(tester, FakeGroupsRepository(), valid());
+      expect(inKey('group-form-intro', find.text('發起一場揪團')), findsOneWidget);
+      expect(find.textContaining('團務操作'), findsOneWidget);
+      expect(find.textContaining('自動'), findsNothing);
+      expect(find.textContaining('同步'), findsNothing);
+    });
+
+    testWidgets('編輯：沒有開團說明卡', (tester) async {
+      await openForm(tester, FakeGroupsRepository(), valid(), groupId: 'g-1');
+      expect(find.byKey(const Key('group-form-intro')), findsNothing);
+    });
+
+    testWidgets('標題與簡介顯示字數（上限 100、2000）', (tester) async {
+      await openForm(tester, FakeGroupsRepository(), valid());
+      expect(inKey('group-form-title', find.text('5／100 字')), findsOneWidget);
+      expect(
+        inKey('group-form-description', find.text('0／2000 字')),
+        findsOneWidget,
+      );
+      await tester.enterText(
+        inKey('group-form-title', find.byType(TextField)),
+        '卡坦島',
+      );
+      await tester.pump();
+      expect(inKey('group-form-title', find.text('3／100 字')), findsOneWidget);
+    });
+
+    testWidgets('日期與時段卡顯示時數', (tester) async {
+      await openForm(tester, FakeGroupsRepository(), valid());
+      expect(inKey('group-form-time', find.text('2 小時')), findsOneWidget);
+    });
+
+    testWidgets('人數用加減按鈕：顯示人數與「開團主 1 人＋募集 N 人」，送出加減後的人數', (tester) async {
+      final repo = FakeGroupsRepository();
+      await openForm(tester, repo, valid());
+      Finder capacity(String text) =>
+          inKey('group-form-capacity', find.text(text));
+      expect(capacity('4 人'), findsOneWidget);
+      expect(capacity('開團主 1 人＋募集 3 人'), findsOneWidget);
+      final plus = find.byKey(const Key('group-capacity-plus'));
+      await tester.ensureVisible(plus);
+      await tester.tap(plus);
+      await tester.pump();
+      expect(capacity('5 人'), findsOneWidget);
+      await submit(tester, '送出');
+      expect(repo.createCalls.single.capacity, 5);
+    });
+
+    testWidgets('人數最少 2 人：到 2 人時「－」停用', (tester) async {
+      final data = valid();
+      await openForm(
+        tester,
+        FakeGroupsRepository(),
+        GroupFormData(
+          shopId: data.shopId,
+          title: data.title,
+          date: data.date,
+          startTime: data.startTime,
+          endTime: data.endTime,
+          capacity: '2',
+        ),
+      );
+      final minus = find.byKey(const Key('group-capacity-minus'));
+      await tester.ensureVisible(minus);
+      expect(tester.widget<IconButton>(minus).onPressed, isNull);
+    });
+
+    testWidgets('新開團沒填人數：預設 4 人', (tester) async {
+      await openForm(tester, FakeGroupsRepository(), GroupFormData(date: day));
+      expect(inKey('group-form-capacity', find.text('4 人')), findsOneWidget);
+    });
+
+    testWidgets('費用卡說明 0 元代表免費', (tester) async {
+      await openForm(tester, FakeGroupsRepository(), valid());
+      expect(
+        inKey('group-form-fee', find.textContaining('0 代表免費')),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('送出是有厚度的大按鈕，下方沒有重複的提醒', (tester) async {
+      await openForm(tester, FakeGroupsRepository(), valid());
+      final button = find.ancestor(
+        of: find.text('送出'),
+        matching: find.byType(DecoratedBox),
+      );
+      await tester.ensureVisible(find.text('送出'));
+      expectThick(tester, button.first);
+      // 說明卡已經提醒過開團後在哪裡修改，按鈕下方不再重複
+      expect(find.textContaining('送出後可以'), findsNothing);
+    });
+  });
+
   testWidgets('開團成功：呼叫 API 並關閉表單', (tester) async {
     final repo = FakeGroupsRepository();
     await openForm(tester, repo, valid());

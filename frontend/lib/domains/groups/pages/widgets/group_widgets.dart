@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
+import '../../../../app/theme/thick_widgets.dart';
 import '../../../../core/api/api_exception.dart';
 import '../../../../core/widgets/pill_badge.dart';
 import '../../data/group.dart';
@@ -38,7 +40,7 @@ class GroupConfirmedBadge extends StatelessWidget {
   );
 }
 
-/// 當日列表中的一筆揪團。
+/// 當日列表中的一筆揪團（Stitch 版面）：有厚度的卡片，點整張進詳細頁，按住時往下沉。
 class GroupCard extends ConsumerWidget {
   const GroupCard({required this.group, required this.onTap, super.key});
 
@@ -50,49 +52,136 @@ class GroupCard extends ConsumerWidget {
     final clock = ref.watch(groupClockProvider);
     final text = Theme.of(context).textTheme;
     final fee = feeLabel(group.fee);
-    return Card(
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(AppSpacing.medium),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(child: Text(group.title, style: text.titleMedium)),
-                  const SizedBox(width: AppSpacing.small),
-                  GroupSlotBadge(group: group),
-                ],
-              ),
-              const SizedBox(height: AppSpacing.small),
-              Wrap(
-                spacing: AppSpacing.small,
-                runSpacing: AppSpacing.xSmall,
-                children: [
-                  PillBadge(
-                    label: formatTimeRange(clock, group),
-                    tone: PillTone.duration,
-                    icon: Icons.schedule,
+    final description = group.description?.trim() ?? '';
+    final muted = text.bodyMedium!.copyWith(color: AppColors.inkMuted);
+    const inset = AppSpacing.medium + AppSpacing.xSmall;
+    return ThickCard(
+      onTap: onTap,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(inset),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    if (isConfirmedOpen(group)) const GroupConfirmedBadge(),
+                    const Spacer(),
+                    GroupSlotBadge(group: group),
+                  ],
+                ),
+                if (group.games.isNotEmpty) ...[
+                  const SizedBox(height: AppSpacing.small),
+                  Wrap(
+                    spacing: AppSpacing.small,
+                    runSpacing: AppSpacing.xSmall,
+                    children: [
+                      for (final game in group.games)
+                        PillBadge(
+                          label: game.name,
+                          icon: Icons.casino_outlined,
+                        ),
+                    ],
                   ),
-                  for (final game in group.games)
-                    PillBadge(label: game.name, icon: Icons.casino_outlined),
-                  if (fee != null) PillBadge(label: fee, tone: PillTone.accent),
-                  if (isConfirmedOpen(group)) const GroupConfirmedBadge(),
                 ],
-              ),
-              const SizedBox(height: AppSpacing.small),
-              Text(group.shop.name, style: text.bodyMedium),
-              Text('開團主：${group.organizer.displayName}', style: text.bodySmall),
-            ],
+                const SizedBox(height: AppSpacing.small),
+                Text(
+                  group.title,
+                  style: text.headlineSmall!.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                if (description.isNotEmpty) ...[
+                  const SizedBox(height: AppSpacing.xSmall),
+                  Text(
+                    description,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: muted,
+                  ),
+                ],
+                const SizedBox(height: AppSpacing.medium),
+                // 時間與店家放在米白的小框裡
+                DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: AppColors.backgroundAlt,
+                    borderRadius: BorderRadius.circular(AppRadius.button),
+                    border: Border.all(color: AppColors.border),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(
+                      AppSpacing.small + AppSpacing.xSmall,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        IconText(
+                          icon: Icons.schedule,
+                          text: formatTimeRange(clock, group),
+                        ),
+                        const SizedBox(height: AppSpacing.small),
+                        IconText(
+                          icon: Icons.storefront_outlined,
+                          text: group.shop.name,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.medium),
+                Row(
+                  children: [
+                    CircleAvatar(
+                      radius: AppSizes.avatar / 2,
+                      backgroundColor: AppColors.sage,
+                      foregroundColor: AppColors.surface,
+                      child: Text(_initial(group.organizer.displayName)),
+                    ),
+                    const SizedBox(width: AppSpacing.small + AppSpacing.xSmall),
+                    Expanded(
+                      child: Text(
+                        '開團主：${group.organizer.displayName}',
+                        style: text.titleSmall,
+                      ),
+                    ),
+                    if (fee != null)
+                      Text(
+                        fee,
+                        style: text.titleMedium!.copyWith(
+                          color: AppColors.primaryText,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                  ],
+                ),
+              ],
+            ),
           ),
-        ),
+          const DashedLine(),
+          ColoredBox(
+            color: AppColors.backgroundAlt,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: inset,
+                vertical: AppSpacing.small + AppSpacing.xSmall,
+              ),
+              child: Text(
+                '查看詳情',
+                textAlign: TextAlign.center,
+                style: text.labelLarge!.copyWith(color: AppColors.primaryText),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
 }
+
+/// 頭像上的字：名字的第一個字。
+String _initial(String name) => name.isEmpty ? '？' : name.characters.first;
 
 /// 操作結果或錯誤訊息的提示條。
 class StatusBanner extends StatelessWidget {

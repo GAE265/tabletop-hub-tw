@@ -74,6 +74,9 @@ Future<void> pumpHome(
   DevUser? user = homePlayer,
   Size size = const Size(400, 900),
   bool settle = true,
+
+  /// 畫面底部被蓋住的高度（手機的畫面框架用 MediaQuery 告訴頁面，見 AppShell）。
+  double bottomInset = 0,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
@@ -110,6 +113,12 @@ Future<void> pumpHome(
       child: MaterialApp.router(
         theme: buildAppTheme(const FakeAppFonts()),
         routerConfig: router,
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(
+            context,
+          ).copyWith(padding: EdgeInsets.only(bottom: bottomInset)),
+          child: child!,
+        ),
       ),
     ),
   );

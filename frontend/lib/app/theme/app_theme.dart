@@ -42,7 +42,7 @@ ThemeData buildAppTheme(AppFonts fonts) {
   const buttonMinSize = Size(64, AppSizes.minTouchTarget);
   const buttonPadding = EdgeInsets.symmetric(horizontal: AppSpacing.large);
   final buttonText = textTheme.labelLarge!.copyWith(
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: FontWeight.w600,
   );
 
@@ -50,6 +50,9 @@ ThemeData buildAppTheme(AppFonts fonts) {
     backgroundColor: WidgetStateProperty.resolveWith(
       (states) => states.contains(WidgetState.disabled)
           ? AppColors.neutralTint
+          // 按下時變深
+          : states.contains(WidgetState.pressed)
+          ? AppColors.primaryText
           : AppColors.primary,
     ),
     foregroundColor: WidgetStateProperty.resolveWith(
@@ -58,7 +61,7 @@ ThemeData buildAppTheme(AppFonts fonts) {
           : Colors.white,
     ),
     overlayColor: WidgetStatePropertyAll(
-      AppColors.primaryBright.withValues(alpha: 0.24),
+      AppColors.primaryBright.withValues(alpha: 0.12),
     ),
     elevation: const WidgetStatePropertyAll(0),
     minimumSize: const WidgetStatePropertyAll(buttonMinSize),
@@ -112,16 +115,14 @@ ThemeData buildAppTheme(AppFonts fonts) {
     filledButtonTheme: FilledButtonThemeData(style: primaryButton),
     elevatedButtonTheme: ElevatedButtonThemeData(style: primaryButton),
     outlinedButtonTheme: OutlinedButtonThemeData(
+      // 次要按鈕：米白底、細邊框、深色字
       style: ButtonStyle(
-        foregroundColor: enabledOr(AppColors.primaryText),
-        side: WidgetStateProperty.resolveWith(
-          (states) => BorderSide(
-            color: states.contains(WidgetState.disabled)
-                ? AppColors.border
-                : AppColors.primary,
-            width: 1.5,
-          ),
+        backgroundColor: const WidgetStatePropertyAll(AppColors.background),
+        foregroundColor: enabledOr(AppColors.ink),
+        overlayColor: WidgetStatePropertyAll(
+          AppColors.neutralTint.withValues(alpha: 0.8),
         ),
+        side: const WidgetStatePropertyAll(BorderSide(color: AppColors.border)),
         minimumSize: const WidgetStatePropertyAll(buttonMinSize),
         padding: const WidgetStatePropertyAll(buttonPadding),
         shape: WidgetStatePropertyAll(buttonShape),
@@ -158,12 +159,18 @@ ThemeData buildAppTheme(AppFonts fonts) {
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
-      fillColor: AppColors.surface,
-      contentPadding: const EdgeInsets.all(AppSpacing.medium),
+      fillColor: AppColors.backgroundAlt,
+      contentPadding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.medium,
+        vertical: AppSpacing.medium - AppSpacing.xSmall / 2,
+      ),
       border: input,
       enabledBorder: input,
       focusedBorder: input.copyWith(
-        borderSide: const BorderSide(color: AppColors.primary, width: 2),
+        borderSide: const BorderSide(
+          color: AppColors.primaryBright,
+          width: 1.5,
+        ),
       ),
       errorBorder: input.copyWith(
         borderSide: const BorderSide(color: AppColors.error),
@@ -204,6 +211,7 @@ ThemeData buildAppTheme(AppFonts fonts) {
     ),
     dialogTheme: DialogThemeData(
       backgroundColor: AppColors.surface,
+      barrierColor: AppColors.scrim,
       surfaceTintColor: Colors.transparent,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppRadius.card),
@@ -218,6 +226,16 @@ ThemeData buildAppTheme(AppFonts fonts) {
         borderRadius: BorderRadius.circular(AppRadius.button),
       ),
     ),
+    bottomSheetTheme: const BottomSheetThemeData(
+      backgroundColor: AppColors.surface,
+      surfaceTintColor: Colors.transparent,
+      modalBarrierColor: AppColors.scrim,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(AppRadius.card),
+        ),
+      ),
+    ),
     listTileTheme: const ListTileThemeData(
       iconColor: AppColors.inkMuted,
       minTileHeight: AppSizes.minTouchTarget,
@@ -229,7 +247,7 @@ ThemeData buildAppTheme(AppFonts fonts) {
       PillBadgeTheme(
         neutral: const PillColors(
           background: AppColors.neutralTint,
-          foreground: AppColors.inkMuted,
+          foreground: AppColors.ink,
         ),
         players: const PillColors(
           background: AppColors.sageTint,
@@ -245,7 +263,7 @@ ThemeData buildAppTheme(AppFonts fonts) {
         ),
         radius: AppRadius.pill,
         padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.small + AppSpacing.xSmall,
+          horizontal: AppSpacing.small + AppSpacing.xSmall / 2,
           vertical: AppSpacing.xSmall,
         ),
         iconGap: AppSpacing.xSmall,
@@ -262,24 +280,57 @@ TextTheme _textTheme(AppFonts fonts) {
   final base = typography.englishLike
       .merge(typography.black)
       .apply(bodyColor: AppColors.ink, displayColor: AppColors.ink);
-  TextStyle h(TextStyle? s, FontWeight w) =>
-      fonts.heading(s!.copyWith(fontWeight: w));
-  TextStyle b(TextStyle? s) => fonts.body(s!);
+  // 字級、行高、字距依 Stitch 設計系統（docs/ui/stitch/DESIGN.md）
+  TextStyle size(
+    TextStyle? s,
+    double fontSize,
+    double lineHeight,
+    FontWeight weight, [
+    double letterSpacingEm = 0,
+  ]) => s!.copyWith(
+    fontSize: fontSize,
+    height: lineHeight / fontSize,
+    fontWeight: weight,
+    letterSpacing: letterSpacingEm * fontSize,
+  );
+  TextStyle h(
+    TextStyle? s,
+    double fs,
+    double lh,
+    FontWeight w, [
+    double ls = 0,
+  ]) => fonts.heading(size(s, fs, lh, w, ls));
+  TextStyle b(
+    TextStyle? s,
+    double fs,
+    double lh,
+    FontWeight w, [
+    double ls = 0,
+  ]) => fonts.body(size(s, fs, lh, w, ls));
+  const bold = FontWeight.w700;
+  const semi = FontWeight.w600;
+  const regular = FontWeight.w400;
   return base.copyWith(
-    displayLarge: h(base.displayLarge, FontWeight.w700),
-    displayMedium: h(base.displayMedium, FontWeight.w700),
-    displaySmall: h(base.displaySmall, FontWeight.w700),
-    headlineLarge: h(base.headlineLarge, FontWeight.w700),
-    headlineMedium: h(base.headlineMedium, FontWeight.w700),
-    headlineSmall: h(base.headlineSmall, FontWeight.w700),
-    titleLarge: h(base.titleLarge, FontWeight.w700),
-    titleMedium: b(base.titleMedium!.copyWith(fontWeight: FontWeight.w600)),
-    titleSmall: b(base.titleSmall!.copyWith(fontWeight: FontWeight.w600)),
-    bodyLarge: b(base.bodyLarge),
-    bodyMedium: b(base.bodyMedium),
-    bodySmall: b(base.bodySmall!.copyWith(color: AppColors.inkMuted)),
-    labelLarge: b(base.labelLarge),
-    labelMedium: b(base.labelMedium),
-    labelSmall: b(base.labelSmall),
+    displayLarge: h(base.displayLarge, 36, 44, bold, -0.02),
+    displayMedium: h(base.displayMedium, 32, 40, bold, -0.02),
+    displaySmall: h(base.displaySmall, 28, 36, bold, -0.01),
+    headlineLarge: h(base.headlineLarge, 28, 36, bold, -0.01),
+    headlineMedium: h(base.headlineMedium, 22, 30, bold),
+    headlineSmall: h(base.headlineSmall, 20, 28, semi),
+    titleLarge: h(base.titleLarge, 22, 30, bold),
+    titleMedium: b(base.titleMedium, 16, 24, semi, 0.01),
+    titleSmall: b(base.titleSmall, 14, 20, semi, 0.01),
+    bodyLarge: b(base.bodyLarge, 16, 24, regular),
+    bodyMedium: b(base.bodyMedium, 14, 22, regular, 0.01),
+    bodySmall: b(
+      base.bodySmall!.copyWith(color: AppColors.inkMuted),
+      13,
+      18,
+      regular,
+      0.01,
+    ),
+    labelLarge: b(base.labelLarge, 14, 20, semi, 0.02),
+    labelMedium: b(base.labelMedium, 12, 16, semi, 0.03),
+    labelSmall: b(base.labelSmall, 11, 14, FontWeight.w500, 0.04),
   );
 }

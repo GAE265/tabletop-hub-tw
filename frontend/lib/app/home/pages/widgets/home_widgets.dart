@@ -8,7 +8,68 @@ import '../../../../core/widgets/pill_badge.dart';
 import '../../../../domains/groups/state/group_clock.dart';
 import '../../../theme/app_colors.dart';
 import '../../../theme/app_spacing.dart';
+import '../../../theme/thick_widgets.dart';
 import '../../state/upcoming_state.dart';
+
+/// 深色大標題卡：「今天想怎麼玩？」。
+class HomeHero extends StatelessWidget {
+  const HomeHero({super.key = const Key('home-hero')});
+
+  @override
+  Widget build(BuildContext context) {
+    final mobile = context.screenSize == ScreenSize.mobile;
+    final textTheme = Theme.of(context).textTheme;
+    return DecoratedBox(
+      decoration: thickDecoration(
+        color: AppColors.ink,
+        edge: AppColors.inkEdge,
+        radius: AppRadius.hero,
+      ),
+      child: Padding(
+        padding: EdgeInsets.all(mobile ? AppSpacing.large : AppSpacing.xLarge),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '今天想怎麼玩？',
+              style: (mobile ? textTheme.displaySmall : textTheme.displayLarge)!
+                  .copyWith(color: AppColors.surface),
+            ),
+            const SizedBox(height: AppSpacing.small),
+            Text(
+              '找遊戲、揪人、訂位、學規則，一個地方搞定。',
+              style: (mobile ? textTheme.bodyLarge : textTheme.titleMedium)!
+                  .copyWith(color: AppColors.onInkMuted),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 入口卡片的配色：四張各不相同（Stitch 設計）。
+class _CardStyle {
+  const _CardStyle({
+    required this.background,
+    required this.title,
+    required this.body,
+    required this.iconBox,
+    required this.iconColor,
+    required this.pill,
+    required this.pillText,
+    required this.arrow,
+  });
+
+  final Color background;
+  final Color title;
+  final Color body;
+  final Color iconBox;
+  final Color iconColor;
+  final Color pill;
+  final Color pillText;
+  final Color arrow;
+}
 
 /// 入口卡片的內容。
 class _Entry {
@@ -18,8 +79,8 @@ class _Entry {
     required this.body,
     required this.route,
     required this.icon,
-    required this.tint,
-    required this.ink,
+    required this.goLabel,
+    required this.style,
   });
 
   final String keyName;
@@ -27,8 +88,10 @@ class _Entry {
   final String body;
   final String route;
   final IconData icon;
-  final Color tint;
-  final Color ink;
+
+  /// 卡片下方的標籤，例如「前往推薦」。
+  final String goLabel;
+  final _CardStyle style;
 }
 
 const _entries = [
@@ -38,8 +101,17 @@ const _entries = [
     body: '跟助理聊聊，幫你挑遊戲',
     route: '/games-advisor',
     icon: Icons.casino_outlined,
-    tint: AppColors.primaryTint,
-    ink: AppColors.primaryText,
+    goLabel: '前往推薦',
+    style: _CardStyle(
+      background: AppColors.surface,
+      title: AppColors.ink,
+      body: AppColors.inkMuted,
+      iconBox: AppColors.ink,
+      iconColor: AppColors.surface,
+      pill: AppColors.primaryTint,
+      pillText: AppColors.primaryText,
+      arrow: AppColors.primaryText,
+    ),
   ),
   _Entry(
     keyName: 'home-card-groups',
@@ -47,17 +119,35 @@ const _entries = [
     body: '開團或加入，額滿可候補',
     route: '/groups',
     icon: Icons.groups_outlined,
-    tint: AppColors.sageTint,
-    ink: AppColors.sage,
+    goLabel: '前往揪團',
+    style: _CardStyle(
+      background: AppColors.ink,
+      title: AppColors.surface,
+      body: AppColors.onInkMuted,
+      iconBox: AppColors.amber,
+      iconColor: AppColors.ink,
+      pill: AppColors.amber,
+      pillText: AppColors.ink,
+      arrow: AppColors.surface,
+    ),
   ),
   _Entry(
     keyName: 'home-card-booking',
     title: '訂個位子',
     body: '挑桌遊店，直接選座位',
     route: '/booking',
-    icon: Icons.event_outlined,
-    tint: AppColors.amberTint,
-    ink: AppColors.amberText,
+    icon: Icons.event_seat_outlined,
+    goLabel: '前往訂位',
+    style: _CardStyle(
+      background: AppColors.neutralTint,
+      title: AppColors.ink,
+      body: AppColors.inkMuted,
+      iconBox: AppColors.sage,
+      iconColor: AppColors.surface,
+      pill: AppColors.surface,
+      pillText: AppColors.ink,
+      arrow: AppColors.ink,
+    ),
   ),
   _Entry(
     keyName: 'home-card-rules',
@@ -65,19 +155,31 @@ const _entries = [
     body: '看教學、隨時問規則',
     route: '/rules',
     icon: Icons.menu_book_outlined,
-    tint: AppColors.neutralTint,
-    ink: AppColors.ink,
+    goLabel: '前往規則',
+    style: _CardStyle(
+      background: AppColors.surface,
+      title: AppColors.ink,
+      body: AppColors.inkMuted,
+      iconBox: AppColors.neutralTint,
+      iconColor: AppColors.ink,
+      pill: AppColors.sageTint,
+      pillText: AppColors.sage,
+      arrow: AppColors.ink,
+    ),
   ),
 ];
 
-/// 四張入口卡片：手機兩欄兩列；平板以上放得下就排成一列，放不下改成兩欄。
+/// 四張入口卡片：手機兩欄兩列、寬窄交錯（第一排左寬右窄，第二排左窄右寬）；
+/// 平板以上放得下就排成一列（同寬），放不下改成兩欄。
 class EntryCards extends StatelessWidget {
   const EntryCards({super.key});
 
   @override
   Widget build(BuildContext context) {
     final mobile = context.screenSize == ScreenSize.mobile;
-    final gap = mobile ? AppSpacing.small : AppSpacing.medium;
+    final gap = mobile
+        ? AppSpacing.small + AppSpacing.xSmall
+        : AppSpacing.medium;
     return LayoutBuilder(
       builder: (context, constraints) {
         final fitsFour =
@@ -93,7 +195,10 @@ class EntryCards extends StatelessWidget {
                   children: [
                     for (var i = start; i < start + columns; i++) ...[
                       if (i > start) SizedBox(width: gap),
-                      Expanded(child: _EntryCard(entry: _entries[i])),
+                      Expanded(
+                        flex: mobile ? _mobileFlex[i] : 1,
+                        child: _EntryCard(entry: _entries[i]),
+                      ),
                     ],
                   ],
                 ),
@@ -106,6 +211,9 @@ class EntryCards extends StatelessWidget {
   }
 }
 
+/// 手機版每張卡片的寬度比例：第一排 3:2，第二排 2:3。
+const _mobileFlex = [3, 2, 2, 3];
+
 class _EntryCard extends StatelessWidget {
   const _EntryCard({required this.entry});
 
@@ -114,48 +222,103 @@ class _EntryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
-    return Material(
+    final style = entry.style;
+    return ThickCard(
       key: Key(entry.keyName),
-      color: AppColors.surface,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(AppRadius.card),
-        side: const BorderSide(color: AppColors.border),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: () => context.go(entry.route),
-        child: Padding(
-          padding: const EdgeInsets.all(AppSpacing.medium),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                width: AppSizes.entryIconBox,
-                height: AppSizes.entryIconBox,
-                decoration: BoxDecoration(
-                  color: entry.tint,
-                  borderRadius: BorderRadius.circular(AppRadius.button),
-                ),
-                child: Icon(entry.icon, color: entry.ink),
+      color: style.background,
+      onTap: () => context.go(entry.route),
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.medium + AppSpacing.xSmall),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: AppSizes.entryIconBox,
+              height: AppSizes.entryIconBox,
+              decoration: BoxDecoration(
+                color: style.iconBox,
+                borderRadius: BorderRadius.circular(AppRadius.button),
               ),
-              const SizedBox(height: AppSpacing.large),
-              Text(
-                entry.title,
-                style: textTheme.titleMedium!.copyWith(
-                  fontWeight: FontWeight.w600,
-                ),
+              child: Icon(entry.icon, color: style.iconColor),
+            ),
+            const SizedBox(height: AppSpacing.medium),
+            Text(
+              entry.title,
+              style: textTheme.headlineSmall!.copyWith(
+                color: style.title,
+                fontWeight: FontWeight.w700,
               ),
-              const SizedBox(height: AppSpacing.xSmall),
-              Text(
-                entry.body,
-                style: textTheme.bodyMedium!.copyWith(
-                  color: AppColors.inkMuted,
+            ),
+            const SizedBox(height: AppSpacing.xSmall),
+            Text(
+              entry.body,
+              style: textTheme.bodyMedium!.copyWith(color: style.body),
+            ),
+            const Spacer(),
+            const SizedBox(height: AppSpacing.medium),
+            Row(
+              children: [
+                DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: style.pill,
+                    borderRadius: BorderRadius.circular(AppRadius.pill),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.small + AppSpacing.xSmall / 2,
+                      vertical: AppSpacing.xSmall,
+                    ),
+                    child: Text(
+                      entry.goLabel,
+                      style: textTheme.labelMedium!.copyWith(
+                        color: style.pillText,
+                      ),
+                    ),
+                  ),
                 ),
-              ),
-            ],
-          ),
+                const Spacer(),
+                Icon(Icons.arrow_forward, color: style.arrow),
+              ],
+            ),
+          ],
         ),
       ),
+    );
+  }
+}
+
+/// 頁面底部的兩個主要按鈕：揪團、訂位。
+class HomeActions extends StatelessWidget {
+  const HomeActions({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: ThickButton(
+            buttonKey: const Key('home-cta-groups'),
+            shadow: AppShadows.soft,
+            style: ThickStyle.dark,
+            expand: true,
+            onPressed: () => context.go('/groups'),
+            icon: Icons.group_add_outlined,
+            label: '我要揪團',
+          ),
+        ),
+        const SizedBox(width: AppSpacing.small + AppSpacing.xSmall),
+        Expanded(
+          child: ThickButton(
+            buttonKey: const Key('home-cta-booking'),
+            shadow: AppShadows.soft,
+            style: ThickStyle.primary,
+            expand: true,
+            onPressed: () => context.go('/booking'),
+            icon: Icons.event_seat_outlined,
+            label: '直接訂位',
+          ),
+        ),
+      ],
     );
   }
 }
@@ -167,22 +330,31 @@ class UpcomingSection extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final upcoming = ref.watch(upcomingProvider);
+    final count = upcoming.whenOrNull(data: (items) => items.length) ?? 0;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(
-          '接下來的行程',
-          style: Theme.of(
-            context,
-          ).textTheme.titleLarge!.copyWith(fontWeight: FontWeight.w700),
+        SectionBar(
+          key: const Key('home-section-upcoming'),
+          title: '接下來的行程',
+          icon: Icons.confirmation_number_outlined,
+          trailing: count == 0
+              ? null
+              : PillBadge(
+                  key: const Key('home-upcoming-count'),
+                  label: '$count 筆已排定',
+                  tone: PillTone.accent,
+                ),
         ),
         const SizedBox(height: AppSpacing.small),
         upcoming.when(
           skipLoadingOnRefresh: false,
-          loading: () => const Padding(
+          loading: () => const ThickCard(
             key: Key('home-upcoming-loading'),
-            padding: EdgeInsets.all(AppSpacing.large),
-            child: Center(child: CircularProgressIndicator()),
+            child: Padding(
+              padding: EdgeInsets.all(AppSpacing.large),
+              child: Center(child: CircularProgressIndicator()),
+            ),
           ),
           error: (error, _) => _UpcomingError(
             error: error,
@@ -193,7 +365,10 @@ class UpcomingSection extends ConsumerWidget {
               : Column(
                   children: [
                     for (final (i, item) in items.indexed) ...[
-                      if (i > 0) const SizedBox(height: AppSpacing.small),
+                      if (i > 0)
+                        const SizedBox(
+                          height: AppSpacing.small + AppSpacing.xSmall,
+                        ),
                       _UpcomingRow(key: Key('home-upcoming-$i'), item: item),
                     ],
                   ],
@@ -211,80 +386,114 @@ class _UpcomingRow extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final clock = ref.watch(groupClockProvider);
+    final card = upcomingCard(ref.watch(groupClockProvider), item);
     final textTheme = Theme.of(context).textTheme;
     final status = upcomingStatus(item);
-    final subtitle = upcomingSubtitle(item);
-    final (tint, ink) = switch (item) {
-      UpcomingBooking() => (AppColors.amberTint, AppColors.amberText),
-      UpcomingGroup() => (AppColors.sageTint, AppColors.sage),
+    final kindColor = switch (item) {
+      UpcomingBooking() => AppColors.sage,
+      UpcomingGroup() => AppColors.primaryText,
     };
-    return Material(
-      color: AppColors.surface,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(AppRadius.card),
-        side: const BorderSide(color: AppColors.border),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: () => context.go(upcomingRoute(item)),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: AppSpacing.medium,
-            vertical: AppSpacing.small,
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: AppSizes.dateBadge,
-                height: AppSizes.dateBadge,
-                decoration: BoxDecoration(
-                  color: tint,
-                  borderRadius: BorderRadius.circular(AppRadius.button),
-                ),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
+    const inset = AppSpacing.medium + AppSpacing.xSmall;
+    return ThickCard(
+      onTap: () => context.go(upcomingRoute(item)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(inset, inset, inset, inset),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
                   children: [
-                    Text(
-                      upcomingMonthLabel(clock, item),
-                      style: textTheme.labelSmall!.copyWith(color: ink),
-                    ),
-                    Text(
-                      upcomingDayLabel(clock, item),
-                      style: textTheme.titleMedium!.copyWith(
-                        color: ink,
-                        fontWeight: FontWeight.w700,
+                    Container(
+                      width: AppSizes.sectionDot,
+                      height: AppSizes.sectionDot,
+                      decoration: BoxDecoration(
+                        color: kindColor,
+                        shape: BoxShape.circle,
                       ),
+                    ),
+                    const SizedBox(width: AppSpacing.small),
+                    Expanded(
+                      child: Text(
+                        card.kind,
+                        style: textTheme.labelLarge!.copyWith(color: kindColor),
+                      ),
+                    ),
+                    PillBadge(label: status.label, tone: _tone(status)),
+                  ],
+                ),
+                const SizedBox(height: AppSpacing.small),
+                Text(
+                  card.title,
+                  style: textTheme.headlineSmall!.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                if (card.subtitle.isNotEmpty)
+                  Text(
+                    card.subtitle,
+                    style: textTheme.bodyLarge!.copyWith(
+                      color: AppColors.inkMuted,
+                    ),
+                  ),
+                const SizedBox(height: AppSpacing.medium),
+                Wrap(
+                  spacing: AppSpacing.large,
+                  runSpacing: AppSpacing.small,
+                  children: [
+                    IconText(
+                      icon: Icons.calendar_today_outlined,
+                      text: card.when,
+                    ),
+                    IconText(
+                      icon: switch (item) {
+                        UpcomingBooking() => Icons.person_outline,
+                        UpcomingGroup() => Icons.group_add_outlined,
+                      },
+                      text: card.people,
                     ),
                   ],
                 ),
+              ],
+            ),
+          ),
+          const DashedLine(),
+          ColoredBox(
+            color: AppColors.backgroundAlt,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: inset,
+                vertical: AppSpacing.small + AppSpacing.xSmall,
               ),
-              const SizedBox(width: AppSpacing.medium),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      upcomingTitle(clock, item),
-                      style: textTheme.titleSmall!.copyWith(
-                        fontWeight: FontWeight.w600,
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      card.footer,
+                      style: textTheme.bodyMedium!.copyWith(
+                        color: AppColors.inkMuted,
                       ),
                     ),
-                    if (subtitle.isNotEmpty)
-                      Text(
-                        subtitle,
-                        style: textTheme.bodyMedium!.copyWith(
-                          color: AppColors.inkMuted,
-                        ),
-                      ),
-                  ],
-                ),
+                  ),
+                  Text(
+                    card.action,
+                    style: textTheme.labelLarge!.copyWith(
+                      color: AppColors.primaryText,
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.xSmall),
+                  const Icon(
+                    Icons.arrow_forward,
+                    size: AppSizes.inlineIcon,
+                    color: AppColors.primaryText,
+                  ),
+                ],
               ),
-              const SizedBox(width: AppSpacing.small),
-              PillBadge(label: status.label, tone: _tone(status)),
-            ],
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
@@ -306,7 +515,7 @@ class _UpcomingEmpty extends StatelessWidget {
     return _Panel(
       key: const Key('home-upcoming-empty'),
       children: [
-        Text('還沒有接下來的行程', style: textTheme.titleSmall),
+        Text('還沒有接下來的行程', style: textTheme.titleMedium),
         const SizedBox(height: AppSpacing.xSmall),
         Text(
           '揪個團或訂個位子，行程就會出現在這裡。',
@@ -314,20 +523,22 @@ class _UpcomingEmpty extends StatelessWidget {
         ),
         const SizedBox(height: AppSpacing.medium),
         Wrap(
-          spacing: AppSpacing.small,
-          runSpacing: AppSpacing.small,
+          spacing: AppSpacing.small + AppSpacing.xSmall,
+          runSpacing: AppSpacing.small + AppSpacing.xSmall,
           children: [
-            FilledButton.icon(
-              key: const Key('home-empty-groups'),
+            ThickButton(
+              buttonKey: const Key('home-empty-groups'),
+              style: ThickStyle.primary,
               onPressed: () => context.go('/groups'),
-              icon: const Icon(Icons.groups_outlined),
-              label: const Text('找人一起玩'),
+              icon: Icons.groups_outlined,
+              label: '找人一起玩',
             ),
-            OutlinedButton.icon(
-              key: const Key('home-empty-booking'),
+            ThickButton(
+              buttonKey: const Key('home-empty-booking'),
+              style: ThickStyle.light,
               onPressed: () => context.go('/booking'),
-              icon: const Icon(Icons.event_outlined),
-              label: const Text('訂個位子'),
+              icon: Icons.event_outlined,
+              label: '訂個位子',
             ),
           ],
         ),
@@ -358,11 +569,12 @@ class _UpcomingError extends StatelessWidget {
           ).textTheme.bodyMedium!.copyWith(color: AppColors.error),
         ),
         const SizedBox(height: AppSpacing.small),
-        OutlinedButton.icon(
-          key: const Key('home-upcoming-retry'),
+        ThickButton(
+          buttonKey: const Key('home-upcoming-retry'),
+          style: ThickStyle.light,
           onPressed: onRetry,
-          icon: const Icon(Icons.refresh),
-          label: const Text('重試'),
+          icon: Icons.refresh,
+          label: '重試',
         ),
       ],
     );
@@ -377,12 +589,7 @@ class _Panel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        border: Border.all(color: AppColors.border),
-        borderRadius: BorderRadius.circular(AppRadius.card),
-      ),
+    return ThickCard(
       child: Padding(
         padding: const EdgeInsets.all(AppSpacing.medium),
         child: Column(
