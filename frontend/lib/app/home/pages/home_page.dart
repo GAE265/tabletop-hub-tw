@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/layout/breakpoints.dart';
 import '../../theme/app_spacing.dart';
+import '../../theme/thick_widgets.dart';
 import '../../theme/wood_background.dart';
 import 'widgets/home_widgets.dart';
 
