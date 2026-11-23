@@ -135,7 +135,8 @@ void main() {
       final card = find.byType(GroupCard);
       Finder inCard(String text) =>
           find.descendant(of: card, matching: find.text(text));
-      expect(inCard('卡坦島・璀璨寶石'), findsOneWidget);
+      expect(inCard('卡坦島'), findsOneWidget);
+      expect(inCard('璀璨寶石'), findsOneWidget);
       expect(inCard('卡坦島新手團'), findsOneWidget);
       expect(inCard('從零開始教，歡迎新手'), findsOneWidget);
       expect(inCard('19:00 – 21:00'), findsOneWidget);
@@ -183,6 +184,34 @@ void main() {
         tester,
         boxAround(find.byKey(const Key('groups-empty-create'))),
       );
+    });
+
+    testWidgets('兩顆「我要揪團」樣式一致：深炭色、同一個圖示、撐滿寬度', (tester) async {
+      await pumpGroupsWidget(tester, const GroupsPage(), repo: sampleRepo());
+      (Color?, IconData?, double) look(String key) {
+        final button = find.byKey(Key(key));
+        final style = tester.widget<ButtonStyleButton>(button).style!;
+        final icon = tester
+            .widget<Icon>(
+              find.descendant(of: button, matching: find.byType(Icon)),
+            )
+            .icon;
+        return (
+          style.backgroundColor!.resolve({}),
+          icon,
+          tester.getSize(button).width,
+        );
+      }
+
+      final withGroups = look('groups-day-create');
+      await tester.tap(find.text('15'));
+      await tester.pumpAndSettle();
+      final empty = look('groups-empty-create');
+      expect(withGroups.$1, AppColors.ink);
+      expect(empty.$1, withGroups.$1);
+      expect(empty.$2, withGroups.$2);
+      // 空狀態的按鈕在卡片裡，左右各少了卡片的內距，但一樣撐滿可用寬度
+      expect(empty.$3, greaterThan(300));
     });
 
     testWidgets('手機底部被導覽列蓋住：捲到最底時「我要揪團」停在導覽列上方', (tester) async {
@@ -314,6 +343,9 @@ void main() {
 
     testWidgets('點揪團開啟詳細資料', (tester) async {
       await pumpGroupsWidget(tester, const GroupsPage(), repo: sampleRepo());
+      // Stitch 版面多了頁首，卡片在畫面下方，先捲過去
+      await tester.ensureVisible(find.text('週末輕策略'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('週末輕策略'));
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('group-detail-page')), findsOneWidget);
@@ -365,7 +397,11 @@ void main() {
     expect(find.text('已成團'), findsOneWidget);
     expect(
       find.descendant(
-        of: find.ancestor(of: find.text('成團了'), matching: find.byType(Card)),
+        // Stitch 版面的卡片不是 Card，改找 GroupCard
+        of: find.ancestor(
+          of: find.text('成團了'),
+          matching: find.byType(GroupCard),
+        ),
         matching: find.text('已成團'),
       ),
       findsOneWidget,
