@@ -34,6 +34,25 @@ String? feeLabel(int? fee) {
   return fee == 0 ? '免費' : '\$$fee／人';
 }
 
+/// 揪團的時數，例如「4 小時」「1 小時 30 分」「45 分鐘」。
+String groupDurationLabel(Group group) {
+  final minutes = group.endAt.difference(group.startAt).inMinutes;
+  if (minutes < 60) return '$minutes 分鐘';
+  final hours = minutes ~/ 60;
+  final rest = minutes % 60;
+  return rest == 0 ? '$hours 小時' : '$hours 小時 $rest 分';
+}
+
+/// 目前使用者在這個揪團的身分：開團主、成員、候補或未報名。
+String myGroupRoleLabel(Group group, String? userId) {
+  if (userId != null && group.organizer.id == userId) return '開團主';
+  return switch (group.myStatus) {
+    'member' => '成員',
+    'waitlisted' => '候補',
+    _ => '未報名',
+  };
+}
+
 /// 開放中且開團主已確定成團。已取消或已結束時，顯示原本的狀態。
 bool isConfirmedOpen(Group group) =>
     group.confirmedAt != null && group.status == 'open';

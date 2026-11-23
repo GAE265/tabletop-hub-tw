@@ -215,6 +215,7 @@ class ThickButton extends StatefulWidget {
     required this.onPressed,
     required this.label,
     this.icon,
+    this.subtitle,
     this.buttonKey,
     this.expand = false,
     super.key,
@@ -226,6 +227,9 @@ class ThickButton extends StatefulWidget {
   final VoidCallback? onPressed;
   final IconData? icon;
   final String label;
+
+  /// 有說明時是方塊樣式（操作台）：圖示、標題、說明由上到下靠左排，撐滿寬度。
+  final String? subtitle;
 
   /// 撐滿可用寬度（底部兩個大按鈕），否則依文字寬度。
   final bool expand;
@@ -272,8 +276,39 @@ class _ThickButtonState extends State<ThickButton> {
       color: edge,
       edge: edge,
       radius: AppRadius.button,
-      child: switch (widget.icon) {
-        final icon? => FilledButton.icon(
+      child: switch ((widget.icon, widget.subtitle)) {
+        (final icon, final subtitle?) => FilledButton(
+          key: widget.buttonKey,
+          statesController: _states,
+          style: buttonStyle.copyWith(
+            minimumSize: const WidgetStatePropertyAll(Size.fromHeight(height)),
+            alignment: Alignment.centerLeft,
+            padding: const WidgetStatePropertyAll(
+              EdgeInsets.all(AppSpacing.small + AppSpacing.xSmall),
+            ),
+          ),
+          onPressed: widget.onPressed,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (icon != null) ...[
+                Icon(icon),
+                const SizedBox(height: AppSpacing.xSmall),
+              ],
+              Text(widget.label),
+              Text(
+                subtitle,
+                style: Theme.of(context).textTheme.bodySmall!.copyWith(
+                  color: widget.onPressed == null
+                      ? AppColors.inkMuted
+                      : style.foreground.withValues(alpha: 0.8),
+                ),
+              ),
+            ],
+          ),
+        ),
+        (final icon?, null) => FilledButton.icon(
           key: widget.buttonKey,
           statesController: _states,
           style: buttonStyle,
@@ -281,7 +316,7 @@ class _ThickButtonState extends State<ThickButton> {
           icon: Icon(icon),
           label: Text(widget.label),
         ),
-        null => FilledButton(
+        (null, null) => FilledButton(
           key: widget.buttonKey,
           statesController: _states,
           style: buttonStyle,
