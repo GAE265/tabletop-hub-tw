@@ -4,6 +4,9 @@ on:
   workflow_run:
     workflows: ["CI"]
     types: [completed]
+  push:
+    branches: [feature/deploy]
+
 
 jobs:
   deploy:
@@ -25,7 +28,7 @@ jobs:
         with:
           service: tabletop-hub-tw-frontend
           region: us-east1
-          image: us-east1-docker.pkg.dev/aerial-handbook-256212/tabletop-hub-tw-repo/gae265/tabletop-hub-tw-frontend:${{ github.sha }}
+          image: us-east1-docker.pkg.dev/aerial-handbook-256212/tabletop-hub-tw-repo/gae265/tabletop-hub-tw-frontend:${{ github.event.workflow_run.head_sha }}
 
       # 3. 更新第二個 Cloud Run 服務 (例如 backend 或其他服務)
       - name: Deploy Service 2
@@ -33,4 +36,4 @@ jobs:
         with:
           service: tabletop-hub-tw-backend # 替換為你的第 2 個 Cloud Run 服務名稱
           region: us-east1                  # 替換為該服務所在的 region
-          image: us-east1-docker.pkg.dev/aerial-handbook-256212/tabletop-hub-tw-repo/gae265/tabletop-hub-tw-backend:${{ github.sha }}
+          image: us-east1-docker.pkg.dev/aerial-handbook-256212/tabletop-hub-tw-repo/gae265/tabletop-hub-tw-backend:${{ github.event.workflow_run.head_sha }}
