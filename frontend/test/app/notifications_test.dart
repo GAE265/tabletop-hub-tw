@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:tabletop_hub/app/theme/wood_background.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tabletop_hub/app/notifications/notification_bell.dart';
 import 'package:tabletop_hub/app/notifications/notifications_page.dart';
@@ -171,6 +172,38 @@ void main() {
     });
   });
 
+  group('通知頁（Stitch 版面）', () {
+    testWidgets('木紋背景；頁首白底條有「通知」與總未讀數', (tester) async {
+      await pumpNotifications(
+        tester,
+        groups: groupsUnread(2),
+        bookings: bookingsUnread(1),
+        location: '/notifications',
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('notifications-page')),
+          matching: find.byType(WoodBackground),
+        ),
+        findsOneWidget,
+      );
+      final header = find.byKey(const Key('notifications-header'));
+      expect(
+        find.descendant(of: header, matching: find.text('通知')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: header, matching: find.text('3 則未讀')),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('沒有未讀：不顯示未讀數', (tester) async {
+      await pumpNotifications(tester, location: '/notifications');
+      expect(find.textContaining('則未讀'), findsNothing);
+    });
+  });
+
   group('通知頁的分頁', () {
     bool selected(WidgetTester tester, String key) {
       final controller = DefaultTabController.of(
@@ -261,6 +294,40 @@ void main() {
       await tester.pumpAndSettle();
       return router;
     }
+
+    testWidgets('訂位通知卡片：種類標籤、店名、人數、訂位代碼，有厚度', (tester) async {
+      final bookings = FakeBookingRepository()
+        ..notifications = [fakeBookingNotification(id: 'bn-1')];
+      await pumpBookingTab(tester, bookings);
+      final card = find.byKey(const Key('booking-notification-bn-1'));
+      for (final text in ['訂位成功', '甲店', '4 人', 'BK7']) {
+        expect(
+          find.descendant(of: card, matching: find.text(text)),
+          findsOneWidget,
+          reason: text,
+        );
+      }
+      final box = tester.widget<DecoratedBox>(
+        find.descendant(of: card, matching: find.byType(DecoratedBox)).first,
+      );
+      final border = (box.decoration as BoxDecoration).border! as Border;
+      expect(border.bottom.width, greaterThan(border.top.width));
+    });
+
+    testWidgets('店家人員的新訂位通知：標「新訂位」', (tester) async {
+      final bookings = FakeBookingRepository()
+        ..notifications = [
+          fakeBookingNotification(id: 'bn-2', type: 'shop_new_booking'),
+        ];
+      await pumpBookingTab(tester, bookings);
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('booking-notification-bn-2')),
+          matching: find.text('新訂位'),
+        ),
+        findsOneWidget,
+      );
+    });
 
     testWidgets('兩種通知的文字、訂位時間與通知時間，新的在前', (tester) async {
       final bookings = FakeBookingRepository()
