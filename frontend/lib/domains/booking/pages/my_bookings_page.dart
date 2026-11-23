@@ -4,14 +4,19 @@ import 'package:go_router/go_router.dart';
 
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_spacing.dart';
+import '../../../app/theme/thick_widgets.dart';
 import '../../../core/dev/state/dev_user_state.dart';
 import '../../../core/layout/breakpoints.dart';
+import '../../../core/widgets/pill_badge.dart';
 import '../data/booking.dart';
 import '../state/booking_state.dart';
 import 'widgets/booking_widgets.dart';
 import 'widgets/seating_plan.dart';
 
 /// 我的訂位正式頁面：依狀態篩選，可以取消（`/booking/mine`）。
+///
+/// Stitch 版面：木紋背景，分段切換的分頁、篩選膠囊、有厚度的訂位卡片與按鈕；
+/// 手機的浮動導覽列蓋住的高度留在最下面。
 class MyBookingsPage extends ConsumerStatefulWidget {
   const MyBookingsPage({super.key});
 
@@ -82,70 +87,304 @@ class _MyBookingsPageState extends ConsumerState<MyBookingsPage> {
     final user = ref.watch(currentDevUserProvider);
     final shopNames = {for (final s in state.shops) s.id: s.name};
 
-    return BookingScaffold(
-      pageKey: const Key('my-bookings-page'),
-      title: '我的訂位',
-      current: 'mine',
-      showBoard: user?.role == 'shop_staff' || user?.role == 'admin',
-      maxWidth: AppSpacing.contentMaxWidth(context.screenSize),
-      children: [
-        Wrap(
-          spacing: AppSpacing.small,
-          runSpacing: AppSpacing.small,
-          children: [
-            for (final (value, label) in _statusFilters)
-              ChoiceChip(
-                key: Key('booking-status-${value ?? 'all'}'),
-                label: Text(label),
-                selected: _status == value,
-                onSelected: state.loading
-                    ? null
-                    : (_) {
-                        setState(() => _status = value);
-                        _search();
-                      },
+    final isStaff = user?.role == 'shop_staff' || user?.role == 'admin';
+    final children = <Widget>[
+      // 狀態篩選：一排可以左右滑的膠囊，放在分頁卡下面另一張卡（三頁的分頁卡才會一樣）
+      ThickCard(
+        key: const Key('booking-filters'),
+        radius: AppRadius.card,
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.small),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    for (final (i, (value, label))
+                        in _statusFilters.indexed) ...[
+                      if (i > 0) const SizedBox(width: AppSpacing.small),
+                      _FilterPill(
+                        key: Key('booking-status-${value ?? 'all'}'),
+                        label: label,
+                        selected: _status == value,
+                        onTap: state.loading
+                            ? null
+                            : () {
+                                setState(() => _status = value);
+                                _search();
+                              },
+                      ),
+                    ],
+                  ],
+                ),
               ),
-          ],
+            ],
+          ),
         ),
+      ),
+      const SizedBox(height: AppSpacing.medium),
+      if (state.isError && state.message != null) ...[
+        BookingErrorBanner(message: state.message!, onRetry: _search),
         const SizedBox(height: AppSpacing.medium),
-        if (state.isError && state.message != null) ...[
-          BookingErrorBanner(message: state.message!, onRetry: _search),
-          const SizedBox(height: AppSpacing.medium),
-        ],
-        if (state.loading && state.mine.isEmpty)
-          const Padding(
-            padding: EdgeInsets.all(AppSpacing.large),
-            child: Center(child: CircularProgressIndicator()),
-          )
-        else if (state.mine.isEmpty && !state.isError)
-          _Empty(filtered: _status != null)
-        else
-          for (final b in state.mine)
-            Padding(
-              padding: const EdgeInsets.only(bottom: AppSpacing.medium),
-              child: BookingCard(
+      ],
+      if (state.loading && state.mine.isEmpty)
+        const Padding(
+          padding: EdgeInsets.all(AppSpacing.large),
+          child: Center(child: CircularProgressIndicator()),
+        )
+      else if (state.mine.isEmpty && !state.isError)
+        _Empty(filtered: _status != null)
+      else
+        _Columns(
+          columns: context.screenSize == ScreenSize.mobile ? 1 : 2,
+          children: [
+            for (final b in state.mine)
+              _MyBookingCard(
                 key: Key('booking-card-${b.id}'),
                 booking: b,
                 shopName: shopNames[b.shopId],
                 actions: [
                   if (b.status == 'confirmed' || b.status == 'seated')
-                    TextButton.icon(
-                      key: Key('booking-seats-${b.id}'),
+                    ThickButton(
+                      buttonKey: Key('booking-seats-${b.id}'),
+                      style: ThickStyle.light,
+                      shadow: AppShadows.soft,
                       onPressed: () => _showSeats(b, shopNames[b.shopId]),
-                      icon: const Icon(Icons.table_restaurant_outlined),
-                      label: const Text('看座位'),
+                      icon: Icons.table_restaurant_outlined,
+                      label: '看座位',
                     ),
                   if (b.status == 'confirmed')
-                    TextButton.icon(
-                      key: Key('booking-cancel-${b.id}'),
+                    ThickButton(
+                      buttonKey: Key('booking-cancel-${b.id}'),
+                      style: ThickStyle.danger,
+                      shadow: AppShadows.soft,
                       onPressed: state.loading ? null : () => _cancel(b),
-                      icon: const Icon(Icons.event_busy_outlined),
-                      label: const Text('取消訂位'),
+                      icon: Icons.event_busy_outlined,
+                      label: '取消訂位',
                     ),
                 ],
               ),
+          ],
+        ),
+    ];
+
+    return BookingPageFrame(
+      pageKey: const Key('my-bookings-page'),
+      current: 'mine',
+      showBoard: isStaff,
+      children: children,
+    );
+  }
+}
+
+/// 依欄數排卡片：手機一欄，平板與桌機兩欄（桌機版面較寬，一欄會太空）。
+class _Columns extends StatelessWidget {
+  const _Columns({required this.columns, required this.children});
+
+  final int columns;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    const gap = AppSpacing.medium;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = (constraints.maxWidth - gap * (columns - 1)) / columns;
+        return Wrap(
+          spacing: gap,
+          runSpacing: gap,
+          children: [
+            for (final child in children) SizedBox(width: width, child: child),
+          ],
+        );
+      },
+    );
+  }
+}
+
+/// 狀態篩選膠囊：選中的是深炭底白字。
+class _FilterPill extends StatelessWidget {
+  const _FilterPill({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+    super.key,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      selected: selected,
+      button: true,
+      child: Material(
+        color: selected ? AppColors.ink : AppColors.surface,
+        shape: StadiumBorder(
+          side: BorderSide(color: selected ? AppColors.ink : AppColors.border),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.medium,
+              vertical: AppSpacing.small,
             ),
-      ],
+            child: Text(
+              label,
+              style: Theme.of(context).textTheme.labelLarge!.copyWith(
+                color: selected ? AppColors.surface : AppColors.ink,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 一筆訂位（Stitch 版面）：店名當標題、右上狀態，時間、人數、桌位、注意事項，
+/// 虛線下方是訂位代碼與預估費用，最下面是操作按鈕。
+class _MyBookingCard extends StatelessWidget {
+  const _MyBookingCard({
+    required this.booking,
+    required this.shopName,
+    required this.actions,
+    super.key,
+  });
+
+  final Booking booking;
+  final String? shopName;
+  final List<Widget> actions;
+
+  @override
+  Widget build(BuildContext context) {
+    final b = booking;
+    final text = Theme.of(context).textTheme;
+    final (statusText, tone) = bookingStatusLabel(b.status);
+    const inset = AppSpacing.medium + AppSpacing.xSmall;
+    return ThickCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(inset),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        shopName ?? '訂位',
+                        style: text.headlineSmall!.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    PillBadge(label: statusText, tone: tone),
+                  ],
+                ),
+                const SizedBox(height: AppSpacing.small + AppSpacing.xSmall),
+                IconText(
+                  icon: Icons.calendar_today_outlined,
+                  text: formatBookingRange(b.startAt, b.endAt),
+                ),
+                const SizedBox(height: AppSpacing.small),
+                Wrap(
+                  spacing: AppSpacing.large,
+                  runSpacing: AppSpacing.small,
+                  children: [
+                    IconText(
+                      icon: Icons.people_outline,
+                      text: '${b.partySize} 人',
+                    ),
+                    if (b.tableCodes.isNotEmpty)
+                      IconText(
+                        icon: Icons.table_restaurant_outlined,
+                        text: '桌位 ${b.tableCodes.join('、')}',
+                      ),
+                  ],
+                ),
+                if (b.notice != null) ...[
+                  const SizedBox(height: AppSpacing.small + AppSpacing.xSmall),
+                  DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: AppColors.amberTint,
+                      borderRadius: BorderRadius.circular(AppRadius.button),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(AppSpacing.small),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Icon(
+                            Icons.info_outline,
+                            size: AppSizes.inlineIcon,
+                            color: AppColors.amberText,
+                          ),
+                          const SizedBox(width: AppSpacing.small),
+                          Expanded(
+                            child: Text(
+                              b.notice!,
+                              style: text.bodyMedium!.copyWith(
+                                color: AppColors.amberText,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+                if (actions.isNotEmpty) ...[
+                  const SizedBox(height: AppSpacing.medium),
+                  Wrap(
+                    spacing: AppSpacing.small,
+                    runSpacing: AppSpacing.small,
+                    children: actions,
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const DashedLine(),
+          ColoredBox(
+            color: AppColors.backgroundAlt,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: inset,
+                vertical: AppSpacing.small + AppSpacing.xSmall,
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      '訂位代碼 ${b.reservationCode}',
+                      style: text.bodyMedium!.copyWith(
+                        color: AppColors.inkMuted,
+                      ),
+                    ),
+                  ),
+                  Text(
+                    b.finalFee == null
+                        ? '預估 ${bookingMoney(b.estimatedFee.venueFee)} 元'
+                        : '結算 ${bookingMoney(b.finalFee!)} 元',
+                    style: text.titleSmall!.copyWith(
+                      color: AppColors.primaryText,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -157,28 +396,32 @@ class _Empty extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Padding(
-      padding: const EdgeInsets.all(AppSpacing.large),
-      child: Column(
-        children: [
-          Icon(
-            Icons.event_note_outlined,
-            size: AppSizes.emptyStateIcon,
-            color: scheme.outline,
-          ),
-          const SizedBox(height: AppSpacing.medium),
-          Text(
-            filtered ? '沒有符合的訂位' : '還沒有訂位',
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
-          const SizedBox(height: AppSpacing.medium),
-          FilledButton(
-            key: const Key('booking-empty-new'),
-            onPressed: () => context.go('/booking'),
-            child: const Text('去訂位'),
-          ),
-        ],
+    return ThickCard(
+      key: const Key('booking-empty'),
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.large),
+        child: Column(
+          children: [
+            const Icon(
+              Icons.event_note_outlined,
+              size: AppSizes.emptyStateIcon,
+              color: AppColors.cardEdge,
+            ),
+            const SizedBox(height: AppSpacing.medium),
+            Text(
+              filtered ? '沒有符合的訂位' : '還沒有訂位',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: AppSpacing.medium),
+            ThickButton(
+              buttonKey: const Key('booking-empty-new'),
+              style: ThickStyle.primary,
+              onPressed: () => context.go('/booking'),
+              icon: Icons.event_seat_outlined,
+              label: '去訂位',
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -221,8 +464,9 @@ class _SeatsSheet extends ConsumerWidget {
     } else {
       content = SeatingPlanView(plans: state.seatingPlan, staffView: false);
     }
+    // 座位圖加上標題、圖例與提示可能比面板高（尤其手機），讓內容可以捲動，不會溢出
     return SafeArea(
-      child: Padding(
+      child: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(
           AppSpacing.large,
           0,

@@ -278,6 +278,37 @@ void main() {
       expect(tester.getTopLeft(logo).dx, 16);
     });
 
+    testWidgets('頂部列：鈴鐺與登入的底色、圖示顏色一樣（白底深色圖示）', (tester) async {
+      await pumpShell(tester, size: const Size(400, 900));
+      Color? fill(String key) =>
+          (tester
+                      .widget<DecoratedBox>(
+                        find
+                            .descendant(
+                              of: find.byKey(Key(key)),
+                              matching: find.byType(DecoratedBox),
+                            )
+                            .first,
+                      )
+                      .decoration
+                  as BoxDecoration)
+              .color;
+      Color? iconColor(String key) => tester
+          .widget<Icon>(
+            find
+                .descendant(
+                  of: find.byKey(Key(key)),
+                  matching: find.byType(Icon),
+                )
+                .first,
+          )
+          .color;
+      for (final key in ['shell-notification-bell', 'shell-login']) {
+        expect(fill(key), AppColors.surface, reason: key);
+        expect(iconColor(key), AppColors.ink, reason: key);
+      }
+    });
+
     for (final key in ['shell-notification-bell', 'shell-login']) {
       testWidgets('按住頂部列的「$key」：底邊變薄、往下沉，移開後彈回', (tester) async {
         await pumpShell(tester, size: const Size(400, 900));
@@ -331,8 +362,12 @@ void main() {
     }
 
     testWidgets('其他頁面：內容停在導覽列上方', (tester) async {
-      // 揪團頁（add：Stitch 揪團月曆）也改成浮動導覽列，這裡改用還沒換版面的訂位頁
-      await pumpShell(tester, location: '/booking', size: const Size(400, 900));
+      // 揪團、訂位、戰績頁都改成浮動導覽列，這裡改用不會改版的規則書入庫頁
+      await pumpShell(
+        tester,
+        location: '/rules-ingest',
+        size: const Size(400, 900),
+      );
       final page = find.byType(Scaffold).last;
       final nav = tester.getTopLeft(find.byType(BottomNavigation)).dy;
       expect(tester.getBottomLeft(page).dy, lessThanOrEqualTo(nav));
