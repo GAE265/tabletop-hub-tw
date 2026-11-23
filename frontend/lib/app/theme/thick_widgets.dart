@@ -261,7 +261,10 @@ enum ThickStyle {
   light(AppColors.background, AppColors.cardEdge, AppColors.ink),
 
   /// 白底紅字：危險操作（例如取消揪團），按下後一律先確認。
-  danger(AppColors.surface, AppColors.error, AppColors.error);
+  danger(AppColors.surface, AppColors.error, AppColors.error),
+
+  /// 紅底白字：危險操作那一列右邊的按鈕。
+  dangerFilled(AppColors.error, AppColors.errorDark, AppColors.surface);
 
   const ThickStyle(this.color, this.edge, this.foreground);
 

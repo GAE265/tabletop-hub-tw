@@ -390,7 +390,8 @@ class _Description extends StatelessWidget {
   }
 }
 
-/// 操作台：報名以外的操作排成兩欄方塊，標題旁顯示我的身分。
+/// 操作台（團務操作）：頁首顯示我的身分；一般操作在「揪團動作」，退出與取消在「退出與取消」。
+/// 每個操作一列：左邊圖示方塊、中間一句白話標題與說明、右邊按鈕（按鈕文字維持原本的操作名稱）。
 class _ActionDesk extends ConsumerWidget {
   const _ActionDesk({
     required this.groupId,
@@ -447,78 +448,137 @@ class _ActionDesk extends ConsumerWidget {
       );
     }
 
-    ThickButton tile(GroupAction action) => switch (action) {
-      GroupAction.edit => ThickButton(
-        style: ThickStyle.light,
-        onPressed: enabled(edit),
-        icon: Icons.edit_outlined,
-        label: '編輯',
-        subtitle: '修改時間、人數與說明',
-      ),
-      GroupAction.book => ThickButton(
-        style: ThickStyle.primary,
-        onPressed: enabled(
-          () => context.go(
-            groupBookingLink(
-              ref.read(groupClockProvider),
-              state.group.value!,
-            ).toString(),
-          ),
-        ),
-        icon: Icons.event_seat_outlined,
-        label: '訂位',
-        subtitle: '帶著揪團資料去訂位',
-      ),
-      GroupAction.recordMatch => ThickButton(
-        style: ThickStyle.light,
-        onPressed: enabled(
-          () => context.go(groupMatchLink(state.group.value!).toString()),
-        ),
-        icon: Icons.emoji_events_outlined,
-        label: '填入戰績',
-        subtitle: '記錄這一局的結果',
-      ),
-      GroupAction.confirm => ThickButton(
-        buttonKey: const Key('group-confirm'),
-        style: ThickStyle.dark,
-        onPressed: enabled(
-          () => confirm('確定成團後會通知所有成員，之後不能取消成團。確定嗎？', notifier.confirm),
-        ),
+    _ActionRow row(GroupAction action) => switch (action) {
+      GroupAction.confirm => _ActionRow(
         icon: Icons.check_circle_outline,
-        label: '確定成團',
-        subtitle: '人夠了就按，大家會收到通知',
-      ),
-      GroupAction.confirmed => const ThickButton(
-        buttonKey: Key('group-confirmed'),
-        style: ThickStyle.dark,
-        onPressed: null,
-        icon: Icons.check_circle,
-        label: '已成團',
-        subtitle: '成員都收到通知了',
-      ),
-      GroupAction.leave => ThickButton(
-        style: ThickStyle.danger,
-        onPressed: enabled(() => confirm('確定要退出這個揪團嗎？', notifier.leave)),
-        icon: Icons.logout,
-        label: '退出',
-        subtitle: '名額會讓給候補',
-      ),
-      GroupAction.cancel => ThickButton(
-        style: ThickStyle.danger,
-        onPressed: enabled(
-          () => confirm('確定要取消這個揪團嗎？取消後無法復原。', notifier.cancel),
+        iconColors: (AppColors.ink, AppColors.surface),
+        title: '人到齊了嗎？',
+        description: '成團後大家會收到通知',
+        button: ThickButton(
+          buttonKey: const Key('group-confirm'),
+          style: ThickStyle.dark,
+          onPressed: enabled(
+            () => confirm('確定成團後會通知所有成員，之後不能取消成團。確定嗎？', notifier.confirm),
+          ),
+          label: '確定成團',
         ),
+      ),
+      GroupAction.confirmed => const _ActionRow(
+        icon: Icons.check_circle,
+        iconColors: (AppColors.sageTint, AppColors.sage),
+        title: '已經成團了',
+        description: '成員都收到通知了',
+        button: ThickButton(
+          buttonKey: Key('group-confirmed'),
+          style: ThickStyle.dark,
+          onPressed: null,
+          label: '已成團',
+        ),
+      ),
+      GroupAction.book => _ActionRow(
+        icon: Icons.event_seat_outlined,
+        iconColors: (AppColors.sageTint, AppColors.sage),
+        title: '幫大家訂位子',
+        description: '帶著揪團資料去訂位',
+        button: ThickButton(
+          style: ThickStyle.primary,
+          onPressed: enabled(
+            () => context.go(
+              groupBookingLink(
+                ref.read(groupClockProvider),
+                state.group.value!,
+              ).toString(),
+            ),
+          ),
+          label: '訂位',
+        ),
+      ),
+      GroupAction.recordMatch => _ActionRow(
+        icon: Icons.emoji_events_outlined,
+        iconColors: (AppColors.amberTint, AppColors.amberText),
+        title: '記錄這一局',
+        description: '玩完記下結果',
+        button: ThickButton(
+          style: ThickStyle.light,
+          onPressed: enabled(
+            () => context.go(groupMatchLink(state.group.value!).toString()),
+          ),
+          label: '填入戰績',
+        ),
+      ),
+      GroupAction.edit => _ActionRow(
+        icon: Icons.edit_outlined,
+        iconColors: (AppColors.primaryTint, AppColors.primaryText),
+        title: '修改揪團資料',
+        description: '時間、人數與說明',
+        button: ThickButton(
+          style: ThickStyle.light,
+          onPressed: enabled(edit),
+          label: '編輯',
+        ),
+      ),
+      GroupAction.leave => _ActionRow(
+        danger: true,
+        icon: Icons.logout,
+        iconColors: (AppColors.surface, AppColors.error),
+        title: '退出這場揪團',
+        tag: '成員',
+        description: '名額會讓給候補',
+        button: ThickButton(
+          style: ThickStyle.dangerFilled,
+          onPressed: enabled(() => confirm('確定要退出這個揪團嗎？', notifier.leave)),
+          label: '退出',
+        ),
+      ),
+      GroupAction.cancel => _ActionRow(
+        danger: true,
         icon: Icons.event_busy_outlined,
-        label: '取消揪團',
-        subtitle: '解散並通知成員與候補',
+        iconColors: (AppColors.surface, AppColors.error),
+        title: '解散這個揪團',
+        tag: '開團主',
+        description: '成員與候補都會收到通知',
+        button: ThickButton(
+          style: ThickStyle.dangerFilled,
+          onPressed: enabled(
+            () => confirm('確定要取消這個揪團嗎？取消後無法復原。', notifier.cancel),
+          ),
+          label: '取消揪團',
+        ),
       ),
       // 報名與加入候補在底部固定列，不會出現在這裡
       GroupAction.join ||
       GroupAction.joinWaitlist => throw StateError('報名不在操作台'),
     };
 
+    bool isDanger(GroupAction a) =>
+        a == GroupAction.leave || a == GroupAction.cancel;
+    // 一般操作的順序：確定成團、訂位、填入戰績、編輯
+    const order = [
+      GroupAction.confirm,
+      GroupAction.confirmed,
+      GroupAction.book,
+      GroupAction.recordMatch,
+      GroupAction.edit,
+    ];
+    final main = [
+      for (final a in order)
+        if (tiles.contains(a)) a,
+    ];
+    final danger = tiles.where(isDanger).toList();
     final text = Theme.of(context).textTheme;
-    const spacing = AppSpacing.small + AppSpacing.xSmall;
+    const gap = SizedBox(height: AppSpacing.small + AppSpacing.xSmall);
+
+    Widget sectionTitle(IconData icon, String title) => Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.small),
+      child: Row(
+        children: [
+          Icon(icon, size: AppSizes.inlineIcon, color: AppColors.primaryText),
+          const SizedBox(width: AppSpacing.small),
+          Text(title, style: text.titleSmall),
+        ],
+      ),
+    );
+
     return ThickCard(
       key: const Key('group-actions'),
       child: Padding(
@@ -528,7 +588,28 @@ class _ActionDesk extends ConsumerWidget {
           children: [
             Row(
               children: [
-                Expanded(child: Text('團務操作', style: _cardTitle(context))),
+                Container(
+                  width: AppSizes.avatar,
+                  height: AppSizes.avatar,
+                  decoration: BoxDecoration(
+                    color: AppColors.primaryTint,
+                    borderRadius: BorderRadius.circular(AppRadius.button),
+                  ),
+                  child: const Icon(
+                    Icons.dashboard_customize_outlined,
+                    color: AppColors.primaryText,
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.small + AppSpacing.xSmall),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('團務操作', style: _cardTitle(context)),
+                      Text('開團、訂位、記錄戰績都在這裡', style: text.bodySmall),
+                    ],
+                  ),
+                ),
                 if (showBusy && state.busy) ...[
                   const SizedBox.square(
                     dimension: AppSizes.inlineIcon,
@@ -536,26 +617,170 @@ class _ActionDesk extends ConsumerWidget {
                   ),
                   const SizedBox(width: AppSpacing.small),
                 ],
-                Text(
-                  '我的身分：$role',
-                  style: text.bodyMedium!.copyWith(color: AppColors.inkMuted),
-                ),
+                _RolePill(role),
               ],
             ),
             const SizedBox(height: AppSpacing.medium),
-            LayoutBuilder(
-              builder: (context, constraints) {
-                final width = (constraints.maxWidth - spacing) / 2;
-                return Wrap(
-                  spacing: spacing,
-                  runSpacing: spacing,
-                  children: [
-                    for (final action in tiles)
-                      SizedBox(width: width, child: tile(action)),
+            const Divider(),
+            const SizedBox(height: AppSpacing.medium),
+            if (main.isNotEmpty)
+              Column(
+                key: const Key('group-actions-main'),
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  sectionTitle(Icons.play_circle_outline, '揪團動作'),
+                  for (final (i, a) in main.indexed) ...[
+                    if (i > 0) gap,
+                    row(a),
                   ],
-                );
-              },
+                ],
+              ),
+            if (danger.isNotEmpty) ...[
+              if (main.isNotEmpty) ...[
+                const SizedBox(height: AppSpacing.medium),
+                const Divider(),
+                const SizedBox(height: AppSpacing.medium),
+              ],
+              Column(
+                key: const Key('group-actions-danger'),
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  sectionTitle(Icons.settings_outlined, '退出與取消'),
+                  for (final (i, a) in danger.indexed) ...[
+                    if (i > 0) gap,
+                    row(a),
+                  ],
+                ],
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 我在這個揪團的身分：綠色膠囊，前面一個小圓點。
+class _RolePill extends StatelessWidget {
+  const _RolePill(this.role);
+
+  final String role;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      key: const Key('group-role'),
+      decoration: BoxDecoration(
+        color: AppColors.sageTint,
+        borderRadius: BorderRadius.circular(AppRadius.pill),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.small + AppSpacing.xSmall,
+          vertical: AppSpacing.xSmall,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: AppSizes.sectionDot,
+              height: AppSizes.sectionDot,
+              decoration: const BoxDecoration(
+                color: AppColors.sage,
+                shape: BoxShape.circle,
+              ),
             ),
+            const SizedBox(width: AppSpacing.small),
+            Text(
+              role,
+              style: Theme.of(
+                context,
+              ).textTheme.labelLarge!.copyWith(color: AppColors.sage),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 操作台的一列：左邊圖示方塊，中間標題（危險操作是紅字，可以加小標籤）與說明，右邊按鈕。
+class _ActionRow extends StatelessWidget {
+  const _ActionRow({
+    required this.icon,
+    required this.iconColors,
+    required this.title,
+    required this.description,
+    required this.button,
+    this.tag,
+    this.danger = false,
+  });
+
+  final IconData icon;
+
+  /// 圖示方塊的（底色, 圖示顏色）。
+  final (Color, Color) iconColors;
+  final String title;
+  final String description;
+  final Widget button;
+  final String? tag;
+  final bool danger;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    final (iconBg, iconFg) = iconColors;
+    return DecoratedBox(
+      decoration: thickDecoration(
+        color: danger ? AppColors.errorTint : AppColors.background,
+        edge: danger ? AppColors.errorEdge : AppColors.cardEdge,
+        radius: AppRadius.card,
+        thickness: AppSizes.smallThickness + 1,
+        shadow: const [],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.small + AppSpacing.xSmall),
+        child: Row(
+          children: [
+            Container(
+              width: AppSizes.avatar,
+              height: AppSizes.avatar,
+              decoration: BoxDecoration(
+                color: iconBg,
+                borderRadius: BorderRadius.circular(AppRadius.button),
+                border: iconBg == AppColors.surface
+                    ? Border.all(color: AppColors.errorEdge)
+                    : null,
+              ),
+              child: Icon(icon, size: AppSizes.inlineIcon + 2, color: iconFg),
+            ),
+            const SizedBox(width: AppSpacing.small + AppSpacing.xSmall),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Wrap(
+                    spacing: AppSpacing.small,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      Text(
+                        title,
+                        style: text.titleSmall!.copyWith(
+                          color: danger ? AppColors.error : AppColors.ink,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      if (tag case final tag?)
+                        PillBadge(label: tag, tone: PillTone.accent),
+                    ],
+                  ),
+                  const SizedBox(height: AppSpacing.xSmall / 2),
+                  Text(description, style: text.bodySmall),
+                ],
+              ),
+            ),
+            const SizedBox(width: AppSpacing.small),
+            button,
           ],
         ),
       ),

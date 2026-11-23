@@ -81,4 +81,13 @@ abstract final class AppColors {
   static const success = sage;
   static const warning = amberText;
   static const error = Color(0xFFB3261E);
+
+  /// 危險操作（退出、取消揪團）那一列的淡紅底。
+  static const errorTint = Color(0xFFFDF0EE);
+
+  /// 危險操作那一列的邊。
+  static const errorEdge = Color(0xFFEECDC8);
+
+  /// 紅色按鈕的底邊（比 [error] 深）。
+  static const errorDark = Color(0xFF8C1C16);
 }
