@@ -1,7 +1,7 @@
 """demo 店家設定與規則教學影片種子資料
 
-Revision ID: 0013
-Revises: 0012
+Revision ID: 0020
+Revises: 0019
 Create Date: 2026-11-23
 """
 
@@ -9,8 +9,8 @@ from collections.abc import Sequence
 
 from alembic import op
 
-revision: str = "0013"
-down_revision: str | None = "0012"
+revision: str = "0020"
+down_revision: str | None = "0019"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
