@@ -249,6 +249,21 @@ void main() {
       );
     });
 
+    for (final withMessages in [false, true]) {
+      testWidgets(withMessages ? '對話區上下邊緣淡出，捲動時不會被硬切' : '空畫面上下邊緣淡出，捲動時不會被硬切', (
+        tester,
+      ) async {
+        final repo = await pumpPage(tester);
+        if (withMessages) await ask(tester, repo, '我們 4 個人', cards());
+        final fade = find.byKey(const Key('advisor-scroll-fade'));
+        expect(fade, findsOneWidget);
+        expect(
+          find.descendant(of: fade, matching: find.byType(Scrollable)),
+          findsWidgets,
+        );
+      });
+    }
+
     testWidgets('手機底部被導覽列蓋住：輸入區停在導覽列上方', (tester) async {
       await pumpPage(tester, bottomInset: 120);
       expect(
