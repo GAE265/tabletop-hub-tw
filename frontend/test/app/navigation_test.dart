@@ -240,6 +240,73 @@ void main() {
       expect(find.text('登入功能即將推出'), findsOneWidget);
     });
 
+    testWidgets('頂部列：白色滿版，底部有較粗的邊與陰影；logo 高 60', (tester) async {
+      await pumpShell(tester, size: const Size(400, 900));
+      final bar = find.byType(MobileTopBar);
+      final decoration =
+          tester
+                  .widget<DecoratedBox>(
+                    find
+                        .descendant(
+                          of: bar,
+                          matching: find.byType(DecoratedBox),
+                        )
+                        .first,
+                  )
+                  .decoration
+              as BoxDecoration;
+      expect(decoration.color, AppColors.surface);
+      final border = decoration.border! as Border;
+      expect(border.bottom.width, greaterThan(border.top.width));
+      expect(decoration.boxShadow, isNotEmpty);
+      expect(
+        tester.getSize(find.descendant(of: bar, matching: logoImage)).height,
+        60,
+      );
+    });
+
+    testWidgets('頂部列：鈴鐺與登入一樣大，右邊留白和左邊一樣 16', (tester) async {
+      await pumpShell(tester, size: const Size(400, 900));
+      final bell = find.byKey(const Key('shell-notification-bell'));
+      final login = find.byKey(const Key('shell-login'));
+      expect(tester.getSize(bell), tester.getSize(login));
+      expect(tester.getTopRight(login).dx, 400 - 16);
+      final logo = find.descendant(
+        of: find.byType(MobileTopBar),
+        matching: logoImage,
+      );
+      expect(tester.getTopLeft(logo).dx, 16);
+    });
+
+    for (final key in ['shell-notification-bell', 'shell-login']) {
+      testWidgets('按住頂部列的「$key」：底邊變薄、往下沉，移開後彈回', (tester) async {
+        await pumpShell(tester, size: const Size(400, 900));
+        final button = find.byKey(Key(key));
+        final frame = find
+            .descendant(of: button, matching: find.byType(DecoratedBox))
+            .first;
+        double edge() =>
+            ((tester.widget<DecoratedBox>(frame).decoration as BoxDecoration)
+                        .border!
+                    as Border)
+                .bottom
+                .width;
+        final icon = find
+            .descendant(of: button, matching: find.byType(Icon))
+            .first;
+        final restEdge = edge();
+        final restTop = tester.getTopLeft(icon).dy;
+        final gesture = await tester.startGesture(tester.getCenter(button));
+        await tester.pumpAndSettle();
+        expect(edge(), lessThan(restEdge));
+        expect(tester.getTopLeft(icon).dy, greaterThan(restTop));
+        await gesture.cancel();
+        await tester.pumpAndSettle();
+        expect(edge(), restEdge);
+        expect(tester.getTopLeft(icon).dy, restTop);
+      });
+    }
+
     testWidgets('頂部列與底部導覽列放在木紋上', (tester) async {
       await pumpShell(tester, size: const Size(400, 900));
       final wood = find.byType(WoodBackground);
