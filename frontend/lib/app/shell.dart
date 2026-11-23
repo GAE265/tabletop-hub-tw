@@ -53,7 +53,7 @@ class AppShell extends StatelessWidget {
 
 /// 哪些頁面的內容延伸到浮動導覽列後面（Stitch 設計）。
 ///
-/// 目前是首頁、揪團月曆、桌遊推薦、規則清單、規則教學頁與通知頁：背景透明（直接看到木紋），內容捲到導覽列後面才不會在導覽列上緣被切成一條線，
+/// 目前是首頁、揪團月曆、桌遊推薦、規則清單、規則教學頁、通知頁、訂位、我的訂位、店家看板、戰績、一局詳情與規則影片的素材清單：背景透明（直接看到木紋），內容捲到導覽列後面才不會在導覽列上緣被切成一條線，
 /// 頁面也已經在捲動內容最下面留出導覽列的高度。
 /// 其他頁面還是米白背景，底部的按鈕也還沒留出導覽列的空間，所以維持內容停在導覽列上方。
 bool _floatsNavigation(String location) =>
@@ -63,6 +63,11 @@ bool _floatsNavigation(String location) =>
     location == '/rules' ||
     location.startsWith('/rules/') ||
     location == '/notifications' ||
+    location == '/booking' ||
+    location == '/booking/mine' ||
+    location == '/booking/board' ||
+    location == '/matches' ||
+    location.startsWith('/matches/') ||
     _videoAssets.hasMatch(location);
 
 /// 規則影片的素材清單（`/videos/<id>/assets`）。

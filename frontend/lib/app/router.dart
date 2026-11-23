@@ -78,18 +78,27 @@ GoRouter createRouter(AppConfig config) => GoRouter(
             ),
           ],
         ),
+        // 訂位、我的訂位、店家看板是同一組分頁：切換時不要換頁動畫，畫面才不會頓一下
         GoRoute(
           path: '/booking',
-          builder: (context, state) =>
-              NewBookingPage.fromQuery(state.uri.queryParameters),
+          pageBuilder: (context, state) => NoTransitionPage(
+            key: state.pageKey,
+            child: NewBookingPage.fromQuery(state.uri.queryParameters),
+          ),
           routes: [
             GoRoute(
               path: 'mine',
-              builder: (context, state) => const MyBookingsPage(),
+              pageBuilder: (context, state) => NoTransitionPage(
+                key: state.pageKey,
+                child: const MyBookingsPage(),
+              ),
             ),
             GoRoute(
               path: 'board',
-              builder: (context, state) => const ShopBoardPage(),
+              pageBuilder: (context, state) => NoTransitionPage(
+                key: state.pageKey,
+                child: const ShopBoardPage(),
+              ),
             ),
           ],
         ),

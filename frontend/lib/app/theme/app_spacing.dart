@@ -61,6 +61,9 @@ abstract final class AppSizes {
   /// 頭像（例如推薦 Agent 的圖示）。
   static const double avatar = 40;
 
+  /// 頭像右下角的座位小圓（戰績的參加者）。
+  static const double seatBadge = 18;
+
   /// 步驟條的圓點（規則影片的步驟）。
   static const double stepDot = 32;
 

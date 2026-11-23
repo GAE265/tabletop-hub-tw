@@ -10,14 +10,14 @@ import 'package:tabletop_hub/domains/booking/pages/widgets/seating_plan.dart';
 import '../../../support/fakes.dart';
 import 'booking_pages_test.dart'
     show
-    admin,
-    chooseShop,
-    player,
-    pumpAt,
-    sampleBooking,
-    staff,
-    tableTaken,
-    tapKey;
+        admin,
+        chooseShop,
+        player,
+        pumpAt,
+        sampleBooking,
+        staff,
+        tableTaken,
+        tapKey;
 
 TableInfo seat(
   int id,
@@ -401,6 +401,33 @@ void main() {
       expect(find.byKey(const Key('booking-seats-3')), findsNothing);
       expect(find.byKey(const Key('booking-seats-4')), findsNothing);
     });
+
+    for (final size in const [Size(400, 600), Size(360, 640)]) {
+      testWidgets(
+        '手機（${size.width.toInt()}×${size.height.toInt()}）按「看座位」：面板內容可以捲動，不會溢出',
+        (tester) async {
+          final repo = FakeBookingRepository()
+            ..mine = [sampleBooking()]
+            ..seatingPlans = playerPlans;
+          await pumpAt(
+            tester,
+            '/booking/mine',
+            repo: repo,
+            user: player,
+            size: size,
+          );
+          await tapKey(tester, 'booking-seats-7');
+          expect(tester.takeException(), isNull);
+          expect(
+            find.descendant(
+              of: find.byKey(const Key('booking-seats-sheet')),
+              matching: find.byType(Scrollable),
+            ),
+            findsWidgets,
+          );
+        },
+      );
+    }
 
     testWidgets('按「看座位」：用那筆訂位的店家與時段查詢，自己的桌標成「你的訂位」', (tester) async {
       final repo = FakeBookingRepository()

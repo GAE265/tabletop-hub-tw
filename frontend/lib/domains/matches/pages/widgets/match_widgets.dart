@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
+import '../../../../app/theme/thick_widgets.dart';
 import '../../../../core/api/api_exception.dart';
 import '../../data/game_match.dart';
 import '../../state/match_labels.dart';
+import '../../state/white_rose.dart';
 
 const _weekdays = ['一', '二', '三', '四', '五', '六', '日'];
 
@@ -35,40 +37,83 @@ String turnTitle(MatchTurn turn) => [
   if (turn.seatNumber case final seat?) '首家座位 $seat',
 ].join('・');
 
-/// 回合清單一列的內容（白薔薇）：出牌座位、四種數量、有沒有白薔薇。
-String turnDetail(Map<String, dynamic> data) {
-  final played = (data['played_seat_numbers'] as List?)?.join('、') ?? '-';
+/// 回合小卡的出牌座位，例如「出牌座位 1、2」。
+String turnPlayedText(Map<String, dynamic> data) =>
+    '出牌座位 ${(data['played_seat_numbers'] as List?)?.join('、') ?? '-'}';
+
+/// 回合小卡的膠囊（白薔薇）：不是 0 的數量，例如「雙刃 2」，有白薔薇時加「白薔薇」。
+List<String> turnChips(Map<String, dynamic> data) {
   int count(String key) => (data[key] as num?)?.toInt() ?? 0;
-  return '出牌座位 $played・雙刃 ${count('double_blade_count')}・'
-      '暗刃 ${count('dark_blade_count')}・巨刃 ${count('giant_blade_count')}・'
-      '信者 ${count('faithful_count')}・'
-      '白薔薇：${data['has_white_rose'] == true ? '有' : '沒有'}';
+  return [
+    for (final (key, label) in const [
+      ('double_blade_count', '雙刃'),
+      ('dark_blade_count', '暗刃'),
+      ('giant_blade_count', '巨刃'),
+      ('faithful_count', '信者'),
+    ])
+      if (count(key) > 0) '$label ${count(key)}',
+    if (data['has_white_rose'] == true) '白薔薇',
+  ];
 }
 
-/// 有標題的區塊卡片。
+/// 最近的局的獲勝摘要：陣營勝負是「薔薇陣營獲勝」；其他是「獲勝：名字（N 分）」
+/// （多人獲勝時列出名字、不寫分數）。還沒有結果時為 null。
+String? matchWinnerText(GameMatch match) {
+  final faction = match.result?['winning_faction'];
+  if (faction is String) return '${factionLabel(faction)}獲勝';
+  final winners = match.participants.where((p) => p.isWinner == true).toList();
+  if (winners.isEmpty) return null;
+  final names = winners.map((p) => p.displayName).join('、');
+  final score = winners.length == 1 ? winners.single.score : null;
+  return '獲勝：$names${score == null ? '' : '（$score 分）'}';
+}
+
+/// 最近的局裡我的結果：有名次是「我排名第 N（M 分）」；陣營勝負是「我的陣營：…」；
+/// 只有分數是「我的分數：M 分」。我不在這一局或還沒有結果時為 null。
+String? matchMyResultText(GameMatch match, String? userId) {
+  if (userId == null) return null;
+  final me = match.participants.where((p) => p.userId == userId).firstOrNull;
+  if (me == null) return null;
+  final score = me.score;
+  if (me.placement case final placement?) {
+    return '我排名第 $placement${score == null ? '' : '（$score 分）'}';
+  }
+  if (me.faction case final faction? when match.result != null) {
+    return '我的陣營：${factionLabel(faction)}';
+  }
+  if (score != null) return '我的分數：$score 分';
+  return null;
+}
+
+/// 有厚度的區塊卡片：左邊圖示、標題，右邊可以放其他東西。
 class MatchSection extends StatelessWidget {
   const MatchSection({
     required this.title,
     required this.children,
+    this.icon,
     this.trailing,
     super.key,
   });
 
   final String title;
+  final IconData? icon;
   final List<Widget> children;
   final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      margin: EdgeInsets.zero,
+    return ThickCard(
       child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.medium),
+        padding: matchCardInset,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Row(
               children: [
+                if (icon case final icon?) ...[
+                  Icon(icon, color: AppColors.primaryText),
+                  const SizedBox(width: AppSpacing.small),
+                ],
                 Expanded(
                   child: Text(
                     title,
@@ -80,13 +125,41 @@ class MatchSection extends StatelessWidget {
                 ?trailing,
               ],
             ),
-            const SizedBox(height: AppSpacing.small),
+            const SizedBox(height: AppSpacing.small + AppSpacing.xSmall),
             ...children,
           ],
         ),
       ),
     );
   }
+}
+
+/// 有厚度卡片的標準內距。
+const matchCardInset = EdgeInsets.all(AppSpacing.medium + AppSpacing.xSmall);
+
+/// 圓角方塊裡的圖示（頁首、開局表單、最近的局）。
+class MatchIconBox extends StatelessWidget {
+  const MatchIconBox({
+    required this.icon,
+    this.color = AppColors.primaryTint,
+    this.foreground = AppColors.primaryText,
+    super.key,
+  });
+
+  final IconData icon;
+  final Color color;
+  final Color foreground;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: AppSizes.entryIconBox,
+    height: AppSizes.entryIconBox,
+    decoration: BoxDecoration(
+      color: color,
+      borderRadius: BorderRadius.circular(AppRadius.button),
+    ),
+    child: Icon(icon, color: foreground),
+  );
 }
 
 /// 操作結果的提示：成功（綠）或錯誤（紅）。

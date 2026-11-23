@@ -109,6 +109,21 @@ void main() {
   });
 
   // add-home-page：`/` 從 health 頁面改成首頁，health 頁面移到 `/health`。
+  testWidgets('訂位、我的訂位、店家看板之間切換沒有換頁動畫', (tester) async {
+    tester.view.physicalSize = const Size(400, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await pumpApp(tester, showPrototypes: false);
+    goTo(tester, '/booking');
+    await tester.pumpAndSettle();
+    goTo(tester, '/booking/mine');
+    // 只推進一個畫格：沒有動畫的話，新頁面已經在原位
+    await tester.pump();
+    await tester.pump();
+    expect(tester.getTopLeft(find.byKey(const Key('my-bookings-page'))).dx, 0);
+    expect(find.byKey(const Key('booking-page')), findsNothing);
+  });
+
   testWidgets('/ 是首頁', (tester) async {
     await pumpApp(tester, showPrototypes: false);
     expect(find.byKey(const Key('home-page')), findsOneWidget);

@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
+import '../../../../app/theme/thick_widgets.dart';
+import '../../../../app/theme/wood_background.dart';
+import '../../../../core/layout/breakpoints.dart';
 import '../../../../core/widgets/pill_badge.dart';
-import '../../data/booking.dart';
 
 /// 店家所在地（台灣）與 UTC 的時差；訂位時間一律以台灣時間顯示與送出。
 const taipeiOffset = Duration(hours: 8);
@@ -14,6 +17,13 @@ String _two(int n) => n.toString().padLeft(2, '0');
 
 /// 台灣時間的「現在」，只取年月日時分（不帶時區）。
 DateTime taipeiNow() => DateTime.now().toUtc().add(taipeiOffset);
+
+/// 金額字串去掉多餘的小數：`480.00` → `480`、`480.50` → `480.5`；不是數字時原樣顯示。
+String bookingMoney(String value) {
+  final v = double.tryParse(value);
+  if (v == null) return value;
+  return v == v.roundToDouble() ? v.toStringAsFixed(0) : '$v';
+}
 
 /// `2026-11-25`
 String isoDate(DateTime d) => '${d.year}-${_two(d.month)}-${_two(d.day)}';
@@ -46,6 +56,69 @@ String bookingErrorText(String message) =>
   _ => (status, PillTone.neutral),
 };
 
+/// 三個訂位頁（訂位、我的訂位、店家看板）共用的外框（Stitch 版面）：
+/// 木紋背景、同樣寬度、同樣位置的分頁卡，下面接各頁的內容；最下面留出手機浮動導覽列的高度。
+/// 三頁的頂部完全一樣，切換分頁時畫面不會跳動。
+class BookingPageFrame extends StatelessWidget {
+  const BookingPageFrame({
+    required this.pageKey,
+    required this.current,
+    required this.showBoard,
+    required this.children,
+    super.key,
+  });
+
+  final Key pageKey;
+
+  /// `new`、`mine`、`board`
+  final String current;
+  final bool showBoard;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    final wide = context.screenSize != ScreenSize.mobile;
+    final body = Align(
+      alignment: Alignment.topCenter,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxWidth: wide ? AppSpacing.splitContentMaxWidth : double.infinity,
+        ),
+        child: ListView(
+          padding: EdgeInsets.fromLTRB(
+            AppSpacing.medium,
+            AppSpacing.medium,
+            AppSpacing.medium,
+            AppSpacing.medium + MediaQuery.paddingOf(context).bottom,
+          ),
+          children: [
+            ThickCard(
+              key: const Key('booking-header'),
+              radius: AppRadius.card,
+              child: Padding(
+                padding: const EdgeInsets.all(AppSpacing.small),
+                child: BookingTabs(current: current, showBoard: showBoard),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.medium),
+            ...children,
+          ],
+        ),
+      ),
+    );
+    return Scaffold(
+      key: pageKey,
+      backgroundColor: Colors.transparent,
+      body: SafeArea(
+        bottom: false,
+        child: WoodBackground.isPaintedAbove(context)
+            ? body
+            : WoodBackground(child: body),
+      ),
+    );
+  }
+}
+
 /// 訂位頁上方的分頁：訂位／我的訂位／店家看板（店家人員與管理員才有）。
 class BookingTabs extends StatelessWidget {
   const BookingTabs({
@@ -66,30 +139,111 @@ class BookingTabs extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: SegmentedButton<String>(
-        showSelectedIcon: false,
-        segments: [
-          const ButtonSegment(
-            value: 'new',
-            icon: Icon(Icons.event_available_outlined),
-            label: Text('訂位', key: Key('booking-tab-new')),
-          ),
-          const ButtonSegment(
-            value: 'mine',
-            icon: Icon(Icons.receipt_long_outlined),
-            label: Text('我的訂位', key: Key('booking-tab-mine')),
-          ),
-          if (showBoard)
-            const ButtonSegment(
-              value: 'board',
-              icon: Icon(Icons.storefront_outlined),
-              label: Text('店家看板', key: Key('booking-tab-board')),
+    // 分段切換（Stitch 版面）：一條米色軌道，目前的分頁是浮起來的白色按鈕
+    final tabs = [
+      ('new', '訂位', Icons.event_available_outlined, 'booking-tab-new'),
+      ('mine', '我的訂位', Icons.receipt_long_outlined, 'booking-tab-mine'),
+      if (showBoard)
+        ('board', '店家看板', Icons.storefront_outlined, 'booking-tab-board'),
+    ];
+    return DecoratedBox(
+      key: const Key('booking-tabs'),
+      decoration: BoxDecoration(
+        color: AppColors.neutralTint,
+        borderRadius: BorderRadius.circular(AppRadius.pill),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.xSmall),
+        child: Row(
+          children: [
+            for (final (i, (value, label, icon, key)) in tabs.indexed) ...[
+              if (i > 0) const SizedBox(width: AppSpacing.xSmall),
+              Expanded(
+                child: _TabSegment(
+                  selected: value == current,
+                  label: label,
+                  labelKey: Key(key),
+                  icon: icon,
+                  onTap: () => context.go(_paths[value]!),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TabSegment extends StatelessWidget {
+  const _TabSegment({
+    required this.selected,
+    required this.label,
+    required this.labelKey,
+    required this.icon,
+    required this.onTap,
+  });
+
+  final bool selected;
+  final String label;
+  final Key labelKey;
+  final IconData icon;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      selected: selected,
+      button: true,
+      child: DecoratedBox(
+        decoration: selected
+            ? thickDecoration(
+                color: AppColors.surface,
+                edge: AppColors.cardEdge,
+                radius: AppRadius.pill,
+                thickness: AppSizes.smallThickness,
+                shadow: AppShadows.soft,
+              )
+            : BoxDecoration(
+                borderRadius: BorderRadius.circular(AppRadius.pill),
+              ),
+        child: Material(
+          type: MaterialType.transparency,
+          shape: const StadiumBorder(),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: selected ? null : onTap,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(
+                minHeight: AppSizes.minTouchTarget - AppSpacing.small,
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    icon,
+                    size: AppSizes.inlineIcon,
+                    color: selected
+                        ? AppColors.primaryText
+                        : AppColors.inkMuted,
+                  ),
+                  const SizedBox(width: AppSpacing.xSmall),
+                  Flexible(
+                    child: Text(
+                      label,
+                      key: labelKey,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.labelLarge!.copyWith(
+                        color: selected ? AppColors.ink : AppColors.inkMuted,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
-        ],
-        selected: {current},
-        onSelectionChanged: (s) => context.go(_paths[s.first]!),
+          ),
+        ),
       ),
     );
   }
@@ -138,108 +292,6 @@ class BookingErrorBanner extends StatelessWidget {
   }
 }
 
-/// 一筆訂位的卡片；按鈕由呼叫的頁面依角色決定。
-class BookingCard extends StatelessWidget {
-  const BookingCard({
-    required this.booking,
-    required this.shopName,
-    this.actions = const [],
-    this.overtimeMinutes,
-    super.key,
-  });
-
-  final Booking booking;
-  final String? shopName;
-  final List<Widget> actions;
-
-  /// 已入座且超過結束時間的分鐘數；有值時顯示「已超時 N 分鐘」（店家看板用）。
-  final int? overtimeMinutes;
-
-  @override
-  Widget build(BuildContext context) {
-    final b = booking;
-    final text = Theme.of(context).textTheme;
-    final muted = Theme.of(context).colorScheme.onSurfaceVariant;
-    final (statusText, tone) = bookingStatusLabel(b.status);
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.medium),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    formatBookingRange(b.startAt, b.endAt),
-                    style: text.titleMedium,
-                  ),
-                ),
-                PillBadge(label: statusText, tone: tone),
-              ],
-            ),
-            const SizedBox(height: AppSpacing.small),
-            Wrap(
-              spacing: AppSpacing.small,
-              runSpacing: AppSpacing.xSmall,
-              children: [
-                if (shopName != null)
-                  PillBadge(label: shopName!, icon: Icons.storefront_outlined),
-                PillBadge(
-                  label: '${b.partySize} 人',
-                  tone: PillTone.players,
-                  icon: Icons.people_outline,
-                ),
-                if (b.tableCodes.isNotEmpty)
-                  PillBadge(
-                    label: '桌位 ${b.tableCodes.join('、')}',
-                    icon: Icons.table_restaurant_outlined,
-                  ),
-                if (overtimeMinutes != null)
-                  PillBadge(
-                    key: Key('board-overtime-${b.id}'),
-                    label: '已超時 $overtimeMinutes 分鐘',
-                    tone: PillTone.accent,
-                    icon: Icons.timer_off_outlined,
-                  ),
-              ],
-            ),
-            const SizedBox(height: AppSpacing.small),
-            Text(
-              '訂位代碼 ${b.reservationCode}　預估 ${b.estimatedFee.venueFee} 元'
-              '${b.finalFee == null ? '' : '　結算 ${b.finalFee} 元'}',
-              style: text.bodyMedium!.copyWith(color: muted),
-            ),
-            if (b.notice != null) ...[
-              const SizedBox(height: AppSpacing.small),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(
-                    Icons.info_outline,
-                    size: text.bodyMedium!.fontSize,
-                    color: muted,
-                  ),
-                  const SizedBox(width: AppSpacing.xSmall),
-                  Expanded(child: Text(b.notice!, style: text.bodyMedium)),
-                ],
-              ),
-            ],
-            if (actions.isNotEmpty) ...[
-              const SizedBox(height: AppSpacing.small),
-              Wrap(
-                alignment: WrapAlignment.end,
-                spacing: AppSpacing.small,
-                children: actions,
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 /// 確認視窗；按「確定」回傳 true。[content] 是標題下方的說明文字。
 Future<bool> confirmBookingAction(
   BuildContext context, {
@@ -267,46 +319,4 @@ Future<bool> confirmBookingAction(
     ),
   );
   return ok ?? false;
-}
-
-/// 頁面共用的外框：置中、限制最大寬度、上方分頁。
-class BookingScaffold extends StatelessWidget {
-  const BookingScaffold({
-    required this.pageKey,
-    required this.title,
-    required this.current,
-    required this.showBoard,
-    required this.children,
-    this.maxWidth,
-    super.key,
-  });
-
-  final Key pageKey;
-  final String title;
-  final String current;
-  final bool showBoard;
-  final List<Widget> children;
-  final double? maxWidth;
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      key: pageKey,
-      appBar: AppBar(title: Text(title)),
-      body: Align(
-        alignment: Alignment.topCenter,
-        child: ConstrainedBox(
-          constraints: BoxConstraints(maxWidth: maxWidth ?? double.infinity),
-          child: ListView(
-            padding: const EdgeInsets.all(AppSpacing.medium),
-            children: [
-              BookingTabs(current: current, showBoard: showBoard),
-              const SizedBox(height: AppSpacing.medium),
-              ...children,
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 }
