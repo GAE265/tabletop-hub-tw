@@ -169,7 +169,8 @@ const _entries = [
   ),
 ];
 
-/// 四張入口卡片：手機兩欄兩列；平板以上放得下就排成一列，放不下改成兩欄。
+/// 四張入口卡片：手機兩欄兩列、寬窄交錯（第一排左寬右窄，第二排左窄右寬）；
+/// 平板以上放得下就排成一列（同寬），放不下改成兩欄。
 class EntryCards extends StatelessWidget {
   const EntryCards({super.key});
 
@@ -194,7 +195,10 @@ class EntryCards extends StatelessWidget {
                   children: [
                     for (var i = start; i < start + columns; i++) ...[
                       if (i > start) SizedBox(width: gap),
-                      Expanded(child: _EntryCard(entry: _entries[i])),
+                      Expanded(
+                        flex: mobile ? _mobileFlex[i] : 1,
+                        child: _EntryCard(entry: _entries[i]),
+                      ),
                     ],
                   ],
                 ),
@@ -206,6 +210,9 @@ class EntryCards extends StatelessWidget {
     );
   }
 }
+
+/// 手機版每張卡片的寬度比例：第一排 3:2，第二排 2:3。
+const _mobileFlex = [3, 2, 2, 3];
 
 class _EntryCard extends StatelessWidget {
   const _EntryCard({required this.entry});
