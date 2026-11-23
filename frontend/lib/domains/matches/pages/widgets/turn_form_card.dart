@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../app/theme/app_spacing.dart';
+import '../../../../app/theme/thick_widgets.dart';
 import '../../data/game_match.dart';
 import '../../state/turn_form_state.dart';
 import 'match_widgets.dart';
@@ -185,11 +186,13 @@ class _TurnFormCardState extends ConsumerState<TurnFormCard> {
         ],
         Align(
           alignment: Alignment.centerLeft,
-          child: FilledButton.icon(
-            key: const Key('turn-submit'),
+          child: ThickButton(
+            buttonKey: const Key('turn-submit'),
+            style: ThickStyle.dark,
+            icon: Icons.edit_note,
+            label: '記錄這個回合',
+            shadow: AppShadows.soft,
             onPressed: form.busy ? null : n.submit,
-            icon: const Icon(Icons.edit_note),
-            label: const Text('記錄這個回合'),
           ),
         ),
       ],
