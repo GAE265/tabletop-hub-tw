@@ -147,6 +147,20 @@ void main() {
       expectThick(tester, firstBoxIn(card));
     });
 
+    testWidgets('「查看詳情」在卡片底部置中，沒有箭頭', (tester) async {
+      await pumpGroupsWidget(tester, const GroupsPage(), repo: sampleRepo());
+      final card = find.byType(GroupCard).first;
+      final label = find.descendant(of: card, matching: find.text('查看詳情'));
+      expect(
+        tester.getCenter(label).dx,
+        moreOrLessEquals(tester.getCenter(card).dx, epsilon: 1),
+      );
+      expect(
+        find.descendant(of: card, matching: find.byIcon(Icons.arrow_forward)),
+        findsNothing,
+      );
+    });
+
     testWidgets('按住揪團卡片：往下沉，移開後彈回', (tester) async {
       await pumpGroupsWidget(tester, const GroupsPage(), repo: sampleRepo());
       final card = find.byType(GroupCard).first;
