@@ -85,6 +85,9 @@ abstract final class AppSizes {
   /// 跟著文字的小圖示（日期、人數、箭頭）。
   static const double inlineIcon = 18;
 
+  /// 捲動區上下邊緣淡出的高度（內容捲到邊緣時慢慢消失，不會被硬切）。
+  static const double scrollFade = 24;
+
   /// 首頁卡片底部較粗的邊（卡片的厚度）。
   static const double cardThickness = 4;
 

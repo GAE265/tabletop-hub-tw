@@ -123,13 +123,15 @@ class _GamesAdvisorPageState extends ConsumerState<GamesAdvisorPage> {
             ),
             if (state.notice case final notice?) _NoticeBanner(notice),
             Expanded(
-              child: state.messages.isEmpty && !sending
-                  ? _EmptyView(onExample: _advisor.sendMessage)
-                  : _MessageList(
-                      controller: _scroll,
-                      messages: state.messages,
-                      sending: sending,
-                    ),
+              child: _EdgeFade(
+                child: state.messages.isEmpty && !sending
+                    ? _EmptyView(onExample: _advisor.sendMessage)
+                    : _MessageList(
+                        controller: _scroll,
+                        messages: state.messages,
+                        sending: sending,
+                      ),
+              ),
             ),
             _Composer(
               controller: _input,
@@ -155,6 +157,38 @@ class _GamesAdvisorPageState extends ConsumerState<GamesAdvisorPage> {
             ? column
             : WoodBackground(child: column),
       ),
+    );
+  }
+}
+
+/// 捲動區上下邊緣淡出：卡片捲到頁首或輸入區旁邊時慢慢消失在木紋裡，不會被切成一條直線。
+class _EdgeFade extends StatelessWidget {
+  const _EdgeFade({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return ShaderMask(
+      key: const Key('advisor-scroll-fade'),
+      blendMode: BlendMode.dstIn,
+      shaderCallback: (bounds) {
+        final edge = bounds.height == 0
+            ? 0.0
+            : (AppSizes.scrollFade / bounds.height).clamp(0.0, 0.5);
+        return LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: const [
+            Colors.transparent,
+            Colors.black,
+            Colors.black,
+            Colors.transparent,
+          ],
+          stops: [0, edge, 1 - edge, 1],
+        ).createShader(bounds);
+      },
+      child: child,
     );
   }
 }
