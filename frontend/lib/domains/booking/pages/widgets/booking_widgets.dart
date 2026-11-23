@@ -17,6 +17,13 @@ String _two(int n) => n.toString().padLeft(2, '0');
 /// 台灣時間的「現在」，只取年月日時分（不帶時區）。
 DateTime taipeiNow() => DateTime.now().toUtc().add(taipeiOffset);
 
+/// 金額字串去掉多餘的小數：`480.00` → `480`、`480.50` → `480.5`；不是數字時原樣顯示。
+String bookingMoney(String value) {
+  final v = double.tryParse(value);
+  if (v == null) return value;
+  return v == v.roundToDouble() ? v.toStringAsFixed(0) : '$v';
+}
+
 /// `2026-11-25`
 String isoDate(DateTime d) => '${d.year}-${_two(d.month)}-${_two(d.day)}';
 
