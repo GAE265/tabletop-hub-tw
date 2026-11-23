@@ -1,6 +1,9 @@
 import '../data/host_models.dart';
 import 'host_controller.dart';
 
+/// 目前唯一支援語音主持的遊戲（規則教學頁用遊戲名稱判斷要不要顯示入口）。
+const hostGameName = '血與刃的白薔薇';
+
 /// 回合內三個階段的名稱（spec §3.1）。
 const hostPhaseNames = {1: '傳金幣、放水晶', 2: '決定出牌', 3: '翻牌結算'};
 
