@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tabletop_hub/app/theme/app_theme.dart';
+import 'package:tabletop_hub/app/theme/wood_background.dart';
 import 'package:tabletop_hub/core/api/api_exception.dart';
 import 'package:tabletop_hub/core/platform/lesson_video_player.dart';
 import 'package:tabletop_hub/domains/rules_qa/data/rules_qa_repository.dart';
@@ -24,6 +25,9 @@ Future<FakeRulesQaRepository> pumpPage(
   Widget page, {
   FakeRulesQaRepository? repo,
   Size size = const Size(400, 900),
+
+  /// 畫面底部被蓋住的高度（手機的浮動導覽列，見 AppShell）。
+  double bottomInset = 0,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
@@ -39,6 +43,12 @@ Future<FakeRulesQaRepository> pumpPage(
       ],
       child: MaterialApp(
         theme: buildAppTheme(const FakeAppFonts()),
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(
+            context,
+          ).copyWith(padding: EdgeInsets.only(bottom: bottomInset)),
+          child: child!,
+        ),
         home: page,
       ),
     ),
@@ -47,7 +57,103 @@ Future<FakeRulesQaRepository> pumpPage(
   return fake;
 }
 
+/// [box] 的外框底邊比上邊粗，而且有陰影（有厚度）。
+void expectThick(WidgetTester tester, Finder box, [String? reason]) {
+  final decoration =
+      tester.widget<DecoratedBox>(box).decoration as BoxDecoration;
+  final border = decoration.border! as Border;
+  expect(border.bottom.width, greaterThan(border.top.width), reason: reason);
+  expect(decoration.boxShadow, isNotEmpty, reason: reason);
+}
+
+final lessonCards = find.byKey(const Key('rules-lesson-card'));
+
 void main() {
+  group('遊戲清單（Stitch 版面）', () {
+    testWidgets('木紋背景；頁首白卡有標題、說明、搜尋框與篩選膠囊', (tester) async {
+      await pumpPage(tester, const RulesLessonsPage());
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('rules-lessons-page')),
+          matching: find.byType(WoodBackground),
+        ),
+        findsOneWidget,
+      );
+      final header = find.byKey(const Key('rules-lessons-header'));
+      Finder inHeader(Finder f) => find.descendant(of: header, matching: f);
+      expect(inHeader(find.text('規則教學與問答')), findsOneWidget);
+      expect(inHeader(find.text('選一款遊戲，看教學影片或直接問規則')), findsOneWidget);
+      expect(inHeader(find.byKey(const Key('rules-search'))), findsOneWidget);
+      expect(inHeader(find.text('全部（2）')), findsOneWidget);
+      expect(inHeader(find.text('有教學影片（1）')), findsOneWidget);
+      expect(inHeader(find.text('可以問規則（2）')), findsOneWidget);
+    });
+
+    testWidgets('遊戲卡片有厚度；沒有影片的標「還沒有影片」；左邊是名稱第一個字的方塊', (tester) async {
+      await pumpPage(tester, const RulesLessonsPage());
+      expect(lessonCards, findsNWidgets(2));
+      expectThick(
+        tester,
+        find
+            .descendant(
+              of: lessonCards.first,
+              matching: find.byType(DecoratedBox),
+            )
+            .first,
+      );
+      final noVideo = lessonCards.at(1);
+      expect(
+        find.descendant(of: noVideo, matching: find.text('還沒有影片')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: noVideo, matching: find.text('只')),
+        findsOneWidget,
+      );
+      expect(find.text('共 2 款'), findsOneWidget);
+    });
+
+    testWidgets('搜尋：只留名稱符合的遊戲，筆數跟著變', (tester) async {
+      await pumpPage(tester, const RulesLessonsPage());
+      await tester.enterText(find.byKey(const Key('rules-search')), '規則書');
+      await tester.pumpAndSettle();
+      expect(lessonCards, findsOneWidget);
+      expect(find.text('只有規則書的桌遊'), findsOneWidget);
+      expect(find.text('共 1 款'), findsOneWidget);
+    });
+
+    testWidgets('篩選「有教學影片」：只留有影片的遊戲', (tester) async {
+      await pumpPage(tester, const RulesLessonsPage());
+      await tester.tap(find.text('有教學影片（1）'));
+      await tester.pumpAndSettle();
+      expect(lessonCards, findsOneWidget);
+      expect(find.text('有影片的桌遊'), findsOneWidget);
+    });
+
+    testWidgets('沒有符合的遊戲：顯示「找不到符合的遊戲」', (tester) async {
+      await pumpPage(tester, const RulesLessonsPage());
+      await tester.enterText(find.byKey(const Key('rules-search')), '不存在');
+      await tester.pumpAndSettle();
+      expect(lessonCards, findsNothing);
+      expect(find.text('找不到符合的遊戲'), findsOneWidget);
+    });
+
+    testWidgets('手機底部被導覽列蓋住：捲到最底時最後一張卡片停在導覽列上方', (tester) async {
+      await pumpPage(
+        tester,
+        const RulesLessonsPage(),
+        size: const Size(400, 500),
+        bottomInset: 120,
+      );
+      await tester.drag(find.byType(Scrollable).first, const Offset(0, -3000));
+      await tester.pumpAndSettle();
+      expect(
+        tester.getBottomLeft(lessonCards.last).dy,
+        lessThanOrEqualTo(500 - 120),
+      );
+    });
+  });
+
   group('遊戲清單', () {
     testWidgets('列出遊戲，有影片的標示「有教學影片」', (tester) async {
       await pumpPage(tester, const RulesLessonsPage());
