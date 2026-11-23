@@ -43,6 +43,10 @@ dependencies:
   youtube_player_iframe: ^6.0.2
   file_picker: ^10.3.10
   web_socket_channel: ^3.0.3
+  # 播放產生的規則影片（add-rules-video-mobile MR 10）；網頁版用 blob 網址
+  video_player: ^2.11.1
+  # 建立影片的 blob 網址（原本就是間接依賴）
+  web: ^1.1.1
 
 dev_dependencies:
   flutter_test:

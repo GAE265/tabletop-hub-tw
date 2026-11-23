@@ -3,7 +3,7 @@
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, Request, status
+from fastapi import APIRouter, Depends, File, Query, Request, Response, UploadFile, status
 from sqlalchemy.orm import Session
 
 from app.core.auth import CurrentUser, get_current_user
@@ -13,6 +13,7 @@ from app.domains.rules_ingest.repository import ManualPageRepository
 from app.domains.rules_ingest.service import read_manual_pages
 from app.domains.rules_qa.repository import (
     RulesQaRepository,
+    VideoDraftRepository,
     VideoJobRepository,
     VideoPagesRepository,
     VideoProjectRepository,
@@ -21,8 +22,13 @@ from app.domains.rules_qa.repository import (
 from app.domains.rules_qa.schemas import (
     MessageRequest,
     MessageResponse,
+    RulebookOut,
     RulesLessonList,
     RulesLessonOut,
+    VideoAssetOut,
+    VideoAssetUpdate,
+    VideoDraftOut,
+    VideoJobCreate,
     VideoJobList,
     VideoJobOut,
     VideoOut,
@@ -31,17 +37,24 @@ from app.domains.rules_qa.schemas import (
     VideoProjectCreate,
     VideoProjectList,
     VideoProjectOut,
+    VideoReadinessOut,
+    VideoRenderOut,
     VideoRequest,
     VideoTermsIn,
     VideoTermsOut,
 )
 from app.domains.rules_qa.service import (
     RulesQaService,
+    VideoAssetsService,
+    VideoDraftService,
     VideoJobService,
     VideoPagesService,
     VideoProjectService,
+    VideoRenderService,
+    VideoRulebookService,
     VideoTermsService,
 )
+from app.domains.rules_qa.video_assets import MAX_PHOTO_BYTES
 
 router = APIRouter(prefix="/rules-lessons", tags=["rules_qa"])
 
@@ -100,11 +113,18 @@ videos_router = APIRouter(prefix="/rules-videos", tags=["rules_qa"])
 
 
 def get_video_project_service(
-    session: Annotated[Session, Depends(get_session)],
+    request: Request, session: Annotated[Session, Depends(get_session)]
 ) -> VideoProjectService:
-    # 店家是共用表 booking_shops，由擁有者的 repository 查詢（AGENTS.md 4.2 共用資料表例外）
+    # 店家是共用表 booking_shops，由擁有者的 repository 查詢（AGENTS.md 4.2 共用資料表例外）；
+    # 規則書原文用 rules_ingest 的 service 函式讀（domain 之間只呼叫對方的 service）
+    manual = ManualPageRepository(session)
     return VideoProjectService(
-        VideoProjectRepository(session), RulesQaRepository(session), BookingRepository(session)
+        VideoProjectRepository(session),
+        RulesQaRepository(session),
+        BookingRepository(session),
+        read_pages=lambda game_id: read_manual_pages(manual, game_id),
+        pages=VideoPagesRepository(session),
+        drafts=get_video_job_service(request, session),
     )
 
 
@@ -234,3 +254,196 @@ def replace_video_pages(
 ) -> VideoPagesOut:
     """選本章頁與參考頁、存編輯後的文字（整份取代；沒給文字的頁用原文）。不改 games_manual。"""
     return service.replace(user, project_id, body)
+
+
+# --------------------------------------------------------------------------- 草稿
+
+
+def get_video_draft_service(
+    request: Request, session: Annotated[Session, Depends(get_session)]
+) -> VideoDraftService:
+    return VideoDraftService(
+        VideoDraftRepository(session),
+        VideoProjectRepository(session),
+        VideoTermsRepository(session),
+        get_video_job_service(request, session),
+    )
+
+
+VideoDraftServiceDep = Annotated[VideoDraftService, Depends(get_video_draft_service)]
+
+
+@videos_router.post(
+    "/{project_id}/jobs", response_model=VideoJobOut, status_code=status.HTTP_202_ACCEPTED
+)
+def create_video_job(
+    project_id: uuid.UUID,
+    body: VideoJobCreate,
+    user: CurrentUserDep,
+    service: VideoDraftServiceDep,
+) -> VideoJobOut:
+    """建立工作：draft＝依編輯後的頁面文字產生草稿；render＝產生影片（素材要齊）。回 202。"""
+    return service.start(user, project_id, body.kind)
+
+
+@videos_router.get("/{project_id}/draft", response_model=VideoDraftOut)
+def get_video_draft(
+    project_id: uuid.UUID, user: CurrentUserDep, service: VideoDraftServiceDep
+) -> VideoDraftOut:
+    """草稿：每段的句子、素材清單、涵蓋檢查摘要、用語對照表狀態、是否依舊文字產生。"""
+    return service.get(user, project_id)
+
+
+# --------------------------------------------------------------------------- 素材
+
+
+def get_video_assets_service(
+    request: Request, session: Annotated[Session, Depends(get_session)]
+) -> VideoAssetsService:
+    """存放介面用後端啟動時建立的（main.py 的 app.state.storage）；測試是 FakeFileStorage。"""
+    return VideoAssetsService(
+        VideoDraftRepository(session), VideoProjectRepository(session), request.app.state.storage
+    )
+
+
+VideoAssetsServiceDep = Annotated[VideoAssetsService, Depends(get_video_assets_service)]
+
+
+@videos_router.put("/{project_id}/assets/{asset_key}/photo", response_model=VideoAssetOut)
+def upload_video_asset_photo(
+    project_id: uuid.UUID,
+    asset_key: str,
+    file: Annotated[UploadFile, File()],
+    user: CurrentUserDep,
+    service: VideoAssetsServiceDep,
+) -> VideoAssetOut:
+    """上傳或換一張素材照片（JPEG、PNG，最多 15 MB；依 EXIF 轉正）。方向改回 0，區域座標保留。"""
+    # 有界讀取：只多讀一個位元組，讓 service 辨識超過上限
+    data = file.file.read(MAX_PHOTO_BYTES + 1)
+    return service.upload_photo(user, project_id, asset_key, data)
+
+
+@videos_router.get("/{project_id}/assets/{asset_key}/photo")
+def read_video_asset_photo(
+    project_id: uuid.UUID, asset_key: str, user: CurrentUserDep, service: VideoAssetsServiceDep
+) -> Response:
+    """素材照片的圖檔（帶身分讀取，權限同專案）。"""
+    data, content_type = service.read_photo(user, project_id, asset_key)
+    return Response(content=data, media_type=content_type)
+
+
+@videos_router.get("/{project_id}/assets/{asset_key}", response_model=VideoAssetOut)
+def get_video_asset(
+    project_id: uuid.UUID, asset_key: str, user: CurrentUserDep, service: VideoAssetsServiceDep
+) -> VideoAssetOut:
+    """一個素材的方向、區域座標、有沒有照片。"""
+    return service.get_asset(user, project_id, asset_key)
+
+
+@videos_router.patch("/{project_id}/assets/{asset_key}", response_model=VideoAssetOut)
+def update_video_asset(
+    project_id: uuid.UUID,
+    asset_key: str,
+    body: VideoAssetUpdate,
+    user: CurrentUserDep,
+    service: VideoAssetsServiceDep,
+) -> VideoAssetOut:
+    """改方向或區域座標；只改方向時區域改回待量測。"""
+    return service.update_asset(user, project_id, asset_key, body)
+
+
+@videos_router.get("/{project_id}/readiness", response_model=VideoReadinessOut)
+def get_video_readiness(
+    project_id: uuid.UUID, user: CurrentUserDep, service: VideoAssetsServiceDep
+) -> VideoReadinessOut:
+    """產生影片前還缺什麼：沒有照片的素材、沒有座標的區域、本版不支援的繪製素材。"""
+    return service.readiness(user, project_id)
+
+
+# --------------------------------------------------------------------------- 成品影片
+
+
+def get_video_render_service(
+    request: Request, session: Annotated[Session, Depends(get_session)]
+) -> VideoRenderService:
+    return VideoRenderService(
+        VideoProjectRepository(session), VideoJobRepository(session), request.app.state.storage
+    )
+
+
+VideoRenderServiceDep = Annotated[VideoRenderService, Depends(get_video_render_service)]
+
+
+@videos_router.get("/{project_id}/render", response_model=VideoRenderOut)
+def get_video_render(
+    project_id: uuid.UUID, user: CurrentUserDep, service: VideoRenderServiceDep
+) -> VideoRenderOut:
+    """最近一次成功產生的影片：總長、重新編碼與沿用的段、略過的素材、產生時間。"""
+    return service.get(user, project_id)
+
+
+@videos_router.get("/{project_id}/render/video")
+def read_video_render(
+    project_id: uuid.UUID, user: CurrentUserDep, service: VideoRenderServiceDep
+) -> Response:
+    """影片檔（帶身分讀取，權限同專案；整支讀出，見 design.md D13 待決 1）。"""
+    return Response(content=service.video(user, project_id), media_type="video/mp4")
+
+
+# --------------------------------------------------------------------------- 店員拍規則書
+
+
+def get_video_rulebook_service(
+    request: Request, session: Annotated[Session, Depends(get_session)]
+) -> VideoRulebookService:
+    """照片放在後端啟動時建立的存放介面（main.py 的 app.state.storage）。"""
+    return VideoRulebookService(
+        VideoProjectRepository(session), VideoPagesRepository(session), request.app.state.storage
+    )
+
+
+VideoRulebookServiceDep = Annotated[VideoRulebookService, Depends(get_video_rulebook_service)]
+
+
+@videos_router.get("/{project_id}/rulebook", response_model=RulebookOut)
+def get_video_rulebook(
+    project_id: uuid.UUID, user: CurrentUserDep, service: VideoRulebookServiceDep
+) -> RulebookOut:
+    """照片模式專案的規則書照片（依頁的順序）、每張的清晰度、是否都讀過了。"""
+    return service.get(user, project_id)
+
+
+@videos_router.post(
+    "/{project_id}/rulebook/photos",
+    response_model=RulebookOut,
+    status_code=status.HTTP_201_CREATED,
+)
+def upload_video_rulebook_photo(
+    project_id: uuid.UUID,
+    file: Annotated[UploadFile, File()],
+    user: CurrentUserDep,
+    service: VideoRulebookServiceDep,
+) -> RulebookOut:
+    """加一張規則書照片（排在最後；JPEG、PNG，最多 15 MB；依 EXIF 轉正）。"""
+    data = file.file.read(MAX_PHOTO_BYTES + 1)
+    return service.upload(user, project_id, data)
+
+
+@videos_router.get("/{project_id}/rulebook/photos/{index}")
+def read_video_rulebook_photo(
+    project_id: uuid.UUID, index: int, user: CurrentUserDep, service: VideoRulebookServiceDep
+) -> Response:
+    """第 index 張規則書照片的圖檔（從 1 開始）。"""
+    data, content_type = service.read_photo(user, project_id, index)
+    return Response(content=data, media_type=content_type)
+
+
+@videos_router.delete(
+    "/{project_id}/rulebook/photos/{index}", status_code=status.HTTP_204_NO_CONTENT
+)
+def delete_video_rulebook_photo(
+    project_id: uuid.UUID, index: int, user: CurrentUserDep, service: VideoRulebookServiceDep
+) -> Response:
+    """刪掉第 index 張（後面的往前遞補）。"""
+    service.delete(user, project_id, index)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

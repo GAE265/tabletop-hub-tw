@@ -5,6 +5,7 @@ from typing import Any
 from app.integrations.llm.base import LLMProvider
 from app.integrations.llm.errors import LLMConversationNotFound, LLMUnavailable
 from app.integrations.llm.types import JsonSchema, LLMResponse, ToolCall, ToolResult, ToolSpec
+from app.integrations.llm.usage import UsageRecord, record_usage
 
 DEFAULT_REPLY = "這是 FakeLLMProvider 的固定回覆"
 
@@ -56,7 +57,10 @@ class FakeLLMProvider(LLMProvider):
     def generate_json(self, *, instructions: str, input: str, schema: JsonSchema) -> dict:
         kwargs = {"instructions": instructions, "input": input, "schema": schema}
         self.calls.append(FakeCall("generate_json", kwargs))
-        return _next_item(self._json_outputs, "json_outputs")
+        result = _next_item(self._json_outputs, "json_outputs")
+        # 和雲端實作一樣記一筆用量（fake 的 token 是 0）
+        record_usage(UsageRecord("llm", schema.name, "fake", 0, 0, 0, 0.0))
+        return result
 
     def respond(
         self,

@@ -5,6 +5,7 @@ openai SDK 只在這個檔案與 llm/cloud.py 裡 import（AGENTS.md §4.2）。
 
 import base64
 import json
+import time
 from typing import Any
 
 import httpx
@@ -12,6 +13,7 @@ import openai
 from openai.types.responses import Response
 
 from app.integrations.llm.types import JsonSchema
+from app.integrations.llm.usage import UsageRecord, record_usage, usage_of
 from app.integrations.ocr.base import VisionProvider
 from app.integrations.ocr.errors import OCRError, OCROutputRejected, OCRUnavailable
 from app.integrations.ocr.images import image_mime
@@ -47,6 +49,7 @@ class CloudVisionProvider(VisionProvider):
             data_url = f"data:{image_mime(image)};base64,{base64.b64encode(image).decode()}"
             # detail=high：規則書是小字，低解析度模式會讀錯字
             content.append({"type": "input_image", "image_url": data_url, "detail": "high"})
+        started = time.monotonic()
         try:
             response = self._client.responses.create(
                 model=self._model,
@@ -69,6 +72,18 @@ class CloudVisionProvider(VisionProvider):
         except openai.OpenAIError as exc:
             raise OCRError(f"Azure OpenAI 呼叫失敗：{exc}") from exc
         _check_finished(response)
+        input_tokens, output_tokens, reasoning_tokens = usage_of(response)
+        record_usage(
+            UsageRecord(
+                kind="vision",
+                name=schema.name,
+                model=self._model,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                reasoning_tokens=reasoning_tokens,
+                seconds=round(time.monotonic() - started, 1),
+            )
+        )
         return _parse_json_output(response)
 
 

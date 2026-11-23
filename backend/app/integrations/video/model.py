@@ -55,6 +55,7 @@ class Asset:
     priority: str  # must（必拍）| optional（選拍）
     reason: str  # 觀眾必須從這個素材讀到什麼資訊
     file: str | None = None
+    label: str | None = None  # 給店員看的中文名稱（例如「白薔薇」）；錯誤訊息用它指出是哪一個素材
     shot: str | None = None
     # 區域座標為 None 代表待量測（只有草稿模式允許）
     regions: dict[str, Region | None] = field(default_factory=dict)
@@ -378,6 +379,7 @@ def _parse_assets(
                 "kind",
                 "priority",
                 "reason",
+                "label",
                 "shot",
                 "file",
                 "drawn",
@@ -385,6 +387,8 @@ def _parse_assets(
                 "orientation",
                 "usable",
                 "quality",
+                "region_hints",
+                "skipped_regions",
             ),
         )
         kind = item.get("kind")
@@ -432,6 +436,7 @@ def _parse_assets(
             priority=p.choice(item, "priority", where, PRIORITIES, "must"),
             reason=p.text(item, "reason", where),
             file=file,
+            label=p.optional_text(item, "label", where),
             shot=p.optional_text(item, "shot", where),
             regions=regions,
             orientation=orientation,

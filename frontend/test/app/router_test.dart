@@ -16,6 +16,7 @@ import 'package:tabletop_hub/domains/matches/data/matches_repository.dart';
 import 'package:tabletop_hub/domains/health/data/health_repository.dart';
 import 'package:tabletop_hub/domains/health/data/health_status.dart';
 import 'package:tabletop_hub/domains/rules_qa/data/rules_qa_repository.dart';
+import 'package:tabletop_hub/domains/rules_qa/data/video_studio_repository.dart';
 
 import '../support/fakes.dart';
 
@@ -49,6 +50,9 @@ Future<void> pumpApp(
         ),
         advisorRepositoryProvider.overrideWithValue(FakeAdvisorRepository()),
         rulesQaRepositoryProvider.overrideWithValue(FakeRulesQaRepository()),
+        videoStudioRepositoryProvider.overrideWithValue(
+          FakeVideoStudioRepository(),
+        ),
         lessonVideoPlayerProvider.overrideWithValue(
           const FakeLessonVideoPlayer(),
         ),
@@ -225,5 +229,11 @@ void main() {
     await tester.tap(find.byKey(const Key('shell-nav-matches')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('matches-page')), findsOneWidget);
+  });
+  testWidgets('店家人員從「影片」入口進到影片專案列表（add-rules-video-mobile）', (tester) async {
+    await pumpApp(tester, showPrototypes: false, user: fakeStaff);
+    await tester.tap(find.byKey(const Key('shell-nav-videos')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('video-projects-page')), findsOneWidget);
   });
 }

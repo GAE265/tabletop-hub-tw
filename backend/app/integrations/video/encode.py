@@ -10,8 +10,9 @@ import glob
 import hashlib
 import json
 import tempfile
+import threading
 from abc import ABC, abstractmethod
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -69,10 +70,27 @@ def pipe_frames(
     temporary = target.with_name(target.stem + ".tmp.mp4")
     with tempfile.TemporaryFile() as errors:
         process = ffmpeg.popen([*args, str(temporary)], errors)
+        # 逾時：時間到就結束子程序（寫入畫面卡在管線時也會因此解開）
+        timed_out = threading.Event()
+
+        def stop() -> None:
+            timed_out.set()
+            process.kill()
+
+        watchdog = (
+            threading.Timer(ffmpeg.timeout_seconds, stop)
+            if ffmpeg.timeout_seconds is not None
+            else None
+        )
+        if watchdog is not None:
+            watchdog.daemon = True
+            watchdog.start()
         try:
             assert process.stdin is not None
             try:
                 for frame in frames:
+                    if timed_out.is_set():
+                        break
                     process.stdin.write(frame)
                 process.stdin.close()
             except (BrokenPipeError, OSError):
@@ -83,6 +101,12 @@ def pipe_frames(
             process.wait()
             temporary.unlink(missing_ok=True)
             raise
+        finally:
+            if watchdog is not None:
+                watchdog.cancel()
+        if timed_out.is_set():
+            temporary.unlink(missing_ok=True)
+            raise ffmpeg.timeout_error(what)
         if code != 0:
             temporary.unlink(missing_ok=True)
             errors.seek(0)
@@ -112,12 +136,18 @@ def encode_segments(
     encoder: SegmentEncoder,
     cache_dir: Path,
     style: Style,
+    *,
+    on_segment: Callable[[int, int, bool], None] | None = None,
 ) -> list[EncodedSegment]:
-    """依序取得每段的影片：快取裡有相同 content_hash 的就沿用，否則重新編碼。"""
+    """依序取得每段的影片：快取裡有相同 content_hash 的就沿用，否則重新編碼。
+
+    on_segment(第幾段, 共幾段, 是否沿用快取)：每段開始前呼叫，給進度回報用。
+    """
     folder = cache_dir / "segments"
     folder.mkdir(parents=True, exist_ok=True)
     results = []
-    for timing in timeline.segments:
+    total = len(timeline.segments)
+    for index, timing in enumerate(timeline.segments, start=1):
         key = timing.segment.segment_key
         # 檔名＝安全檔名＋key 的短雜湊＋內容雜湊。key 的短雜湊讓「開頭相同」（s1 與 s1_2）
         # 或「轉成檔名後相同」（s/1 與 s-1）的段各有自己的檔名前綴，清舊快取時不會互刪（#75 審核）
@@ -126,6 +156,8 @@ def encode_segments(
         full_hash = segment_hash(video, timing, style, renderer)
         path = folder / f"{prefix}{full_hash[:16]}.mp4"
         reused = path.is_file()
+        if on_segment is not None:
+            on_segment(index, total, reused)
         if not reused:
             encoder.encode(timing, renderer, path)
             if not path.is_file():

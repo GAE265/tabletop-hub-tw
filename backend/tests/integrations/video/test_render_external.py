@@ -126,3 +126,41 @@ def test_progress_bar_fill_and_quality(tmp_path: Path, ffmpeg_tools: tuple[str, 
     ssim = float(re.findall(r"All:([0-9.]+)", measured)[-1])
     print(f"SSIM（疊加前 vs 成品，不含進度條）：{ssim:.5f}")
     assert ssim >= 0.98
+
+
+# --- 1d MR 9：產生影片的進度回呼（真的 ffmpeg） ---
+
+
+def test_progress_callback_with_real_ffmpeg(tmp_path: Path, ffmpeg_tools: tuple[str, str]) -> None:
+    ffmpeg, ffprobe = ffmpeg_tools
+    video = load_video(write_game(tmp_path / "game", base_data()))
+    reports: list[tuple[float, str]] = []
+    result = render_video(
+        video,
+        tmp_path / "game" / "out",
+        FontSet(None, None),
+        DEFAULT_STYLE,
+        FakeTTSProvider(),
+        Ffmpeg([ffmpeg], timeout_seconds=600),
+        cache_dir=tmp_path / "game" / "cache",
+        on_progress=lambda progress, message: reports.append((progress, message)),
+    )
+    messages = [m for _, m in reports]
+    segments = len(video.segments)
+    # 段影片的回呼次數與段數一致，順序是排版 → 旁白 → 段影片 → 串接 → 進度條 → 混音
+    assert [m for m in messages if m.startswith("段影片")] == [
+        f"段影片 {i}／{segments}" for i in range(1, segments + 1)
+    ]
+    assert messages[0] == "排版" and messages[-3:] == ["串接段影片", "疊上進度條", "混音"]
+    assert [p for p, _ in reports] == sorted(p for p, _ in reports)
+    # 成品與第 1 階段相同規格
+    probe = json.loads(
+        subprocess.run(
+            [ffprobe, "-v", "error", "-show_streams", "-of", "json", str(result.video)],
+            capture_output=True,
+            check=True,
+        ).stdout
+    )
+    stream = next(s for s in probe["streams"] if s["codec_type"] == "video")
+    assert (stream["width"], stream["height"]) == (1920, 1080)
+    assert stream["r_frame_rate"] == "30/1"

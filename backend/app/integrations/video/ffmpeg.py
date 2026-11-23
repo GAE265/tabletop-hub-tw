@@ -9,16 +9,21 @@ import subprocess
 from pathlib import Path
 from typing import IO
 
-from app.integrations.video.errors import VideoRenderError
+from app.integrations.video.errors import VideoRenderError, VideoTimeoutError
 
 STDERR_TAIL_LINES = 8
 
 
 class Ffmpeg:
-    def __init__(self, command: list[str]) -> None:
+    def __init__(self, command: list[str], *, timeout_seconds: float | None = None) -> None:
+        """timeout_seconds：每次呼叫 ffmpeg 的上限（秒），超過就結束子程序並拋錯；None＝不限。
+
+        背景工作（產生影片）一定要設，避免 ffmpeg 卡住時整個工作停住（add-rules-video-mobile D15）。
+        """
         if not command:
             raise ValueError("ffmpeg 指令不能是空的")
         self.command = list(command)
+        self.timeout_seconds = timeout_seconds
 
     def check(self) -> None:
         """在開始渲染前確認找得到 ffmpeg；找不到時說明要安裝或設定 FFMPEG_PATH。"""
@@ -31,13 +36,17 @@ class Ffmpeg:
 
     def run(self, args: list[str], *, what: str) -> None:
         """執行一次 ffmpeg；失敗時拋 VideoRenderError，訊息含 ffmpeg 輸出的最後幾行。"""
-        result = subprocess.run(
-            [*self.command, *args],
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.PIPE,
-            check=False,
-        )
+        try:
+            result = subprocess.run(
+                [*self.command, *args],
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
+                check=False,
+                timeout=self.timeout_seconds,
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise self.timeout_error(what) from exc
         if result.returncode != 0:
             raise VideoRenderError(f"ffmpeg {what}失敗：\n{stderr_tail(result.stderr)}")
 
@@ -49,6 +58,9 @@ class Ffmpeg:
             stdout=subprocess.DEVNULL,
             stderr=stderr,
         )
+
+    def timeout_error(self, what: str) -> VideoTimeoutError:
+        return VideoTimeoutError(f"ffmpeg {what}超過 {self.timeout_seconds:g} 秒沒有完成，已停止")
 
 
 def stderr_tail(data: bytes, lines: int = STDERR_TAIL_LINES) -> str:

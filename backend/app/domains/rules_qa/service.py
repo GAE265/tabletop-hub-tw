@@ -3,11 +3,15 @@
 不 import FastAPI（AGENTS.md 4.2）；錯誤一律拋 AppError，由錯誤處理器轉成統一格式。
 """
 
+import copy
+import io
 import logging
 import uuid
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import AbstractContextManager, contextmanager
 from typing import Any, Protocol
+
+from PIL import Image
 
 from app.core.auth import CurrentUser, require_role
 from app.core.errors import AppError, PermissionDenied
@@ -16,6 +20,7 @@ from app.domains.rules_qa.chunking import split_pages
 from app.domains.rules_qa.repository import (
     ActiveJobExists,
     ChunkHit,
+    DraftState,
     LessonSummary,
     PagesRecord,
     VideoJobRecord,
@@ -26,12 +31,26 @@ from app.domains.rules_qa.repository import (
 from app.domains.rules_qa.schemas import (
     ChangedLineOut,
     Citation,
+    CoverageHintOut,
+    CoverageIssueOut,
+    CoverageProblemOut,
+    CoverageSlotOut,
+    DraftAssetOut,
+    DraftBeatOut,
+    DraftCoverageOut,
+    DraftSegmentOut,
+    DraftTermsOut,
     MessageRequest,
     MessageResponse,
     RemovedBlockOut,
+    RulebookOut,
+    RulebookPhotoOut,
     RulesLessonItem,
     RulesLessonList,
     RulesLessonOut,
+    VideoAssetOut,
+    VideoAssetUpdate,
+    VideoDraftOut,
     VideoJobList,
     VideoJobOut,
     VideoOut,
@@ -41,18 +60,53 @@ from app.domains.rules_qa.schemas import (
     VideoProjectCreate,
     VideoProjectList,
     VideoProjectOut,
+    VideoReadinessOut,
+    VideoRenderOut,
     VideoRequest,
     VideoTermsIn,
     VideoTermsOut,
 )
+from app.domains.rules_qa.video_assets import (
+    PhotoRejected,
+    asset_label,
+    find_asset,
+    is_skippable,
+    is_skipped,
+    new_photo_file,
+    normalize_photo,
+    photo_key,
+    readiness,
+    region_segments,
+    skip_impact,
+)
+from app.domains.rules_qa.video_coverage import report_from_dict
+from app.domains.rules_qa.video_draft import (
+    DRAFT_NO_RULEBOOK_MESSAGE,
+    DRAFT_PAGES_NOT_SET_MESSAGE,
+    PAGES_STALE_HINT,
+    TERMS_MISSING_HINT,
+    narration_text_hash,
+    terms_status,
+)
 from app.domains.rules_qa.video_jobs import JOB_TIMEOUT_MINUTES, TIMEOUT_MESSAGE
 from app.domains.rules_qa.video_pages import page_diff, text_hash
-from app.domains.rules_qa.video_script import term_conflicts
+from app.domains.rules_qa.video_rulebook import (
+    MAX_RULEBOOK_PHOTOS,
+    is_read,
+    load_manifest,
+    photo_quality,
+    rulebook_photo_key,
+    save_manifest,
+    sharpness,
+)
+from app.domains.rules_qa.video_script import REPRESENTATIVE, term_conflicts
 from app.domains.rules_qa.youtube import parse_youtube_id
 from app.integrations.embedding import EmbeddingError, EmbeddingProvider
 from app.integrations.llm import LLMProvider
 from app.integrations.llm.errors import LLMConversationNotFound, LLMError, LLMUnavailable
 from app.integrations.llm.types import LLMResponse
+from app.integrations.storage.base import FileStorage
+from app.integrations.storage.errors import FileNotFound, StorageError
 
 logger = logging.getLogger(__name__)
 
@@ -325,19 +379,57 @@ def _project_not_found() -> AppError:
     return AppError(404, "RULES_VIDEO_PROJECT_NOT_FOUND", "找不到這個影片專案")
 
 
-class VideoProjectService:
-    """規則影片專案（add-rules-video-mobile design.md D1）。"""
+class ProjectPagesWriter(Protocol):
+    def save(
+        self,
+        project_id: uuid.UUID,
+        *,
+        chapter_pages: list[int],
+        reference_pages: list[int],
+        page_texts: dict[str, Any],
+    ) -> None: ...
 
-    def __init__(self, projects: VideoProjectStore, games: GameNames, shops: ShopLookup) -> None:
+
+class DraftStarter(Protocol):
+    def create(self, user: CurrentUser, project_id: uuid.UUID, kind: str) -> VideoJobOut: ...
+
+
+class VideoProjectService:
+    """規則影片專案（add-rules-video-mobile design.md D1；整個遊戲一支影片見整本範圍）。
+
+    只給遊戲時：這支影片用到的頁預設是規則書的全部頁，建立後自動開始產生草稿
+    （頁面文字那一步不在店員流程裡；OCR 錯字由管理員匯入時處理，2026-11-22 永傑決定）。
+    """
+
+    def __init__(
+        self,
+        projects: VideoProjectStore,
+        games: GameNames,
+        shops: ShopLookup,
+        read_pages: Callable[[int], list[tuple[int, str]]] | None = None,
+        pages: ProjectPagesWriter | None = None,
+        drafts: DraftStarter | None = None,
+    ) -> None:
         self._projects = projects
         self._games = games
         self._shops = shops
+        self._read_pages = read_pages
+        self._pages = pages
+        self._drafts = drafts
 
     def create(self, user: CurrentUser, body: VideoProjectCreate) -> VideoProjectOut:
         require_role(user, "shop_staff", "admin")
         shop_id = self._shop_for(user, body.shop_id)
         if self._games.game_name(body.game_id) is None:
             raise _game_not_found(body.game_id)
+        whole_game = body.chapter_number is None
+        photos = body.rulebook == "photos"
+        manual: list[tuple[int, str]] = []
+        if whole_game and not photos:
+            assert self._read_pages is not None
+            manual = sorted((p, t) for p, t in self._read_pages(body.game_id) if t.strip())
+            if not manual:
+                raise AppError(422, "RULES_VIDEO_NO_RULEBOOK", DRAFT_NO_RULEBOOK_MESSAGE)
         with self._projects.transaction():
             project_id = self._projects.create(
                 game_id=body.game_id,
@@ -346,7 +438,22 @@ class VideoProjectService:
                 chapter_number=body.chapter_number,
                 chapter_title=body.chapter_title,
             )
-            record = self._projects.get(project_id)
+            if whole_game and not photos:
+                assert self._pages is not None
+                self._pages.save(
+                    project_id,
+                    chapter_pages=[page for page, _ in manual],
+                    reference_pages=[],
+                    page_texts={
+                        str(page): {"text": text, "original_hash": text_hash(text)}
+                        for page, text in manual
+                    },
+                )
+        if whole_game and not photos:
+            # 照片模式：店員拍好規則書後才產生草稿
+            assert self._drafts is not None
+            self._drafts.create(user, project_id, "draft")
+        record = self._projects.get(project_id)
         assert record is not None
         return _project_out(record)
 
@@ -387,6 +494,26 @@ def _can_access(user: CurrentUser, record: VideoProjectRecord) -> bool:
     return user.role == "admin" or record.shop_id == user.shop_id
 
 
+def _step(record: VideoProjectRecord) -> str:
+    """由狀態推出（design.md D1、D11、D15 實作決定）：
+    pages＝還沒有草稿；draft＝有草稿、還沒拍照也沒略過；assets＝素材還沒齊；
+    render＝齊了、還沒有成品；done＝有成功產生的影片。
+    """
+    video = record.video
+    if video is None:
+        if record.rulebook == "photos" and not record.chapter_pages:
+            return "rulebook"  # 照片模式：還沒讀規則書照片
+        # 整個遊戲：建立時就開始產生草稿；單章：要先選頁
+        return "draft" if record.chapter_number is None else "pages"
+    if record.has_render:
+        return "done"
+    if readiness(video)["ready"]:
+        return "render"
+    if any(a.get("file") or is_skipped(a) for a in video.get("assets", [])):
+        return "assets"
+    return "draft"
+
+
 def _project_out(record: VideoProjectRecord) -> VideoProjectOut:
     return VideoProjectOut(
         id=record.id,
@@ -396,7 +523,9 @@ def _project_out(record: VideoProjectRecord) -> VideoProjectOut:
         created_by=record.created_by,
         chapter_number=record.chapter_number,
         chapter_title=record.chapter_title,
-        step="pages",  # MR 1 沒有其他狀態（design.md D1）
+        title=record.chapter_title or f"{record.game_name} 規則教學",
+        step=_step(record),
+        rulebook=record.rulebook,
         created_at=record.created_at,
         updated_at=record.updated_at,
     )
@@ -652,3 +781,587 @@ def _pages_out(record: PagesRecord, manual: dict[int, str]) -> VideoPagesOut:
         pages_version=record.pages_version,
         pages=pages,
     )
+
+
+# --------------------------------------------------------------------------- 草稿
+
+
+class VideoDraftStore(Protocol):
+    def get_state(self, project_id: uuid.UUID) -> DraftState | None: ...
+
+
+class TermsReader(Protocol):
+    def get(self, game_id: int) -> VideoTermsRecord | None: ...
+
+
+class VideoDraftService:
+    """建立草稿工作、查看草稿（add-rules-video-mobile design.md D11）。"""
+
+    def __init__(
+        self,
+        drafts: VideoDraftStore,
+        projects: VideoProjectStore,
+        terms: TermsReader,
+        jobs: VideoJobService,
+    ) -> None:
+        self._drafts = drafts
+        self._projects = projects
+        self._terms = terms
+        self._jobs = jobs
+
+    def start(self, user: CurrentUser, project_id: uuid.UUID, kind: str = "draft") -> VideoJobOut:
+        state = self._state(user, project_id)
+        if kind == "render":
+            # 產生影片：要有草稿、素材齊了（MR 9）
+            if state.video is None:
+                raise AppError(404, "RULES_VIDEO_DRAFT_NOT_FOUND", "這個專案還沒有草稿")
+            report = readiness(state.video)
+            if not report["ready"]:
+                raise AppError(
+                    422,
+                    "RULES_VIDEO_NOT_READY",
+                    "還不能產生影片，請先補齊素材",
+                    {k: v for k, v in report.items() if k != "ready"},
+                )
+            return self._jobs.create(user, project_id, "render")
+        # 照片模式（整個遊戲、還沒有頁）可以開始：草稿工作會先讀店員拍的規則書照片
+        if not state.chapter_pages and state.chapter_number is not None:
+            raise AppError(422, "RULES_VIDEO_PAGES_NOT_SET", DRAFT_PAGES_NOT_SET_MESSAGE)
+        return self._jobs.create(user, project_id, "draft")
+
+    def get(self, user: CurrentUser, project_id: uuid.UUID) -> VideoDraftOut:
+        state = self._state(user, project_id)
+        if state.video is None:
+            raise AppError(404, "RULES_VIDEO_DRAFT_NOT_FOUND", "這個專案還沒有草稿")
+        stored = self._terms.get(state.game_id)
+        status = terms_status(None if stored is None else stored.terms)
+        stale = state.draft_pages_version is not None and (
+            state.draft_pages_version != state.pages_version
+        )
+        return VideoDraftOut(
+            video_version=state.video_version,
+            segments=[_draft_segment(s) for s in state.video.get("segments", [])],
+            assets=[_draft_asset(a, state.video) for a in state.video.get("assets", [])],
+            coverage=_draft_coverage(state),
+            terms=DraftTermsOut(
+                status=status, message=TERMS_MISSING_HINT if status == "missing" else None
+            ),
+            pages_stale=stale,
+            pages_stale_message=PAGES_STALE_HINT if stale else None,
+        )
+
+    def _state(self, user: CurrentUser, project_id: uuid.UUID) -> DraftState:
+        require_role(user, "shop_staff", "admin")
+        record = self._projects.get(project_id)
+        if record is None or not _can_access(user, record):
+            raise _project_not_found()
+        state = self._drafts.get_state(project_id)
+        assert state is not None
+        return state
+
+
+def _draft_segment(segment: dict[str, Any]) -> DraftSegmentOut:
+    return DraftSegmentOut(
+        segment_key=segment["segment_key"],
+        chapter=segment.get("chapter_key", ""),
+        source_pages=[p["page"] for p in segment.get("source_pages", [])],
+        beats=[
+            DraftBeatOut(
+                beat_key=b.get("beat_key", ""),
+                narration=b.get("narration", ""),
+                subtitle=b.get("subtitle", ""),
+            )
+            for b in segment.get("beats", [])
+        ],
+    )
+
+
+def _draft_asset(asset: dict[str, Any], video: dict[str, Any]) -> DraftAssetOut:
+    reason = asset.get("reason", "")
+    return DraftAssetOut(
+        asset_key=asset["asset_key"],
+        label=asset.get("label"),
+        kind=asset.get("kind", "flat_photo"),
+        priority=asset.get("priority", "must"),
+        reason=reason,
+        shot=asset.get("shot"),
+        representative=REPRESENTATIVE in reason,
+        regions=list((asset.get("regions") or {}).keys()),
+        marked_regions=[n for n, box in (asset.get("regions") or {}).items() if box is not None],
+        has_photo=bool(asset.get("file")),
+        skipped=is_skipped(asset),
+        skippable=is_skippable(video, asset["asset_key"]),
+    )
+
+
+def _draft_coverage(state: DraftState) -> DraftCoverageOut:
+    coverage = state.coverage or {"status": "not_done", "reason": "還沒有做規則涵蓋檢查"}
+    if "slots" in coverage:
+        return _slot_coverage(coverage, state)
+    if coverage.get("status") != "done":
+        return DraftCoverageOut(
+            status="not_done",
+            reason=coverage.get("reason"),
+            total_rules=0,
+            issues=[],
+            problems=[],
+            hints=[],
+        )
+    report = report_from_dict(coverage["report"])
+    issues, problems, hints = _report_parts(report)
+    # 只有旁白或字幕變了才算過期；只改素材（照片、區域）不算
+    stale = coverage.get("text_hash") != narration_text_hash(state.video or {})
+    return DraftCoverageOut(
+        status="stale" if stale else "done",
+        reason=STALE_COVERAGE_REASON if stale else None,
+        total_rules=len(report.rules),
+        issues=issues,
+        problems=problems,
+        hints=hints,
+    )
+
+
+STALE_COVERAGE_REASON = "旁白或字幕在涵蓋檢查之後改過，結果可能過期"
+
+
+def _report_parts(
+    report: Any, prefix: str = ""
+) -> tuple[list[CoverageIssueOut], list[CoverageProblemOut], list[CoverageHintOut]]:
+    issues = [
+        CoverageIssueOut(
+            rule_id=prefix + r.rule_id,
+            category=r.category,
+            source=r.source,
+            narration_status=r.narration.status,
+            narration_missing=r.narration.missing,
+            subtitle_status=r.subtitle.status,
+            subtitle_missing=r.subtitle.missing,
+            narration_shorter=r.narration_shorter,
+        )
+        for r in report.rules
+        if not r.is_hint and r.has_issue
+    ]
+    problems = [
+        CoverageProblemOut(
+            beat_key=p.beat_key, track=p.track, kind=p.kind, text=p.text, reason=p.reason
+        )
+        for p in report.problems
+    ]
+    hints = [
+        CoverageHintOut(rule_id=prefix + r.rule_id, source=r.source)
+        for r in report.rules
+        if r.is_hint
+    ]
+    return issues, problems, hints
+
+
+def _slot_coverage(coverage: dict[str, Any], state: DraftState) -> DraftCoverageOut:
+    """整個遊戲：每一格一份涵蓋檢查；合計把三格加起來（rule_id 前面加格的 key）。"""
+    slots: list[CoverageSlotOut] = []
+    for slot in coverage["slots"]:
+        if slot.get("status") != "done":
+            slots.append(
+                CoverageSlotOut(
+                    slot=slot["key"],
+                    title=slot["title"],
+                    status="not_done",
+                    reason=slot.get("reason"),
+                    total_rules=0,
+                    issues=[],
+                    problems=[],
+                    hints=[],
+                )
+            )
+            continue
+        report = report_from_dict(slot["report"])
+        issues, problems, hints = _report_parts(report, prefix=f"{slot['key']}-")
+        slots.append(
+            CoverageSlotOut(
+                slot=slot["key"],
+                title=slot["title"],
+                status="done",
+                reason=None,
+                total_rules=len(report.rules),
+                issues=issues,
+                problems=problems,
+                hints=hints,
+            )
+        )
+    stale = coverage.get("text_hash") != narration_text_hash(state.video or {})
+    not_done = [s.title for s in slots if s.status == "not_done"]
+    if stale:
+        status, reason = "stale", STALE_COVERAGE_REASON
+    elif not_done:
+        status, reason = "not_done", f"「{'、'.join(not_done)}」的涵蓋檢查沒有完成"
+    else:
+        status, reason = "done", None
+    return DraftCoverageOut(
+        status=status,
+        reason=reason,
+        total_rules=sum(s.total_rules for s in slots),
+        issues=[i for s in slots for i in s.issues],
+        problems=[p for s in slots for p in s.problems],
+        hints=[h for s in slots for h in s.hints],
+        slots=slots,
+    )
+
+
+# --------------------------------------------------------------------------- 素材（MR 7）
+
+
+class VideoAssetStore(VideoDraftStore, Protocol):
+    def transaction(self) -> AbstractContextManager[None]: ...
+    def save_video(
+        self, project_id: uuid.UUID, *, expected_version: int, video: dict[str, Any]
+    ) -> bool: ...
+
+
+ASSET_CONFLICT_MESSAGE = "專案剛被修改（例如草稿重新產生），請重新整理後再試一次"
+
+
+class VideoAssetsService:
+    """素材照片、方向、區域、缺什麼（add-rules-video-mobile design.md D13）。
+
+    照片檔放在存放介面；段資料記檔名。寫入段資料的條件是 video_version 沒變（和草稿工作一樣），
+    所以草稿工作進行中上傳照片時，是草稿工作寫入失敗，照片保留。
+    """
+
+    def __init__(
+        self, drafts: VideoAssetStore, projects: VideoProjectStore, storage: FileStorage
+    ) -> None:
+        self._drafts = drafts
+        self._projects = projects
+        self._storage = storage
+
+    def upload_photo(
+        self, user: CurrentUser, project_id: uuid.UUID, asset_key: str, data: bytes
+    ) -> VideoAssetOut:
+        state = self._state(user, project_id)
+        video, asset = self._asset(state, asset_key)
+        try:
+            content, ext, content_type = normalize_photo(data)
+        except PhotoRejected as exc:
+            raise AppError(422, exc.code, f"「{asset_label(asset)}」：{exc.message}") from exc
+        old_file = asset.get("file")
+        file = new_photo_file(asset_key, ext)
+        self._put(photo_key(project_id, file), content, content_type)
+        asset["file"] = file
+        # 新照片已經轉正；區域座標保留（同一張牌的版面通常相同），由手機頁提示重新確認
+        asset["orientation"] = 0
+        if not self._save(project_id, state.video_version, video):
+            self._storage.delete(photo_key(project_id, file))
+            raise AppError(409, "RULES_VIDEO_CONFLICT", ASSET_CONFLICT_MESSAGE)
+        if old_file and old_file != file:
+            self._delete(photo_key(project_id, old_file))
+        return _asset_out(asset, state.video_version + 1, video)
+
+    def read_photo(
+        self, user: CurrentUser, project_id: uuid.UUID, asset_key: str
+    ) -> tuple[bytes, str]:
+        state = self._state(user, project_id)
+        _, asset = self._asset(state, asset_key)
+        file = asset.get("file")
+        if not file:
+            raise AppError(
+                404, "RULES_VIDEO_PHOTO_NOT_FOUND", f"「{asset_label(asset)}」還沒有照片"
+            )
+        try:
+            data = self._storage.get(photo_key(project_id, file))
+        except FileNotFound as exc:
+            raise AppError(404, "RULES_VIDEO_PHOTO_NOT_FOUND", "找不到這個素材的照片") from exc
+        except StorageError as exc:
+            raise AppError(503, "RULES_VIDEO_STORAGE_UNAVAILABLE", STORAGE_DOWN_MESSAGE) from exc
+        ext = file.rsplit(".", 1)[-1].lower()
+        return data, "image/png" if ext == "png" else "image/jpeg"
+
+    def get_asset(self, user: CurrentUser, project_id: uuid.UUID, asset_key: str) -> VideoAssetOut:
+        state = self._state(user, project_id)
+        video, asset = self._asset(state, asset_key)
+        return _asset_out(asset, state.video_version, video)
+
+    def update_asset(
+        self, user: CurrentUser, project_id: uuid.UUID, asset_key: str, body: VideoAssetUpdate
+    ) -> VideoAssetOut:
+        state = self._state(user, project_id)
+        video, asset = self._asset(state, asset_key)
+        regions = asset.setdefault("regions", {})
+        if body.regions is not None:
+            unknown = sorted(set(body.regions) - set(regions))
+            if unknown:
+                raise AppError(
+                    422,
+                    "RULES_VIDEO_REGION_UNKNOWN",
+                    f"「{asset_label(asset)}」沒有這些區域：{'、'.join(unknown)}",
+                    {"unknown": unknown},
+                )
+        if body.orientation is not None and body.orientation != asset.get("orientation", 0):
+            asset["orientation"] = body.orientation
+            # 座標以套用方向之後的圖為準，方向變了舊座標就不對
+            if body.regions is None:
+                for name in regions:
+                    regions[name] = None
+        for name, box in (body.regions or {}).items():
+            regions[name] = box
+        if body.skipped_regions is not None:
+            unknown = sorted(set(body.skipped_regions) - set(regions))
+            if unknown:
+                raise AppError(
+                    422,
+                    "RULES_VIDEO_REGION_UNKNOWN",
+                    f"「{asset_label(asset)}」沒有這些區域：{'、'.join(unknown)}",
+                    {"unknown": unknown},
+                )
+            # 照片拍不到的區域（2026-11-22 永傑決定）；依草稿列出的順序存
+            asset["skipped_regions"] = [n for n in regions if n in set(body.skipped_regions)]
+        if body.skipped is True:
+            self._check_skip(video, asset)
+            asset["usable"] = False
+        elif body.skipped is False:
+            asset.pop("usable", None)
+        if not self._save(project_id, state.video_version, video):
+            raise AppError(409, "RULES_VIDEO_CONFLICT", ASSET_CONFLICT_MESSAGE)
+        return _asset_out(asset, state.video_version + 1, video)
+
+    @staticmethod
+    def _check_skip(video: dict[str, Any], asset: dict[str, Any]) -> None:
+        """每個素材都可以略過（2026-11-22 永傑決定：拍不了的素材不能擋住產生影片）。
+
+        略過後某段的主畫面會空掉時，產生影片會把它換成寫著素材名稱的文字卡（video_render）；
+        素材明細的 skip_blocked_segments 列出是哪幾段，手機頁在略過前說明。
+        """
+
+    def readiness(self, user: CurrentUser, project_id: uuid.UUID) -> VideoReadinessOut:
+        state = self._state(user, project_id)
+        return VideoReadinessOut.model_validate(readiness(state.video or {}))
+
+    def _state(self, user: CurrentUser, project_id: uuid.UUID) -> DraftState:
+        require_role(user, "shop_staff", "admin")
+        record = self._projects.get(project_id)
+        if record is None or not _can_access(user, record):
+            raise _project_not_found()
+        state = self._drafts.get_state(project_id)
+        assert state is not None
+        if state.video is None:
+            raise AppError(404, "RULES_VIDEO_DRAFT_NOT_FOUND", "這個專案還沒有草稿")
+        return state
+
+    @staticmethod
+    def _asset(state: DraftState, asset_key: str) -> tuple[dict[str, Any], dict[str, Any]]:
+        """回傳（段資料的複本、其中的這個素材）；改複本再寫回，失敗時原本的不受影響。"""
+        video = copy.deepcopy(state.video or {})
+        asset = find_asset(video, asset_key)
+        if asset is None:
+            raise AppError(
+                404, "RULES_VIDEO_ASSET_NOT_FOUND", "草稿沒有這個素材，請重新整理素材清單"
+            )
+        return video, asset
+
+    def _save(self, project_id: uuid.UUID, version: int, video: dict[str, Any]) -> bool:
+        with self._drafts.transaction():
+            return self._drafts.save_video(project_id, expected_version=version, video=video)
+
+    def _put(self, key: str, data: bytes, content_type: str) -> None:
+        try:
+            self._storage.put(key, data, content_type)
+        except StorageError as exc:
+            raise AppError(503, "RULES_VIDEO_STORAGE_UNAVAILABLE", STORAGE_DOWN_MESSAGE) from exc
+
+    def _delete(self, key: str) -> None:
+        """刪舊照片失敗不影響這次上傳（只留下用不到的檔案），記 log。"""
+        try:
+            self._storage.delete(key)
+        except StorageError:
+            logger.warning("刪除舊的素材照片失敗：%s", key, exc_info=True)
+
+
+STORAGE_DOWN_MESSAGE = "照片存放空間暫時無法使用，請稍後再試"
+
+
+def _asset_out(asset: dict[str, Any], version: int, video: dict[str, Any]) -> VideoAssetOut:
+    affected, blocked = skip_impact(video, asset["asset_key"])
+    return VideoAssetOut(
+        asset_key=asset["asset_key"],
+        label=asset.get("label"),
+        kind=asset.get("kind", "flat_photo"),
+        priority=asset.get("priority", "must"),
+        reason=asset.get("reason", ""),
+        shot=asset.get("shot"),
+        has_photo=bool(asset.get("file")),
+        orientation=asset.get("orientation", 0),
+        regions=dict(asset.get("regions") or {}),
+        region_hints=dict(asset.get("region_hints") or {}),
+        region_segments=region_segments(video, asset["asset_key"]),
+        skipped_regions=list(asset.get("skipped_regions") or []),
+        video_version=version,
+        skipped=is_skipped(asset),
+        skippable=not blocked,
+        skip_affected_segments=affected,
+        skip_blocked_segments=blocked,
+    )
+
+
+# --------------------------------------------------------------------------- 成品影片（MR 9）
+
+
+class RenderJobsReader(Protocol):
+    def latest_succeeded(self, project_id: uuid.UUID, kind: str) -> VideoJobRecord | None: ...
+
+
+class VideoRenderService:
+    """最近一次成功產生的影片與影片檔（design.md D15）。"""
+
+    def __init__(
+        self, projects: VideoProjectStore, jobs: RenderJobsReader, storage: FileStorage
+    ) -> None:
+        self._projects = projects
+        self._jobs = jobs
+        self._storage = storage
+
+    def get(self, user: CurrentUser, project_id: uuid.UUID) -> VideoRenderOut:
+        job = self._latest(user, project_id)
+        result = job.result or {}
+        return VideoRenderOut(
+            job_id=job.id,
+            video_path=f"/api/v1/rules-videos/{project_id}/render/video",
+            total_seconds=result.get("total_seconds", 0),
+            reencoded=result.get("reencoded", []),
+            reused=result.get("reused", []),
+            skipped_assets=result.get("skipped_assets", []),
+            estimated=result.get("estimated", False),
+            warnings=result.get("warnings", []),
+            segments=result.get("segments", []),
+            finished_at=job.finished_at,
+        )
+
+    def video(self, user: CurrentUser, project_id: uuid.UUID) -> bytes:
+        job = self._latest(user, project_id)
+        try:
+            return self._storage.get((job.result or {})["video_key"])
+        except (KeyError, FileNotFound) as exc:
+            raise AppError(404, "RULES_VIDEO_RENDER_NOT_FOUND", "找不到影片檔") from exc
+        except StorageError as exc:
+            raise AppError(503, "RULES_VIDEO_STORAGE_UNAVAILABLE", STORAGE_DOWN_MESSAGE) from exc
+
+    def _latest(self, user: CurrentUser, project_id: uuid.UUID) -> VideoJobRecord:
+        require_role(user, "shop_staff", "admin")
+        record = self._projects.get(project_id)
+        if record is None or not _can_access(user, record):
+            raise _project_not_found()
+        job = self._jobs.latest_succeeded(project_id, "render")
+        if job is None:
+            raise AppError(404, "RULES_VIDEO_RENDER_NOT_FOUND", "這個專案還沒有產生影片")
+        return job
+
+
+# --------------------------------------------------------------------------- 店員拍規則書
+
+
+NOT_PHOTO_RULEBOOK_MESSAGE = "這個專案用的是已匯入的規則書，不能拍規則書"
+TOO_MANY_RULEBOOK_PHOTOS_MESSAGE = "規則書照片最多 40 張"
+
+
+class VideoRulebookService:
+    """照片模式專案的規則書照片（2026-11-22 永傑決定）：上傳、列出、讀圖、刪除。
+
+    照片與清單放在存放介面；讀取在草稿工作裡做（video_draft）。
+    """
+
+    def __init__(
+        self, projects: VideoProjectStore, pages: "PagesReader", storage: FileStorage
+    ) -> None:
+        self._projects = projects
+        self._pages = pages
+        self._storage = storage
+
+    def get(self, user: CurrentUser, project_id: uuid.UUID) -> RulebookOut:
+        self._project(user, project_id)
+        return self._out(project_id, self._manifest(project_id))
+
+    def upload(self, user: CurrentUser, project_id: uuid.UUID, data: bytes) -> RulebookOut:
+        self._project(user, project_id)
+        photos = self._manifest(project_id)
+        if len(photos) >= MAX_RULEBOOK_PHOTOS:
+            raise AppError(422, "RULES_VIDEO_RULEBOOK_TOO_MANY", TOO_MANY_RULEBOOK_PHOTOS_MESSAGE)
+        try:
+            content, ext, content_type = normalize_photo(data)
+        except PhotoRejected as exc:
+            raise AppError(422, exc.code, exc.message) from exc
+        file = f"{uuid.uuid4().hex[:12]}.{ext}"
+        width, height = Image.open(io.BytesIO(content)).size
+        try:
+            self._storage.put(rulebook_photo_key(project_id, file), content, content_type)
+            photos.append(
+                {"file": file, "width": width, "height": height, "sharpness": sharpness(content)}
+            )
+            save_manifest(self._storage, project_id, photos)
+        except StorageError as exc:
+            raise AppError(503, "RULES_VIDEO_STORAGE_UNAVAILABLE", STORAGE_DOWN_MESSAGE) from exc
+        return self._out(project_id, photos)
+
+    def delete(self, user: CurrentUser, project_id: uuid.UUID, index: int) -> None:
+        self._project(user, project_id)
+        photos = self._manifest(project_id)
+        if not 1 <= index <= len(photos):
+            raise _rulebook_photo_not_found()
+        removed = photos.pop(index - 1)
+        try:
+            save_manifest(self._storage, project_id, photos)
+        except StorageError as exc:
+            raise AppError(503, "RULES_VIDEO_STORAGE_UNAVAILABLE", STORAGE_DOWN_MESSAGE) from exc
+        try:
+            self._storage.delete(rulebook_photo_key(project_id, removed["file"]))
+        except StorageError:
+            logger.warning("刪除規則書照片失敗：%s", removed["file"], exc_info=True)
+
+    def read_photo(self, user: CurrentUser, project_id: uuid.UUID, index: int) -> tuple[bytes, str]:
+        self._project(user, project_id)
+        photos = self._manifest(project_id)
+        if not 1 <= index <= len(photos):
+            raise _rulebook_photo_not_found()
+        file = photos[index - 1]["file"]
+        try:
+            data = self._storage.get(rulebook_photo_key(project_id, file))
+        except FileNotFound as exc:
+            raise _rulebook_photo_not_found() from exc
+        except StorageError as exc:
+            raise AppError(503, "RULES_VIDEO_STORAGE_UNAVAILABLE", STORAGE_DOWN_MESSAGE) from exc
+        return data, "image/png" if file.endswith(".png") else "image/jpeg"
+
+    def _project(self, user: CurrentUser, project_id: uuid.UUID) -> None:
+        require_role(user, "shop_staff", "admin")
+        record = self._projects.get(project_id)
+        if record is None or not _can_access(user, record):
+            raise _project_not_found()
+        if record.rulebook != "photos":
+            raise AppError(409, "RULES_VIDEO_NOT_PHOTO_RULEBOOK", NOT_PHOTO_RULEBOOK_MESSAGE)
+
+    def _manifest(self, project_id: uuid.UUID) -> list[dict[str, Any]]:
+        try:
+            return load_manifest(self._storage, project_id)
+        except StorageError as exc:
+            raise AppError(503, "RULES_VIDEO_STORAGE_UNAVAILABLE", STORAGE_DOWN_MESSAGE) from exc
+
+    def _out(self, project_id: uuid.UUID, photos: list[dict[str, Any]]) -> RulebookOut:
+        pages = self._pages.get(project_id)
+        items = []
+        for i, p in enumerate(photos, start=1):
+            level, message = photo_quality(p.get("sharpness", 0))
+            items.append(
+                RulebookPhotoOut(
+                    id=p["file"].rsplit(".", 1)[0],
+                    index=i,
+                    width=p["width"],
+                    height=p["height"],
+                    quality=level,
+                    quality_message=message,
+                )
+            )
+        return RulebookOut(photos=items, read=is_read(pages.page_texts if pages else {}, photos))
+
+
+class PagesReader(Protocol):
+    def get(self, project_id: uuid.UUID) -> Any: ...
+
+
+def _rulebook_photo_not_found() -> AppError:
+    return AppError(404, "RULES_VIDEO_RULEBOOK_PHOTO_NOT_FOUND", "找不到這張規則書照片")

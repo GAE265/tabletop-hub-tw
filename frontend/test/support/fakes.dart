@@ -19,8 +19,11 @@ import 'package:tabletop_hub/core/dev/data/dev_user.dart';
 import 'package:tabletop_hub/core/dev/data/dev_users_repository.dart';
 
 import 'package:tabletop_hub/core/platform/lesson_video_player.dart';
+import 'package:tabletop_hub/core/platform/video_file_player.dart';
 import 'package:tabletop_hub/domains/rules_qa/data/rules_qa_models.dart';
 import 'package:tabletop_hub/domains/rules_qa/data/rules_qa_repository.dart';
+import 'package:tabletop_hub/domains/rules_qa/data/video_studio_models.dart';
+import 'package:tabletop_hub/domains/rules_qa/data/video_studio_repository.dart';
 import 'package:tabletop_hub/domains/booking/data/booking.dart';
 import 'package:tabletop_hub/domains/booking/data/booking_notification.dart';
 import 'package:tabletop_hub/domains/booking/data/booking_repository.dart';
@@ -1595,3 +1598,364 @@ class FakeShopsRepository implements ShopsRepository {
     return List.of(choices);
   }
 }
+
+/// 在記憶體中運作的 VideoStudioRepository（規則影片生產器 1d，MR 6）。
+///
+/// [jobSequence]：之後每次 [getJob] 依序回傳的狀態（最後一個會一直重複），
+/// 用來模擬工作從 queued → running → succeeded／failed。
+class FakeVideoStudioRepository implements VideoStudioRepository {
+  FakeVideoStudioRepository({
+    List<VideoProject>? projects,
+    List<VideoGameOption>? games,
+    Map<String, VideoDraft>? drafts,
+  }) : projects = projects ?? [],
+       games = games ?? [],
+       drafts = drafts ?? {};
+
+  List<VideoProject> projects;
+  List<VideoGameOption> games;
+  Map<String, VideoDraft> drafts;
+
+  /// 各方法丟出的錯誤（有值就丟）。
+  Object? listError;
+  Object? createError;
+  Object? startDraftError;
+  Object? draftError;
+
+  /// 專案最近一個工作（[latestJob] 回傳）。
+  final latestJobs = <String, VideoJob>{};
+
+  /// [getJob] 依序回傳的狀態。
+  List<VideoJob> jobSequence = [];
+  int _jobIndex = 0;
+
+  final created = <VideoProjectCreate>[];
+  final startedDrafts = <String>[];
+  final polledJobs = <String>[];
+
+  @override
+  Future<List<VideoProject>> listProjects() async {
+    if (listError != null) throw listError!;
+    return projects;
+  }
+
+  @override
+  Future<List<VideoGameOption>> listGames() async => games;
+
+  @override
+  Future<VideoProject> createProject(VideoProjectCreate input) async {
+    created.add(input);
+    if (createError != null) throw createError!;
+    // 整個遊戲一支影片：建立後後端自動開始產生草稿；拍規則書時先停在「規則書」
+    final photos = input.rulebook == 'photos';
+    final project = sampleVideoProject(
+      id: 'p-new',
+      gameId: input.gameId,
+      step: photos ? 'rulebook' : 'draft',
+      rulebook: photos ? 'photos' : 'imported',
+    );
+    projects = [project, ...projects];
+    return project;
+  }
+
+  @override
+  Future<VideoProject> getProject(String projectId) async =>
+      projects.firstWhere((p) => p.id == projectId);
+
+  // --- 店員拍規則書 ---
+
+  /// 專案的規則書照片；沒有時是空的。
+  final rulebooks = <String, Rulebook>{};
+  final rulebookUploads = <(String, String)>[];
+  final rulebookDeletes = <(String, int)>[];
+  Object? rulebookUploadError;
+
+  /// 縮圖的內容（預設是有效的 1×1 PNG）。
+  Uint8List rulebookImage = base64Decode(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==',
+  );
+
+  @override
+  Future<Rulebook> getRulebook(String projectId) async =>
+      rulebooks[projectId] ?? const Rulebook(photos: [], read: false);
+
+  @override
+  Future<Rulebook> uploadRulebookPhoto(
+    String projectId,
+    PickedImage image,
+  ) async {
+    rulebookUploads.add((projectId, image.name));
+    if (rulebookUploadError != null) throw rulebookUploadError!;
+    final current = await getRulebook(projectId);
+    final index = current.photos.length + 1;
+    return rulebooks[projectId] = Rulebook(
+      photos: [
+        ...current.photos,
+        sampleRulebookPhoto(index: index, id: '${image.name}-$index'),
+      ],
+      read: false,
+    );
+  }
+
+  @override
+  Future<void> deleteRulebookPhoto(String projectId, int index) async {
+    rulebookDeletes.add((projectId, index));
+    final current = await getRulebook(projectId);
+    final kept = [
+      for (final photo in current.photos)
+        if (photo.index != index) photo,
+    ];
+    rulebooks[projectId] = Rulebook(
+      photos: [
+        for (final (i, photo) in kept.indexed) photo.copyWith(index: i + 1),
+      ],
+      read: false,
+    );
+  }
+
+  @override
+  Future<Uint8List> getRulebookPhoto(String projectId, int index) async =>
+      rulebookImage;
+
+  @override
+  Future<VideoJob> startDraft(String projectId) async {
+    startedDrafts.add(projectId);
+    if (startDraftError != null) throw startDraftError!;
+    return sampleVideoJob(projectId: projectId, status: VideoJobStatus.queued);
+  }
+
+  @override
+  Future<VideoJob> getJob(String projectId, String jobId) async {
+    polledJobs.add(jobId);
+    final job = jobSequence[_jobIndex.clamp(0, jobSequence.length - 1)];
+    if (_jobIndex < jobSequence.length - 1) _jobIndex++;
+    return job;
+  }
+
+  @override
+  Future<VideoJob?> latestJob(String projectId) async => latestJobs[projectId];
+
+  @override
+  Future<VideoDraft?> getDraft(String projectId) async {
+    if (draftError != null) throw draftError!;
+    return drafts[projectId];
+  }
+
+  // --- 素材（MR 8）：key 是 '<專案>/<asset_key>' ---
+
+  final assets = <String, VideoAsset>{};
+  final photos = <String, Uint8List>{};
+  final readiness = <String, VideoReadiness>{};
+
+  /// 上傳成功後存下的照片內容（預設是上傳的內容；後端轉正時內容會不同）。
+  Uint8List Function(Uint8List uploaded)? storedPhoto;
+  Object? uploadError;
+  Object? updateError;
+
+  final uploads = <(String, String, PickedImage)>[];
+  final updates = <(String, String, VideoAssetUpdate)>[];
+
+  @override
+  Future<VideoAsset> getAsset(String projectId, String assetKey) async =>
+      assets['$projectId/$assetKey']!;
+
+  @override
+  Future<Uint8List> getPhoto(String projectId, String assetKey) async =>
+      photos['$projectId/$assetKey']!;
+
+  @override
+  Future<VideoAsset> uploadPhoto(
+    String projectId,
+    String assetKey,
+    PickedImage image,
+  ) async {
+    uploads.add((projectId, assetKey, image));
+    if (uploadError != null) throw uploadError!;
+    final key = '$projectId/$assetKey';
+    photos[key] = storedPhoto?.call(image.bytes) ?? image.bytes;
+    final asset = assets[key]!;
+    return assets[key] = asset.copyWith(
+      hasPhoto: true,
+      orientation: 0,
+      videoVersion: asset.videoVersion + 1,
+    );
+  }
+
+  @override
+  Future<VideoAsset> updateAsset(
+    String projectId,
+    String assetKey,
+    VideoAssetUpdate input,
+  ) async {
+    updates.add((projectId, assetKey, input));
+    if (updateError != null) throw updateError!;
+    final key = '$projectId/$assetKey';
+    final asset = assets[key]!;
+    var regions = {...asset.regions};
+    final orientation = input.orientation;
+    if (orientation != null && orientation != asset.orientation) {
+      // 和後端一樣：只改方向時區域改回待量測
+      if (input.regions == null) {
+        regions = {for (final name in regions.keys) name: null};
+      }
+    }
+    regions.addAll(input.regions ?? const {});
+    return assets[key] = asset.copyWith(
+      orientation: orientation ?? asset.orientation,
+      regions: regions,
+      skipped: input.skipped ?? asset.skipped,
+      skippedRegions: input.skippedRegions ?? asset.skippedRegions,
+      videoVersion: asset.videoVersion + 1,
+    );
+  }
+
+  // --- 產生影片（MR 10） ---
+
+  /// 專案最近一次成功的成品；沒有的專案 getRender 拋 404。
+  final renders = <String, VideoRender>{};
+  final renderVideos = <String, Uint8List>{};
+  Object? startRenderError;
+  final startedRenders = <String>[];
+
+  @override
+  Future<VideoJob> startRender(String projectId) async {
+    startedRenders.add(projectId);
+    if (startRenderError != null) throw startRenderError!;
+    return sampleVideoJob(
+      projectId: projectId,
+      kind: 'render',
+      status: VideoJobStatus.queued,
+    );
+  }
+
+  @override
+  Future<VideoRender?> getRender(String projectId) async => renders[projectId];
+
+  Object? renderVideoError;
+
+  @override
+  Future<Uint8List> getRenderVideo(String projectId) async {
+    if (renderVideoError != null) throw renderVideoError!;
+    return renderVideos[projectId]!;
+  }
+
+  @override
+  Future<VideoReadiness> getReadiness(String projectId) async =>
+      readiness[projectId]!;
+}
+
+VideoProject sampleVideoProject({
+  String id = 'p1',
+  int gameId = 1,
+  String gameName = '假遊戲',
+  String step = 'draft',
+  String rulebook = 'imported',
+}) => VideoProject(
+  id: id,
+  gameId: gameId,
+  gameName: gameName,
+  shopId: 's1',
+  createdBy: 'u1',
+  title: '$gameName 規則教學',
+  step: step,
+  rulebook: rulebook,
+  createdAt: DateTime.utc(2026, 11, 21),
+  updatedAt: DateTime.utc(2026, 11, 21),
+);
+
+VideoJob sampleVideoJob({
+  String id = 'j1',
+  String projectId = 'p1',
+  String kind = 'draft',
+  VideoJobStatus status = VideoJobStatus.queued,
+  double progress = 0,
+  String? message,
+  String? error,
+}) => VideoJob(
+  id: id,
+  projectId: projectId,
+  kind: kind,
+  status: status,
+  progress: progress,
+  message: message,
+  error: error,
+  createdAt: DateTime.utc(2026, 11, 21),
+);
+
+/// 不載入播放套件的影片播放器：顯示收到幾個位元組，記下跳到哪些時間點（MR 10）。
+class FakeVideoFilePlayer implements VideoFilePlayer {
+  final seeks = <Duration>[];
+
+  @override
+  Widget build(
+    BuildContext context, {
+    required Uint8List bytes,
+    required VideoSeekController seek,
+  }) {
+    return ListenableBuilder(
+      listenable: seek,
+      builder: (context, _) {
+        final target = seek.target;
+        if (target != null && (seeks.isEmpty || seeks.last != target)) {
+          seeks.add(target);
+        }
+        return ColoredBox(
+          key: const Key('fake-video-file-player'),
+          color: Colors.black,
+          child: Center(child: Text('影片：${bytes.length} 位元組')),
+        );
+      },
+    );
+  }
+}
+
+/// 手寫的播放狀態：play／pause／seekTo 只記錄並改狀態。
+class FakeVideoPlayback extends ChangeNotifier implements VideoPlayback {
+  FakeVideoPlayback({
+    this.duration = const Duration(seconds: 42),
+    this.position = Duration.zero,
+  });
+
+  @override
+  final Duration duration;
+  @override
+  Duration position;
+  @override
+  bool isPlaying = false;
+  final calls = <String>[];
+
+  @override
+  Future<void> play() async {
+    calls.add('play');
+    isPlaying = true;
+    notifyListeners();
+  }
+
+  @override
+  Future<void> pause() async {
+    calls.add('pause');
+    isPlaying = false;
+    notifyListeners();
+  }
+
+  @override
+  Future<void> seekTo(Duration target) async {
+    calls.add('seek ${target.inMilliseconds}');
+    position = target;
+    notifyListeners();
+  }
+}
+
+RulebookPhoto sampleRulebookPhoto({
+  int index = 1,
+  String? id,
+  String quality = 'ok',
+  String? qualityMessage,
+}) => RulebookPhoto(
+  id: id ?? 'f$index',
+  index: index,
+  width: 1512,
+  height: 2016,
+  quality: quality,
+  qualityMessage: qualityMessage,
+);

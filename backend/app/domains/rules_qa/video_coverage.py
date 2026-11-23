@@ -314,7 +314,11 @@ def _hint_lines(hints: list[RuleCheck]) -> list[str]:
 
 def markdown_from_json(text: str) -> str:
     """從 coverage.json 重建報告段落（compare 用）。"""
-    raw = json.loads(text)
+    return report_from_dict(json.loads(text)).markdown()
+
+
+def report_from_dict(raw: dict[str, Any]) -> CoverageReport:
+    """從 to_json() 的內容重建報告（compare 與草稿頁共用）。"""
     rules = [
         RuleCheck(
             r["rule_id"],
@@ -327,7 +331,7 @@ def markdown_from_json(text: str) -> str:
         for r in raw["rules"]
     ]
     problems = [Problem(**p) for p in raw["problems"]]
-    return CoverageReport(rules, problems, raw.get("video_hash")).markdown()
+    return CoverageReport(rules, problems, raw.get("video_hash"))
 
 
 def video_hash(content: bytes) -> str:

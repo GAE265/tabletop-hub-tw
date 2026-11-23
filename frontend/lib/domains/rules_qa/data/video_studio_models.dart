@@ -1,0 +1,441 @@
+// freezed 的 @JsonSerializable 寫在 factory 上，分析器會誤報 invalid_annotation_target。
+// ignore_for_file: invalid_annotation_target
+
+import 'package:freezed_annotation/freezed_annotation.dart';
+
+part 'video_studio_models.freezed.dart';
+part 'video_studio_models.g.dart';
+
+// ⚠️ 必須和後端 rules_qa 的 schemas 同步
+// （規格：openspec/changes/add-rules-video-mobile/specs/rules-video-studio/spec.md）。
+
+/// 影片專案（`GET /api/v1/rules-videos`）。整個遊戲一支影片（D17）時章節是 null。
+/// `step`：draft＝產生草稿中或有草稿、還沒拍照；assets＝素材還沒齊；render＝齊了、還沒有成品；
+/// done＝有成品；pages＝舊的單章專案還沒有草稿。
+@freezed
+abstract class VideoProject with _$VideoProject {
+  @JsonSerializable(fieldRename: FieldRename.snake)
+  const factory VideoProject({
+    required String id,
+    required int gameId,
+    required String gameName,
+    required String shopId,
+    required String createdBy,
+    int? chapterNumber,
+    String? chapterTitle,
+    // 影片標題：整個遊戲是「〈遊戲〉 規則教學」
+    required String title,
+    required String step,
+    // 規則書來源：imported＝管理員匯入的；photos＝店員拍規則書（2026-11-22 永傑決定）
+    @Default('imported') String rulebook,
+    required DateTime createdAt,
+    required DateTime updatedAt,
+  }) = _VideoProject;
+
+  factory VideoProject.fromJson(Map<String, dynamic> json) =>
+      _$VideoProjectFromJson(json);
+}
+
+/// 建立專案：只選遊戲（整個遊戲一支影片，建立後後端自動產生草稿）。店員的店家用登入身分。
+@freezed
+abstract class VideoProjectCreate with _$VideoProjectCreate {
+  @JsonSerializable(fieldRename: FieldRename.snake, includeIfNull: false)
+  const factory VideoProjectCreate({
+    required int gameId,
+    // 'photos'＝拍規則書；null＝用已匯入的規則書（不送這個欄位）
+    String? rulebook,
+  }) = _VideoProjectCreate;
+
+  factory VideoProjectCreate.fromJson(Map<String, dynamic> json) =>
+      _$VideoProjectCreateFromJson(json);
+}
+
+/// 建立專案時選的遊戲（`GET /api/v1/games` 的一筆）。
+@freezed
+abstract class VideoGameOption with _$VideoGameOption {
+  @JsonSerializable(fieldRename: FieldRename.snake)
+  const factory VideoGameOption({required int id, required String name}) =
+      _VideoGameOption;
+
+  factory VideoGameOption.fromJson(Map<String, dynamic> json) =>
+      _$VideoGameOptionFromJson(json);
+}
+
+/// 工作的狀態：queued＝等待、running＝處理中、succeeded＝完成、failed＝失敗。
+enum VideoJobStatus { queued, running, succeeded, failed }
+
+/// 非同步工作（產生草稿等）。`error` 是給店員看的說明。
+@freezed
+abstract class VideoJob with _$VideoJob {
+  const VideoJob._();
+
+  @JsonSerializable(fieldRename: FieldRename.snake)
+  const factory VideoJob({
+    required String id,
+    required String projectId,
+    required String kind,
+    required VideoJobStatus status,
+    required double progress,
+    String? message,
+    String? error,
+    Map<String, dynamic>? result,
+    required DateTime createdAt,
+    DateTime? startedAt,
+    DateTime? finishedAt,
+  }) = _VideoJob;
+
+  factory VideoJob.fromJson(Map<String, dynamic> json) =>
+      _$VideoJobFromJson(json);
+
+  /// 還在等待或處理中。
+  bool get active =>
+      status == VideoJobStatus.queued || status == VideoJobStatus.running;
+}
+
+@freezed
+abstract class DraftBeat with _$DraftBeat {
+  @JsonSerializable(fieldRename: FieldRename.snake)
+  const factory DraftBeat({
+    required String beatKey,
+    required String narration,
+    required String subtitle,
+  }) = _DraftBeat;
+
+  factory DraftBeat.fromJson(Map<String, dynamic> json) =>
+      _$DraftBeatFromJson(json);
+}
+
+@freezed
+abstract class DraftSegment with _$DraftSegment {
+  @JsonSerializable(fieldRename: FieldRename.snake)
+  const factory DraftSegment({
+    required String segmentKey,
+    // 屬於哪一格：setup＝開局、round＝走完一輪、win＝獲勝方式
+    @Default('') String chapter,
+    required List<int> sourcePages,
+    required List<DraftBeat> beats,
+  }) = _DraftSegment;
+
+  factory DraftSegment.fromJson(Map<String, dynamic> json) =>
+      _$DraftSegmentFromJson(json);
+}
+
+/// 素材清單的一筆。`representative`：泛稱素材，店員可以換成同類的任一張牌。
+@freezed
+abstract class DraftAsset with _$DraftAsset {
+  @JsonSerializable(fieldRename: FieldRename.snake)
+  const factory DraftAsset({
+    required String assetKey,
+    // 給店員看的中文名稱；舊的草稿沒有
+    String? label,
+    required String kind,
+    required String priority,
+    required String reason,
+    String? shot,
+    required bool representative,
+    required List<String> regions,
+    // 已經標好座標的區域（重新產生草稿前提示要重標）
+    @Default([]) List<String> markedRegions,
+    required bool hasPhoto,
+    // 店員略過的素材（MR 9）
+    @Default(false) bool skipped,
+    // 可以略過：略過後每一段仍有主要內容（後端程式判斷，不看 priority）
+    @Default(false) bool skippable,
+  }) = _DraftAsset;
+
+  factory DraftAsset.fromJson(Map<String, dynamic> json) =>
+      _$DraftAssetFromJson(json);
+}
+
+@freezed
+abstract class CoverageIssue with _$CoverageIssue {
+  @JsonSerializable(fieldRename: FieldRename.snake)
+  const factory CoverageIssue({
+    required String ruleId,
+    required String category,
+    required String source,
+    required String narrationStatus,
+    String? narrationMissing,
+    required String subtitleStatus,
+    String? subtitleMissing,
+    required bool narrationShorter,
+  }) = _CoverageIssue;
+
+  factory CoverageIssue.fromJson(Map<String, dynamic> json) =>
+      _$CoverageIssueFromJson(json);
+}
+
+@freezed
+abstract class CoverageProblem with _$CoverageProblem {
+  @JsonSerializable(fieldRename: FieldRename.snake)
+  const factory CoverageProblem({
+    required String beatKey,
+    required String track,
+    required String kind,
+    required String text,
+    required String reason,
+  }) = _CoverageProblem;
+
+  factory CoverageProblem.fromJson(Map<String, dynamic> json) =>
+      _$CoverageProblemFromJson(json);
+}
+
+@freezed
+abstract class CoverageHint with _$CoverageHint {
+  @JsonSerializable(fieldRename: FieldRename.snake)
+  const factory CoverageHint({required String ruleId, required String source}) =
+      _CoverageHint;
+
+  factory CoverageHint.fromJson(Map<String, dynamic> json) =>
+      _$CoverageHintFromJson(json);
+}
+
+/// 一格（開局、走完一輪、獲勝方式）的涵蓋檢查。`status`：done、not_done（附 reason）。
+@freezed
+abstract class CoverageSlot with _$CoverageSlot {
+  @JsonSerializable(fieldRename: FieldRename.snake)
+  const factory CoverageSlot({
+    required String slot,
+    required String title,
+    required String status,
+    String? reason,
+    required int totalRules,
+    required List<CoverageIssue> issues,
+    required List<CoverageProblem> problems,
+    required List<CoverageHint> hints,
+  }) = _CoverageSlot;
+
+  factory CoverageSlot.fromJson(Map<String, dynamic> json) =>
+      _$CoverageSlotFromJson(json);
+}
+
+/// 涵蓋檢查摘要。`status`：done、not_done（附 reason）、stale（旁白或字幕改過）。
+/// `slots`：依格的摘要（整個遊戲一支影片）；合計是三格加起來。
+@freezed
+abstract class DraftCoverage with _$DraftCoverage {
+  @JsonSerializable(fieldRename: FieldRename.snake)
+  const factory DraftCoverage({
+    required String status,
+    String? reason,
+    required int totalRules,
+    required List<CoverageIssue> issues,
+    required List<CoverageProblem> problems,
+    required List<CoverageHint> hints,
+    @Default([]) List<CoverageSlot> slots,
+  }) = _DraftCoverage;
+
+  factory DraftCoverage.fromJson(Map<String, dynamic> json) =>
+      _$DraftCoverageFromJson(json);
+}
+
+/// 用語對照表狀態：used、empty、missing（從未上傳時附提示）。
+@freezed
+abstract class DraftTerms with _$DraftTerms {
+  const factory DraftTerms({required String status, String? message}) =
+      _DraftTerms;
+
+  factory DraftTerms.fromJson(Map<String, dynamic> json) =>
+      _$DraftTermsFromJson(json);
+}
+
+/// `GET /api/v1/rules-videos/{id}/draft`。
+@freezed
+abstract class VideoDraft with _$VideoDraft {
+  @JsonSerializable(fieldRename: FieldRename.snake)
+  const factory VideoDraft({
+    required int videoVersion,
+    required List<DraftSegment> segments,
+    required List<DraftAsset> assets,
+    required DraftCoverage coverage,
+    required DraftTerms terms,
+    required bool pagesStale,
+    String? pagesStaleMessage,
+  }) = _VideoDraft;
+
+  factory VideoDraft.fromJson(Map<String, dynamic> json) =>
+      _$VideoDraftFromJson(json);
+}
+
+/// 一個素材的明細（`GET /api/v1/rules-videos/{id}/assets/{asset_key}`，MR 7）。
+/// `orientation`：照片需要順時針轉幾度才會擺正。`regions`：名稱 → [x, y, w, h]（0–1 的比例，
+/// 以套用方向之後的圖為準）；null＝待量測。
+@freezed
+abstract class VideoAsset with _$VideoAsset {
+  @JsonSerializable(fieldRename: FieldRename.snake)
+  const factory VideoAsset({
+    required String assetKey,
+    // 給店員看的中文名稱；舊的草稿沒有
+    String? label,
+    required String kind,
+    required String priority,
+    required String reason,
+    String? shot,
+    required bool hasPhoto,
+    required int orientation,
+    required Map<String, List<double>?> regions,
+    // 區域名稱 → 給店員的白話說明（只在標區域畫面顯示）；舊的草稿沒有
+    @Default({}) Map<String, String> regionHints,
+    // 區域名稱 → 用到它的段（段號從 1 開始）
+    @Default({}) Map<String, List<int>> regionSegments,
+    // 照片拍不到、店員略過的區域
+    @Default([]) List<String> skippedRegions,
+    required int videoVersion,
+    // 略過（MR 9）：可不可以略過由後端程式判斷（skippable，不看 priority）；
+    // 略過後會少一張圖的段、只靠它而不能略過的段（段號從 1 開始）
+    @Default(false) bool skipped,
+    @Default(false) bool skippable,
+    @Default([]) List<int> skipAffectedSegments,
+    @Default([]) List<int> skipBlockedSegments,
+  }) = _VideoAsset;
+
+  factory VideoAsset.fromJson(Map<String, dynamic> json) =>
+      _$VideoAssetFromJson(json);
+}
+
+/// 改方向或區域；沒給的欄位不送。只改方向時，後端把區域改回待量測。
+@freezed
+abstract class VideoAssetUpdate with _$VideoAssetUpdate {
+  @JsonSerializable(fieldRename: FieldRename.snake, includeIfNull: false)
+  const factory VideoAssetUpdate({
+    int? orientation,
+    Map<String, List<double>?>? regions,
+    // true 略過、false 取消略過
+    bool? skipped,
+    // 照片拍不到的區域（整份取代；[] 取消全部）
+    List<String>? skippedRegions,
+  }) = _VideoAssetUpdate;
+
+  factory VideoAssetUpdate.fromJson(Map<String, dynamic> json) =>
+      _$VideoAssetUpdateFromJson(json);
+}
+
+/// 還沒有照片的素材（都會擋住產生影片）。`skippable`：可以略過（後端程式判斷）；
+/// `priority` 是 AI 標的必拍／選拍，畫面不再使用。
+@freezed
+abstract class MissingPhoto with _$MissingPhoto {
+  @JsonSerializable(fieldRename: FieldRename.snake)
+  const factory MissingPhoto({
+    required String assetKey,
+    // 給店員看的名稱（中文名稱；舊的草稿是 reason）
+    @Default('') String label,
+    required String priority,
+    @Default(false) bool skippable,
+    required String reason,
+    String? shot,
+    @Default([]) List<int> skipAffectedSegments,
+    @Default([]) List<int> skipBlockedSegments,
+  }) = _MissingPhoto;
+
+  factory MissingPhoto.fromJson(Map<String, dynamic> json) =>
+      _$MissingPhotoFromJson(json);
+}
+
+@freezed
+abstract class MissingRegion with _$MissingRegion {
+  @JsonSerializable(fieldRename: FieldRename.snake)
+  const factory MissingRegion({
+    required String assetKey,
+    required String region,
+  }) = _MissingRegion;
+
+  factory MissingRegion.fromJson(Map<String, dynamic> json) =>
+      _$MissingRegionFromJson(json);
+}
+
+/// 本版不支援的素材（繪製素材）。
+@freezed
+abstract class UnsupportedAsset with _$UnsupportedAsset {
+  @JsonSerializable(fieldRename: FieldRename.snake)
+  const factory UnsupportedAsset({
+    required String assetKey,
+    required String kind,
+    required String message,
+  }) = _UnsupportedAsset;
+
+  factory UnsupportedAsset.fromJson(Map<String, dynamic> json) =>
+      _$UnsupportedAssetFromJson(json);
+}
+
+/// 產生影片前還缺什麼（`GET /api/v1/rules-videos/{id}/readiness`）。
+@freezed
+abstract class VideoReadiness with _$VideoReadiness {
+  @JsonSerializable(fieldRename: FieldRename.snake)
+  const factory VideoReadiness({
+    required bool ready,
+    required List<MissingPhoto> missingPhotos,
+    required List<MissingRegion> missingRegions,
+    required List<UnsupportedAsset> unsupported,
+  }) = _VideoReadiness;
+
+  factory VideoReadiness.fromJson(Map<String, dynamic> json) =>
+      _$VideoReadinessFromJson(json);
+}
+
+/// 最近一次成功產生的影片（`GET /api/v1/rules-videos/{id}/render`，MR 9）。
+/// `estimated`：沒有設定文字轉語音，旁白靜音、時間為估計值。
+@freezed
+abstract class VideoRender with _$VideoRender {
+  @JsonSerializable(fieldRename: FieldRename.snake)
+  const factory VideoRender({
+    required String jobId,
+    required String videoPath,
+    required double totalSeconds,
+    required List<String> reencoded,
+    required List<String> reused,
+    required List<String> skippedAssets,
+    required bool estimated,
+    required List<String> warnings,
+    // 段清單（看影片頁點一段跳到那個時間點）
+    @Default([]) List<RenderSegment> segments,
+    DateTime? finishedAt,
+  }) = _VideoRender;
+
+  factory VideoRender.fromJson(Map<String, dynamic> json) =>
+      _$VideoRenderFromJson(json);
+}
+
+/// 成品的一段：第一句開始的秒數與字幕。
+@freezed
+abstract class RenderSegment with _$RenderSegment {
+  @JsonSerializable(fieldRename: FieldRename.snake)
+  const factory RenderSegment({
+    required String segmentKey,
+    required double startSeconds,
+    required String title,
+  }) = _RenderSegment;
+
+  factory RenderSegment.fromJson(Map<String, dynamic> json) =>
+      _$RenderSegmentFromJson(json);
+}
+
+/// 一張規則書照片（店員拍規則書）。`quality`：ok｜warn（可能讀錯，建議重拍）｜bad（太模糊，請重拍）。
+@freezed
+abstract class RulebookPhoto with _$RulebookPhoto {
+  @JsonSerializable(fieldRename: FieldRename.snake)
+  const factory RulebookPhoto({
+    // 不隨刪除改變的代號（縮圖快取用）
+    required String id,
+    // 第幾張（從 1 開始），就是頁的順序
+    required int index,
+    required int width,
+    required int height,
+    required String quality,
+    String? qualityMessage,
+  }) = _RulebookPhoto;
+
+  factory RulebookPhoto.fromJson(Map<String, dynamic> json) =>
+      _$RulebookPhotoFromJson(json);
+}
+
+/// 照片模式專案的規則書照片；`read`＝這些照片都讀過了（重新產生草稿不會再讀）。
+@freezed
+abstract class Rulebook with _$Rulebook {
+  @JsonSerializable(fieldRename: FieldRename.snake)
+  const factory Rulebook({
+    required List<RulebookPhoto> photos,
+    required bool read,
+  }) = _Rulebook;
+
+  factory Rulebook.fromJson(Map<String, dynamic> json) =>
+      _$RulebookFromJson(json);
+}

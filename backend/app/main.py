@@ -26,11 +26,14 @@ from app.domains.rules_qa.router import router as rules_qa_router
 from app.domains.rules_qa.router import video_terms_router as rules_qa_video_terms_router
 from app.domains.rules_qa.router import videos_router as rules_qa_videos_router
 from app.domains.rules_qa.service import RulesQaService
+from app.domains.rules_qa.video_draft import DraftJobHandler
 from app.domains.rules_qa.video_jobs import JobRunner, recover_interrupted_jobs
+from app.domains.rules_qa.video_render import RenderJobHandler
 from app.domains.shops.router import router as shops_router
 from app.integrations.embedding import EmbeddingConfig, EmbeddingProvider, get_embedding_provider
 from app.integrations.llm import LLMProvider, get_llm_provider
 from app.integrations.ocr.factory import get_vision_provider
+from app.integrations.storage.factory import StorageConfig, get_file_storage
 
 API_PREFIX = "/api/v1"
 
@@ -105,12 +108,26 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app = FastAPI(title="遊任有娛 tabletop-hub-tw", lifespan=lifespan)
     app.state.settings = settings
     app.state.session_factory = create_session_factory(engine)
-    # 規則影片工作的處理函式（kind → 函式）；草稿、產生影片、修改的處理函式依序在這裡註冊
-    app.state.rules_video_job_handlers = {}
-    app.state.rules_video_runner = None
     # LLM_PROVIDER、GAMES_ADVISOR_EMBEDDING_* 設錯時在啟動就明確報錯
     app.state.llm = get_llm_provider(settings.llm_provider, settings)
+    # 檔案存放（規則影片的素材照片與影片；add-rules-video-mobile MR 7）。設定錯誤時啟動就報錯
+    app.state.storage = get_file_storage(
+        StorageConfig(
+            provider=settings.storage_provider,
+            local_dir=settings.storage_local_dir,
+            public_base_url=settings.storage_public_base_url,
+            connection_string=settings.storage_connection_string,
+            container=settings.storage_container,
+        )
+    )
     app.state.vision = get_vision_provider(settings.ocr_provider, settings)
+    # 規則影片工作的處理函式（kind → 函式）；草稿、產生影片、修改的處理函式依序在這裡註冊
+    # 草稿工作要看圖、讀存放空間：照片模式的專案先讀店員拍的規則書（2026-11-22 永傑同意）
+    app.state.rules_video_job_handlers = {
+        "draft": DraftJobHandler(app.state.llm, vision=app.state.vision, storage=app.state.storage),
+        "render": RenderJobHandler.from_settings(settings, app.state.storage),
+    }
+    app.state.rules_video_runner = None
     app.state.games_advisor_embedding_config = EmbeddingConfig(
         provider=settings.games_advisor_embedding_provider,
         dim=settings.games_advisor_embedding_dim,

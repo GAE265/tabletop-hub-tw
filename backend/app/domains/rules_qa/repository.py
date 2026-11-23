@@ -5,7 +5,7 @@
 
 import uuid
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -162,22 +162,53 @@ class VideoProjectRecord:
     game_name: str
     shop_id: uuid.UUID
     created_by: uuid.UUID
-    chapter_number: int
-    chapter_title: str
+    # 舊的單章專案才有；整個遊戲一支影片時是 None
+    chapter_number: int | None
+    chapter_title: str | None
     created_at: datetime
     updated_at: datetime
+    has_draft: bool = False
+    # 段資料（推出步驟用：有沒有照片、齊了沒）；沒有草稿時是 None
+    video: dict[str, Any] | None = None
+    # 有成功產生的影片（MR 9）
+    has_render: bool = False
+    # 這支影片用到的頁；照片模式還沒讀照片時是空的
+    chapter_pages: list[int] = field(default_factory=list)
+    # 規則書來源：imported＝管理員匯入的（games_manual）；photos＝店員拍的照片
+    rulebook: str = "imported"
+
+
+def _rulebook(project: RulesQaVideoProject) -> str:
+    """照片模式不另存欄位（不用 migration）：整個遊戲的專案，還沒有頁（建立時就沒讀匯入的規則書），
+    或頁面文字是從照片讀出來的，就是照片模式。"""
+    if project.chapter_number is not None:
+        return "imported"
+    texts = project.page_texts or {}
+    from_photos = any(isinstance(v, dict) and v.get("photo") for v in texts.values())
+    return "photos" if from_photos or not project.chapter_pages else "imported"
 
 
 class VideoProjectRepository(SessionRepository):
     """rules_qa_video_projects（add-rules-video-mobile design.md D1）。遊戲名稱讀共用表 games。"""
 
     def _select(self):
-        return select(RulesQaVideoProject, Game.name).join(
+        has_render = (
+            exists()
+            .where(
+                RulesQaVideoJob.project_id == RulesQaVideoProject.id,
+                RulesQaVideoJob.kind == "render",
+                RulesQaVideoJob.status == "succeeded",
+            )
+            .correlate(RulesQaVideoProject)
+        )
+        return select(RulesQaVideoProject, Game.name, has_render.label("has_render")).join(
             Game, Game.id == RulesQaVideoProject.game_id
         )
 
     @staticmethod
-    def _record(project: RulesQaVideoProject, game_name: str) -> VideoProjectRecord:
+    def _record(
+        project: RulesQaVideoProject, game_name: str, has_render: bool = False
+    ) -> VideoProjectRecord:
         return VideoProjectRecord(
             id=project.id,
             game_id=project.game_id,
@@ -188,6 +219,11 @@ class VideoProjectRepository(SessionRepository):
             chapter_title=project.chapter_title,
             created_at=project.created_at,
             updated_at=project.updated_at,
+            has_draft=project.video is not None,
+            video=project.video,
+            has_render=bool(has_render),
+            chapter_pages=list(project.chapter_pages or []),
+            rulebook=_rulebook(project),
         )
 
     def create(
@@ -196,8 +232,8 @@ class VideoProjectRepository(SessionRepository):
         game_id: int,
         shop_id: uuid.UUID,
         created_by: uuid.UUID,
-        chapter_number: int,
-        chapter_title: str,
+        chapter_number: int | None,
+        chapter_title: str | None,
     ) -> uuid.UUID:
         project = RulesQaVideoProject(
             game_id=game_id,
@@ -324,6 +360,20 @@ class VideoJobRepository(SessionRepository):
 
     def get(self, job_id: uuid.UUID) -> VideoJobRecord | None:
         job = self.session.get(RulesQaVideoJob, job_id, populate_existing=True)
+        return None if job is None else self._record(job)
+
+    def latest_succeeded(self, project_id: uuid.UUID, kind: str) -> VideoJobRecord | None:
+        """這個專案某種工作最近一次成功的（例如最近一次產生的影片）。"""
+        job = self.session.scalars(
+            select(RulesQaVideoJob)
+            .where(
+                RulesQaVideoJob.project_id == project_id,
+                RulesQaVideoJob.kind == kind,
+                RulesQaVideoJob.status == "succeeded",
+            )
+            .order_by(RulesQaVideoJob.finished_at.desc(), RulesQaVideoJob.id)
+            .limit(1)
+        ).first()
         return None if job is None else self._record(job)
 
     def list_for_project(
@@ -469,3 +519,100 @@ class VideoPagesRepository(SessionRepository):
                 updated_at=func.now(),
             )
         )
+
+
+# --------------------------------------------------------------------------- 草稿
+
+
+@dataclass(frozen=True)
+class DraftState:
+    game_id: int
+    # 整個遊戲一支影片時是 None
+    chapter_number: int | None
+    chapter_title: str | None
+    chapter_pages: list[int]
+    reference_pages: list[int]
+    page_texts: dict[str, Any]
+    pages_version: int
+    video: dict[str, Any] | None
+    video_version: int
+    coverage: dict[str, Any] | None
+    coverage_version: int | None
+    draft_pages_version: int | None
+
+
+class VideoDraftRepository(SessionRepository):
+    """rules_qa_video_projects 的草稿欄位（add-rules-video-mobile design.md D11）。"""
+
+    def get_state(self, project_id: uuid.UUID) -> DraftState | None:
+        project = self.session.get(RulesQaVideoProject, project_id, populate_existing=True)
+        if project is None:
+            return None
+        return DraftState(
+            game_id=project.game_id,
+            chapter_number=project.chapter_number,
+            chapter_title=project.chapter_title,
+            chapter_pages=list(project.chapter_pages),
+            reference_pages=list(project.reference_pages),
+            page_texts=project.page_texts,
+            pages_version=project.pages_version,
+            video=project.video,
+            video_version=project.video_version,
+            coverage=project.coverage,
+            coverage_version=project.coverage_version,
+            draft_pages_version=project.draft_pages_version,
+        )
+
+    def save_draft(
+        self,
+        project_id: uuid.UUID,
+        *,
+        expected_version: int,
+        video: dict[str, Any],
+        coverage: dict[str, Any],
+        pages_version: int,
+        classification: dict[str, Any] | None = None,
+    ) -> bool:
+        """video_version 還是 expected_version 才寫入；回傳是否寫入（沒寫入代表專案被改過）。
+
+        classification：整個遊戲一支影片的分類結果（含排除清單）；單章專案是 None。
+        """
+        result = self.session.execute(
+            update(RulesQaVideoProject)
+            .where(
+                RulesQaVideoProject.id == project_id,
+                RulesQaVideoProject.video_version == expected_version,
+            )
+            .values(
+                video=video,
+                video_version=expected_version + 1,
+                coverage=coverage,
+                coverage_version=expected_version + 1,
+                draft_pages_version=pages_version,
+                classification=classification,
+                updated_at=func.now(),
+            )
+        )
+        return result.rowcount == 1
+
+    def touch(self, project_id: uuid.UUID) -> None:
+        """記下最後一次動作的時間（Q1 的保留期限從這裡算），例如產生了影片。"""
+        self.session.execute(
+            update(RulesQaVideoProject)
+            .where(RulesQaVideoProject.id == project_id)
+            .values(updated_at=func.now())
+        )
+
+    def save_video(
+        self, project_id: uuid.UUID, *, expected_version: int, video: dict[str, Any]
+    ) -> bool:
+        """只改段資料（例如素材照片、方向、區域；涵蓋檢查不動）。條件同 save_draft。"""
+        result = self.session.execute(
+            update(RulesQaVideoProject)
+            .where(
+                RulesQaVideoProject.id == project_id,
+                RulesQaVideoProject.video_version == expected_version,
+            )
+            .values(video=video, video_version=expected_version + 1, updated_at=func.now())
+        )
+        return result.rowcount == 1

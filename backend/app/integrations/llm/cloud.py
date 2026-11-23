@@ -4,6 +4,7 @@ openai SDK 只在這個檔案裡 import（AGENTS.md §4.2）。例外轉換照 t
 """
 
 import json
+import time
 from typing import Any
 
 import httpx
@@ -18,6 +19,7 @@ from app.integrations.llm.errors import (
     LLMUnavailable,
 )
 from app.integrations.llm.types import JsonSchema, LLMResponse, ToolCall, ToolResult, ToolSpec
+from app.integrations.llm.usage import UsageRecord, record_usage, usage_of
 
 
 class CloudLLMProvider(LLMProvider):
@@ -95,6 +97,7 @@ class CloudLLMProvider(LLMProvider):
     def _create(self, **params: Any) -> Response:
         if self._reasoning_effort:
             params["reasoning"] = {"effort": self._reasoning_effort}
+        started = time.monotonic()
         try:
             response = self._client.responses.create(model=self._model, **params)
         except openai.APIConnectionError as exc:  # 包含逾時（APITimeoutError）
@@ -104,6 +107,18 @@ class CloudLLMProvider(LLMProvider):
         except openai.OpenAIError as exc:
             raise LLMError(f"Azure OpenAI 呼叫失敗：{exc}") from exc
         _check_finished(response)
+        input_tokens, output_tokens, reasoning_tokens = usage_of(response)
+        record_usage(
+            UsageRecord(
+                kind="llm",
+                name=((params.get("text") or {}).get("format") or {}).get("name") or "text",
+                model=self._model,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                reasoning_tokens=reasoning_tokens,
+                seconds=round(time.monotonic() - started, 1),
+            )
+        )
         return response
 
 

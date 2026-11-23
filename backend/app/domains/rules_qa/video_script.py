@@ -5,6 +5,8 @@
 並把兩次原始輸出交給呼叫端保存（與規則問答「改寫一次」的做法一致）。
 """
 
+import copy
+import dataclasses
 import json
 import re
 import shutil
@@ -66,9 +68,25 @@ class ScriptRequest:
     voice: str | None = None
     # 參考頁：只供查牌名與分類（例如判斷代表牌），不可寫成旁白，也不可列在 source_pages
     reference_pages: list[RulebookPage] = field(default_factory=list)
+    # 整個遊戲一支影片的三格（video_scope.ScopeSlot）；None＝單章模式（命令列與舊的單章專案）。
+    # 整本模式時 pages 是三格用到的頁（source_pages 只能用這些頁）
+    scope: list[Any] | None = None
+    # 每格各一次呼叫時，前面幾格已有的素材（video.json 的素材格式）；後面的格優先沿用
+    existing_assets: list[dict[str, Any]] = field(default_factory=list)
+    # 場地清單（video_scope.Place）；整本模式才有。區域名稱只能用 kind=board 的名稱。
+    # None＝不檢查區域名稱（單章模式）
+    places: list[Any] | None = None
 
 
 # --------------------------------------------------------------------------- 輸入
+
+
+def place_key(name: str) -> str:
+    """場地名稱的比對用 key：忽略空白，「區」與「處」視為相同（2026-11-22 永傑決定）。
+
+    只處理這兩個字，不做其他寬鬆比對。
+    """
+    return re.sub(r"\s+", "", name).replace("處", "區")
 
 
 def load_pages(folder: Path, names: list[str]) -> list[RulebookPage]:
@@ -198,8 +216,33 @@ def term_conflicts(terms: list[Term]) -> list[TermConflict]:
 
 
 def build_input(request: ScriptRequest) -> str:
+    if request.scope is not None and len(request.scope) == 1:
+        slot = request.scope[0]
+        header = [f"這次只產生：{slot.key}（{slot.title}）"]
+    elif request.scope is not None:
+        header = ["範圍：整個遊戲（開局、走完一輪、獲勝方式三個章節）"]
+    else:
+        header = [f"章節：第 {request.chapter_number} 章「{request.chapter_title}」"]
+    if request.existing_assets:
+        header += ["", "已有的素材（前面幾格產生的；用到同樣的東西時優先沿用 asset_key）："]
+        for asset in request.existing_assets:
+            regions = "、".join(asset.get("regions") or {}) or "沒有"
+            header.append(
+                f"- {asset['asset_key']}（{asset.get('label') or asset.get('reason', '')}）"
+                f"：區域 {regions}"
+            )
+    if request.places is not None:
+        board = [p.name for p in request.places if p.kind == "board"]
+        table = [p.name for p in request.places if p.kind == "table"]
+        header += [
+            "",
+            "可以當區域的名稱（規則書裡主板上的格子；regions 只能用這些名稱）："
+            + ("、".join(board) or "沒有，這一格不要有任何區域"),
+            "桌上的位置（不能當區域；要提到時，高亮直接指整張素材）："
+            + ("、".join(table) or "沒有"),
+        ]
     lines = [
-        f"章節：第 {request.chapter_number} 章「{request.chapter_title}」",
+        *header,
         "",
         "用語對照表（英文 → 中文；key 是段資料中使用的名稱；泛稱或單一種牌；不要用的譯法）：",
     ]
@@ -212,6 +255,12 @@ def build_input(request: ScriptRequest) -> str:
         if term.avoid:
             line += f"（不要用：{'、'.join(term.avoid)}）"
         lines.append(line)
+    if request.scope is not None:
+        for slot in request.scope:
+            lines += ["", f"##### {slot.key}（{slot.title}）的原文片段 #####"]
+            for excerpt in slot.excerpts:
+                lines += [f"--- 規則書第 {excerpt.page} 頁 ---", excerpt.text]
+        return "\n".join(lines)
     for page in request.pages:
         lines += ["", f"=== 本章內容：規則書第 {page.page} 頁（{page.lang}）===", page.text]
     for page in request.reference_pages:
@@ -227,28 +276,34 @@ def build_input(request: ScriptRequest) -> str:
 # --------------------------------------------------------------------------- 產生
 
 
+# 整個遊戲一支影片：每格最多改寫 2 次（2026-11-22 永傑決定）；單章模式維持 1 次
+WHOLE_GAME_REWRITES = 2
+
+
 def generate_script(
     llm: LLMProvider,
     request: ScriptRequest,
     base_dir: Path,
     cleanup_log: list["CleanupRecord"] | None = None,
+    rewrites: int = 1,
 ) -> dict[str, Any]:
-    """回傳通過檢查的段資料（video.json 的內容）；改寫一次仍不通過時拋 ScriptRejected。
+    """回傳通過檢查的段資料（video.json 的內容）；改寫 rewrites 次仍不通過時拋 ScriptRejected。
 
     每次 LLM 輸出都先做格式小錯的自動清理（C1–C4），清了什麼記進 cleanup_log；清理後照樣檢查。
     """
     llm_input = build_input(request)
+    whole_game = request.scope is not None
+    instructions = (
+        video_prompts.WHOLE_GAME_SLOT_INSTRUCTIONS if whole_game else video_prompts.INSTRUCTIONS
+    )
+    schema = video_prompts.WHOLE_GAME_SCHEMA if whole_game else video_prompts.SCRIPT_SCHEMA
     outputs: list[dict[str, Any]] = []
     errors: list[str] = []
-    for attempt in range(2):
+    for attempt in range(1 + rewrites):
         prompt = llm_input
         if attempt:
             prompt += "\n\n" + video_prompts.rewrite_request(errors, outputs[-1])
-        raw = llm.generate_json(
-            instructions=video_prompts.INSTRUCTIONS,
-            input=prompt,
-            schema=video_prompts.SCRIPT_SCHEMA,
-        )
+        raw = llm.generate_json(instructions=instructions, input=prompt, schema=schema)
         outputs.append(raw)
         cleaned, records = clean_format(raw)
         if cleanup_log is not None:
@@ -264,6 +319,107 @@ def generate_script(
         if not errors:
             return data
     raise ScriptRejected(errors, outputs)
+
+
+def generate_whole_game(
+    llm: LLMProvider,
+    request: ScriptRequest,
+    base_dir: Path,
+    cleanup_log: list["CleanupRecord"] | None = None,
+) -> dict[str, Any]:
+    """整個遊戲一支影片：每格各一次呼叫，依序開局、走完一輪、獲勝方式（2026-11-22 永傑決定）。
+
+    後面的格帶入前面已有的素材，優先沿用 asset_key；每格各自有自動清理、檢查與改寫一次
+    （generate_script）。段的 key 和前面的格撞名時加上格的 key。合起來後再檢查一次整份。
+    某一格改寫後仍不通過時拋 ScriptRejected，錯誤前面加上「〈格〉」。
+    """
+    assert request.scope is not None
+    assets: list[dict[str, Any]] = []
+    segments: list[dict[str, Any]] = []
+    outputs: list[dict[str, Any]] = []
+    used_keys: set[str] = set()
+    for number, slot in enumerate(request.scope, start=1):
+        slot_pages = {e.page for e in slot.excerpts}
+        slot_request = dataclasses.replace(
+            request,
+            chapter_number=number,  # 句的 key 依格編號，三格不會撞名
+            pages=[p for p in request.pages if p.page in slot_pages],
+            scope=[slot],
+            existing_assets=assets,
+        )
+        try:
+            data = generate_script(
+                llm, slot_request, base_dir, cleanup_log, rewrites=WHOLE_GAME_REWRITES
+            )
+        except ScriptRejected as exc:
+            raise ScriptRejected(
+                [f"「{slot.title}」{error}" for error in exc.errors], exc.outputs
+            ) from exc
+        assets = data["assets"]
+        for segment in data["segments"]:
+            key = segment["segment_key"]
+            while key in used_keys:
+                key = f"{slot.key}_{key}"
+            segment["segment_key"] = key
+            used_keys.add(key)
+            segments.append(segment)
+        outputs.append(data)
+    merged: dict[str, Any] = {
+        "format_version": 1,
+        "game_key": request.game_key,
+        "title": request.title,
+        "chapters": [
+            {"chapter_key": slot.key, "number": number, "title": slot.title}
+            for number, slot in enumerate(request.scope, start=1)
+        ],
+        "assets": assets,
+        "segments": segments,
+    }
+    if request.voice:
+        merged["voice"] = request.voice
+    prune_unused_regions(merged)
+    if request.places is not None:
+        add_region_hints(merged, request.places)
+    errors = check_script(merged, request, base_dir)
+    if errors:
+        raise ScriptRejected([f"合併後{error}" for error in errors], outputs)
+    return merged
+
+
+def add_region_hints(data: dict[str, Any], places: list[Any]) -> None:
+    """每個區域加上給店員的白話說明（取自場地清單的 hint）；只出現在標區域畫面，不進影片。"""
+    hints = {place_key(p.name): p.hint for p in places}
+    for asset in data.get("assets", []):
+        regions = asset.get("regions") or {}
+        if regions:
+            asset["region_hints"] = {name: hints.get(place_key(name), "") for name in regions}
+
+
+def prune_unused_regions(data: dict[str, Any]) -> None:
+    """刪掉沒被任何 highlight、label、move 指到的區域（2026-11-22 永傑決定），店員不用標。
+
+    區域的寫法是 `<槽位>@<區域名稱>`，槽位是放了這個素材的 asset 槽位。直接改傳入的段資料。
+    """
+    used: set[tuple[str, str]] = set()
+    for segment in data.get("segments", []):
+        slots = segment.get("slots") or {}
+        refs = [h.get("target") for h in segment.get("highlights", [])]
+        refs += [lab.get("target") for lab in segment.get("labels", [])]
+        for beat in segment.get("beats", []):
+            for cue in beat.get("cues", []):
+                refs += [cue.get("target"), cue.get("to")]
+        for ref in refs:
+            if not ref or "@" not in ref:
+                continue
+            slot_name, _, region = ref.partition("@")
+            slot = slots.get(slot_name) or {}
+            if slot.get("kind") == "asset" and slot.get("asset_key"):
+                used.add((slot["asset_key"], region))
+    for asset in data.get("assets", []):
+        regions = asset.get("regions") or {}
+        asset["regions"] = {
+            name: box for name, box in regions.items() if (asset["asset_key"], name) in used
+        }
 
 
 # --------------------------------------------------------------------------- 格式小錯的自動清理
@@ -357,23 +513,40 @@ def to_video_data(raw: dict[str, Any], request: ScriptRequest) -> dict[str, Any]
     """LLM 輸出 → video.json 的格式（草稿：照片待拍、區域待量測）。"""
     page_lang = {p.page: p.lang for p in request.pages}
     chapter_key = f"c{request.chapter_number}"
-    data: dict[str, Any] = {
-        "format_version": 1,
-        "game_key": request.game_key,
-        "title": request.title,
-        "chapters": [
+    if request.scope is not None:
+        # 整本：三個 chapter，依開局、走完一輪、獲勝方式的順序
+        chapters = [
+            {"chapter_key": slot.key, "number": number, "title": slot.title}
+            for number, slot in enumerate(request.scope, start=1)
+        ]
+    else:
+        chapters = [
             {
                 "chapter_key": chapter_key,
                 "number": request.chapter_number,
                 "title": request.chapter_title,
             }
-        ],
+        ]
+    order = {c["chapter_key"]: i for i, c in enumerate(chapters)}
+    data: dict[str, Any] = {
+        "format_version": 1,
+        "game_key": request.game_key,
+        "title": request.title,
+        "chapters": chapters,
         "assets": [],
         "segments": [],
     }
     if request.voice:
         data["voice"] = request.voice
+    data["assets"] = copy.deepcopy(request.existing_assets)
+    known = {a["asset_key"]: a for a in data["assets"]}
     for asset in raw["assets"]:
+        if asset["asset_key"] in known:
+            # 沿用已有的素材：保留原本的內容，只加上這一格新用到的區域名稱
+            regions = known[asset["asset_key"]].setdefault("regions", {})
+            for name in asset["regions"]:
+                regions.setdefault(name, None)
+            continue
         entry: dict[str, Any] = {
             "asset_key": asset["asset_key"],
             "kind": asset["kind"],
@@ -384,13 +557,19 @@ def to_video_data(raw: dict[str, Any], request: ScriptRequest) -> dict[str, Any]
         }
         if asset.get("shot"):
             entry["shot"] = asset["shot"]
+        if asset.get("label"):
+            entry["label"] = asset["label"]
         data["assets"].append(entry)
 
+    raw_segments = raw["segments"]
+    if request.scope is not None:
+        # 依三格的順序排好（同一格內維持原本的順序）；不認得的 chapter 排最後，交給檢查回報
+        raw_segments = sorted(raw_segments, key=lambda s: order.get(s.get("chapter"), len(order)))
     beat_number = 0
-    for raw_segment in raw["segments"]:
+    for raw_segment in raw_segments:
         segment: dict[str, Any] = {
             "segment_key": raw_segment["segment_key"],
-            "chapter_key": chapter_key,
+            "chapter_key": _segment_chapter(raw_segment, request, chapter_key),
             "source_pages": [
                 {"lang": page_lang.get(page, "?"), "page": page}
                 for page in raw_segment["source_pages"]
@@ -419,6 +598,14 @@ def to_video_data(raw: dict[str, Any], request: ScriptRequest) -> dict[str, Any]
         _hide_shown_targets(segment)
         data["segments"].append(segment)
     return data
+
+
+def _segment_chapter(raw_segment: dict[str, Any], request: ScriptRequest, chapter_key: str) -> str:
+    if request.scope is None:
+        return chapter_key
+    if len(request.scope) == 1:
+        return request.scope[0].key  # 每格各一次呼叫：這一格的段
+    return raw_segment.get("chapter", chapter_key)
 
 
 def _slots(raw_segment: dict[str, Any]) -> dict[str, Any]:
@@ -488,6 +675,10 @@ def check_script(data: dict[str, Any], request: ScriptRequest, base_dir: Path) -
                     errors.append(f"{where}用了「{word}」，請改用「{term.zh}」：{text}")
 
     errors += _check_assets(data, request)
+    if request.scope is not None:
+        errors += _check_whole_game(data, request)
+    if request.places is not None:
+        errors += _check_region_names(data, request.places)
 
     chapter_pages = {p.page for p in request.pages}
     reference_pages = {p.page for p in request.reference_pages} - chapter_pages
@@ -508,6 +699,48 @@ def check_script(data: dict[str, Any], request: ScriptRequest, base_dir: Path) -
             errors.append(
                 f"段 {key} 的 source_pages 有輸入以外的頁碼：{listed}（只能用 {allowed}）"
             )
+    return errors
+
+
+def _check_whole_game(data: dict[str, Any], request: ScriptRequest) -> list[str]:
+    """整本模式：素材只能實拍（繪製素材到了素材步驟會卡住店員，要在草稿就改掉）；三格都要有段。"""
+    errors = []
+    for asset in data.get("assets", []):
+        if asset.get("kind") != "flat_photo":
+            errors.append(
+                f"素材 {asset.get('asset_key')} 的 kind 是 {asset.get('kind')}："
+                "本版不支援繪製素材，kind 一律用 flat_photo（實拍），立體配件也是拍照"
+            )
+    used = {segment.get("chapter_key") for segment in data.get("segments", [])}
+    for slot in request.scope or []:
+        if slot.key not in used:
+            errors.append(
+                f"「{slot.title}」（chapter={slot.key}）沒有任何一段：三個章節都至少要有一段"
+            )
+    return errors
+
+
+def _check_region_names(data: dict[str, Any], places: list[Any]) -> list[str]:
+    """區域名稱只能用場地清單裡「主板上的格子」（「區」與「處」視為相同）。"""
+    board = {place_key(p.name): p.name for p in places if p.kind == "board"}
+    table = {place_key(p.name) for p in places if p.kind == "table"}
+    allowed = "、".join(board.values()) or "沒有（不要有任何區域）"
+    errors = []
+    for asset in data.get("assets", []):
+        for name in asset.get("regions") or {}:
+            key = place_key(name)
+            if key in board:
+                continue
+            if key in table:
+                errors.append(
+                    f"素材 {asset.get('asset_key')} 的區域「{name}」是桌上的位置，不能當區域："
+                    "請拿掉這個區域，要提到它時，高亮直接指整張素材"
+                )
+            else:
+                errors.append(
+                    f"素材 {asset.get('asset_key')} 的區域「{name}」不是規則書裡主板上的格子名稱，"
+                    f"區域只能用：{allowed}"
+                )
     return errors
 
 

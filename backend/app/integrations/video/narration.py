@@ -6,6 +6,7 @@ TTS 種類、文字與聲音都沒變就直接用快取，不重新呼叫 TTS；
 """
 
 import hashlib
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -29,23 +30,34 @@ def narration_key(provider: str, voice: str, text: str) -> str:
     return hashlib.sha256(f"{provider}\n{voice}\n{text}".encode()).hexdigest()
 
 
-def prepare_narration(video: Video, tts: TTSProvider, cache_dir: Path) -> dict[str, NarrationClip]:
-    """依段的順序合成每一句旁白，回傳 beat_key → 音檔與長度。"""
+def prepare_narration(
+    video: Video,
+    tts: TTSProvider,
+    cache_dir: Path,
+    *,
+    on_clip: Callable[[int, int], None] | None = None,
+) -> dict[str, NarrationClip]:
+    """依段的順序合成每一句旁白，回傳 beat_key → 音檔與長度。
+
+    on_clip(第幾句, 共幾句)：每句開始前呼叫（含沿用快取的句子），給進度回報用。
+    """
     folder = cache_dir / "narration"
     folder.mkdir(parents=True, exist_ok=True)
     clips: dict[str, NarrationClip] = {}
-    for segment in video.segments:
-        for beat in segment.beats:
-            key = narration_key(tts.cache_name, video.voice, beat.narration)
-            path = folder / f"{key}.wav"
-            if path.is_file():
-                seconds = wav_seconds(path.read_bytes())
-            else:
-                clip = tts.synthesize(beat.narration, video.voice)
-                # 先寫暫存檔再改名，中斷時不會留下壞的快取
-                temporary = path.with_suffix(".tmp")
-                temporary.write_bytes(clip.data)
-                temporary.replace(path)
-                seconds = clip.seconds
-            clips[beat.beat_key] = NarrationClip(path, seconds)
+    beats = [beat for segment in video.segments for beat in segment.beats]
+    for index, beat in enumerate(beats, start=1):
+        if on_clip is not None:
+            on_clip(index, len(beats))
+        key = narration_key(tts.cache_name, video.voice, beat.narration)
+        path = folder / f"{key}.wav"
+        if path.is_file():
+            seconds = wav_seconds(path.read_bytes())
+        else:
+            clip = tts.synthesize(beat.narration, video.voice)
+            # 先寫暫存檔再改名，中斷時不會留下壞的快取
+            temporary = path.with_suffix(".tmp")
+            temporary.write_bytes(clip.data)
+            temporary.replace(path)
+            seconds = clip.seconds
+        clips[beat.beat_key] = NarrationClip(path, seconds)
     return clips

@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from app.integrations.llm.types import JsonSchema
+from app.integrations.llm.usage import UsageRecord, record_usage
 from app.integrations.ocr.base import OCRProvider, VisionProvider
 from app.integrations.ocr.errors import OCRUnavailable
 from app.integrations.ocr.images import image_mime
@@ -71,4 +72,7 @@ class FakeVisionProvider(VisionProvider):
     ) -> dict:
         described = [(image_mime(image), len(image)) for image in images]
         self.calls.append(FakeVisionCall(instructions, input, schema.name, described))
-        return _next(self._replies, "回覆")
+        result = _next(self._replies, "回覆")
+        # 和雲端實作一樣記一筆用量（fake 的 token 是 0）
+        record_usage(UsageRecord("vision", schema.name, "fake", 0, 0, 0, 0.0))
+        return result

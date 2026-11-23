@@ -87,6 +87,13 @@ abstract final class AppSizes {
   /// 規則書匯入：選好的圖片縮圖（直式，接近書頁比例）。
   static const double pageThumbWidth = 48;
   static const double pageThumbHeight = 64;
+
+  /// 規則影片標區域：角的把手看得到的大小，與可點範圍（至少 44，2026-11-21 永傑決定）。
+  static const double regionHandle = 24;
+  static const double regionHandleHitArea = 44;
+
+  /// 規則影片標區域：框線粗細。
+  static const double regionBorder = 2;
 }
 
 /// 暖色柔和懸浮陰影。

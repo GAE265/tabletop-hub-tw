@@ -11,6 +11,7 @@ from app.integrations.video.errors import (
     VideoDataError,
     VideoError,
     VideoRenderError,
+    VideoTimeoutError,
 )
 from app.integrations.video.fonts import FontSet
 from app.integrations.video.geometry import Rect
@@ -43,6 +44,7 @@ __all__ = [
     "VideoDataError",
     "VideoError",
     "VideoRenderError",
+    "VideoTimeoutError",
     "build_timeline",
     "estimate_narration_seconds",
     "frame_at",
