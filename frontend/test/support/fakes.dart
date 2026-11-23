@@ -475,6 +475,7 @@ Group fakeGroup({
   int memberCount = 1,
   int waitlistCount = 0,
   int? fee,
+  String? description,
   String status = 'open',
   String organizerId = 'u-org',
   String organizerName = '開團主',
@@ -487,6 +488,7 @@ Group fakeGroup({
   return Group(
     id: id,
     title: title,
+    description: description,
     startAt: startAt,
     endAt: endAt ?? startAt.add(const Duration(hours: 2)),
     capacity: capacity,

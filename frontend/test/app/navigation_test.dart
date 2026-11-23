@@ -252,17 +252,20 @@ void main() {
       }
     });
 
-    testWidgets('首頁：內容延伸到導覽列後面，並告訴頁面底部要留多少空間', (tester) async {
-      await pumpShell(tester, size: const Size(400, 900));
-      final page = find.byType(Scaffold).last;
-      expect(tester.getBottomLeft(page).dy, 900);
-      final nav = tester.getTopLeft(find.byType(BottomNavigation)).dy;
-      final padding = MediaQuery.paddingOf(tester.element(page)).bottom;
-      expect(padding, greaterThanOrEqualTo(900 - nav));
-    });
+    for (final location in ['/', '/groups']) {
+      testWidgets('$location：內容延伸到導覽列後面，並告訴頁面底部要留多少空間', (tester) async {
+        await pumpShell(tester, location: location, size: const Size(400, 900));
+        final page = find.byType(Scaffold).last;
+        expect(tester.getBottomLeft(page).dy, 900);
+        final nav = tester.getTopLeft(find.byType(BottomNavigation)).dy;
+        final padding = MediaQuery.paddingOf(tester.element(page)).bottom;
+        expect(padding, greaterThanOrEqualTo(900 - nav));
+      });
+    }
 
     testWidgets('其他頁面：內容停在導覽列上方', (tester) async {
-      await pumpShell(tester, location: '/groups', size: const Size(400, 900));
+      // 揪團頁（add：Stitch 揪團月曆）也改成浮動導覽列，這裡改用還沒換版面的訂位頁
+      await pumpShell(tester, location: '/booking', size: const Size(400, 900));
       final page = find.byType(Scaffold).last;
       final nav = tester.getTopLeft(find.byType(BottomNavigation)).dy;
       expect(tester.getBottomLeft(page).dy, lessThanOrEqualTo(nav));

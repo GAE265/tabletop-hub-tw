@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tabletop_hub/app/theme/app_colors.dart';
+import 'package:tabletop_hub/app/theme/wood_background.dart';
 import 'package:tabletop_hub/core/api/api_exception.dart';
 import 'package:tabletop_hub/domains/groups/data/group.dart';
 import 'package:tabletop_hub/domains/groups/pages/groups_page.dart';
@@ -44,7 +45,162 @@ FakeGroupsRepository sampleRepo() => FakeGroupsRepository(
 final calendar = find.byKey(const Key('groups-calendar'));
 final dayList = find.byKey(const Key('groups-day-list'));
 
+/// [box] 的外框底邊比上邊粗，而且有陰影（有厚度）。
+void expectThick(WidgetTester tester, Finder box, [String? reason]) {
+  final decoration =
+      tester.widget<DecoratedBox>(box).decoration as BoxDecoration;
+  final border = decoration.border! as Border;
+  expect(border.bottom.width, greaterThan(border.top.width), reason: reason);
+  expect(decoration.boxShadow, isNotEmpty, reason: reason);
+}
+
+Finder firstBoxIn(Finder of) =>
+    find.descendant(of: of, matching: find.byType(DecoratedBox)).first;
+
+Finder boxAround(Finder of) =>
+    find.ancestor(of: of, matching: find.byType(DecoratedBox)).first;
+
 void main() {
+  // Stitch 版面（docs/ui/stitch/）：木紋背景，文字放在卡片或白底條上，卡片與按鈕有厚度、按得下去
+  group('Stitch 版面', () {
+    for (final size in const [Size(400, 900), Size(1280, 900)]) {
+      testWidgets('寬度 ${size.width.toInt()}：木紋背景，頁首白底卡有標題、說明與開團主篩選', (
+        tester,
+      ) async {
+        await pumpGroupsWidget(
+          tester,
+          const GroupsPage(),
+          repo: sampleRepo(),
+          size: size,
+        );
+        expect(
+          find.descendant(
+            of: find.byKey(const Key('groups-page')),
+            matching: find.byType(WoodBackground),
+          ),
+          findsOneWidget,
+        );
+        final header = find.byKey(const Key('groups-header'));
+        Finder inHeader(Finder f) => find.descendant(of: header, matching: f);
+        expect(inHeader(find.text('找人一起玩・揪團月曆')), findsOneWidget);
+        expect(inHeader(find.text('選取日期看當日開團，隨時加入或自己當團主')), findsOneWidget);
+        expect(inHeader(find.text('全部開團主')), findsOneWidget);
+        expectThick(tester, firstBoxIn(header), 'header');
+      });
+    }
+
+    testWidgets('月曆卡片有厚度', (tester) async {
+      await pumpGroupsWidget(tester, const GroupsPage(), repo: sampleRepo());
+      expectThick(tester, firstBoxIn(calendar));
+    });
+
+    testWidgets('當日標題條：日期與「共 N 場」', (tester) async {
+      await pumpGroupsWidget(tester, const GroupsPage(), repo: sampleRepo());
+      final bar = find.byKey(const Key('groups-day-header'));
+      expect(
+        find.descendant(of: bar, matching: find.text('11/14（六）的揪團')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: bar, matching: find.text('共 2 場')),
+        findsOneWidget,
+      );
+      expectThick(tester, firstBoxIn(bar));
+    });
+
+    testWidgets('沒有揪團的日期：標題條不顯示場數', (tester) async {
+      await pumpGroupsWidget(tester, const GroupsPage(), repo: sampleRepo());
+      await tester.tap(find.text('15'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('共 '), findsNothing);
+    });
+
+    testWidgets('揪團卡片：遊戲、名稱、簡介、時間、店家、開團主、費用、查看詳情', (tester) async {
+      final repo = FakeGroupsRepository(
+        groups: [
+          fakeGroup(
+            title: '卡坦島新手團',
+            description: '從零開始教，歡迎新手',
+            startAt: taipei(11, 14, 19),
+            fee: 150,
+            organizerName: '阿瑋',
+            games: const [
+              GameRef(id: 1, name: '卡坦島'),
+              GameRef(id: 2, name: '璀璨寶石'),
+            ],
+          ),
+        ],
+      );
+      await pumpGroupsWidget(tester, const GroupsPage(), repo: repo);
+      final card = find.byType(GroupCard);
+      Finder inCard(String text) =>
+          find.descendant(of: card, matching: find.text(text));
+      expect(inCard('卡坦島・璀璨寶石'), findsOneWidget);
+      expect(inCard('卡坦島新手團'), findsOneWidget);
+      expect(inCard('從零開始教，歡迎新手'), findsOneWidget);
+      expect(inCard('19:00 – 21:00'), findsOneWidget);
+      expect(inCard('測試桌遊店'), findsOneWidget);
+      expect(inCard('開團主：阿瑋'), findsOneWidget);
+      expect(inCard('\$150／人'), findsOneWidget);
+      expect(inCard('查看詳情'), findsOneWidget);
+      expectThick(tester, firstBoxIn(card));
+    });
+
+    testWidgets('按住揪團卡片：往下沉，移開後彈回', (tester) async {
+      await pumpGroupsWidget(tester, const GroupsPage(), repo: sampleRepo());
+      final card = find.byType(GroupCard).first;
+      final title = find.descendant(of: card, matching: find.text('阿瓦隆夜'));
+      double edge() =>
+          ((tester.widget<DecoratedBox>(firstBoxIn(card)).decoration
+                          as BoxDecoration)
+                      .border!
+                  as Border)
+              .bottom
+              .width;
+      await tester.ensureVisible(card);
+      await tester.pumpAndSettle();
+      final restEdge = edge();
+      final restTop = tester.getTopLeft(title).dy;
+      final gesture = await tester.startGesture(tester.getCenter(title));
+      await tester.pumpAndSettle();
+      expect(edge(), lessThan(restEdge));
+      expect(tester.getTopLeft(title).dy, greaterThan(restTop));
+      await gesture.cancel();
+      await tester.pumpAndSettle();
+      expect(edge(), restEdge);
+      expect(tester.getTopLeft(title).dy, restTop);
+    });
+
+    testWidgets('「我要揪團」是有厚度的深色按鈕', (tester) async {
+      await pumpGroupsWidget(tester, const GroupsPage(), repo: sampleRepo());
+      expectThick(
+        tester,
+        boxAround(find.byKey(const Key('groups-day-create'))),
+      );
+      await tester.tap(find.text('15'));
+      await tester.pumpAndSettle();
+      expectThick(
+        tester,
+        boxAround(find.byKey(const Key('groups-empty-create'))),
+      );
+    });
+
+    testWidgets('手機底部被導覽列蓋住：捲到最底時「我要揪團」停在導覽列上方', (tester) async {
+      await pumpGroupsWidget(
+        tester,
+        const GroupsPage(),
+        repo: sampleRepo(),
+        bottomInset: 120,
+      );
+      await tester.drag(find.byType(Scrollable).first, const Offset(0, -3000));
+      await tester.pumpAndSettle();
+      expect(
+        tester.getBottomLeft(find.byKey(const Key('groups-day-create'))).dy,
+        lessThanOrEqualTo(900 - 120),
+      );
+    });
+  });
+
   group('RWD', () {
     testWidgets('手機寬度（360）：月曆在上、當日列表在下，沒有溢出', (tester) async {
       await pumpGroupsWidget(

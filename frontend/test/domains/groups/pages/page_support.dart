@@ -24,6 +24,9 @@ Future<void> pumpGroupsWidget(
   String? userId = 'u-player',
   Size size = const Size(400, 900),
   bool settle = true,
+
+  /// 畫面底部被蓋住的高度（手機的浮動導覽列，見 AppShell）。
+  double bottomInset = 0,
 }) async {
   setScreenSize(tester, size);
   await tester.pumpWidget(
@@ -35,6 +38,12 @@ Future<void> pumpGroupsWidget(
       ],
       child: MaterialApp(
         theme: buildAppTheme(const FakeAppFonts()),
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(
+            context,
+          ).copyWith(padding: EdgeInsets.only(bottom: bottomInset)),
+          child: child!,
+        ),
         home: home,
       ),
     ),
