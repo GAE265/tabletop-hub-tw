@@ -461,8 +461,9 @@ class _SeatsSheet extends ConsumerWidget {
     } else {
       content = SeatingPlanView(plans: state.seatingPlan, staffView: false);
     }
+    // 座位圖加上標題、圖例與提示可能比面板高（尤其手機），讓內容可以捲動，不會溢出
     return SafeArea(
-      child: Padding(
+      child: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(
           AppSpacing.large,
           0,
