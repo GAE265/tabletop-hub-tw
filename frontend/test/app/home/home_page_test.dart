@@ -109,6 +109,48 @@ void main() {
       expect(inside('home-section-upcoming', '接下來的行程'), findsOneWidget);
     });
 
+    testWidgets('大標題卡、區塊標題條、底部兩個按鈕都有厚度與陰影', (tester) async {
+      await pumpHome(tester);
+      void expectThick(Finder box, String reason) {
+        final decoration =
+            tester.widget<DecoratedBox>(box).decoration as BoxDecoration;
+        final border = decoration.border! as Border;
+        expect(
+          border.bottom.width,
+          greaterThan(border.top.width),
+          reason: reason,
+        );
+        expect(decoration.boxShadow, isNotEmpty, reason: reason);
+      }
+
+      for (final key in [
+        'home-hero',
+        'home-section-entries',
+        'home-section-upcoming',
+      ]) {
+        expectThick(
+          find
+              .descendant(
+                of: find.byKey(Key(key)),
+                matching: find.byType(DecoratedBox),
+              )
+              .first,
+          key,
+        );
+      }
+      for (final key in ['home-cta-groups', 'home-cta-booking']) {
+        expectThick(
+          find
+              .ancestor(
+                of: find.byKey(Key(key)),
+                matching: find.byType(DecoratedBox),
+              )
+              .first,
+          key,
+        );
+      }
+    });
+
     testWidgets('行程卡片有厚度：底部有一條較深的邊', (tester) async {
       final bookings = FakeBookingRepository(
         mine: [homeBooking(id: 1, startAt: taipei(11, 21))],

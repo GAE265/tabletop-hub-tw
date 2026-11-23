@@ -260,7 +260,7 @@ void main() {
       expect(upcomingRoute(item), '/groups/g-1');
     });
 
-    test('揪團額滿：顯示已額滿，有候補時加上候補人數', () {
+    test('揪團額滿：底部顯示候補人數（「已額滿」在狀態標籤上，不重複）', () {
       String footer({int waitlist = 0}) => upcomingCard(
         clock,
         UpcomingGroup(
@@ -273,8 +273,8 @@ void main() {
           ),
         ),
       ).footer;
-      expect(footer(), '已額滿');
-      expect(footer(waitlist: 3), '已額滿・候補 3 人');
+      expect(footer(), '目前沒有候補');
+      expect(footer(waitlist: 3), '候補 3 人');
     });
 
     test('揪團狀態：有名額是招募中、額滿是已額滿、我是候補是候補中', () {
