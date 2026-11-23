@@ -194,7 +194,10 @@ enum ThickStyle {
   dark(AppColors.ink, AppColors.inkEdge, AppColors.surface),
 
   /// 米白：次要操作。
-  light(AppColors.background, AppColors.cardEdge, AppColors.ink);
+  light(AppColors.background, AppColors.cardEdge, AppColors.ink),
+
+  /// 白底紅字：危險操作（例如取消揪團），按下後一律先確認。
+  danger(AppColors.surface, AppColors.error, AppColors.error);
 
   const ThickStyle(this.color, this.edge, this.foreground);
 
@@ -204,22 +207,24 @@ enum ThickStyle {
 }
 
 /// 有厚度的按鈕：底部較深的邊與陰影。按住時底邊變薄、往下沉，放開後彈回。
+///
+/// [onPressed] 為 null 時停用（灰底灰字）。沒有 [icon] 時是一般的 [FilledButton]。
 class ThickButton extends StatefulWidget {
   const ThickButton({
-    required this.buttonKey,
     required this.style,
     required this.onPressed,
-    required this.icon,
     required this.label,
+    this.icon,
+    this.buttonKey,
     this.expand = false,
     super.key,
   });
 
   /// 掛在按鈕本身的 Key（測試用它找按鈕）。
-  final Key buttonKey;
+  final Key? buttonKey;
   final ThickStyle style;
-  final VoidCallback onPressed;
-  final IconData icon;
+  final VoidCallback? onPressed;
+  final IconData? icon;
   final String label;
 
   /// 撐滿可用寬度（底部兩個大按鈕），否則依文字寬度。
@@ -251,26 +256,39 @@ class _ThickButtonState extends State<ThickButton> {
   @override
   Widget build(BuildContext context) {
     final style = widget.style;
+    final edge = widget.onPressed == null ? AppColors.cardEdge : style.edge;
     const height = AppSizes.minTouchTarget + AppSpacing.small;
+    final buttonStyle = FilledButton.styleFrom(
+      backgroundColor: style.color,
+      foregroundColor: style.foreground,
+      disabledBackgroundColor: AppColors.neutralTint,
+      disabledForegroundColor: AppColors.inkMuted,
+      minimumSize: widget.expand
+          ? const Size.fromHeight(height)
+          : const Size(AppSizes.minTouchTarget, height),
+    );
     return PressFrame(
       pressed: _pressed,
-      color: style.edge,
-      edge: style.edge,
+      color: edge,
+      edge: edge,
       radius: AppRadius.button,
-      child: FilledButton.icon(
-        key: widget.buttonKey,
-        statesController: _states,
-        style: FilledButton.styleFrom(
-          backgroundColor: style.color,
-          foregroundColor: style.foreground,
-          minimumSize: widget.expand
-              ? const Size.fromHeight(height)
-              : const Size(AppSizes.minTouchTarget, height),
+      child: switch (widget.icon) {
+        final icon? => FilledButton.icon(
+          key: widget.buttonKey,
+          statesController: _states,
+          style: buttonStyle,
+          onPressed: widget.onPressed,
+          icon: Icon(icon),
+          label: Text(widget.label),
         ),
-        onPressed: widget.onPressed,
-        icon: Icon(widget.icon),
-        label: Text(widget.label),
-      ),
+        null => FilledButton(
+          key: widget.buttonKey,
+          statesController: _states,
+          style: buttonStyle,
+          onPressed: widget.onPressed,
+          child: Text(widget.label),
+        ),
+      },
     );
   }
 }
@@ -289,11 +307,14 @@ class IconText extends StatelessWidget {
       children: [
         Icon(icon, size: AppSizes.inlineIcon, color: AppColors.ink),
         const SizedBox(width: AppSpacing.small),
-        Text(
-          text,
-          style: Theme.of(
-            context,
-          ).textTheme.titleSmall!.copyWith(fontWeight: FontWeight.w700),
+        // 文字太長時換行，不要超出卡片
+        Flexible(
+          child: Text(
+            text,
+            style: Theme.of(
+              context,
+            ).textTheme.titleSmall!.copyWith(fontWeight: FontWeight.w700),
+          ),
         ),
       ],
     );
