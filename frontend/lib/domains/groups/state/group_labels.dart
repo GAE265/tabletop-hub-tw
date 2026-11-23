@@ -35,8 +35,12 @@ String? feeLabel(int? fee) {
 }
 
 /// 揪團的時數，例如「4 小時」「1 小時 30 分」「45 分鐘」。
-String groupDurationLabel(Group group) {
-  final minutes = group.endAt.difference(group.startAt).inMinutes;
+String groupDurationLabel(Group group) =>
+    durationLabel(group.endAt.difference(group.startAt));
+
+/// 一段時間的長度，例如「4 小時」「1 小時 30 分」「45 分鐘」。
+String durationLabel(Duration length) {
+  final minutes = length.inMinutes;
   if (minutes < 60) return '$minutes 分鐘';
   final hours = minutes ~/ 60;
   final rest = minutes % 60;
