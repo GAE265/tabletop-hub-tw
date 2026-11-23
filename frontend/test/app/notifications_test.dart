@@ -198,6 +198,33 @@ void main() {
       );
     });
 
+    testWidgets('分段切換：頁首有說明，兩個分頁在同一條軌道裡、一樣寬', (tester) async {
+      await pumpNotifications(tester, location: '/notifications');
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('notifications-header')),
+          matching: find.text('揪團與訂位的最新消息'),
+        ),
+        findsOneWidget,
+      );
+      final track = find.byKey(const Key('notifications-tabs'));
+      for (final key in [
+        'notifications-tab-groups',
+        'notifications-tab-booking',
+      ]) {
+        expect(
+          find.descendant(of: track, matching: find.byKey(Key(key))),
+          findsOneWidget,
+        );
+      }
+      expect(
+        tester.getSize(find.byKey(const Key('notifications-tab-groups'))).width,
+        tester
+            .getSize(find.byKey(const Key('notifications-tab-booking')))
+            .width,
+      );
+    });
+
     testWidgets('沒有未讀：不顯示未讀數', (tester) async {
       await pumpNotifications(tester, location: '/notifications');
       expect(find.textContaining('則未讀'), findsNothing);
