@@ -396,7 +396,7 @@ class BrandMark extends StatelessWidget {
 }
 
 /// 登入按鈕。`auth` 尚未完成，按下只提示「登入功能即將推出」。
-/// [compact] 時是米白的圓形按鈕＋橘色人形（手機頂部列），和鈴鐺一樣大、按得下去。
+/// [compact] 時是白底的圓形按鈕＋深色人形（手機頂部列），和鈴鐺一樣大、一樣顏色、按得下去。
 class LoginButton extends StatelessWidget {
   const LoginButton({this.compact = false, super.key});
 
@@ -410,9 +410,8 @@ class LoginButton extends StatelessWidget {
     if (compact) {
       return ThickIconButton(
         tooltip: '登入',
-        color: AppColors.background,
         onPressed: onPressed,
-        icon: const Icon(Icons.person_outline, color: AppColors.primaryText),
+        icon: const Icon(Icons.person_outline, color: AppColors.ink),
       );
     }
     return OutlinedButton.icon(
