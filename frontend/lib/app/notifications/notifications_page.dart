@@ -77,49 +77,90 @@ class _NotificationsScaffoldState
             AppSpacing.medium,
             0,
           ),
-          child: GlassBar(
+          child: ThickCard(
             key: const Key('notifications-header'),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
-                  children: [
-                    const Icon(
-                      Icons.notifications_outlined,
-                      color: AppColors.primaryText,
+            radius: AppRadius.card,
+            child: Padding(
+              padding: const EdgeInsets.all(AppSpacing.medium),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        width: AppSizes.avatar,
+                        height: AppSizes.avatar,
+                        decoration: BoxDecoration(
+                          color: AppColors.primaryTint,
+                          borderRadius: BorderRadius.circular(AppRadius.button),
+                        ),
+                        child: const Icon(
+                          Icons.notifications_outlined,
+                          color: AppColors.primaryText,
+                        ),
+                      ),
+                      const SizedBox(
+                        width: AppSpacing.small + AppSpacing.xSmall,
+                      ),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '通知',
+                              style: Theme.of(context).textTheme.headlineSmall!
+                                  .copyWith(fontWeight: FontWeight.w700),
+                            ),
+                            Text(
+                              '揪團與訂位的最新消息',
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (total > 0)
+                        PillBadge(label: '$total 則未讀', tone: PillTone.accent),
+                    ],
+                  ),
+                  const SizedBox(height: AppSpacing.medium),
+                  // 分段切換：一條米色軌道，選中的那半是浮起來的白色按鈕
+                  DecoratedBox(
+                    key: const Key('notifications-tabs'),
+                    decoration: BoxDecoration(
+                      color: AppColors.neutralTint,
+                      borderRadius: BorderRadius.circular(AppRadius.pill),
                     ),
-                    const SizedBox(width: AppSpacing.small),
-                    Text(
-                      '通知',
-                      style: Theme.of(context).textTheme.headlineSmall!
-                          .copyWith(fontWeight: FontWeight.w700),
+                    child: Padding(
+                      padding: const EdgeInsets.all(AppSpacing.xSmall),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: _Segment(
+                              key: const Key('notifications-tab-groups'),
+                              index: 0,
+                              icon: Icons.groups_outlined,
+                              label: '揪團',
+                              count: groups,
+                              onTap: () => _touched = true,
+                            ),
+                          ),
+                          const SizedBox(width: AppSpacing.xSmall),
+                          Expanded(
+                            child: _Segment(
+                              key: const Key('notifications-tab-booking'),
+                              index: 1,
+                              icon: Icons.event_seat_outlined,
+                              label: '訂位',
+                              count: bookings,
+                              onTap: () => _touched = true,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                    const SizedBox(width: AppSpacing.small),
-                    if (total > 0)
-                      PillBadge(label: '$total 則未讀', tone: PillTone.accent),
-                  ],
-                ),
-                const SizedBox(height: AppSpacing.small),
-                Row(
-                  children: [
-                    _TabPill(
-                      key: const Key('notifications-tab-groups'),
-                      index: 0,
-                      label: '揪團',
-                      count: groups,
-                      onTap: () => _touched = true,
-                    ),
-                    const SizedBox(width: AppSpacing.small),
-                    _TabPill(
-                      key: const Key('notifications-tab-booking'),
-                      index: 1,
-                      label: '訂位',
-                      count: bookings,
-                      onTap: () => _touched = true,
-                    ),
-                  ],
-                ),
-              ],
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -143,10 +184,12 @@ class _NotificationsScaffoldState
   }
 }
 
-/// 分頁膠囊：選中的是深炭底白字，旁邊是未讀數（沒有未讀時不顯示）。
-class _TabPill extends StatelessWidget {
-  const _TabPill({
+/// 分段切換的一半：選中時是浮起來的白色按鈕（薄厚邊、淡陰影），未讀數是橘色圓點；
+/// 沒選中時透明、灰字。
+class _Segment extends StatelessWidget {
+  const _Segment({
     required this.index,
+    required this.icon,
     required this.label,
     required this.count,
     required this.onTap,
@@ -154,6 +197,7 @@ class _TabPill extends StatelessWidget {
   });
 
   final int index;
+  final IconData icon;
   final String label;
   final int? count;
   final VoidCallback onTap;
@@ -162,63 +206,86 @@ class _TabPill extends StatelessWidget {
   Widget build(BuildContext context) {
     final controller = DefaultTabController.of(context);
     final badge = unreadBadgeLabel(count);
+    final text = Theme.of(context).textTheme;
     return AnimatedBuilder(
       animation: controller,
       builder: (context, _) {
         final selected = controller.index == index;
-        final fg = selected ? AppColors.surface : AppColors.ink;
         return Semantics(
           selected: selected,
           button: true,
-          child: Material(
-            color: selected ? AppColors.ink : AppColors.surface,
-            shape: StadiumBorder(
-              side: BorderSide(
-                color: selected ? AppColors.ink : AppColors.border,
-              ),
-            ),
-            clipBehavior: Clip.antiAlias,
-            child: InkWell(
-              onTap: () {
-                onTap();
-                controller.animateTo(index);
-              },
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppSpacing.medium,
-                  vertical: AppSpacing.small,
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      label,
-                      style: Theme.of(
-                        context,
-                      ).textTheme.labelLarge!.copyWith(color: fg),
-                    ),
-                    if (badge != null) ...[
+          child: AnimatedContainer(
+            duration: AppDurations.press,
+            decoration: selected
+                ? thickDecoration(
+                    color: AppColors.surface,
+                    edge: AppColors.cardEdge,
+                    radius: AppRadius.pill,
+                    thickness: AppSizes.smallThickness,
+                    shadow: AppShadows.soft,
+                  )
+                : BoxDecoration(
+                    borderRadius: BorderRadius.circular(AppRadius.pill),
+                  ),
+            child: Material(
+              type: MaterialType.transparency,
+              shape: const StadiumBorder(),
+              clipBehavior: Clip.antiAlias,
+              child: InkWell(
+                onTap: () {
+                  onTap();
+                  controller.animateTo(index);
+                },
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(
+                    minHeight: AppSizes.minTouchTarget - AppSpacing.small,
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        icon,
+                        size: AppSizes.inlineIcon,
+                        color: selected
+                            ? AppColors.primaryText
+                            : AppColors.inkMuted,
+                      ),
                       const SizedBox(width: AppSpacing.small),
-                      DecoratedBox(
-                        decoration: BoxDecoration(
-                          color: selected
-                              ? AppColors.surface
-                              : AppColors.primaryTint,
-                          borderRadius: BorderRadius.circular(AppRadius.pill),
+                      Text(
+                        label,
+                        style: text.labelLarge!.copyWith(
+                          color: selected ? AppColors.ink : AppColors.inkMuted,
                         ),
-                        child: Padding(
+                      ),
+                      if (badge != null) ...[
+                        const SizedBox(width: AppSpacing.small),
+                        Container(
+                          constraints: const BoxConstraints(
+                            minWidth: AppSizes.inlineIcon,
+                            minHeight: AppSizes.inlineIcon,
+                          ),
                           padding: const EdgeInsets.symmetric(
-                            horizontal: AppSpacing.small,
+                            horizontal: AppSpacing.xSmall,
+                          ),
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: selected
+                                ? AppColors.primary
+                                : AppColors.cardEdge,
+                            borderRadius: BorderRadius.circular(AppRadius.pill),
                           ),
                           child: Text(
                             badge,
-                            style: Theme.of(context).textTheme.labelMedium!
-                                .copyWith(color: AppColors.primaryText),
+                            style: text.labelSmall!.copyWith(
+                              color: selected
+                                  ? AppColors.surface
+                                  : AppColors.ink,
+                            ),
                           ),
                         ),
-                      ),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
               ),
             ),
