@@ -104,9 +104,11 @@ def test_render_with_fake_tts_warns_estimated_time(
     assert (out / "fake_game.mp4").is_file()
     assert (out / "timing.csv").is_file()
     assert "時間為估計值" in (out / "report.txt").read_text(encoding="utf-8")
-    # 編碼 2 段、串接、混音
+    # 編碼 2 段、串接、疊加進度條、混音（第 2 階段多了疊加進度條這一步，原本是 4 次；
+    # add-rules-video-revision design.md D1，AGENTS.md 7.5）
     calls = fake_ffmpeg_calls(ffmpeg)
-    assert len(calls) == 4
+    assert len(calls) == 5
+    assert any("overlay=" in call for call in calls)
     assert any("sidechaincompress" in call for call in calls)
 
 

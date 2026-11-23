@@ -7,10 +7,12 @@
 
 import csv
 import json
+import re
 import shutil
 import subprocess
 from pathlib import Path
 
+import numpy as np
 import pytest
 
 from app.integrations.tts import FakeTTSProvider
@@ -75,3 +77,52 @@ def test_render_whole_chapter(tmp_path: Path, ffmpeg_tools: tuple[str, str]) -> 
     assert abs(float(probe["format"]["duration"]) - result.total_seconds) < 0.1
     # 音軌與畫面一樣長（旁白結束後，背景音樂要一直播到片尾）
     assert abs(float(audio_stream["duration"]) - float(video_stream["duration"])) < 0.05
+
+
+# --- 第 2 階段 MR 1：進度條最後才疊上去 ---
+
+
+def _frame_rgb(ffmpeg: str, path: Path, t: float) -> np.ndarray:
+    raw = subprocess.run(
+        [ffmpeg, "-v", "error", "-ss", f"{t:.3f}", "-i", str(path), "-frames:v", "1",
+         "-f", "rawvideo", "-pix_fmt", "rgb24", "-"],
+        capture_output=True,
+        check=True,
+    ).stdout  # fmt: skip
+    return np.frombuffer(raw, np.uint8).reshape(DEFAULT_STYLE.height, DEFAULT_STYLE.width, 3)
+
+
+def test_progress_bar_fill_and_quality(tmp_path: Path, ffmpeg_tools: tuple[str, str]) -> None:
+    from app.integrations.video.render import progress_box
+
+    ffmpeg, _ = ffmpeg_tools
+    video = load_video(write_game(tmp_path / "game", base_data()))
+    result = render_video(
+        video,
+        tmp_path / "game" / "out",
+        FontSet(None, None),
+        DEFAULT_STYLE,
+        FakeTTSProvider(),
+        Ffmpeg([ffmpeg]),
+        cache_dir=tmp_path / "game" / "cache",
+    )
+    x, y, w, h = progress_box(DEFAULT_STYLE)
+    gold = np.array(DEFAULT_STYLE.gold)
+    for fraction in (0.25, 0.5, 0.75):
+        t = result.total_seconds * fraction
+        row = _frame_rgb(ffmpeg, result.video, t)[y + h // 2, x : x + w].astype(int)
+        filled = float((np.abs(row - gold) <= 40).all(axis=-1).mean())
+        # 第 t 秒的填滿比例約為 t ÷ 總長（誤差 2% 以內）
+        assert abs(filled - fraction) < 0.02, (fraction, filled)
+
+    # 二次編碼的畫質：疊加前（串接好的段影片）與成品比 SSIM，不含進度條那一條
+    crop = f"crop={DEFAULT_STYLE.width}:{y - 12}:0:0"
+    measured = subprocess.run(
+        [ffmpeg, "-v", "info", "-i", str(result.joined), "-i", str(result.video),
+         "-lavfi", f"[0:v]{crop}[a];[1:v]{crop}[b];[a][b]ssim", "-f", "null", "-"],
+        capture_output=True,
+        check=True,
+    ).stderr.decode("utf-8", errors="replace")  # fmt: skip
+    ssim = float(re.findall(r"All:([0-9.]+)", measured)[-1])
+    print(f"SSIM（疊加前 vs 成品，不含進度條）：{ssim:.5f}")
+    assert ssim >= 0.98

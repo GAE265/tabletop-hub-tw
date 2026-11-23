@@ -1,5 +1,7 @@
 """依 Frame 畫出 1920×1080 的畫面（Pillow）。風格數值全部來自 Style。"""
 
+import math
+
 import numpy as np
 from PIL import Image, ImageDraw
 
@@ -40,7 +42,12 @@ class Renderer:
     def frame(self, t: float) -> Frame:
         return frame_at(self.video, self.timeline, self.layouts, t, self.style)
 
-    def render(self, t: float) -> Image.Image:
+    def render(self, t: float, progress: bool = True) -> Image.Image:
+        """畫出第 t 秒的畫面。
+
+        progress：要不要畫進度條。靜態圖照舊畫；段影片不畫，串接後才用 progress_strip 疊上去，
+        段影片才不會依賴全片長度（第 2 階段 add-rules-video-revision D1）。
+        """
         frame = self.frame(t)
         canvas = self.background.copy()
         self._canvas = canvas
@@ -56,7 +63,8 @@ class Renderer:
             self._labels(draw, frame)
             self._header(draw, frame)
             self._subtitle(draw, frame)
-        self._progress(draw, frame)
+        if progress:
+            draw_progress(draw, self.timeline, self.style, frame.t)
         if segment.transition_in == "fade" and frame.local_t < self.style.transition_seconds:
             alpha = 1 - frame.local_t / self.style.transition_seconds
             draw.rectangle(
@@ -279,31 +287,6 @@ class Renderer:
             self._text((x, y), text, font=font, fill=_rgba(color, alpha))
             x += text_width(font, text)
 
-    def _progress(self, draw: ImageDraw.ImageDraw, frame: Frame) -> None:
-        style = self.style
-        rect = style.progress_rect
-        spans = self.timeline.chapter_spans
-        total = self.timeline.total or 1.0
-        gap = 10
-        usable = rect.w - gap * (len(spans) - 1)
-        x = rect.x0
-        for _, start, end in spans:
-            width = usable * (end - start) / total
-            draw.rounded_rectangle(
-                (x, rect.y0, x + width, rect.y1), radius=3, fill=style.progress_empty
-            )
-            if frame.t >= end:
-                filled = width
-            elif frame.t > start:
-                filled = width * (frame.t - start) / (end - start)
-            else:
-                filled = 0
-            if filled > 0:
-                draw.rounded_rectangle(
-                    (x, rect.y0, x + filled, rect.y1), radius=3, fill=_rgba(style.gold, 1)
-                )
-            x += width + gap
-
     def _title_card(self, draw: ImageDraw.ImageDraw, frame: Frame) -> None:
         style = self.style
         chapter = self.video.chapter(frame.segment.segment.chapter_key)
@@ -323,6 +306,57 @@ class Renderer:
             font=sub_font,
             fill=_rgba(style.text_color, alpha),
         )
+
+
+def draw_progress(
+    draw: ImageDraw.ImageDraw,
+    timeline: Timeline,
+    style: Style,
+    t: float,
+    origin: tuple[int, int] = (0, 0),
+) -> None:
+    """畫出第 t 秒的進度條：每章一段，依章的長度分配寬度。origin 是畫布左上角在畫面上的位置。"""
+    rect = style.progress_rect
+    ox, oy = origin
+    spans = timeline.chapter_spans
+    total = timeline.total or 1.0
+    gap = 10
+    usable = rect.w - gap * (len(spans) - 1)
+    x = rect.x0 - ox
+    y0, y1 = rect.y0 - oy, rect.y1 - oy
+    for _, start, end in spans:
+        width = usable * (end - start) / total
+        draw.rounded_rectangle((x, y0, x + width, y1), radius=3, fill=style.progress_empty)
+        if t >= end:
+            filled = width
+        elif t > start:
+            filled = width * (t - start) / (end - start)
+        else:
+            filled = 0
+        if filled > 0:
+            draw.rounded_rectangle((x, y0, x + filled, y1), radius=3, fill=_rgba(style.gold, 1))
+        x += width + gap
+
+
+def progress_box(style: Style) -> tuple[int, int, int, int]:
+    """進度條在畫面上占的範圍 (x, y, 寬, 高)，寬高取偶數，方便 ffmpeg 疊加。
+
+    Pillow 畫矩形時包含右下角那一格，所以寬高要多算 1。
+    """
+    rect = style.progress_rect
+    x, y = math.floor(rect.x0), math.floor(rect.y0)
+    w = math.ceil(rect.x1) - x + 1
+    h = math.ceil(rect.y1) - y + 1
+    return x, y, w + w % 2, h + h % 2
+
+
+def progress_strip(timeline: Timeline, style: Style, t: float) -> Image.Image:
+    """只有進度條那一條的 RGBA 圖（其他地方透明），串接後逐格疊到影片上。"""
+    x, y, w, h = progress_box(style)
+    strip = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    # 不用 "RGBA" 混色模式：顏色（含半透明的底色）直接寫進去，疊加時再和畫面混色
+    draw_progress(ImageDraw.Draw(strip), timeline, style, t, origin=(x, y))
+    return strip
 
 
 def _background(style: Style) -> Image.Image:

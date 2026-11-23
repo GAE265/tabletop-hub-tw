@@ -1,8 +1,8 @@
 """逐格渲染與段影片快取（spec rules-video-maker「完整影片輸出」）。
 
 每段編成一個 mp4，以 content_hash 快取：段內容、用到的素材檔、風格、字型、各句長度都沒變時直接沿用。
-第 1 階段的限制：每段畫面都畫了全片進度條，所以全片或章的長度一變，同一章的段都會重做
-（第 2 階段的前置項目會把進度條改成最後才疊上去）。
+段影片不含進度條（串接後才由 progress.py 疊上去），所以全片長度或其他段改變，不會讓這段重做
+（第 2 階段 add-rules-video-revision D1）。
 """
 
 import dataclasses
@@ -11,6 +11,7 @@ import hashlib
 import json
 import tempfile
 from abc import ABC, abstractmethod
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -23,7 +24,11 @@ from app.integrations.video.style import Style
 from app.integrations.video.timeline import SegmentTiming, Timeline
 
 # 渲染程式本身改變、會讓舊的段影片不再正確時，把這個數字加 1
-ENGINE_VERSION = 1
+# 2：段影片不再畫進度條（第 2 階段）
+ENGINE_VERSION = 2
+
+# 段影片的編碼設定（libx264、crf 18、veryfast、yuv420p）
+SEGMENT_VIDEO_ARGS = ("-c:v", "libx264", "-crf", "18", "-preset", "veryfast", "-pix_fmt", "yuv420p")
 
 
 class SegmentEncoder(ABC):
@@ -33,7 +38,7 @@ class SegmentEncoder(ABC):
 
 
 class FfmpegSegmentEncoder(SegmentEncoder):
-    """逐格產生 rgb24 → 管線送 ffmpeg（libx264、crf 18、veryfast、yuv420p）→ 先寫暫存檔再改名。"""
+    """逐格產生 rgb24 → 管線送 ffmpeg（SEGMENT_VIDEO_ARGS）→ 先寫暫存檔再改名。段影片不畫進度條。"""
 
     def __init__(self, ffmpeg: Ffmpeg, style: Style) -> None:
         self.ffmpeg = ffmpeg
@@ -41,38 +46,48 @@ class FfmpegSegmentEncoder(SegmentEncoder):
 
     def encode(self, timing: SegmentTiming, renderer: Renderer, target: Path) -> None:
         style = self.style
-        temporary = target.with_name(target.stem + ".tmp.mp4")
         args = [
             "-y", "-loglevel", "error",
             "-f", "rawvideo", "-pix_fmt", "rgb24",
             "-s", f"{style.width}x{style.height}", "-r", str(style.fps),
             "-i", "-",
-            "-c:v", "libx264", "-crf", "18", "-preset", "veryfast", "-pix_fmt", "yuv420p",
-            str(temporary),
+            *SEGMENT_VIDEO_ARGS,
         ]  # fmt: skip
-        with tempfile.TemporaryFile() as errors:
-            process = self.ffmpeg.popen(args, errors)
+        frames = (
+            renderer.render(t, progress=False).tobytes() for t in frame_times(timing, style.fps)
+        )
+        pipe_frames(self.ffmpeg, args, frames, target, what=f"編碼段 {timing.segment.segment_key} ")
+
+
+def pipe_frames(
+    ffmpeg: Ffmpeg, args: list[str], frames: Iterable[bytes], target: Path, *, what: str
+) -> None:
+    """把逐格畫面從標準輸入送進 ffmpeg，輸出先寫暫存檔，成功才改名成 target。
+
+    args 不含輸出路徑（這裡補上暫存檔）。失敗時不留下暫存檔，拋 VideoRenderError。
+    """
+    temporary = target.with_name(target.stem + ".tmp.mp4")
+    with tempfile.TemporaryFile() as errors:
+        process = ffmpeg.popen([*args, str(temporary)], errors)
+        try:
+            assert process.stdin is not None
             try:
-                assert process.stdin is not None
-                try:
-                    for t in frame_times(timing, style.fps):
-                        process.stdin.write(renderer.render(t).tobytes())
-                    process.stdin.close()
-                except (BrokenPipeError, OSError):
-                    pass  # ffmpeg 提早結束，下面依結束代碼回報
-                code = process.wait()
-            except BaseException:
-                process.kill()
-                process.wait()
-                temporary.unlink(missing_ok=True)
-                raise
-            if code != 0:
-                temporary.unlink(missing_ok=True)
-                errors.seek(0)
-                key = timing.segment.segment_key
-                tail = stderr_tail(errors.read())
-                raise VideoRenderError(f"ffmpeg 編碼段 {key} 失敗：\n{tail}")
-        temporary.replace(target)
+                for frame in frames:
+                    process.stdin.write(frame)
+                process.stdin.close()
+            except (BrokenPipeError, OSError):
+                pass  # ffmpeg 提早結束，下面依結束代碼回報
+            code = process.wait()
+        except BaseException:
+            process.kill()
+            process.wait()
+            temporary.unlink(missing_ok=True)
+            raise
+        if code != 0:
+            temporary.unlink(missing_ok=True)
+            errors.seek(0)
+            raise VideoRenderError(f"ffmpeg {what}失敗：\n{stderr_tail(errors.read())}")
+    temporary.replace(target)
 
 
 def frame_times(timing: SegmentTiming, fps: int) -> list[float]:
@@ -107,7 +122,7 @@ def encode_segments(
         # 或「轉成檔名後相同」（s/1 與 s-1）的段各有自己的檔名前綴，清舊快取時不會互刪（#75 審核）
         key_id = hashlib.sha256(key.encode()).hexdigest()[:8]
         prefix = f"{safe_file_part(key)}__{key_id}__"
-        content = segment_hash(video, timing, timeline, style, renderer)[:16]
+        content = segment_hash(video, timing, style, renderer)[:16]
         path = folder / f"{prefix}{content}.mp4"
         reused = path.is_file()
         if not reused:
@@ -121,10 +136,11 @@ def encode_segments(
     return results
 
 
-def segment_hash(
-    video: Video, timing: SegmentTiming, timeline: Timeline, style: Style, renderer: Renderer
-) -> str:
-    """段影片的內容雜湊：任何會改變這段畫面的東西都算進來。"""
+def segment_hash(video: Video, timing: SegmentTiming, style: Style, renderer: Renderer) -> str:
+    """段影片的內容雜湊：任何會改變這段畫面的東西都算進來。
+
+    不含全片長度、這段的開始秒數與各章範圍：進度條串接後才疊上去，這段的畫面與它們無關。
+    """
     segment = timing.segment
     payload = {
         "engine": ENGINE_VERSION,
@@ -141,12 +157,6 @@ def segment_hash(
             for b in timing.beats
         ],
         "duration": round(timing.duration, 4),
-        # 進度條：依全片長度與各章範圍畫出（第 1 階段的限制）
-        "progress": {
-            "start": round(timing.start, 4),
-            "total": round(timeline.total, 4),
-            "chapters": [[k, round(s, 4), round(e, 4)] for k, s, e in timeline.chapter_spans],
-        },
         "style": dataclasses.asdict(style),
         "fonts": renderer.fonts.cache_key,
     }
