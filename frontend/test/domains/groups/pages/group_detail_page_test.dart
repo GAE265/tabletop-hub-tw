@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tabletop_hub/app/theme/app_theme.dart';
+import 'package:tabletop_hub/app/theme/wood_background.dart';
 import 'package:tabletop_hub/core/api/api_exception.dart';
 import 'package:tabletop_hub/domains/groups/data/group.dart';
 import 'package:tabletop_hub/domains/groups/data/groups_repository.dart';
@@ -40,7 +41,94 @@ FakeGroupsRepository repoWith({
 Finder button(String label) =>
     find.ancestor(of: find.text(label), matching: find.byType(FilledButton));
 
+/// [box] 的外框底邊比上邊粗，而且有陰影（有厚度）。
+void expectThick(WidgetTester tester, Finder box, [String? reason]) {
+  final decoration =
+      tester.widget<DecoratedBox>(box).decoration as BoxDecoration;
+  final border = decoration.border! as Border;
+  expect(border.bottom.width, greaterThan(border.top.width), reason: reason);
+  expect(decoration.boxShadow, isNotEmpty, reason: reason);
+}
+
 void main() {
+  // Stitch 版面（和揪團月曆同一套樣式）：木紋背景，文字放在卡片上，按鈕有厚度、按得下去
+  group('Stitch 版面', () {
+    testWidgets('木紋背景；資訊卡與名單卡有厚度', (tester) async {
+      await pumpGroupsWidget(
+        tester,
+        const GroupDetailPage(groupId: 'g-1'),
+        repo: repoWith(),
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('group-detail-page')),
+          matching: find.byType(WoodBackground),
+        ),
+        findsOneWidget,
+      );
+      for (final key in ['group-info', 'group-members']) {
+        final card = find.byKey(Key(key));
+        expectThick(
+          tester,
+          find.descendant(of: card, matching: find.byType(DecoratedBox)).first,
+          key,
+        );
+      }
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('group-members')),
+          matching: find.text('名單（1 人）'),
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('「報名」有厚度，按住往下沉，移開後彈回', (tester) async {
+      await pumpGroupsWidget(
+        tester,
+        const GroupDetailPage(groupId: 'g-1'),
+        repo: repoWith(),
+      );
+      final join = button('報名');
+      final frame = find
+          .ancestor(of: join, matching: find.byType(DecoratedBox))
+          .first;
+      double edge() =>
+          ((tester.widget<DecoratedBox>(frame).decoration as BoxDecoration)
+                      .border!
+                  as Border)
+              .bottom
+              .width;
+      expectThick(tester, frame);
+      final restEdge = edge();
+      final restTop = tester.getTopLeft(join).dy;
+      final gesture = await tester.startGesture(tester.getCenter(join));
+      await tester.pumpAndSettle();
+      expect(edge(), lessThan(restEdge));
+      expect(tester.getTopLeft(join).dy, greaterThan(restTop));
+      await gesture.cancel();
+      await tester.pumpAndSettle();
+      expect(edge(), restEdge);
+      expect(tester.getTopLeft(join).dy, restTop);
+    });
+
+    testWidgets('手機底部被導覽列蓋住：捲到最底時名單停在導覽列上方', (tester) async {
+      await pumpGroupsWidget(
+        tester,
+        const GroupDetailPage(groupId: 'g-1'),
+        repo: repoWith(),
+        size: const Size(400, 600),
+        bottomInset: 120,
+      );
+      await tester.drag(find.byType(Scrollable).first, const Offset(0, -3000));
+      await tester.pumpAndSettle();
+      expect(
+        tester.getBottomLeft(find.byKey(const Key('group-members'))).dy,
+        lessThanOrEqualTo(600 - 120),
+      );
+    });
+  });
+
   testWidgets('顯示揪團資訊', (tester) async {
     await pumpGroupsWidget(
       tester,
