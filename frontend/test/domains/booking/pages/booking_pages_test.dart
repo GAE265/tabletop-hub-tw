@@ -140,6 +140,20 @@ Finder firstBoxIn(Finder of) =>
 
 void main() {
   // Stitch 版面（訂位頁）：木紋背景、分段切換的分頁、厚的表單卡與預估費用卡
+  group('三個訂位頁的頂部一致', () {
+    for (final size in const [Size(400, 900), Size(1280, 900)]) {
+      testWidgets('寬度 ${size.width.toInt()}：分頁卡的位置與大小在三頁都一樣', (tester) async {
+        final rects = <Rect>[];
+        for (final path in ['/booking', '/booking/mine', '/booking/board']) {
+          await pumpAt(tester, path, user: staff, size: size);
+          rects.add(tester.getRect(find.byKey(const Key('booking-header'))));
+        }
+        expect(rects[1], rects[0]);
+        expect(rects[2], rects[0]);
+      });
+    }
+  });
+
   group('我的訂位（Stitch 版面）', () {
     testWidgets('木紋背景；分頁在分段切換的軌道裡；狀態篩選是一排膠囊', (tester) async {
       await pumpAt(tester, '/booking/mine');
