@@ -28,7 +28,9 @@ def upgrade() -> None:
     op.execute(
         f"""
         INSERT INTO business_hours (shop_id, weekday, open_time, close_time)
-        VALUES {", ".join(f"('{SHOP_ID}', {weekday}, '13:00', '22:00')" for weekday in (0, 1, 3, 4, 5, 6))}
+        VALUES {", ".join(
+            f"('{SHOP_ID}', {weekday}, '13:00', '22:00')" for weekday in (0, 1, 3, 4, 5, 6)
+        )}
         ON CONFLICT (shop_id, weekday) DO NOTHING
         """
     )
@@ -55,13 +57,15 @@ def upgrade() -> None:
         ("I", 12, -1, 40, 160, 160, 160),
     ]
     values = ", ".join(
-        f"('{SHOP_ID}', '{code}', 1, {capacity}, true, {floor}, {x}, {y}, {width}, {height}, 'rectangle')"
+        f"('{SHOP_ID}', '{code}', 1, {capacity}, true, {floor}, {x}, {y}, {width}, {height}, '"
+        "rectangle')"
         for code, capacity, floor, x, y, width, height in tables
     )
     op.execute(
         f"""
         INSERT INTO seating_tables
-            (shop_id, table_code, min_capacity, max_capacity, is_active, floor, x, y, width, height, shape)
+            (shop_id, table_code, min_capacity, max_capacity, is_active, floor, x, y,
+             width, height, shape)
         VALUES {values}
         ON CONFLICT (shop_id, table_code) DO NOTHING
         """
@@ -98,7 +102,8 @@ def upgrade() -> None:
             "hourly",
             60.00,
             "person_hour",
-            "適用星期一至星期五。依每位客人計費；不足一小時以一小時計算；超過 5 小時以 5 小時計算。",
+            ("適用星期一至星期五。依每位客人計費；不足一小時以一小時計算；"
+             "超過 5 小時以 5 小時計算。"),
         ),
         (
             "WEEKEND_HOURLY_FEE",
@@ -106,7 +111,8 @@ def upgrade() -> None:
             "hourly",
             80.00,
             "person_hour",
-            "適用星期六及星期日。依每位客人計費；不足一小時以一小時計算；超過 5 小時以 5 小時計算。",
+            ("適用星期六及星期日。依每位客人計費；不足一小時以一小時計算；"
+             "超過 5 小時以 5 小時計算。"),
         ),
         (
             "WEEKEND_MINIMUM_DRINK_PER_PERSON",
@@ -194,7 +200,8 @@ def upgrade() -> None:
         op.execute(
             f"""
             INSERT INTO faqs (shop_id, question, answer, category, keywords, is_active, sort_order)
-            SELECT '{SHOP_ID}', '{question}', '{answer}', '{category}', '{keywords_sql}', true, {sort_order}
+            SELECT '{SHOP_ID}', '{question}', '{answer}', '{category}', '{keywords_sql}', true,
+                   {sort_order}
             WHERE NOT EXISTS (
                 SELECT 1 FROM faqs WHERE shop_id = '{SHOP_ID}' AND question = '{question}'
             )
@@ -230,7 +237,8 @@ def upgrade() -> None:
     )
     op.execute(
         f"""
-        INSERT INTO menu_items (shop_id, category_id, name, description, price, sort_order, is_available)
+        INSERT INTO menu_items
+            (shop_id, category_id, name, description, price, sort_order, is_available)
         SELECT '{SHOP_ID}', c.id, data.name, data.description, data.price, data.sort_order, true
         FROM (VALUES {values}) AS data(category_name, name, description, price, sort_order)
         JOIN menu_categories c ON c.shop_id = '{SHOP_ID}' AND c.name = data.category_name
@@ -263,25 +271,37 @@ def downgrade() -> None:
         """
     )
     op.execute(
-        f"DELETE FROM menu_items WHERE shop_id = '{SHOP_ID}' AND name IN ('美式咖啡', '拿鐵', '檸檬紅茶', '無糖綠茶', '可樂', '薯條', '布朗尼', '爆米花', '雞塊', '火腿起司吐司')"
+        f"DELETE FROM menu_items WHERE shop_id = '{SHOP_ID}' AND name IN ("
+        "'美式咖啡', '拿鐵', '檸檬紅茶', '無糖綠茶', '可樂', '薯條', '布朗尼', '爆米花', '雞塊', "
+        "'火腿起司吐司')"
     )
     op.execute(
-        f"DELETE FROM menu_categories WHERE shop_id = '{SHOP_ID}' AND name IN ('飲料', '點心', '輕食')"
+        f"DELETE FROM menu_categories WHERE shop_id = '{SHOP_ID}' AND name IN ("
+        "'飲料', '點心', '輕食')"
     )
     op.execute(
-        f"DELETE FROM faqs WHERE shop_id = '{SHOP_ID}' AND question IN ('場地費如何計算？', '平日與假日的場地費有什麼不同？', '使用時間不滿一小時也要付一小時的費用嗎？', '每個人都有最低消費嗎？')"
+        f"DELETE FROM faqs WHERE shop_id = '{SHOP_ID}' AND question IN ("
+        "'場地費如何計算？', '平日與假日的場地費有什麼不同？', "
+        "'使用時間不滿一小時也要付一小時的費用嗎？', '每個人都有最低消費嗎？')"
     )
     op.execute(
-        f"DELETE FROM pricing_rules WHERE shop_id = '{SHOP_ID}' AND rule_code IN ('WEEKDAY_HOURLY_FEE', 'WEEKEND_HOURLY_FEE', 'WEEKEND_MINIMUM_DRINK_PER_PERSON', 'BILLING_ROUNDING_UNIT_HOURS', 'BILLING_MAX_HOURS', 'BOOKING_MIN_HOURS')"
+        f"DELETE FROM pricing_rules WHERE shop_id = '{SHOP_ID}' AND rule_code IN ("
+        "'WEEKDAY_HOURLY_FEE', 'WEEKEND_HOURLY_FEE', "
+        "'WEEKEND_MINIMUM_DRINK_PER_PERSON', 'BILLING_ROUNDING_UNIT_HOURS', "
+        "'BILLING_MAX_HOURS', 'BOOKING_MIN_HOURS')"
     )
     op.execute(f"DELETE FROM seating_tables_rel WHERE shop_id = '{SHOP_ID}'")
     op.execute(
-        f"DELETE FROM seating_tables WHERE shop_id = '{SHOP_ID}' AND table_code IN ('A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I')"
+        f"DELETE FROM seating_tables WHERE shop_id = '{SHOP_ID}' AND table_code IN ("
+        "'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I')"
     )
     op.execute(
-        f"DELETE FROM closing_hours WHERE shop_id = '{SHOP_ID}' AND closing_date = DATE '2026-11-18' AND start_time = TIME '12:00' AND end_time = TIME '14:00' AND reason = 'take a break'"
+        f"DELETE FROM closing_hours WHERE shop_id = '{SHOP_ID}' "
+        "AND closing_date = DATE '2026-11-18' AND start_time = TIME '12:00' "
+        "AND end_time = TIME '14:00' AND reason = 'take a break'"
     )
     op.execute(
-        f"DELETE FROM business_hours WHERE shop_id = '{SHOP_ID}' AND weekday IN (0, 1, 3, 4, 5, 6) AND open_time = TIME '13:00' AND close_time = TIME '22:00'"
+        f"DELETE FROM business_hours WHERE shop_id = '{SHOP_ID}' AND weekday IN (0, 1, 3, 4, 5, 6) "
+        "AND open_time = TIME '13:00' AND close_time = TIME '22:00'"
     )
     # 測試帳號的 shop_id 會參照此店家，因此保留店家列供 seed 指令建立帳號使用。
