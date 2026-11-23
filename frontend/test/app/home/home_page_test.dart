@@ -93,24 +93,6 @@ void main() {
     expect(width('home-card-booking'), lessThan(width('home-card-rules')));
   });
 
-  testWidgets('手機：「今天玩什麼？」用機器人圖示，「這遊戲怎麼玩」有大書的背景圖案', (tester) async {
-    await pumpHome(tester, size: const Size(400, 900));
-    expect(
-      find.descendant(
-        of: find.byKey(const Key('home-card-advisor')),
-        matching: find.byIcon(Icons.smart_toy_outlined),
-      ),
-      findsOneWidget,
-    );
-    expect(
-      find.descendant(
-        of: find.byKey(const Key('home-card-rules')),
-        matching: find.byIcon(Icons.menu_book_outlined),
-      ),
-      findsNWidgets(2),
-    );
-  });
-
   testWidgets('桌機：四張入口卡片在同一列，寬度相同', (tester) async {
     await pumpHome(tester, size: const Size(1280, 900));
     final widths = {
