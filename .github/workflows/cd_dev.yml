@@ -35,3 +35,29 @@ jobs:
           service: tabletop-hub-tw-backend # 替換為你的第 2 個 Cloud Run 服務名稱
           region: us-east1                  # 替換為該服務所在的 region
           image: us-east1-docker.pkg.dev/aerial-handbook-256212/tabletop-hub-tw-repo/gae265/tabletop-hub-tw-backend:${{ github.event.workflow_run.head_sha }}
+      - name: Discord Notification
+        if: always()
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          JOB_STATUS: ${{ job.status }}
+          REPO: ${{ github.repository }}
+          BRANCH: ${{ github.ref_name }}
+          COMMIT: ${{ github.sha }}
+          ACTOR: ${{ github.actor }}
+        run: |
+          if [ "$JOB_STATUS" = "success" ]; then
+            STATUS="✅ 部署成功"
+          else
+            STATUS="❌ 部署失敗"
+          fi
+
+          MESSAGE="$STATUS
+          Repository: $REPO
+          Branch: $BRANCH
+          Commit: ${COMMIT:0:7}
+          Triggered by: $ACTOR"
+
+          jq -n --arg content "$MESSAGE" \
+            '{content: $content}' |
+            curl -sS -H "Content-Type: application/json" \
+            -d @- "$DISCORD_WEBHOOK"
