@@ -1,0 +1,538 @@
+{
+  "next_id": 17,
+  "games": [
+    {
+      "id": 1,
+      "bgg_id": 400566,
+      "name": "血與刃的白薔薇",
+      "english_name": "Blades & Rose",
+      "min_players": 5,
+      "max_players": 10,
+      "min_playtime": 15,
+      "max_playtime": 25,
+      "min_age": 12,
+      "weight": 1.8333333333333333,
+      "categories": [
+        "Bluffing",
+        "Card Game",
+        "Deduction",
+        "Fantasy",
+        "Horror",
+        "Medieval",
+        "Negotiation",
+        "Party Game",
+        "Spies / Secret Agents"
+      ],
+      "mechanics": [
+        "Hand Management",
+        "Hidden Roles",
+        "Roles with Asymmetric Information",
+        "Sudden Death Ending",
+        "Team-Based Game",
+        "Traitor Game",
+        "Variable Player Powers"
+      ],
+      "result_type": "faction",
+      "types": [
+        "party"
+      ]
+    },
+    {
+      "id": 2,
+      "bgg_id": 144734,
+      "name": "阿不思學院",
+      "english_name": "Arcane Academy",
+      "min_players": 2,
+      "max_players": 4,
+      "min_playtime": 30,
+      "max_playtime": 45,
+      "min_age": 12,
+      "weight": 2.142857142857143,
+      "categories": [
+        "Comic Book / Strip",
+        "Fantasy"
+      ],
+      "mechanics": [
+        "Open Drafting",
+        "Tile Placement"
+      ],
+      "result_type": "score",
+      "types": [
+        "family"
+      ]
+    },
+    {
+      "id": 3,
+      "bgg_id": 171623,
+      "name": "馬可波羅",
+      "english_name": "The Voyages of Marco Polo",
+      "min_players": 2,
+      "max_players": 4,
+      "min_playtime": 40,
+      "max_playtime": 100,
+      "min_age": 12,
+      "weight": 3.178036605657238,
+      "categories": [
+        "Dice",
+        "Economic",
+        "Medieval",
+        "Travel"
+      ],
+      "mechanics": [
+        "Contracts",
+        "Dice Rolling",
+        "End Game Bonuses",
+        "Point to Point Movement",
+        "Resource to Move",
+        "Turn Order: Claim Action",
+        "Variable Player Powers",
+        "Variable Set-up",
+        "Worker Placement with Dice Workers"
+      ],
+      "result_type": "score",
+      "types": [
+        "strategy"
+      ]
+    },
+    {
+      "id": 4,
+      "bgg_id": 128882,
+      "name": "阿瓦隆",
+      "english_name": "The Resistance: Avalon",
+      "min_players": 5,
+      "max_players": 10,
+      "min_playtime": 30,
+      "max_playtime": 30,
+      "min_age": 13,
+      "weight": 1.742384682332463,
+      "categories": [
+        "Bluffing",
+        "Card Game",
+        "Deduction",
+        "Fantasy",
+        "Medieval",
+        "Negotiation",
+        "Party Game",
+        "Spies / Secret Agents"
+      ],
+      "mechanics": [
+        "Finale Ending",
+        "Hidden Roles",
+        "Roles with Asymmetric Information",
+        "Simultaneous Action Selection",
+        "Team-Based Game",
+        "Traitor Game",
+        "Variable Player Powers",
+        "Voting"
+      ],
+      "result_type": null,
+      "types": [
+        "party"
+      ]
+    },
+    {
+      "id": 5,
+      "bgg_id": 178900,
+      "name": "機密代號",
+      "english_name": "Codenames",
+      "min_players": 2,
+      "max_players": 8,
+      "min_playtime": 15,
+      "max_playtime": 15,
+      "min_age": 10,
+      "weight": 1.2512296632614452,
+      "categories": [
+        "Card Game",
+        "Deduction",
+        "Party Game",
+        "Spies / Secret Agents",
+        "Word Game"
+      ],
+      "mechanics": [
+        "Communication Limits",
+        "Deduction",
+        "Memory",
+        "Race",
+        "Team-Based Game"
+      ],
+      "result_type": null,
+      "types": [
+        "party"
+      ]
+    },
+    {
+      "id": 6,
+      "bgg_id": 200680,
+      "name": "農家樂（修訂版）",
+      "english_name": "Agricola (Revised Edition)",
+      "min_players": 1,
+      "max_players": 4,
+      "min_playtime": 30,
+      "max_playtime": 120,
+      "min_age": 12,
+      "weight": 3.4498044328552804,
+      "categories": [
+        "Animals",
+        "Economic",
+        "Farming"
+      ],
+      "mechanics": [
+        "Enclosure",
+        "Hand Management",
+        "Worker Placement",
+        "Advantage Token",
+        "Automatic Resource Growth",
+        "Closed Drafting",
+        "Increase Value of Unchosen Resources",
+        "Solo / Solitaire Game",
+        "Team-Based Game",
+        "Turn Order: Claim Action",
+        "Variable Player Powers"
+      ],
+      "result_type": null,
+      "types": [
+        "strategy"
+      ]
+    },
+    {
+      "id": 7,
+      "bgg_id": 205059,
+      "name": "瘋狂詭宅 第二版",
+      "english_name": "Mansions of Madness: Second Edition",
+      "min_players": 1,
+      "max_players": 5,
+      "min_playtime": 120,
+      "max_playtime": 180,
+      "min_age": 14,
+      "weight": 2.6887340301974447,
+      "categories": [
+        "Adventure",
+        "Exploration",
+        "Fantasy",
+        "Fighting",
+        "Horror",
+        "Miniatures",
+        "Murder / Mystery",
+        "Mythology",
+        "Novel-based",
+        "Puzzle"
+      ],
+      "mechanics": [
+        "Action Points",
+        "Area Movement",
+        "Cooperative Game",
+        "Dice Rolling",
+        "Hand Management",
+        "Map Addition",
+        "Modular Board",
+        "Role Playing",
+        "Scenario / Mission / Campaign Game",
+        "Solo / Solitaire Game",
+        "Stat Check Resolution",
+        "Traitor Game",
+        "Variable Player Powers"
+      ],
+      "result_type": null,
+      "types": [
+        "thematic"
+      ]
+    },
+    {
+      "id": 8,
+      "bgg_id": 12333,
+      "name": "冷戰熱鬥",
+      "english_name": "Twilight Struggle",
+      "min_players": 2,
+      "max_players": 2,
+      "min_playtime": 120,
+      "max_playtime": 180,
+      "min_age": 13,
+      "weight": 3.6147301895964996,
+      "categories": [
+        "Modern Warfare",
+        "Political",
+        "Wargame"
+      ],
+      "mechanics": [
+        "Action / Event",
+        "Advantage Token",
+        "Area Majority / Influence",
+        "Campaign / Battle Card Driven",
+        "Dice Rolling",
+        "Events",
+        "Hand Management",
+        "Simulation",
+        "Simultaneous Action Selection",
+        "Stat Check Resolution",
+        "Sudden Death Ending",
+        "Tug of War",
+        "Variable Player Powers",
+        "Variable Set-up"
+      ],
+      "result_type": null,
+      "types": [
+        "strategy",
+        "war"
+      ]
+    },
+    {
+      "id": 9,
+      "bgg_id": 10630,
+      "name": "大戰回憶錄",
+      "english_name": "Memoir '44",
+      "min_players": 2,
+      "max_players": 4,
+      "min_playtime": 30,
+      "max_playtime": 45,
+      "min_age": 8,
+      "weight": 2.271940667490729,
+      "categories": [
+        "Miniatures",
+        "Wargame",
+        "World War II"
+      ],
+      "mechanics": [
+        "Area Majority / Influence",
+        "Campaign / Battle Card Driven",
+        "Command Cards",
+        "Dice Rolling",
+        "Die Icon Resolution",
+        "Grid Movement",
+        "Hand Management",
+        "Hexagon Grid",
+        "Line of Sight",
+        "Modular Board",
+        "Movement Points",
+        "Scenario / Mission / Campaign Game",
+        "Simulation",
+        "Team-Based Game",
+        "Variable Set-up"
+      ],
+      "result_type": null,
+      "types": [
+        "war"
+      ]
+    },
+    {
+      "id": 10,
+      "bgg_id": 230802,
+      "name": "花磚物語",
+      "english_name": "Azul",
+      "min_players": 2,
+      "max_players": 4,
+      "min_playtime": 30,
+      "max_playtime": 45,
+      "min_age": 8,
+      "weight": 1.7740863787375416,
+      "categories": [
+        "Abstract Strategy",
+        "Renaissance"
+      ],
+      "mechanics": [
+        "End Game Bonuses",
+        "Grid Coverage",
+        "Open Drafting",
+        "Pattern Building",
+        "Set Collection",
+        "Square Grid",
+        "Tile Placement",
+        "Turn Order: Claim Action"
+      ],
+      "result_type": null,
+      "types": [
+        "abstract",
+        "family"
+      ]
+    },
+    {
+      "id": 11,
+      "bgg_id": 163412,
+      "name": "拼布藝術",
+      "english_name": "Patchwork",
+      "min_players": 2,
+      "max_players": 2,
+      "min_playtime": 15,
+      "max_playtime": 30,
+      "min_age": 8,
+      "weight": 1.5995893223819302,
+      "categories": [
+        "Abstract Strategy",
+        "Economic",
+        "Puzzle"
+      ],
+      "mechanics": [
+        "Grid Coverage",
+        "Income",
+        "Open Drafting",
+        "Rondel",
+        "Square Grid",
+        "Tile Placement",
+        "Turn Order: Stat-Based",
+        "Turn Order: Time Track",
+        "Victory Points as a Resource"
+      ],
+      "result_type": null,
+      "types": [
+        "abstract",
+        "family"
+      ]
+    },
+    {
+      "id": 12,
+      "bgg_id": 463,
+      "name": "魔法風雲會",
+      "english_name": "Magic: The Gathering",
+      "min_players": 2,
+      "max_players": 6,
+      "min_playtime": 20,
+      "max_playtime": 20,
+      "min_age": 13,
+      "weight": 3.291835084882781,
+      "categories": [
+        "Card Game",
+        "Collectible Components",
+        "Fantasy",
+        "Fighting"
+      ],
+      "mechanics": [
+        "Betting and Bluffing",
+        "Closed Drafting",
+        "Deck Construction",
+        "Hand Management",
+        "Income",
+        "Interrupts",
+        "Player Elimination",
+        "Tags",
+        "Take That"
+      ],
+      "result_type": null,
+      "types": [
+        "customizable"
+      ]
+    },
+    {
+      "id": 13,
+      "bgg_id": 2165,
+      "name": "寶可夢集換式卡牌遊戲",
+      "english_name": "Pokémon Trading Card Game",
+      "min_players": 2,
+      "max_players": 2,
+      "min_playtime": 20,
+      "max_playtime": 20,
+      "min_age": 6,
+      "weight": 2.0501930501930503,
+      "categories": [
+        "Card Game",
+        "Collectible Components",
+        "Fantasy",
+        "Fighting",
+        "Video Game Theme"
+      ],
+      "mechanics": [
+        "Deck Construction",
+        "Hand Management",
+        "Open Drafting",
+        "Variable Player Powers"
+      ],
+      "result_type": null,
+      "types": [
+        "customizable"
+      ]
+    },
+    {
+      "id": 14,
+      "bgg_id": 17329,
+      "name": "動物疊疊樂",
+      "english_name": "Animal Upon Animal",
+      "min_players": 2,
+      "max_players": 4,
+      "min_playtime": 15,
+      "max_playtime": 15,
+      "min_age": 4,
+      "weight": 1.0427553444180522,
+      "categories": [
+        "Action / Dexterity",
+        "Animals",
+        "Children's Game"
+      ],
+      "mechanics": [
+        "Dice Rolling",
+        "Stacking and Balancing",
+        "Take That"
+      ],
+      "result_type": null,
+      "types": [
+        "children"
+      ]
+    },
+    {
+      "id": 15,
+      "bgg_id": 91514,
+      "name": "超級犀牛",
+      "english_name": "Rhino Hero",
+      "min_players": 2,
+      "max_players": 5,
+      "min_playtime": 5,
+      "max_playtime": 15,
+      "min_age": 5,
+      "weight": 1.0278884462151394,
+      "categories": [
+        "Action / Dexterity",
+        "Animals",
+        "Card Game",
+        "Children's Game",
+        "Party Game"
+      ],
+      "mechanics": [
+        "Hand Management",
+        "Lose a Turn",
+        "Score-and-Reset Game",
+        "Stacking and Balancing",
+        "Three Dimensional Movement"
+      ],
+      "result_type": null,
+      "types": [
+        "children",
+        "family"
+      ]
+    },
+    {
+      "id": 16,
+      "bgg_id": 13,
+      "name": "卡坦島",
+      "english_name": "Catan",
+      "min_players": 3,
+      "max_players": 4,
+      "min_playtime": 60,
+      "max_playtime": 120,
+      "min_age": 10,
+      "weight": 2.279413462648655,
+      "categories": [
+        "Economic",
+        "Negotiation"
+      ],
+      "mechanics": [
+        "Chaining",
+        "Dice Rolling",
+        "Hand Management",
+        "Hexagon Grid",
+        "Hidden Victory Points",
+        "Income",
+        "Market",
+        "Modular Board",
+        "Negotiation",
+        "Network and Route Building",
+        "Race",
+        "Random Production",
+        "Take That",
+        "Trading",
+        "Variable Set-up"
+      ],
+      "result_type": null,
+      "types": [
+        "family",
+        "strategy"
+      ]
+    }
+  ]
+}
