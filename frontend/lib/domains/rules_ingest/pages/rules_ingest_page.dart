@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_spacing.dart';
+import '../../../app/theme/thick_widgets.dart';
+import '../../../app/theme/wood_background.dart';
 import '../../../core/dev/state/dev_user_state.dart';
 import '../../../core/layout/breakpoints.dart';
 import '../data/game_option.dart';
@@ -12,27 +14,41 @@ import '../state/manual_pages_state.dart';
 ///
 /// 只有管理員可以使用；其他人只看到提示，不載入遊戲清單。
 /// 手機上下排列，平板與桌機左邊匯入、右邊已入庫頁面。
+/// Stitch 版面：木紋背景，兩個區塊是有厚度的卡片；手機的浮動導覽列蓋住的高度留在最下面。
 class RulesIngestPage extends ConsumerWidget {
   const RulesIngestPage({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final admin = ref.watch(currentDevUserProvider)?.role == 'admin';
-    return Scaffold(
-      key: const Key('rules-ingest-page'),
-      appBar: AppBar(title: const Text('匯入規則書')),
-      body: admin
-          ? const _AdminView()
-          : Center(
-              child: Padding(
-                padding: const EdgeInsets.all(AppSpacing.large),
-                child: Text(
-                  '只有管理員可以匯入規則書',
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.titleMedium,
+    final body = admin
+        ? const _AdminView()
+        : Center(
+            child: Padding(
+              padding: const EdgeInsets.all(AppSpacing.large),
+              child: ThickCard(
+                child: Padding(
+                  padding: _inset,
+                  child: Text(
+                    '只有管理員可以匯入規則書',
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
                 ),
               ),
             ),
+          );
+    return Scaffold(
+      key: const Key('rules-ingest-page'),
+      backgroundColor: Colors.transparent,
+      appBar: AppBar(
+        title: const Text('匯入規則書'),
+        // 放在木紋上，用半透明白底，文字才看得清楚
+        backgroundColor: AppColors.headerGlass,
+      ),
+      body: WoodBackground.isPaintedAbove(context)
+          ? body
+          : WoodBackground(child: body),
     );
   }
 }
@@ -44,11 +60,16 @@ class _AdminView extends StatelessWidget {
   Widget build(BuildContext context) {
     const import = _ImportSection(key: Key('rules-ingest-import'));
     const stored = _StoredSection(key: Key('rules-ingest-stored'));
-    const padding = EdgeInsets.all(AppSpacing.medium);
+    final padding = EdgeInsets.fromLTRB(
+      AppSpacing.medium,
+      AppSpacing.medium,
+      AppSpacing.medium,
+      AppSpacing.medium + MediaQuery.paddingOf(context).bottom,
+    );
     if (context.screenSize == ScreenSize.mobile) {
-      return const SingleChildScrollView(
+      return SingleChildScrollView(
         padding: padding,
-        child: Column(
+        child: const Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             import,
@@ -63,7 +84,7 @@ class _AdminView extends StatelessWidget {
         constraints: const BoxConstraints(
           maxWidth: AppSpacing.splitContentMaxWidth,
         ),
-        child: const Row(
+        child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Expanded(
@@ -79,22 +100,51 @@ class _AdminView extends StatelessWidget {
   }
 }
 
-/// 一個區塊：標題加內容。
+/// 有厚度卡片的標準內距。
+const _inset = EdgeInsets.all(AppSpacing.medium + AppSpacing.xSmall);
+
+/// 一個區塊：有厚度的卡片，左邊圖示方塊與標題，下面是內容。
 class _Section extends StatelessWidget {
-  const _Section({required this.title, required this.children});
+  const _Section({
+    required this.title,
+    required this.icon,
+    required this.children,
+  });
 
   final String title;
+  final IconData icon;
   final List<Widget> children;
 
   @override
   Widget build(BuildContext context) {
-    return Card(
+    return ThickCard(
       child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.medium),
+        padding: _inset,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(title, style: Theme.of(context).textTheme.titleMedium),
+            Row(
+              children: [
+                Container(
+                  width: AppSizes.minTouchTarget,
+                  height: AppSizes.minTouchTarget,
+                  decoration: BoxDecoration(
+                    color: AppColors.primaryTint,
+                    borderRadius: BorderRadius.circular(AppRadius.button),
+                  ),
+                  child: Icon(icon, color: AppColors.primaryText),
+                ),
+                const SizedBox(width: AppSpacing.small + AppSpacing.xSmall),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: Theme.of(context).textTheme.titleMedium!.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ],
+            ),
             const SizedBox(height: AppSpacing.medium),
             ...children,
           ],
@@ -120,6 +170,7 @@ class _ImportSection extends ConsumerWidget {
 
     return _Section(
       title: '匯入規則書圖片',
+      icon: Icons.upload_file_outlined,
       children: [
         Autocomplete<GameOption>(
           initialValue: TextEditingValue(text: upload.selectedGame?.name ?? ''),
@@ -162,11 +213,14 @@ class _ImportSection extends ConsumerWidget {
           ),
         ],
         const SizedBox(height: AppSpacing.medium),
-        OutlinedButton.icon(
-          key: const Key('pick-images-button'),
+        ThickButton(
+          buttonKey: const Key('pick-images-button'),
+          style: ThickStyle.light,
+          expand: true,
+          icon: Icons.add_photo_alternate_outlined,
+          label: '選擇 JPEG／PNG 圖片',
+          shadow: AppShadows.soft,
           onPressed: busy ? null : notifier.pickImages,
-          icon: const Icon(Icons.add_photo_alternate_outlined),
-          label: const Text('選擇 JPEG／PNG 圖片'),
         ),
         if (upload.picking)
           const Padding(
@@ -233,13 +287,15 @@ class _ImportSection extends ConsumerWidget {
           ),
         ],
         const SizedBox(height: AppSpacing.medium),
-        FilledButton.icon(
-          key: const Key('import-button'),
+        ThickButton(
+          buttonKey: const Key('import-button'),
+          style: ThickStyle.primary,
+          expand: true,
+          icon: Icons.upload_file_outlined,
+          label: '匯入',
           onPressed: upload.canImport && !pages.loading
               ? notifier.importPages
               : null,
-          icon: const Icon(Icons.upload_file_outlined),
-          label: const Text('匯入'),
         ),
         if (upload.importing) ...[
           const SizedBox(height: AppSpacing.medium),
@@ -279,16 +335,20 @@ class _StoredSection extends ConsumerWidget {
 
     return _Section(
       title: '已入庫頁面',
+      icon: Icons.menu_book_outlined,
       children: [
-        OutlinedButton.icon(
-          key: const Key('read-pages-button'),
+        ThickButton(
+          buttonKey: const Key('read-pages-button'),
+          style: ThickStyle.light,
+          expand: true,
+          icon: Icons.refresh,
+          label: '讀回已入庫頁面',
+          shadow: AppShadows.soft,
           onPressed: busy || pages.loading || upload.selectedGame == null
               ? null
               : () => ref
                     .read(manualPagesProvider.notifier)
                     .load(upload.selectedGame!.id.toString()),
-          icon: const Icon(Icons.refresh),
-          label: const Text('讀回已入庫頁面'),
         ),
         const SizedBox(height: AppSpacing.medium),
         if (pages.loading)
