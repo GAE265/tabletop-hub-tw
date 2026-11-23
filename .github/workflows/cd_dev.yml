@@ -1,0 +1,36 @@
+name: CD
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    if: >
+      github.event.workflow_run.conclusion == 'success' &&
+      (github.event.workflow_run.head_branch == 'dev'
+
+    steps:
+      # 1. 使用你設定好的 Secret 登入 GCP
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      # 2. 更新第一個 Cloud Run 服務 (例如 frontend)
+      - name: Deploy Service 1 (Frontend)
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: tabletop-hub-tw-frontend
+          region: us-east1
+          image: us-east1-docker.pkg.dev/aerial-handbook-256212/tabletop-hub-tw-repo/gae265/tabletop-hub-tw-frontend:${{ github.sha }}
+
+      # 3. 更新第二個 Cloud Run 服務 (例如 backend 或其他服務)
+      - name: Deploy Service 2
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: tabletop-hub-tw-backend # 替換為你的第 2 個 Cloud Run 服務名稱
+          region: us-east1                  # 替換為該服務所在的 region
+          image: us-east1-docker.pkg.dev/aerial-handbook-256212/tabletop-hub-tw-repo/gae265/tabletop-hub-tw-backend:${{ github.sha }}
