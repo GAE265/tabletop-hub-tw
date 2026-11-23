@@ -207,7 +207,7 @@ void main() {
         tester
             .widget<Semantics>(
               find
-                  .ancestor(
+                  .descendant(
                     of: find.byKey(const Key('booking-date-today')),
                     matching: find.byType(Semantics),
                   )

@@ -331,8 +331,8 @@ void main() {
     }
 
     testWidgets('其他頁面：內容停在導覽列上方', (tester) async {
-      // 揪團頁（add：Stitch 揪團月曆）也改成浮動導覽列，這裡改用還沒換版面的訂位頁
-      await pumpShell(tester, location: '/booking', size: const Size(400, 900));
+      // 揪團、訂位頁都已改成浮動導覽列，這裡改用還沒換版面的戰績頁
+      await pumpShell(tester, location: '/matches', size: const Size(400, 900));
       final page = find.byType(Scaffold).last;
       final nav = tester.getTopLeft(find.byType(BottomNavigation)).dy;
       expect(tester.getBottomLeft(page).dy, lessThanOrEqualTo(nav));
