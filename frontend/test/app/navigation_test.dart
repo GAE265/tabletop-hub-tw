@@ -53,6 +53,7 @@ Future<GoRouter> pumpShell(
             '/rules-ingest',
             '/videos',
             '/videos/p1/draft',
+            '/videos/p1/assets',
             '/games-advisor',
             '/rules',
             '/rules/1',
@@ -350,7 +351,13 @@ void main() {
       }
     });
 
-    for (final location in ['/', '/groups', '/matches', '/matches/m-1']) {
+    for (final location in [
+      '/',
+      '/groups',
+      '/matches',
+      '/matches/m-1',
+      '/videos/p1/assets',
+    ]) {
       testWidgets('$location：內容延伸到導覽列後面，並告訴頁面底部要留多少空間', (tester) async {
         await pumpShell(tester, location: location, size: const Size(400, 900));
         final page = find.byType(Scaffold).last;

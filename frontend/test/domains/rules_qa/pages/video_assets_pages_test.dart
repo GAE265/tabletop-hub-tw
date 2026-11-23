@@ -87,8 +87,10 @@ void main() {
       // 2026-11-22 永傑決定：不再顯示 AI 標的必拍／選拍，改顯示程式判斷的「可略過」
       expect(inTile('board', find.text('必拍')), findsNothing);
       expect(inTile('board', find.text('可略過')), findsNothing);
+      // Stitch 版面：還缺的素材各一張卡片，可以略過的素材卡片上有「略過這個素材」
+      // （原本是文字清單上的「（可略過）」）
       expect(
-        find.descendant(of: missing, matching: find.textContaining('（可略過）')),
+        inTile('card', find.byKey(const Key('video-asset-skip-card'))),
         findsOneWidget,
       );
       expect(inTile('board', find.text('未拍')), findsOneWidget);
