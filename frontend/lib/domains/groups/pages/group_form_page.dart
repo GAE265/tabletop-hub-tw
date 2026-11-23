@@ -113,7 +113,6 @@ class _GroupFormPageState extends ConsumerState<GroupFormPage> {
     final maxWidth =
         AppSpacing.contentMaxWidth(context.screenSize) ?? double.infinity;
     final bottomInset = MediaQuery.paddingOf(context).bottom;
-    final text = Theme.of(context).textTheme;
     const gap = SizedBox(height: AppSpacing.medium);
     final start = _data.startTime;
     final end = _data.endTime;
@@ -295,13 +294,6 @@ class _GroupFormPageState extends ConsumerState<GroupFormPage> {
               if (state.submitting) ...[
                 const SizedBox(height: AppSpacing.small),
                 const Center(child: CircularProgressIndicator()),
-              ],
-              if (!_editing) ...[
-                const SizedBox(height: AppSpacing.small + AppSpacing.xSmall),
-                // 放在白底條上，文字才不會直接壓在木紋上
-                GlassBar(
-                  child: Text('送出後可以在揪團詳細頁修改或取消揪團', style: text.bodySmall),
-                ),
               ],
             ],
           ),
