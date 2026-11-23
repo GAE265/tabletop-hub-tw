@@ -168,6 +168,24 @@ void main() {
       }
     });
 
+    testWidgets('頁面底部兩個大按鈕用淡陰影', (tester) async {
+      await pumpHome(tester);
+      for (final key in ['home-cta-groups', 'home-cta-booking']) {
+        final frame = find
+            .ancestor(
+              of: find.byKey(Key(key)),
+              matching: find.byType(DecoratedBox),
+            )
+            .first;
+        expect(
+          (tester.widget<DecoratedBox>(frame).decoration as BoxDecoration)
+              .boxShadow,
+          AppShadows.soft,
+          reason: key,
+        );
+      }
+    });
+
     testWidgets('厚框的陰影比一般卡片深、擴散得更開', (tester) async {
       await pumpHome(tester);
       final decoration =
