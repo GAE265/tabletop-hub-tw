@@ -154,6 +154,146 @@ void main() {
     });
   });
 
+  group('教學頁（Stitch 版面）', () {
+    Finder inKey(String key, Finder f) =>
+        find.descendant(of: find.byKey(Key(key)), matching: f);
+
+    Future<FakeRulesQaRepository> askOnce(WidgetTester tester) async {
+      final repo = await pumpPage(tester, const RulesLessonPage(gameId: 2));
+      await tester.tap(find.text('一個回合可以做什麼？'));
+      await tester.pump();
+      repo.respond(answer(text: '每個回合抽兩張牌。', pages: [5]));
+      await tester.pumpAndSettle();
+      return repo;
+    }
+
+    testWidgets('木紋背景；頁首白底條有返回鍵與遊戲名稱', (tester) async {
+      await pumpPage(tester, const RulesLessonPage(gameId: 1));
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('rules-lesson-page')),
+          matching: find.byType(WoodBackground),
+        ),
+        findsOneWidget,
+      );
+      expect(inKey('rules-lesson-header', find.text('有影片的桌遊')), findsOneWidget);
+      expect(
+        inKey(
+          'rules-lesson-header',
+          find.byKey(const Key('rules-lesson-back')),
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('影片卡有厚度，標題「教學影片」；「看完了，開始提問」是厚按鈕', (tester) async {
+      await pumpPage(tester, const RulesLessonPage(gameId: 1));
+      final card = find.byKey(const Key('rules-video-card'));
+      expectThick(
+        tester,
+        find.descendant(of: card, matching: find.byType(DecoratedBox)).first,
+      );
+      expect(inKey('rules-video-card', find.text('教學影片')), findsOneWidget);
+      expectThick(
+        tester,
+        find
+            .ancestor(
+              of: find.text('看完了，開始提問'),
+              matching: find.byType(DecoratedBox),
+            )
+            .first,
+      );
+    });
+
+    testWidgets('問規則卡有厚度，標題旁是遊戲名稱；建議問題是小膠囊', (tester) async {
+      await pumpPage(tester, const RulesLessonPage(gameId: 2));
+      final card = find.byKey(const Key('rules-chat-card'));
+      expectThick(
+        tester,
+        find.descendant(of: card, matching: find.byType(DecoratedBox)).first,
+      );
+      expect(inKey('rules-chat-card', find.text('問規則')), findsOneWidget);
+      expect(inKey('rules-chat-card', find.text('（只有規則書的桌遊）')), findsOneWidget);
+      expect(
+        inKey('rules-chat-card', find.text('大家都在問（點了直接發問）')),
+        findsOneWidget,
+      );
+      final chip = find
+          .ancestor(
+            of: find.text('一個回合可以做什麼？'),
+            matching: find.byType(DecoratedBox),
+          )
+          .first;
+      expectThick(tester, chip);
+      expect(tester.getSize(chip).height, lessThan(48));
+    });
+
+    testWidgets('回答：「規則助理」；問題與回答泡泡都有厚度', (tester) async {
+      await askOnce(tester);
+      expect(find.text('規則助理'), findsOneWidget);
+      for (final text in ['一個回合可以做什麼？', '每個回合抽兩張牌。']) {
+        expectThick(
+          tester,
+          find
+              .ancestor(
+                of: find.text(text),
+                matching: find.byType(DecoratedBox),
+              )
+              .first,
+          text,
+        );
+      }
+    });
+
+    testWidgets('輸入區有厚度；左下是操作說明，右下是字數', (tester) async {
+      await pumpPage(tester, const RulesLessonPage(gameId: 2));
+      final composer = find.byKey(const Key('rules-composer'));
+      expectThick(
+        tester,
+        find
+            .descendant(of: composer, matching: find.byType(DecoratedBox))
+            .first,
+      );
+      expect(
+        inKey('rules-composer', find.text('Enter 送出、Shift+Enter 換行')),
+        findsOneWidget,
+      );
+      expect(
+        inKey('rules-composer', find.text('0 / $rulesQaMaxContentLength 字')),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('手機：輸入區固定在底部、停在導覽列上方；內容從後面滑過去，捲到底時停在輸入區上方', (tester) async {
+      await pumpPage(
+        tester,
+        const RulesLessonPage(gameId: 1),
+        size: const Size(400, 700),
+        bottomInset: 120,
+      );
+      await tester.tap(find.text('看完了，開始提問'));
+      await tester.pumpAndSettle();
+      final composer = find.byKey(const Key('rules-composer'));
+      expect(tester.getBottomLeft(composer).dy, lessThanOrEqualTo(700 - 120));
+      final scroll = find.byType(Scrollable).first;
+      expect(
+        tester.getBottomLeft(scroll).dy,
+        greaterThan(tester.getTopLeft(composer).dy),
+      );
+      await tester.drag(scroll, const Offset(0, -5000));
+      await tester.pumpAndSettle();
+      expect(
+        tester.getBottomLeft(find.byKey(const Key('rules-chat-card'))).dy,
+        lessThanOrEqualTo(tester.getTopLeft(composer).dy),
+      );
+    });
+
+    testWidgets('還在看影片：沒有輸入區', (tester) async {
+      await pumpPage(tester, const RulesLessonPage(gameId: 1));
+      expect(find.byKey(const Key('rules-composer')), findsNothing);
+    });
+  });
+
   group('遊戲清單', () {
     testWidgets('列出遊戲，有影片的標示「有教學影片」', (tester) async {
       await pumpPage(tester, const RulesLessonsPage());
