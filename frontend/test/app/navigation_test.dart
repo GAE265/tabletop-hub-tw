@@ -225,7 +225,7 @@ void main() {
       final bar = find.byType(MobileTopBar);
       Finder inBar(Finder f) => find.descendant(of: bar, matching: f);
       expect(inBar(logoImage), findsOneWidget);
-      expect(inBar(find.bySemanticsLabel('遊任有娛')), findsOneWidget);
+      expect(tester.widget<Image>(inBar(logoImage)).semanticLabel, '遊任有娛');
       expect(
         inBar(find.byKey(const Key('shell-notification-bell'))),
         findsOneWidget,
@@ -250,6 +250,22 @@ void main() {
           findsOneWidget,
         );
       }
+    });
+
+    testWidgets('首頁：內容延伸到導覽列後面，並告訴頁面底部要留多少空間', (tester) async {
+      await pumpShell(tester, size: const Size(400, 900));
+      final page = find.byType(Scaffold).last;
+      expect(tester.getBottomLeft(page).dy, 900);
+      final nav = tester.getTopLeft(find.byType(BottomNavigation)).dy;
+      final padding = MediaQuery.paddingOf(tester.element(page)).bottom;
+      expect(padding, greaterThanOrEqualTo(900 - nav));
+    });
+
+    testWidgets('其他頁面：內容停在導覽列上方', (tester) async {
+      await pumpShell(tester, location: '/groups', size: const Size(400, 900));
+      final page = find.byType(Scaffold).last;
+      final nav = tester.getTopLeft(find.byType(BottomNavigation)).dy;
+      expect(tester.getBottomLeft(page).dy, lessThanOrEqualTo(nav));
     });
 
     testWidgets('桌機：沒有木紋框（版面不變）', (tester) async {

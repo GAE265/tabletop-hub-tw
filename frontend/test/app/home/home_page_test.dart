@@ -345,6 +345,17 @@ void main() {
       expect(find.byKey(const Key('home-upcoming-count')), findsNothing);
     });
 
+    testWidgets('底部被導覽列蓋住的高度：捲到最底時，最後的按鈕停在那段高度上方', (tester) async {
+      await pumpHome(tester, bottomInset: 120);
+      final scrollable = find.byType(Scrollable).first;
+      await tester.drag(scrollable, const Offset(0, -3000));
+      await tester.pumpAndSettle();
+      final bottom = tester
+          .getBottomLeft(find.byKey(const Key('home-cta-booking')))
+          .dy;
+      expect(bottom, lessThanOrEqualTo(900 - 120));
+    });
+
     testWidgets('頁面底部「我要揪團」前往揪團', (tester) async {
       await pumpHome(tester);
       await tapKey(tester, 'home-cta-groups');
