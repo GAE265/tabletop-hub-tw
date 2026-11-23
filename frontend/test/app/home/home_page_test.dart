@@ -86,6 +86,40 @@ void main() {
     expect(rules.dy, booking.dy);
   });
 
+  testWidgets('手機：入口卡片寬窄交錯（第一排左寬右窄，第二排左窄右寬）', (tester) async {
+    await pumpHome(tester, size: const Size(400, 900));
+    double width(String key) => tester.getSize(find.byKey(Key(key))).width;
+    expect(width('home-card-advisor'), greaterThan(width('home-card-groups')));
+    expect(width('home-card-booking'), lessThan(width('home-card-rules')));
+  });
+
+  testWidgets('手機：「今天玩什麼？」用機器人圖示，「這遊戲怎麼玩」有大書的背景圖案', (tester) async {
+    await pumpHome(tester, size: const Size(400, 900));
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('home-card-advisor')),
+        matching: find.byIcon(Icons.smart_toy_outlined),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('home-card-rules')),
+        matching: find.byIcon(Icons.menu_book_outlined),
+      ),
+      findsNWidgets(2),
+    );
+  });
+
+  testWidgets('桌機：四張入口卡片在同一列，寬度相同', (tester) async {
+    await pumpHome(tester, size: const Size(1280, 900));
+    final widths = {
+      for (final key in cards.keys)
+        tester.getSize(find.byKey(Key(key))).width.round(),
+    };
+    expect(widths, hasLength(1));
+  });
+
   testWidgets('桌機：四張入口卡片在同一列', (tester) async {
     await pumpHome(tester, size: const Size(1280, 900));
     final ys = {for (final key in cards.keys) topLeftOf(tester, key).dy};
