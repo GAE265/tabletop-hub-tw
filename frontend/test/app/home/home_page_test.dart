@@ -3,6 +3,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:tabletop_hub/app/theme/app_spacing.dart';
 import 'package:tabletop_hub/app/theme/wood_background.dart';
 import 'package:tabletop_hub/core/dev/data/dev_user.dart';
 
@@ -150,6 +151,65 @@ void main() {
         );
       }
     });
+
+    testWidgets('厚框的陰影比一般卡片深、擴散得更開', (tester) async {
+      await pumpHome(tester);
+      final decoration =
+          tester
+                  .widget<DecoratedBox>(
+                    find
+                        .descendant(
+                          of: find.byKey(const Key('home-hero')),
+                          matching: find.byType(DecoratedBox),
+                        )
+                        .first,
+                  )
+                  .decoration
+              as BoxDecoration;
+      final deepest = decoration.boxShadow!.reduce(
+        (a, b) => a.blurRadius > b.blurRadius ? a : b,
+      );
+      expect(
+        deepest.blurRadius,
+        greaterThan(AppShadows.hover.first.blurRadius),
+      );
+      expect(deepest.color.a, greaterThan(AppShadows.hover.first.color.a));
+    });
+
+    for (final key in ['home-cta-groups', 'home-cta-booking']) {
+      testWidgets('按住「$key」：底邊變薄、按鈕往下沉；放開後恢復', (tester) async {
+        await pumpHome(tester);
+        final button = find.byKey(Key(key));
+        await tester.ensureVisible(button);
+        await tester.pumpAndSettle();
+        double edge() {
+          final decoration =
+              tester
+                      .widget<DecoratedBox>(
+                        find
+                            .ancestor(
+                              of: button,
+                              matching: find.byType(DecoratedBox),
+                            )
+                            .first,
+                      )
+                      .decoration
+                  as BoxDecoration;
+          return (decoration.border! as Border).bottom.width;
+        }
+
+        final restEdge = edge();
+        final restTop = tester.getTopLeft(button).dy;
+        final gesture = await tester.startGesture(tester.getCenter(button));
+        await tester.pumpAndSettle();
+        expect(edge(), lessThan(restEdge));
+        expect(tester.getTopLeft(button).dy, greaterThan(restTop));
+        await gesture.up();
+        await tester.pumpAndSettle();
+        expect(edge(), restEdge);
+        expect(tester.getTopLeft(button).dy, restTop);
+      });
+    }
 
     testWidgets('行程卡片有厚度：底部有一條較深的邊', (tester) async {
       final bookings = FakeBookingRepository(
