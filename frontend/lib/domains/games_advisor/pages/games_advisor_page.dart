@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
+import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_spacing.dart';
+import '../../../app/theme/thick_widgets.dart';
+import '../../../app/theme/wood_background.dart';
 import '../../../core/layout/breakpoints.dart';
 import '../../../core/widgets/pill_badge.dart';
 import '../state/advisor_state.dart';
@@ -16,6 +20,9 @@ const _examples = ['我們 4 個人，想輕鬆聊天', '2 個人約會玩', '6 
 ///
 /// 網址可以帶 `?shop_id=<店家 id>`（例如從訂位頁進來）：這時店家沒有的桌遊，
 /// 卡片上會多一行提示。
+///
+/// Stitch 版面（docs/ui/stitch/）：木紋背景，文字放在卡片或泡泡裡；
+/// 手機的浮動導覽列蓋住的高度（MediaQuery 底部 padding）留在輸入區下方。
 class GamesAdvisorPage extends ConsumerStatefulWidget {
   const GamesAdvisorPage({super.key, this.shopId});
 
@@ -94,50 +101,95 @@ class _GamesAdvisorPageState extends ConsumerState<GamesAdvisorPage> {
     final maxWidth =
         AppSpacing.contentMaxWidth(context.screenSize) ?? double.infinity;
 
+    final column = Align(
+      alignment: Alignment.topCenter,
+      child: ConstrainedBox(
+        key: const Key('advisor-column'),
+        constraints: BoxConstraints(maxWidth: maxWidth),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.medium,
+                AppSpacing.medium,
+                AppSpacing.medium,
+                0,
+              ),
+              child: _Header(
+                canStartNew: state.canStartNew,
+                onStartNew: _advisor.startNewConversation,
+              ),
+            ),
+            if (state.notice case final notice?) _NoticeBanner(notice),
+            Expanded(
+              child: state.messages.isEmpty && !sending
+                  ? _EmptyView(onExample: _advisor.sendMessage)
+                  : _MessageList(
+                      controller: _scroll,
+                      messages: state.messages,
+                      sending: sending,
+                    ),
+            ),
+            _Composer(
+              controller: _input,
+              onKey: _onKey,
+              sending: sending,
+              canSend: state.canSend,
+              draftLength: state.draftLength,
+              onChanged: _advisor.editDraft,
+              onSend: () => _advisor.sendMessage(state.draft),
+              bottomInset: MediaQuery.paddingOf(context).bottom,
+            ),
+          ],
+        ),
+      ),
+    );
+
     return Scaffold(
       key: const Key('games-advisor-page'),
-      appBar: AppBar(
-        title: const Text('桌遊推薦'),
-        actions: [
+      backgroundColor: Colors.transparent,
+      body: SafeArea(
+        bottom: false,
+        child: WoodBackground.isPaintedAbove(context)
+            ? column
+            : WoodBackground(child: column),
+      ),
+    );
+  }
+}
+
+/// 頁首白底條：標題與「開始新對話」。
+class _Header extends StatelessWidget {
+  const _Header({required this.canStartNew, required this.onStartNew});
+
+  final bool canStartNew;
+  final VoidCallback onStartNew;
+
+  @override
+  Widget build(BuildContext context) {
+    return GlassBar(
+      key: const Key('advisor-header'),
+      child: Row(
+        children: [
+          const Icon(Icons.auto_awesome_outlined, color: AppColors.primaryText),
+          const SizedBox(width: AppSpacing.small),
+          Expanded(
+            child: Text(
+              '桌遊推薦',
+              style: Theme.of(
+                context,
+              ).textTheme.headlineSmall!.copyWith(fontWeight: FontWeight.w700),
+            ),
+          ),
           OutlinedButton.icon(
             key: const Key('advisor-new'),
-            onPressed: state.canStartNew ? _advisor.startNewConversation : null,
+            style: OutlinedButton.styleFrom(shape: const StadiumBorder()),
+            onPressed: canStartNew ? onStartNew : null,
             icon: const Icon(Icons.refresh),
             label: const Text('開始新對話'),
           ),
-          const SizedBox(width: AppSpacing.medium),
         ],
-      ),
-      body: Align(
-        alignment: Alignment.topCenter,
-        child: ConstrainedBox(
-          key: const Key('advisor-column'),
-          constraints: BoxConstraints(maxWidth: maxWidth),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (state.notice case final notice?) _NoticeBanner(notice),
-              Expanded(
-                child: state.messages.isEmpty && !sending
-                    ? _EmptyView(onExample: _advisor.sendMessage)
-                    : _MessageList(
-                        controller: _scroll,
-                        messages: state.messages,
-                        sending: sending,
-                      ),
-              ),
-              _Composer(
-                controller: _input,
-                onKey: _onKey,
-                sending: sending,
-                canSend: state.canSend,
-                draftLength: state.draftLength,
-                onChanged: _advisor.editDraft,
-                onSend: () => _advisor.sendMessage(state.draft),
-              ),
-            ],
-          ),
-        ),
       ),
     );
   }
@@ -197,40 +249,101 @@ class _EmptyView extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(AppSpacing.large),
+      padding: const EdgeInsets.all(AppSpacing.medium),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const SizedBox(height: AppSpacing.xLarge),
-          Icon(
-            Icons.casino_outlined,
-            size: AppSizes.emptyStateIcon,
-            color: theme.colorScheme.primary,
-          ),
-          const SizedBox(height: AppSpacing.large),
-          Text(
-            '我幫你挑桌遊',
-            textAlign: TextAlign.center,
-            style: theme.textTheme.headlineMedium,
-          ),
-          const SizedBox(height: AppSpacing.small),
-          Text(
-            '告訴我幾個人、想玩多久、喜歡什麼感覺。',
-            textAlign: TextAlign.center,
-            style: theme.textTheme.bodyLarge!.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-          ),
-          const SizedBox(height: AppSpacing.large),
-          for (final example in _examples)
-            Padding(
-              padding: const EdgeInsets.only(bottom: AppSpacing.small),
-              child: OutlinedButton(
-                onPressed: () => onExample(example),
-                child: Text(example),
+          ThickCard(
+            key: const Key('advisor-empty'),
+            child: Padding(
+              padding: const EdgeInsets.all(AppSpacing.large),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Icon(
+                    Icons.casino_outlined,
+                    size: AppSizes.emptyStateIcon,
+                    color: AppColors.primary,
+                  ),
+                  const SizedBox(height: AppSpacing.medium),
+                  Text(
+                    '我幫你挑桌遊',
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.headlineMedium,
+                  ),
+                  const SizedBox(height: AppSpacing.small),
+                  Text(
+                    '告訴我幾個人、想玩多久、喜歡什麼感覺。',
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.bodyLarge!.copyWith(
+                      color: AppColors.inkMuted,
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.large),
+                  Wrap(
+                    alignment: WrapAlignment.center,
+                    spacing: AppSpacing.small,
+                    runSpacing: AppSpacing.small + AppSpacing.xSmall,
+                    children: [
+                      for (final example in _examples)
+                        ThickButton(
+                          style: ThickStyle.light,
+                          onPressed: () => onExample(example),
+                          label: example,
+                        ),
+                    ],
+                  ),
+                ],
               ),
             ),
+          ),
+          const SizedBox(height: AppSpacing.medium),
+          const _RulesLink(),
         ],
+      ),
+    );
+  }
+}
+
+/// 到規則問答的連結卡片（`/rules`）。
+class _RulesLink extends StatelessWidget {
+  const _RulesLink();
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    return ThickCard(
+      key: const Key('advisor-rules-link'),
+      onTap: () => context.go('/rules'),
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.medium),
+        child: Row(
+          children: [
+            Container(
+              width: AppSizes.avatar,
+              height: AppSizes.avatar,
+              decoration: BoxDecoration(
+                color: AppColors.amberTint,
+                borderRadius: BorderRadius.circular(AppRadius.button),
+              ),
+              child: const Icon(
+                Icons.menu_book_outlined,
+                color: AppColors.amberText,
+              ),
+            ),
+            const SizedBox(width: AppSpacing.small + AppSpacing.xSmall),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('想問規則或玩法？到規則問答', style: text.titleSmall),
+                  Text('看教學影片、隨時問規則', style: text.bodySmall),
+                ],
+              ),
+            ),
+            const Icon(Icons.arrow_forward, color: AppColors.primaryText),
+          ],
+        ),
       ),
     );
   }
@@ -262,19 +375,37 @@ class _MessageList extends StatelessWidget {
             },
           ),
         if (sending)
-          const _AdvisorRow(
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                SizedBox.square(
-                  dimension: AppSpacing.medium,
-                  child: CircularProgressIndicator(),
+          Align(
+            alignment: Alignment.centerLeft,
+            // 放在白底膠囊裡，文字才不會直接壓在木紋上
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: AppColors.surfaceGlass,
+                borderRadius: BorderRadius.circular(AppRadius.pill),
+                border: Border.all(color: AppColors.border),
+                boxShadow: AppShadows.soft,
+              ),
+              child: const Padding(
+                padding: EdgeInsets.symmetric(
+                  horizontal: AppSpacing.medium,
+                  vertical: AppSpacing.small,
                 ),
-                SizedBox(width: AppSpacing.small),
-                Flexible(child: Text('正在找桌遊…')),
-              ],
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SizedBox.square(
+                      dimension: AppSpacing.medium,
+                      child: CircularProgressIndicator(),
+                    ),
+                    SizedBox(width: AppSpacing.small),
+                    Flexible(child: Text('正在找桌遊…')),
+                  ],
+                ),
+              ),
             ),
           ),
+        const SizedBox(height: AppSpacing.small),
+        const _RulesLink(),
       ],
     );
   }
@@ -299,7 +430,13 @@ class _PlayerBubble extends StatelessWidget {
           child: DecoratedBox(
             decoration: BoxDecoration(
               color: scheme.primary,
-              borderRadius: BorderRadius.circular(AppRadius.card),
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(AppRadius.card),
+                topRight: Radius.circular(AppRadius.card),
+                bottomLeft: Radius.circular(AppRadius.card),
+                bottomRight: Radius.circular(AppSpacing.xSmall),
+              ),
+              boxShadow: AppShadows.soft,
             ),
             child: Padding(
               padding: const EdgeInsets.symmetric(
@@ -320,7 +457,7 @@ class _PlayerBubble extends StatelessWidget {
   }
 }
 
-/// 推薦 Agent 那一側：左邊是頭像，右邊放內容。
+/// 推薦 Agent 那一側：上面是頭像與「推薦助理」，下面是白色泡泡。
 class _AdvisorRow extends StatelessWidget {
   const _AdvisorRow({required this.child});
 
@@ -328,30 +465,56 @@ class _AdvisorRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Row(
+    return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        CircleAvatar(
-          radius: AppSizes.avatar / 2,
-          backgroundColor: scheme.primaryContainer,
-          foregroundColor: scheme.onPrimaryContainer,
-          child: const Icon(Icons.casino_outlined),
-        ),
-        const SizedBox(width: AppSpacing.small),
-        Flexible(
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              color: scheme.surfaceContainerHigh,
-              borderRadius: BorderRadius.circular(AppRadius.card),
+        Row(
+          children: [
+            const CircleAvatar(
+              radius: AppSizes.avatar / 2,
+              backgroundColor: AppColors.primaryTint,
+              foregroundColor: AppColors.primaryText,
+              child: Icon(Icons.auto_awesome),
             ),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppSpacing.medium,
-                vertical: AppSpacing.small,
+            const SizedBox(width: AppSpacing.small),
+            // 名字放在白底膠囊裡，不直接壓在木紋上
+            DecoratedBox(
+              decoration: BoxDecoration(
+                color: AppColors.surfaceGlass,
+                borderRadius: BorderRadius.circular(AppRadius.pill),
               ),
-              child: child,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.small + AppSpacing.xSmall,
+                  vertical: AppSpacing.xSmall,
+                ),
+                child: Text(
+                  '推薦助理',
+                  style: Theme.of(context).textTheme.labelLarge,
+                ),
+              ),
             ),
+          ],
+        ),
+        const SizedBox(height: AppSpacing.small),
+        DecoratedBox(
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: const BorderRadius.only(
+              topLeft: Radius.circular(AppSpacing.xSmall),
+              topRight: Radius.circular(AppRadius.card),
+              bottomLeft: Radius.circular(AppRadius.card),
+              bottomRight: Radius.circular(AppRadius.card),
+            ),
+            border: Border.all(color: AppColors.border),
+            boxShadow: AppShadows.soft,
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.medium,
+              vertical: AppSpacing.small + AppSpacing.xSmall,
+            ),
+            child: child,
           ),
         ),
       ],
@@ -408,6 +571,7 @@ class _Composer extends StatelessWidget {
     required this.draftLength,
     required this.onChanged,
     required this.onSend,
+    required this.bottomInset,
   });
 
   final TextEditingController controller;
@@ -418,67 +582,75 @@ class _Composer extends StatelessWidget {
   final ValueChanged<String> onChanged;
   final VoidCallback onSend;
 
+  /// 手機浮動導覽列蓋住的高度：輸入區要停在它上方。
+  final double bottomInset;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainer,
-        border: Border(top: BorderSide(color: theme.colorScheme.outline)),
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        AppSpacing.medium,
+        AppSpacing.small,
+        AppSpacing.medium,
+        AppSpacing.medium + bottomInset,
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.medium),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Focus(
-              onKeyEvent: onKey,
-              child: TextField(
-                key: const Key('advisor-input'),
-                controller: controller,
-                enabled: !sending,
-                minLines: 1,
-                maxLines: 4,
-                keyboardType: TextInputType.multiline,
-                onChanged: onChanged,
-                decoration: InputDecoration(
-                  hintText: '例如：我們 4 個人，想玩 1 小時內、輕鬆聊天的',
-                  suffixIcon: Padding(
-                    padding: const EdgeInsets.all(AppSpacing.xSmall),
-                    child: IconButton.filled(
-                      key: const Key('advisor-send'),
-                      // 主題的圖示按鈕是深色圖示；主色底的送出鈕要用白色
-                      style: ButtonStyle(
-                        iconColor: WidgetStateProperty.resolveWith(
-                          (states) => states.contains(WidgetState.disabled)
-                              ? theme.colorScheme.onSurfaceVariant
-                              : theme.colorScheme.onPrimary,
+      child: ThickCard(
+        key: const Key('advisor-composer'),
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.small + AppSpacing.xSmall),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Focus(
+                onKeyEvent: onKey,
+                child: TextField(
+                  key: const Key('advisor-input'),
+                  controller: controller,
+                  enabled: !sending,
+                  minLines: 1,
+                  maxLines: 4,
+                  keyboardType: TextInputType.multiline,
+                  onChanged: onChanged,
+                  decoration: InputDecoration(
+                    hintText: '例如：我們 4 個人，想玩 1 小時內、輕鬆聊天的',
+                    suffixIcon: Padding(
+                      padding: const EdgeInsets.all(AppSpacing.xSmall),
+                      child: IconButton.filled(
+                        key: const Key('advisor-send'),
+                        // 主題的圖示按鈕是深色圖示；主色底的送出鈕要用白色
+                        style: ButtonStyle(
+                          iconColor: WidgetStateProperty.resolveWith(
+                            (states) => states.contains(WidgetState.disabled)
+                                ? theme.colorScheme.onSurfaceVariant
+                                : theme.colorScheme.onPrimary,
+                          ),
                         ),
+                        tooltip: '送出',
+                        onPressed: canSend ? onSend : null,
+                        icon: const Icon(Icons.send),
                       ),
-                      tooltip: '送出',
-                      onPressed: canSend ? onSend : null,
-                      icon: const Icon(Icons.send),
                     ),
                   ),
                 ),
               ),
-            ),
-            const SizedBox(height: AppSpacing.xSmall),
-            Wrap(
-              alignment: WrapAlignment.spaceBetween,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              spacing: AppSpacing.small,
-              children: [
-                Text(
-                  '$draftLength / $advisorMaxContentLength 字'
-                  '（Enter 送出、Shift+Enter 換行）',
-                  style: theme.textTheme.bodySmall,
-                ),
-                // rules_qa 還沒有正式頁面，先停用；有頁面後改成連過去
-                const TextButton(onPressed: null, child: Text('想問規則或玩法？到規則問答')),
-              ],
-            ),
-          ],
+              const SizedBox(height: AppSpacing.small),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Enter 送出、Shift+Enter 換行',
+                      style: theme.textTheme.bodySmall,
+                    ),
+                  ),
+                  Text(
+                    '$draftLength / $advisorMaxContentLength 字',
+                    style: theme.textTheme.bodySmall,
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
