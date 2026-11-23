@@ -109,6 +109,23 @@ void main() {
       expect(inside('home-section-upcoming', '接下來的行程'), findsOneWidget);
     });
 
+    testWidgets('行程卡片有厚度：底部有一條較深的邊', (tester) async {
+      final bookings = FakeBookingRepository(
+        mine: [homeBooking(id: 1, startAt: taipei(11, 21))],
+      );
+      await pumpHome(tester, bookings: bookings);
+      final box = tester.widget<DecoratedBox>(
+        find
+            .descendant(
+              of: find.byKey(const Key('home-upcoming-0')),
+              matching: find.byType(DecoratedBox),
+            )
+            .first,
+      );
+      final border = (box.decoration as BoxDecoration).border! as Border;
+      expect(border.bottom.width, greaterThan(border.top.width));
+    });
+
     testWidgets('入口卡片下方有「前往…」標籤', (tester) async {
       await pumpHome(tester);
       for (final (key, label) in [
@@ -132,7 +149,7 @@ void main() {
       expect(
         find.descendant(
           of: find.byKey(const Key('home-upcoming-count')),
-          matching: find.text('1 筆'),
+          matching: find.text('1 筆已排定'),
         ),
         findsOneWidget,
       );
@@ -157,7 +174,7 @@ void main() {
   });
 
   group('接下來的行程', () {
-    testWidgets('有訂位也有揪團：依時間各一列，顯示日期、標題、說明與狀態', (tester) async {
+    testWidgets('有訂位也有揪團：依時間各一張卡片，顯示名稱、時間、人數、狀態與代碼或名額', (tester) async {
       final bookings = FakeBookingRepository(
         mine: [homeBooking(id: 1, startAt: taipei(11, 21, 19), shopId: 's-b')],
       );
@@ -178,14 +195,20 @@ void main() {
       final second = find.byKey(const Key('home-upcoming-1'));
       Finder inRow(Finder row, String text) =>
           find.descendant(of: row, matching: find.text(text));
-      expect(inRow(first, '訂位・19:00・4 人'), findsOneWidget);
-      expect(inRow(first, '乙店・桌號 T1、T2'), findsOneWidget);
+      expect(inRow(first, '訂位'), findsOneWidget);
+      expect(inRow(first, '乙店'), findsOneWidget);
+      expect(inRow(first, '桌號 T1、T2'), findsOneWidget);
+      expect(inRow(first, '11/21（六）19:00–21:00'), findsOneWidget);
+      expect(inRow(first, '4 人'), findsOneWidget);
       expect(inRow(first, '已確認'), findsOneWidget);
-      expect(inRow(first, '21'), findsOneWidget);
-      expect(inRow(second, '揪團・阿瓦隆之夜'), findsOneWidget);
-      expect(inRow(second, '已報名 5 / 7 人'), findsOneWidget);
+      expect(inRow(first, '訂位代碼 BK1'), findsOneWidget);
+      expect(inRow(first, '查看我的訂位'), findsOneWidget);
+      expect(inRow(second, '揪團'), findsOneWidget);
+      expect(inRow(second, '阿瓦隆之夜'), findsOneWidget);
+      expect(inRow(second, '5 / 7 人'), findsOneWidget);
       expect(inRow(second, '招募中'), findsOneWidget);
-      expect(inRow(second, '22'), findsOneWidget);
+      expect(inRow(second, '還有 2 個名額'), findsOneWidget);
+      expect(inRow(second, '查看揪團'), findsOneWidget);
       expect(find.byKey(const Key('home-upcoming-2')), findsNothing);
     });
 
