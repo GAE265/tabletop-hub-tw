@@ -1,14 +1,15 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_spacing.dart';
+import '../../../app/theme/chat_widgets.dart';
 import '../../../app/theme/thick_widgets.dart';
 import '../../../app/theme/wood_background.dart';
 import '../../../core/layout/breakpoints.dart';
+import '../../../core/widgets/size_reporter.dart';
 import '../../../core/widgets/pill_badge.dart';
 import '../state/advisor_state.dart';
 import '../state/game_card_text.dart';
@@ -131,7 +132,8 @@ class _GamesAdvisorPageState extends ConsumerState<GamesAdvisorPage> {
               child: Stack(
                 children: [
                   Positioned.fill(
-                    child: _EdgeFade(
+                    child: TopEdgeFade(
+                      key: const Key('advisor-scroll-fade'),
                       child: state.messages.isEmpty && !sending
                           ? _EmptyView(
                               onExample: _advisor.sendMessage,
@@ -149,7 +151,7 @@ class _GamesAdvisorPageState extends ConsumerState<GamesAdvisorPage> {
                     left: 0,
                     right: 0,
                     bottom: 0,
-                    child: _SizeReporter(
+                    child: SizeReporter(
                       onHeight: (height) {
                         if (height != _composerHeight) {
                           setState(() => _composerHeight = height);
@@ -185,69 +187,6 @@ class _GamesAdvisorPageState extends ConsumerState<GamesAdvisorPage> {
             : WoodBackground(child: column),
       ),
     );
-  }
-}
-
-/// 捲動區上緣淡出：卡片捲到頁首下面時慢慢消失在木紋裡，不會被切成一條直線。
-/// 下緣不用淡出：內容會從輸入區後面滑過去。
-class _EdgeFade extends StatelessWidget {
-  const _EdgeFade({required this.child});
-
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    return ShaderMask(
-      key: const Key('advisor-scroll-fade'),
-      blendMode: BlendMode.dstIn,
-      shaderCallback: (bounds) {
-        final edge = bounds.height == 0
-            ? 0.0
-            : (AppSizes.scrollFade / bounds.height).clamp(0.0, 1.0);
-        return LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: const [Colors.transparent, Colors.black, Colors.black],
-          stops: [0, edge, 1],
-        ).createShader(bounds);
-      },
-      child: child,
-    );
-  }
-}
-
-/// 量出 [child] 的高度，變了就呼叫 [onHeight]（排版完成後才呼叫，避免在排版途中改狀態）。
-class _SizeReporter extends SingleChildRenderObjectWidget {
-  const _SizeReporter({required this.onHeight, required super.child});
-
-  final ValueChanged<double> onHeight;
-
-  @override
-  RenderObject createRenderObject(BuildContext context) =>
-      _RenderSizeReporter(onHeight);
-
-  @override
-  void updateRenderObject(
-    BuildContext context,
-    _RenderSizeReporter renderObject,
-  ) {
-    renderObject.onHeight = onHeight;
-  }
-}
-
-class _RenderSizeReporter extends RenderProxyBox {
-  _RenderSizeReporter(this.onHeight);
-
-  ValueChanged<double> onHeight;
-  double? _last;
-
-  @override
-  void performLayout() {
-    super.performLayout();
-    final height = size.height;
-    if (height == _last) return;
-    _last = height;
-    WidgetsBinding.instance.addPostFrameCallback((_) => onHeight(height));
   }
 }
 
@@ -354,7 +293,8 @@ class _EmptyView extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           // 空畫面就是推薦助理的第一句話，和之後的對話同一個樣子
-          _AdvisorRow(
+          AssistantMessage(
+            name: '推薦助理',
             bubbleKey: const Key('advisor-empty'),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -377,63 +317,12 @@ class _EmptyView extends StatelessWidget {
             runSpacing: AppSpacing.small + AppSpacing.xSmall,
             children: [
               for (final example in _examples)
-                _SuggestionChip(
-                  label: example,
-                  onTap: () => onExample(example),
-                ),
+                SuggestionChip(label: example, onTap: () => onExample(example)),
             ],
           ),
           const SizedBox(height: AppSpacing.large),
           const _RulesLink(),
         ],
-      ),
-    );
-  }
-}
-
-/// 建議回覆的小膠囊：白底、薄厚邊、淡陰影，按住時往下沉。
-class _SuggestionChip extends StatefulWidget {
-  const _SuggestionChip({required this.label, required this.onTap});
-
-  final String label;
-  final VoidCallback onTap;
-
-  @override
-  State<_SuggestionChip> createState() => _SuggestionChipState();
-}
-
-class _SuggestionChipState extends State<_SuggestionChip> {
-  var _pressed = false;
-
-  @override
-  Widget build(BuildContext context) {
-    return PressFrame(
-      pressed: _pressed,
-      color: AppColors.surface,
-      edge: AppColors.cardEdge,
-      radius: AppRadius.pill,
-      thickness: AppSizes.smallThickness,
-      shadow: AppShadows.soft,
-      child: Material(
-        type: MaterialType.transparency,
-        shape: const StadiumBorder(),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: widget.onTap,
-          onHighlightChanged: (pressed) => setState(() => _pressed = pressed),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: AppSpacing.medium,
-              vertical: AppSpacing.small,
-            ),
-            child: Text(
-              widget.label,
-              style: Theme.of(
-                context,
-              ).textTheme.labelLarge!.copyWith(color: AppColors.ink),
-            ),
-          ),
-        ),
       ),
     );
   }
@@ -513,188 +402,13 @@ class _MessageList extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.only(bottom: AppSpacing.medium),
             child: switch (message) {
-              PlayerMessage() => _PlayerBubble(message),
+              PlayerMessage() => UserBubble(text: message.text),
               AdvisorReplyMessage() => _AdvisorReply(message),
             },
           ),
-        if (sending)
-          Align(
-            alignment: Alignment.centerLeft,
-            // 放在白底膠囊裡，文字才不會直接壓在木紋上
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                color: AppColors.surfaceGlass,
-                borderRadius: BorderRadius.circular(AppRadius.pill),
-                border: Border.all(color: AppColors.border),
-                boxShadow: AppShadows.soft,
-              ),
-              child: const Padding(
-                padding: EdgeInsets.symmetric(
-                  horizontal: AppSpacing.medium,
-                  vertical: AppSpacing.small,
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    SizedBox.square(
-                      dimension: AppSpacing.medium,
-                      child: CircularProgressIndicator(),
-                    ),
-                    SizedBox(width: AppSpacing.small),
-                    Flexible(child: Text('正在找桌遊…')),
-                  ],
-                ),
-              ),
-            ),
-          ),
+        if (sending) const ThinkingPill(text: '正在找桌遊…'),
         const SizedBox(height: AppSpacing.small),
         const _RulesLink(),
-      ],
-    );
-  }
-}
-
-/// 對話泡泡的外框：四邊細線、底部較粗（厚度），加上陰影；圓角可以每個角不同。
-BoxDecoration _bubble({
-  required Color color,
-  required Color edge,
-  required BorderRadius radius,
-  double thickness = AppSizes.cardThickness,
-  List<BoxShadow>? shadow,
-}) => BoxDecoration(
-  color: color,
-  borderRadius: radius,
-  border: Border(
-    top: BorderSide(color: edge),
-    left: BorderSide(color: edge),
-    right: BorderSide(color: edge),
-    bottom: BorderSide(color: edge, width: thickness),
-  ),
-  boxShadow: shadow ?? AppShadows.raised,
-);
-
-/// 玩家的訊息：靠右、主色底。
-class _PlayerBubble extends StatelessWidget {
-  const _PlayerBubble(this.message);
-
-  final PlayerMessage message;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Align(
-      alignment: Alignment.centerRight,
-      child: FractionallySizedBox(
-        widthFactor: 0.8,
-        alignment: Alignment.centerRight,
-        child: Align(
-          alignment: Alignment.centerRight,
-          child: DecoratedBox(
-            decoration: _bubble(
-              color: scheme.primary,
-              edge: AppColors.primaryText,
-              radius: const BorderRadius.only(
-                topLeft: Radius.circular(AppRadius.card),
-                topRight: Radius.circular(AppRadius.card),
-                bottomLeft: Radius.circular(AppRadius.card),
-                bottomRight: Radius.circular(AppSpacing.xSmall),
-              ),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppSpacing.medium,
-                vertical: AppSpacing.small,
-              ),
-              child: Text(
-                message.text,
-                style: Theme.of(
-                  context,
-                ).textTheme.bodyLarge!.copyWith(color: scheme.onPrimary),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// 推薦 Agent 那一側：上面是頭像與「推薦助理」，下面是白色泡泡；都有厚度與陰影。
-class _AdvisorRow extends StatelessWidget {
-  const _AdvisorRow({required this.child, this.bubbleKey});
-
-  final Widget child;
-
-  /// 掛在白色泡泡上的 Key。
-  final Key? bubbleKey;
-
-  @override
-  Widget build(BuildContext context) {
-    final small = BorderRadius.circular(AppRadius.pill);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            DecoratedBox(
-              decoration: _bubble(
-                color: AppColors.primaryTint,
-                edge: AppColors.cardEdge,
-                radius: small,
-                thickness: AppSizes.smallThickness,
-                shadow: AppShadows.soft,
-              ),
-              child: const SizedBox.square(
-                dimension: AppSizes.avatar,
-                child: Icon(Icons.auto_awesome, color: AppColors.primaryText),
-              ),
-            ),
-            const SizedBox(width: AppSpacing.small),
-            // 名字放在白底膠囊裡，不直接壓在木紋上
-            DecoratedBox(
-              decoration: _bubble(
-                color: AppColors.surface,
-                edge: AppColors.cardEdge,
-                radius: small,
-                thickness: AppSizes.smallThickness,
-                shadow: AppShadows.soft,
-              ),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppSpacing.small + AppSpacing.xSmall,
-                  vertical: AppSpacing.xSmall,
-                ),
-                child: Text(
-                  '推薦助理',
-                  style: Theme.of(context).textTheme.labelLarge,
-                ),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: AppSpacing.small),
-        KeyedSubtree(
-          key: bubbleKey,
-          child: DecoratedBox(
-            decoration: _bubble(
-              color: AppColors.surface,
-              edge: AppColors.cardEdge,
-              radius: const BorderRadius.only(
-                topLeft: Radius.circular(AppSpacing.xSmall),
-                topRight: Radius.circular(AppRadius.card),
-                bottomLeft: Radius.circular(AppRadius.card),
-                bottomRight: Radius.circular(AppRadius.card),
-              ),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppSpacing.medium,
-                vertical: AppSpacing.small + AppSpacing.xSmall,
-              ),
-              child: child,
-            ),
-          ),
-        ),
       ],
     );
   }
@@ -711,7 +425,8 @@ class _AdvisorReply extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _AdvisorRow(
+        AssistantMessage(
+          name: '推薦助理',
           child: Text(
             message.reply,
             style: Theme.of(context).textTheme.bodyLarge,
