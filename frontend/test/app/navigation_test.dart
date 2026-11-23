@@ -380,6 +380,21 @@ void main() {
       expect(tester.getBottomLeft(page).dy, lessThanOrEqualTo(nav));
     });
 
+    testWidgets('頁面要求藏起導覽列（語音主持中）：手機沒有底部導覽列，內容延伸到底；取消後恢復', (tester) async {
+      await pumpShell(tester, location: '/', size: const Size(400, 900));
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(AppShell)),
+      );
+      container.read(hideBottomNavigationProvider.notifier).set(true);
+      await tester.pumpAndSettle();
+      expect(find.byType(BottomNavigation), findsNothing);
+      expect(tester.getBottomLeft(find.byType(Scaffold).last).dy, 900);
+
+      container.read(hideBottomNavigationProvider.notifier).set(false);
+      await tester.pumpAndSettle();
+      expect(find.byType(BottomNavigation), findsOneWidget);
+    });
+
     testWidgets('桌機：沒有木紋框（版面不變）', (tester) async {
       await pumpShell(tester, size: const Size(1280, 900));
       expect(find.byType(WoodBackground), findsNothing);
