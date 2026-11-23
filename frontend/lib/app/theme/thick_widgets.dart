@@ -35,6 +35,8 @@ class PressFrame extends StatelessWidget {
     required this.edge,
     required this.radius,
     required this.child,
+    this.thickness = AppSizes.cardThickness,
+    this.shadow,
     super.key,
   });
 
@@ -44,12 +46,16 @@ class PressFrame extends StatelessWidget {
   final double radius;
   final Widget child;
 
+  /// 沒按下時底邊的厚度；小按鈕比卡片薄。
+  final double thickness;
+
+  /// 沒按下時的陰影；預設是 [AppShadows.raised]。
+  final List<BoxShadow>? shadow;
+
   @override
   Widget build(BuildContext context) {
-    const sink = AppSizes.cardThickness - AppSizes.pressedThickness;
-    final thickness = pressed
-        ? AppSizes.pressedThickness
-        : AppSizes.cardThickness;
+    final sink = thickness - AppSizes.pressedThickness;
+    final current = pressed ? AppSizes.pressedThickness : thickness;
     return AnimatedContainer(
       duration: AppDurations.press,
       // AnimatedContainer 會依邊框粗細自動內縮，內容不會蓋到底邊；
@@ -59,10 +65,68 @@ class PressFrame extends StatelessWidget {
         color: color,
         edge: edge,
         radius: radius,
-        thickness: thickness,
-        shadow: pressed ? AppShadows.card : AppShadows.raised,
+        thickness: current,
+        shadow: pressed ? AppShadows.card : (shadow ?? AppShadows.raised),
       ),
       child: child,
+    );
+  }
+}
+
+/// 有厚度的圓形圖示按鈕（手機頂部列的鈴鐺、登入）：淡陰影、薄底邊，按住時往下沉。
+class ThickIconButton extends StatefulWidget {
+  const ThickIconButton({
+    required this.icon,
+    required this.tooltip,
+    required this.onPressed,
+    this.color = AppColors.surface,
+    super.key,
+  });
+
+  final Widget icon;
+  final String tooltip;
+  final VoidCallback onPressed;
+  final Color color;
+
+  @override
+  State<ThickIconButton> createState() => _ThickIconButtonState();
+}
+
+class _ThickIconButtonState extends State<ThickIconButton> {
+  var _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    const size = AppSizes.roundButton;
+    // 不用 Tooltip：它的長按手勢會和按下去往下沉的效果搶手勢；讀屏照樣唸 [tooltip]
+    return Semantics(
+      button: true,
+      label: widget.tooltip,
+      excludeSemantics: true,
+      child: SizedBox(
+        width: size,
+        // 高度多留底邊的厚度，按下去往下沉時旁邊的東西不會跟著動
+        height: size + AppSizes.smallThickness,
+        child: PressFrame(
+          pressed: _pressed,
+          color: widget.color,
+          edge: AppColors.cardEdge,
+          radius: AppRadius.pill,
+          thickness: AppSizes.smallThickness,
+          shadow: AppShadows.soft,
+          child: Material(
+            type: MaterialType.transparency,
+            shape: const CircleBorder(),
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
+              onTap: widget.onPressed,
+              onHighlightChanged: (pressed) =>
+                  setState(() => _pressed = pressed),
+              child: Center(child: widget.icon),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

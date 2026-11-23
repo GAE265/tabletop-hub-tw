@@ -65,7 +65,13 @@ abstract final class AppSizes {
   static const double logoHeight = 44;
 
   /// 品牌 logo 的高度：手機頂部列（較高，logo 裡的英文小字才看得清楚）。
-  static const double logoHeightMobile = 56;
+  static const double logoHeightMobile = 60;
+
+  /// 頂部列的圓形按鈕（鈴鐺、登入）。
+  static const double roundButton = 44;
+
+  /// 小按鈕（頂部列的圓形按鈕）的厚度，比卡片薄。
+  static const double smallThickness = 2;
 
   /// 首頁入口卡片的圖示方塊。
   static const double entryIconBox = 48;
@@ -180,6 +186,15 @@ abstract final class AppShadows {
       color: AppColors.shadow.withValues(alpha: 0.08),
       blurRadius: 12,
       offset: const Offset(0, -2),
+    ),
+  ];
+
+  /// 小按鈕（頂部列的圓形按鈕）的淡陰影：只貼在按鈕下方。
+  static List<BoxShadow> get soft => [
+    BoxShadow(
+      color: AppColors.shadow.withValues(alpha: 0.12),
+      blurRadius: 6,
+      offset: const Offset(0, 2),
     ),
   ];
 

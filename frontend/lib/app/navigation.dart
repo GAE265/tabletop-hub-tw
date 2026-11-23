@@ -6,6 +6,7 @@ import '../core/dev/state/dev_user_state.dart';
 import 'notifications/notification_bell.dart';
 import 'theme/app_colors.dart';
 import 'theme/app_spacing.dart';
+import 'theme/thick_widgets.dart';
 
 /// 主要導覽列的一個項目。[keyName] 掛在項目的 [Semantics] 上（測試與無障礙都用它判斷選取狀態）。
 class NavItem {
@@ -251,20 +252,24 @@ class MobileTopBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 白色滿版，底部較粗的邊與陰影，像其他卡片一樣有厚度
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: AppColors.headerGlass,
-        border: const Border(bottom: BorderSide(color: AppColors.border)),
-        boxShadow: AppShadows.card,
+        color: AppColors.surface,
+        border: const Border(
+          bottom: BorderSide(
+            color: AppColors.cardEdge,
+            width: AppSizes.cardThickness,
+          ),
+        ),
+        boxShadow: AppShadows.hover,
       ),
       child: const SafeArea(
         bottom: false,
         child: Padding(
-          padding: EdgeInsets.fromLTRB(
-            AppSpacing.medium,
-            AppSpacing.small + AppSpacing.xSmall,
-            AppSpacing.small + AppSpacing.xSmall,
-            AppSpacing.small + AppSpacing.xSmall,
+          padding: EdgeInsets.symmetric(
+            horizontal: AppSpacing.medium,
+            vertical: AppSpacing.small,
           ),
           child: Row(
             children: [
@@ -274,7 +279,10 @@ class MobileTopBar extends StatelessWidget {
                   child: BrandMark(height: AppSizes.logoHeightMobile),
                 ),
               ),
-              NotificationBell(key: Key('shell-notification-bell')),
+              NotificationBell(
+                key: Key('shell-notification-bell'),
+                thick: true,
+              ),
               SizedBox(width: AppSpacing.small),
               LoginButton(key: Key('shell-login'), compact: true),
             ],
@@ -388,7 +396,7 @@ class BrandMark extends StatelessWidget {
 }
 
 /// 登入按鈕。`auth` 尚未完成，按下只提示「登入功能即將推出」。
-/// [compact] 時是焦糖橘的圓形頭像按鈕（手機頂部列）。
+/// [compact] 時是米白的圓形按鈕＋橘色人形（手機頂部列），和鈴鐺一樣大、按得下去。
 class LoginButton extends StatelessWidget {
   const LoginButton({this.compact = false, super.key});
 
@@ -400,15 +408,11 @@ class LoginButton extends StatelessWidget {
       context,
     ).showSnackBar(const SnackBar(content: Text('登入功能即將推出')));
     if (compact) {
-      return IconButton.filled(
+      return ThickIconButton(
         tooltip: '登入',
-        style: IconButton.styleFrom(
-          backgroundColor: AppColors.primaryText,
-          foregroundColor: AppColors.surface,
-          fixedSize: const Size.square(AppSizes.minTouchTarget),
-        ),
+        color: AppColors.background,
         onPressed: onPressed,
-        icon: const Icon(Icons.person_outline),
+        icon: const Icon(Icons.person_outline, color: AppColors.primaryText),
       );
     }
     return OutlinedButton.icon(
