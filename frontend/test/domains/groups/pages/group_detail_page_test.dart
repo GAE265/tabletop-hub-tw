@@ -112,6 +112,179 @@ void main() {
       expect(tester.getTopLeft(join).dy, restTop);
     });
 
+    Finder inKey(String key, Finder f) =>
+        find.descendant(of: find.byKey(Key(key)), matching: f);
+
+    GroupMember member(
+      String id,
+      String name, {
+      String status = 'member',
+      int? position,
+    }) => GroupMember(
+      userId: id,
+      displayName: name,
+      status: status,
+      waitlistPosition: position,
+      joinedAt: nowUtc,
+    );
+
+    testWidgets('資訊卡：時數、分項小標（聚會時間、桌遊店家、費用）', (tester) async {
+      await pumpGroupsWidget(
+        tester,
+        const GroupDetailPage(groupId: 'g-1'),
+        repo: repoWith(),
+      );
+      for (final text in ['2 小時', '聚會時間', '桌遊店家', '費用']) {
+        expect(
+          inKey('group-info', find.text(text)),
+          findsOneWidget,
+          reason: text,
+        );
+      }
+    });
+
+    testWidgets('開團主卡片；有簡介時另一張「揪團說明」卡', (tester) async {
+      final repo = FakeGroupsRepository(
+        groups: [
+          fakeGroup(
+            id: 'g-1',
+            startAt: taipei(11, 14, 19),
+            organizerName: '阿瑋',
+            description: '新手友善，現場教學',
+          ),
+        ],
+      );
+      await pumpGroupsWidget(
+        tester,
+        const GroupDetailPage(groupId: 'g-1'),
+        repo: repo,
+      );
+      expect(inKey('group-organizer', find.text('開團主：阿瑋')), findsOneWidget);
+      expect(inKey('group-description', find.text('揪團說明')), findsOneWidget);
+      expect(
+        inKey('group-description', find.text('新手友善，現場教學')),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('沒有簡介：不顯示「揪團說明」卡', (tester) async {
+      await pumpGroupsWidget(
+        tester,
+        const GroupDetailPage(groupId: 'g-1'),
+        repo: repoWith(),
+      );
+      expect(find.byKey(const Key('group-description')), findsNothing);
+    });
+
+    testWidgets('名單：成員與候補分開，自己標「我」，有空位時顯示剩幾個', (tester) async {
+      final repo =
+          FakeGroupsRepository(
+              groups: [
+                fakeGroup(
+                  id: 'g-1',
+                  startAt: taipei(11, 14, 19),
+                  capacity: 4,
+                  memberCount: 2,
+                  waitlistCount: 1,
+                  organizerId: 'u-org',
+                  organizerName: '阿瑋',
+                  myStatus: 'member',
+                ),
+              ],
+            )
+            ..members['g-1'] = [
+              member('u-org', '阿瑋'),
+              member('u-player', '小安'),
+              member('u-w', '阿翔', status: 'waitlisted', position: 1),
+            ];
+      await pumpGroupsWidget(
+        tester,
+        const GroupDetailPage(groupId: 'g-1'),
+        repo: repo,
+      );
+      Finder members(Finder f) => inKey('group-members', f);
+      expect(members(find.text('名單（2 人）')), findsOneWidget);
+      expect(members(find.text('我')), findsOneWidget);
+      expect(members(find.text('尚有 2 個空位')), findsOneWidget);
+      expect(members(find.text('候補（1 人等待中）')), findsOneWidget);
+      expect(members(find.text('候補第 1 位')), findsOneWidget);
+      // 「我」標在自己那一列
+      final me = find
+          .ancestor(of: members(find.text('小安')), matching: find.byType(Row))
+          .first;
+      expect(find.descendant(of: me, matching: find.text('我')), findsOneWidget);
+    });
+
+    testWidgets('額滿：不顯示空位提示', (tester) async {
+      await pumpGroupsWidget(
+        tester,
+        const GroupDetailPage(groupId: 'g-1'),
+        repo: repoWith(memberCount: 4),
+      );
+      expect(find.textContaining('個空位'), findsNothing);
+    });
+
+    testWidgets('操作台：顯示我的身分，操作按鈕放在操作台裡', (tester) async {
+      await pumpGroupsWidget(
+        tester,
+        const GroupDetailPage(groupId: 'g-1'),
+        repo: repoWith(myStatus: 'member'),
+      );
+      expect(inKey('group-actions', find.text('我的身分：成員')), findsOneWidget);
+      expect(inKey('group-actions', find.text('退出')), findsOneWidget);
+      expect(inKey('group-actions', find.text('填入戰績')), findsOneWidget);
+    });
+
+    testWidgets('未報名：沒有操作台，報名在底部固定列', (tester) async {
+      await pumpGroupsWidget(
+        tester,
+        const GroupDetailPage(groupId: 'g-1'),
+        repo: repoWith(),
+      );
+      expect(find.byKey(const Key('group-actions')), findsNothing);
+      final bar = find.byKey(const Key('group-join-bar'));
+      expect(
+        find.descendant(of: bar, matching: find.text('每人 \$150')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: bar, matching: find.text('剩 3 席')),
+        findsOneWidget,
+      );
+      expect(find.descendant(of: bar, matching: button('報名')), findsOneWidget);
+      // 固定在畫面底部：捲動內容不會帶著它跑
+      final top = tester.getTopLeft(bar).dy;
+      await tester.drag(find.byType(Scrollable).first, const Offset(0, -500));
+      await tester.pumpAndSettle();
+      expect(tester.getTopLeft(bar).dy, top);
+    });
+
+    testWidgets('額滿：底部固定列是「加入候補」與「已額滿」', (tester) async {
+      await pumpGroupsWidget(
+        tester,
+        const GroupDetailPage(groupId: 'g-1'),
+        repo: repoWith(memberCount: 4),
+      );
+      final bar = find.byKey(const Key('group-join-bar'));
+      expect(
+        find.descendant(of: bar, matching: find.text('已額滿')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: bar, matching: button('加入候補')),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('已報名：沒有底部報名列', (tester) async {
+      await pumpGroupsWidget(
+        tester,
+        const GroupDetailPage(groupId: 'g-1'),
+        repo: repoWith(myStatus: 'member'),
+      );
+      expect(find.byKey(const Key('group-join-bar')), findsNothing);
+    });
+
     testWidgets('手機底部被導覽列蓋住：捲到最底時名單停在導覽列上方', (tester) async {
       await pumpGroupsWidget(
         tester,
