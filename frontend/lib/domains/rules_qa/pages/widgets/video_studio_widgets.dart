@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../core/dev/state/dev_user_state.dart';
 import '../../../../core/layout/breakpoints.dart';
@@ -292,6 +293,92 @@ class VideoReadinessCard extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// 步驟條的一步：名稱與圖示。
+typedef VideoStep = ({String label, IconData icon});
+
+/// 規則影片的步驟（Stitch 版面的步驟條）：拍規則書的專案多一步「拍規則書」。
+List<VideoStep> videoSteps({required bool rulebookPhotos}) => [
+  if (rulebookPhotos) (label: '拍規則書', icon: Icons.menu_book_outlined),
+  (label: '生成草稿', icon: Icons.edit_note),
+  (label: '拍攝素材', icon: Icons.photo_camera_outlined),
+  (label: '產生影片', icon: Icons.movie_outlined),
+];
+
+/// 橫向步驟條：做過的步驟是綠色打勾，目前這一步是橘色，之後的是灰色；中間用線連起來。
+class VideoStepper extends StatelessWidget {
+  const VideoStepper({required this.steps, required this.current, super.key});
+
+  final List<VideoStep> steps;
+
+  /// 目前在第幾步（從 0 開始）。
+  final int current;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    Widget line(bool done) => Expanded(
+      child: Container(
+        height: AppSizes.stepLine,
+        // 對齊圓點的中間
+        margin: const EdgeInsets.only(
+          top: (AppSizes.stepDot - AppSizes.stepLine) / 2,
+        ),
+        color: done ? AppColors.sage : AppColors.cardEdge,
+      ),
+    );
+    Widget step(int i, VideoStep s) {
+      final done = i < current;
+      final now = i == current;
+      final color = done
+          ? AppColors.sage
+          : now
+          ? AppColors.primary
+          : AppColors.neutralTint;
+      final column = Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: AppSizes.stepDot,
+            height: AppSizes.stepDot,
+            decoration: BoxDecoration(
+              color: color,
+              shape: BoxShape.circle,
+              boxShadow: now ? AppShadows.soft : null,
+            ),
+            child: Icon(
+              done ? Icons.check : s.icon,
+              size: AppSizes.inlineIcon,
+              color: done || now ? AppColors.surface : AppColors.inkMuted,
+            ),
+          ),
+          const SizedBox(height: AppSpacing.xSmall),
+          Text(
+            s.label,
+            style: text.labelMedium!.copyWith(
+              color: now ? AppColors.primaryText : AppColors.inkMuted,
+              fontWeight: now ? FontWeight.w700 : FontWeight.w500,
+            ),
+          ),
+        ],
+      );
+      return now
+          ? KeyedSubtree(key: const Key('video-stepper-current'), child: column)
+          : column;
+    }
+
+    return Row(
+      key: const Key('video-stepper'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (final (i, s) in steps.indexed) ...[
+          if (i > 0) line(i <= current),
+          step(i, s),
+        ],
+      ],
     );
   }
 }

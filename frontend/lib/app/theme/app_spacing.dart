@@ -61,6 +61,12 @@ abstract final class AppSizes {
   /// 頭像（例如推薦 Agent 的圖示）。
   static const double avatar = 40;
 
+  /// 步驟條的圓點（規則影片的步驟）。
+  static const double stepDot = 32;
+
+  /// 步驟條圓點之間的連接線粗細。
+  static const double stepLine = 3;
+
   /// 品牌 logo 的高度：平板與桌機的頂部導覽列。
   static const double logoHeight = 44;
 

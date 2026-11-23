@@ -62,7 +62,11 @@ bool _floatsNavigation(String location) =>
     location == '/games-advisor' ||
     location == '/rules' ||
     location.startsWith('/rules/') ||
-    location == '/notifications';
+    location == '/notifications' ||
+    _videoAssets.hasMatch(location);
+
+/// 規則影片的素材清單（`/videos/<id>/assets`）。
+final _videoAssets = RegExp(r'^/videos/[^/]+/assets$');
 
 /// 導覽列浮在頁面上面；用 MediaQuery 的底部 padding 告訴頁面被蓋住多高，
 /// 頁面自己在捲動內容的最下面留出這段空間。
