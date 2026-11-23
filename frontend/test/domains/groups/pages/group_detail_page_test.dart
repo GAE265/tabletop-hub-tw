@@ -230,9 +230,34 @@ void main() {
         const GroupDetailPage(groupId: 'g-1'),
         repo: repoWith(myStatus: 'member'),
       );
-      expect(inKey('group-actions', find.text('我的身分：成員')), findsOneWidget);
+      expect(inKey('group-role', find.text('成員')), findsOneWidget);
       expect(inKey('group-actions', find.text('退出')), findsOneWidget);
       expect(inKey('group-actions', find.text('填入戰績')), findsOneWidget);
+    });
+
+    testWidgets('操作台：一般操作在「揪團動作」，退出與取消在「退出與取消」並標身分', (tester) async {
+      await pumpGroupsWidget(
+        tester,
+        const GroupDetailPage(groupId: 'g-1'),
+        repo: repoWith(myStatus: 'member'),
+      );
+      Finder section(String key) => find.byKey(Key(key));
+      expect(
+        find.descendant(
+          of: section('group-actions-main'),
+          matching: find.text('填入戰績'),
+        ),
+        findsOneWidget,
+      );
+      final danger = section('group-actions-danger');
+      expect(
+        find.descendant(of: danger, matching: find.text('退出')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: danger, matching: find.text('退出這場揪團')),
+        findsOneWidget,
+      );
     });
 
     testWidgets('未報名：沒有操作台，報名在底部固定列', (tester) async {
