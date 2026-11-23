@@ -167,22 +167,10 @@ class GroupCard extends ConsumerWidget {
                 horizontal: inset,
                 vertical: AppSpacing.small + AppSpacing.xSmall,
               ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  Text(
-                    '查看詳情',
-                    style: text.labelLarge!.copyWith(
-                      color: AppColors.primaryText,
-                    ),
-                  ),
-                  const SizedBox(width: AppSpacing.xSmall),
-                  const Icon(
-                    Icons.arrow_forward,
-                    size: AppSizes.inlineIcon,
-                    color: AppColors.primaryText,
-                  ),
-                ],
+              child: Text(
+                '查看詳情',
+                textAlign: TextAlign.center,
+                style: text.labelLarge!.copyWith(color: AppColors.primaryText),
               ),
             ),
           ),
