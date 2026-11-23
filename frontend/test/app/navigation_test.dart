@@ -94,6 +94,14 @@ Future<GoRouter> pumpShell(
   return router;
 }
 
+/// 品牌 logo 圖片（橫式完整版：魚＋遊任有娛＋PLAY · GAME · FUN）。
+final logoImage = find.byWidgetPredicate(
+  (widget) =>
+      widget is Image &&
+      widget.image is AssetImage &&
+      (widget.image as AssetImage).assetName == BrandMark.asset,
+);
+
 /// 每個導覽項目的 Key 掛在它的 [Semantics] 上，選取狀態也由 Semantics 對外表達。
 bool isSelected(WidgetTester tester, String key) =>
     tester.widget<Semantics>(find.byKey(Key(key))).properties.selected ?? false;
@@ -212,12 +220,12 @@ void main() {
   });
 
   group('Stitch 版面（手機）', () {
-    testWidgets('頂部列：品牌、副標、鈴鐺與登入', (tester) async {
+    testWidgets('頂部列：品牌 logo（讀屏唸「遊任有娛」）、鈴鐺與登入', (tester) async {
       await pumpShell(tester, size: const Size(400, 900));
       final bar = find.byType(MobileTopBar);
       Finder inBar(Finder f) => find.descendant(of: bar, matching: f);
-      expect(inBar(find.text('遊任有娛')), findsOneWidget);
-      expect(inBar(find.text('智慧桌遊助理與同好社群')), findsOneWidget);
+      expect(inBar(logoImage), findsOneWidget);
+      expect(inBar(find.bySemanticsLabel('遊任有娛')), findsOneWidget);
       expect(
         inBar(find.byKey(const Key('shell-notification-bell'))),
         findsOneWidget,
@@ -264,6 +272,14 @@ void main() {
       expect(fill('shell-nav-groups'), AppColors.ink);
       expect(fill('shell-nav-home'), Colors.transparent);
     });
+  });
+
+  testWidgets('桌機：頂部導覽列左邊是品牌 logo', (tester) async {
+    await pumpShell(tester, size: const Size(1280, 900));
+    expect(
+      find.descendant(of: find.byType(TopNavigation), matching: logoImage),
+      findsOneWidget,
+    );
   });
 
   group('通知鈴鐺（add-groups-notifications）', () {
