@@ -19,6 +19,7 @@ RUN uv sync
 # Copy application code
 COPY backend/app /app/app
 COPY backend/migrations /app/migrations
+COPY backend/alembic.ini /app/alembic.ini
 
 # migrate DDL/DML
 COPY entrypoint.sh /app/entrypoint.sh
