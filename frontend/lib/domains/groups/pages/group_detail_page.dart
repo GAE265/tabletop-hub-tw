@@ -455,6 +455,7 @@ class _ActionDesk extends ConsumerWidget {
         title: '人到齊了嗎？',
         description: '成團後大家會收到通知',
         button: ThickButton(
+          shadow: AppShadows.soft,
           buttonKey: const Key('group-confirm'),
           style: ThickStyle.dark,
           onPressed: enabled(
@@ -463,13 +464,14 @@ class _ActionDesk extends ConsumerWidget {
           label: '確定成團',
         ),
       ),
-      GroupAction.confirmed => const _ActionRow(
+      GroupAction.confirmed => _ActionRow(
         icon: Icons.check_circle,
         iconColors: (AppColors.sageTint, AppColors.sage),
         title: '已經成團了',
         description: '成員都收到通知了',
         button: ThickButton(
-          buttonKey: Key('group-confirmed'),
+          shadow: AppShadows.soft,
+          buttonKey: const Key('group-confirmed'),
           style: ThickStyle.dark,
           onPressed: null,
           label: '已成團',
@@ -481,6 +483,7 @@ class _ActionDesk extends ConsumerWidget {
         title: '幫大家訂位子',
         description: '帶著揪團資料去訂位',
         button: ThickButton(
+          shadow: AppShadows.soft,
           style: ThickStyle.primary,
           onPressed: enabled(
             () => context.go(
@@ -499,6 +502,7 @@ class _ActionDesk extends ConsumerWidget {
         title: '記錄這一局',
         description: '玩完記下結果',
         button: ThickButton(
+          shadow: AppShadows.soft,
           style: ThickStyle.light,
           onPressed: enabled(
             () => context.go(groupMatchLink(state.group.value!).toString()),
@@ -512,6 +516,7 @@ class _ActionDesk extends ConsumerWidget {
         title: '修改揪團資料',
         description: '時間、人數與說明',
         button: ThickButton(
+          shadow: AppShadows.soft,
           style: ThickStyle.light,
           onPressed: enabled(edit),
           label: '編輯',
@@ -525,6 +530,7 @@ class _ActionDesk extends ConsumerWidget {
         tag: '成員',
         description: '名額會讓給候補',
         button: ThickButton(
+          shadow: AppShadows.soft,
           style: ThickStyle.dangerFilled,
           onPressed: enabled(() => confirm('確定要退出這個揪團嗎？', notifier.leave)),
           label: '退出',
@@ -538,6 +544,7 @@ class _ActionDesk extends ConsumerWidget {
         tag: '開團主',
         description: '成員與候補都會收到通知',
         button: ThickButton(
+          shadow: AppShadows.soft,
           style: ThickStyle.dangerFilled,
           onPressed: enabled(
             () => confirm('確定要取消這個揪團嗎？取消後無法復原。', notifier.cancel),

@@ -285,6 +285,7 @@ class ThickButton extends StatefulWidget {
     this.subtitle,
     this.buttonKey,
     this.expand = false,
+    this.shadow,
     super.key,
   });
 
@@ -300,6 +301,9 @@ class ThickButton extends StatefulWidget {
 
   /// 撐滿可用寬度（底部兩個大按鈕），否則依文字寬度。
   final bool expand;
+
+  /// 沒按下時的陰影；預設是 [AppShadows.raised]。放在卡片裡的小按鈕用 [AppShadows.soft]。
+  final List<BoxShadow>? shadow;
 
   @override
   State<ThickButton> createState() => _ThickButtonState();
@@ -343,6 +347,7 @@ class _ThickButtonState extends State<ThickButton> {
       color: edge,
       edge: edge,
       radius: AppRadius.button,
+      shadow: widget.shadow,
       child: switch ((widget.icon, widget.subtitle)) {
         (final icon, final subtitle?) => FilledButton(
           key: widget.buttonKey,

@@ -298,6 +298,7 @@ class HomeActions extends StatelessWidget {
         Expanded(
           child: ThickButton(
             buttonKey: const Key('home-cta-groups'),
+            shadow: AppShadows.soft,
             style: ThickStyle.dark,
             expand: true,
             onPressed: () => context.go('/groups'),
@@ -309,6 +310,7 @@ class HomeActions extends StatelessWidget {
         Expanded(
           child: ThickButton(
             buttonKey: const Key('home-cta-booking'),
+            shadow: AppShadows.soft,
             style: ThickStyle.primary,
             expand: true,
             onPressed: () => context.go('/booking'),
