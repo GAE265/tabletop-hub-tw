@@ -3,6 +3,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:tabletop_hub/app/theme/wood_background.dart';
 import 'package:tabletop_hub/core/dev/data/dev_user.dart';
 
 import '../../domains/groups/support.dart';
@@ -94,6 +95,72 @@ void main() {
     await pumpHome(tester, size: const Size(1280, 900));
     final ys = {for (final key in cards.keys) topLeftOf(tester, key).dy};
     expect(ys, hasLength(1));
+  });
+
+  group('Stitch 版面', () {
+    testWidgets('背景是木紋；文字都放在卡片或白底條上', (tester) async {
+      await pumpHome(tester);
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('home-page')),
+          matching: find.byType(WoodBackground),
+        ),
+        findsOneWidget,
+      );
+      Finder inside(String key, String text) =>
+          find.descendant(of: find.byKey(Key(key)), matching: find.text(text));
+      expect(inside('home-header', '遊任有娛'), findsOneWidget);
+      expect(inside('home-hero', '今天想怎麼玩？'), findsOneWidget);
+      expect(inside('home-hero', '找遊戲、揪人、訂位、學規則，一個地方搞定。'), findsOneWidget);
+      expect(inside('home-section-entries', '快速入口'), findsOneWidget);
+      expect(inside('home-section-upcoming', '接下來的行程'), findsOneWidget);
+    });
+
+    testWidgets('入口卡片下方有「前往…」標籤', (tester) async {
+      await pumpHome(tester);
+      for (final (key, label) in [
+        ('home-card-advisor', '前往推薦'),
+        ('home-card-groups', '前往揪團'),
+        ('home-card-booking', '前往訂位'),
+        ('home-card-rules', '前往規則'),
+      ]) {
+        expect(
+          find.descendant(of: find.byKey(Key(key)), matching: find.text(label)),
+          findsOneWidget,
+        );
+      }
+    });
+
+    testWidgets('行程區標題旁顯示筆數', (tester) async {
+      final bookings = FakeBookingRepository(
+        mine: [homeBooking(id: 1, startAt: taipei(11, 21))],
+      );
+      await pumpHome(tester, bookings: bookings);
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('home-upcoming-count')),
+          matching: find.text('1 筆'),
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('沒有行程時不顯示筆數', (tester) async {
+      await pumpHome(tester);
+      expect(find.byKey(const Key('home-upcoming-count')), findsNothing);
+    });
+
+    testWidgets('頁面底部「我要揪團」前往揪團', (tester) async {
+      await pumpHome(tester);
+      await tapKey(tester, 'home-cta-groups');
+      expect(find.text('到了 /groups'), findsOneWidget);
+    });
+
+    testWidgets('頁面底部「直接訂位」前往訂位', (tester) async {
+      await pumpHome(tester);
+      await tapKey(tester, 'home-cta-booking');
+      expect(find.text('到了 /booking'), findsOneWidget);
+    });
   });
 
   group('接下來的行程', () {
