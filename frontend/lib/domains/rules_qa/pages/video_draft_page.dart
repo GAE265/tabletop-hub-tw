@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../app/theme/app_spacing.dart';
+import '../../../app/theme/thick_widgets.dart';
 import '../../../core/api/api_exception.dart';
 import '../../../core/widgets/pill_badge.dart';
 import '../data/video_studio_models.dart';
@@ -68,25 +69,32 @@ class _VideoDraftPageState extends ConsumerState<VideoDraftPage> {
     final draft = ref.watch(videoDraftProvider(_id));
     final running = ref.watch(videoJobProvider(_id)).running;
     final jobCard = VideoJobCard(projectId: _id, showDone: false);
-    return Scaffold(
+    return VideoScaffold(
       key: const Key('video-draft-page'),
-      appBar: AppBar(title: const Text('草稿')),
-      bottomNavigationBar: draft.value == null
+      title: '草稿',
+      bottom: draft.value == null
           ? null
           : VideoBottomActions(
               children: [
-                OutlinedButton(
-                  key: const Key('video-draft-regenerate'),
+                ThickButton(
+                  buttonKey: const Key('video-draft-regenerate'),
+                  style: ThickStyle.light,
+                  expand: true,
+                  icon: Icons.refresh,
+                  label: '重新產生',
+                  shadow: AppShadows.soft,
                   onPressed: running
                       ? null
                       : () => _confirmRegenerate(draft.value!),
-                  child: const Text('重新產生'),
                 ),
                 // 不擋流程：涵蓋檢查有問題也可以往下（漏講的之後用修改補救）
-                FilledButton(
-                  key: const Key('video-draft-next'),
+                ThickButton(
+                  buttonKey: const Key('video-draft-next'),
+                  style: ThickStyle.primary,
+                  expand: true,
+                  label: '下一步：拍素材',
+                  shadow: AppShadows.soft,
                   onPressed: () => context.go('/videos/$_id/assets'),
-                  child: const Text('下一步：拍素材'),
                 ),
               ],
             ),
@@ -97,19 +105,27 @@ class _VideoDraftPageState extends ConsumerState<VideoDraftPage> {
           error: (error, _) => Center(
             child: Padding(
               padding: const EdgeInsets.all(AppSpacing.large),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    error is ApiException ? error.message : '發生未知錯誤',
-                    textAlign: TextAlign.center,
+              child: ThickCard(
+                child: Padding(
+                  padding: videoCardInset,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        error is ApiException ? error.message : '發生未知錯誤',
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: AppSpacing.medium),
+                      ThickButton(
+                        style: ThickStyle.primary,
+                        label: '重試',
+                        shadow: AppShadows.soft,
+                        onPressed: () =>
+                            ref.invalidate(videoDraftProvider(_id)),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: AppSpacing.medium),
-                  FilledButton(
-                    onPressed: () => ref.invalidate(videoDraftProvider(_id)),
-                    child: const Text('重試'),
-                  ),
-                ],
+                ),
               ),
             ),
           ),
@@ -118,23 +134,37 @@ class _VideoDraftPageState extends ConsumerState<VideoDraftPage> {
                   padding: const EdgeInsets.all(AppSpacing.medium),
                   children: [
                     jobCard,
-                    Text(
-                      '還沒有草稿',
-                      textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                    const SizedBox(height: AppSpacing.small),
-                    Text(
-                      '建立專案後會自動產生；正在產生時上方會顯示進度',
-                      textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                    const SizedBox(height: AppSpacing.medium),
-                    if (!running)
-                      FilledButton(
-                        onPressed: _regenerate,
-                        child: const Text('產生草稿'),
+                    ThickCard(
+                      child: Padding(
+                        padding: videoCardInset,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Text(
+                              '還沒有草稿',
+                              textAlign: TextAlign.center,
+                              style: Theme.of(context).textTheme.titleMedium,
+                            ),
+                            const SizedBox(height: AppSpacing.small),
+                            Text(
+                              '建立專案後會自動產生；正在產生時上方會顯示進度',
+                              textAlign: TextAlign.center,
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                            if (!running) ...[
+                              const SizedBox(height: AppSpacing.medium),
+                              ThickButton(
+                                style: ThickStyle.primary,
+                                expand: true,
+                                icon: Icons.auto_awesome,
+                                label: '產生草稿',
+                                onPressed: _regenerate,
+                              ),
+                            ],
+                          ],
+                        ),
                       ),
+                    ),
                   ],
                 )
               : ListView(
@@ -186,14 +216,17 @@ class _Summary extends StatelessWidget {
   Widget build(BuildContext context) {
     final summary = draftSummary(draft);
     final text = Theme.of(context).textTheme;
-    return Card(
+    return ThickCard(
       key: const Key('video-draft-summary'),
       child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.medium),
+        padding: videoCardInset,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('草稿內容', style: text.titleSmall),
+            Text(
+              '草稿內容',
+              style: text.titleMedium!.copyWith(fontWeight: FontWeight.w700),
+            ),
             const SizedBox(height: AppSpacing.small),
             for (final slot in summary.slots)
               Padding(
@@ -251,16 +284,23 @@ class _CoverageBySlotState extends State<_CoverageBySlot> {
     final hasDetails = slots.any(
       (s) => s.issues.isNotEmpty || s.problems.isNotEmpty || s.hints.isNotEmpty,
     );
-    return Card(
+    return ThickCard(
       key: const Key('video-coverage-summary'),
       child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.medium),
+        padding: videoCardInset,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                Expanded(child: Text('涵蓋檢查', style: text.titleSmall)),
+                Expanded(
+                  child: Text(
+                    '涵蓋檢查',
+                    style: text.titleMedium!.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
                 if (hasDetails)
                   TextButton(
                     key: const Key('video-coverage-toggle'),

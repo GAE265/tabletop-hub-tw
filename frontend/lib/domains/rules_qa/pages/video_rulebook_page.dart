@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_spacing.dart';
+import '../../../app/theme/thick_widgets.dart';
 import '../../../core/widgets/pill_badge.dart';
 import '../data/video_studio_models.dart';
 import '../state/video_rulebook_state.dart';
@@ -42,21 +44,27 @@ class _VideoRulebookPageState extends ConsumerState<VideoRulebookPage> {
     final notifier = ref.read(videoRulebookProvider(_id).notifier);
     final text = Theme.of(context).textTheme;
     final scheme = Theme.of(context).colorScheme;
-    return Scaffold(
+    return VideoScaffold(
       key: const Key('video-rulebook-page'),
-      appBar: AppBar(title: const Text('拍規則書')),
-      bottomNavigationBar: VideoBottomActions(
+      title: '拍規則書',
+      bottom: VideoBottomActions(
         children: [
-          OutlinedButton.icon(
-            key: const Key('video-rulebook-add'),
+          ThickButton(
+            buttonKey: const Key('video-rulebook-add'),
+            style: ThickStyle.light,
+            expand: true,
+            icon: Icons.photo_camera_outlined,
+            label: state.progress ?? '拍照或選圖',
+            shadow: AppShadows.soft,
             onPressed: state.busy ? null : notifier.addPhotos,
-            icon: const Icon(Icons.photo_camera_outlined),
-            label: Text(state.progress ?? '拍照或選圖'),
           ),
-          FilledButton(
-            key: const Key('video-rulebook-start'),
+          ThickButton(
+            buttonKey: const Key('video-rulebook-start'),
+            style: ThickStyle.primary,
+            expand: true,
+            label: '讀取規則書並產生草稿',
+            shadow: AppShadows.soft,
             onPressed: state.canStart ? _start : null,
-            child: const Text('讀取規則書並產生草稿'),
           ),
         ],
       ),
@@ -64,10 +72,27 @@ class _VideoRulebookPageState extends ConsumerState<VideoRulebookPage> {
         child: ListView(
           padding: const EdgeInsets.all(AppSpacing.medium),
           children: [
-            Text(
-              '依頁面的順序拍規則書的每一頁（一張一頁，整頁入鏡、不要反光）。'
-              '可以一次選很多張；拍壞的照片可以刪掉再補拍，新拍的會排在最後。',
-              style: text.bodyMedium,
+            ThickCard(
+              child: Padding(
+                padding: videoCardInset,
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(
+                      Icons.photo_camera_outlined,
+                      color: AppColors.primaryText,
+                    ),
+                    const SizedBox(width: AppSpacing.small + AppSpacing.xSmall),
+                    Expanded(
+                      child: Text(
+                        '依頁面的順序拍規則書的每一頁（一張一頁，整頁入鏡、不要反光）。'
+                        '可以一次選很多張；拍壞的照片可以刪掉再補拍，新拍的會排在最後。',
+                        style: text.bodyMedium,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
             const SizedBox(height: AppSpacing.medium),
             if (state.rulebook?.read ?? false) ...[
@@ -88,26 +113,36 @@ class _VideoRulebookPageState extends ConsumerState<VideoRulebookPage> {
             if (state.loading && state.rulebook == null)
               const Center(child: CircularProgressIndicator())
             else if (state.photos.isEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: AppSpacing.large),
-                child: Text(
-                  '還沒有照片',
-                  textAlign: TextAlign.center,
-                  style: text.bodyMedium!.copyWith(
-                    color: scheme.onSurfaceVariant,
+              ThickCard(
+                child: Padding(
+                  padding: videoCardInset,
+                  child: Text(
+                    '還沒有照片',
+                    textAlign: TextAlign.center,
+                    style: text.bodyMedium!.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
                   ),
                 ),
               )
             else ...[
-              Text('已拍 ${state.photos.length} 頁', style: text.titleSmall),
-              const SizedBox(height: AppSpacing.small),
-              for (final photo in state.photos)
+              SectionBar(
+                title: '已拍的頁面',
+                icon: Icons.photo_library_outlined,
+                trailing: Text(
+                  '已拍 ${state.photos.length} 頁',
+                  style: text.bodyMedium!.copyWith(color: AppColors.inkMuted),
+                ),
+              ),
+              for (final photo in state.photos) ...[
+                const SizedBox(height: AppSpacing.small + AppSpacing.xSmall),
                 _PhotoTile(
                   projectId: _id,
                   photo: photo,
                   busy: state.busy,
                   onDelete: () => notifier.delete(photo.index),
                 ),
+              ],
             ],
           ],
         ),
@@ -139,10 +174,10 @@ class _PhotoTile extends ConsumerWidget {
       )),
     );
     final text = Theme.of(context).textTheme;
-    return Card(
+    return ThickCard(
       key: Key('video-rulebook-photo-${photo.index}'),
       child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.small),
+        padding: const EdgeInsets.all(AppSpacing.small + AppSpacing.xSmall),
         child: Row(
           children: [
             SizedBox(
@@ -164,7 +199,12 @@ class _PhotoTile extends ConsumerWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('第 ${photo.index} 張', style: text.titleSmall),
+                  Text(
+                    '第 ${photo.index} 張',
+                    style: text.titleSmall!.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
                   if (photo.qualityMessage != null) ...[
                     const SizedBox(height: AppSpacing.xSmall),
                     PillBadge(
