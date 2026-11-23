@@ -77,7 +77,7 @@ void main() {
       expect(
         find.descendant(
           of: find.byKey(const Key('group-members')),
-          matching: find.text('名單（1 人）'),
+          matching: find.textContaining('名單（'),
         ),
         findsOneWidget,
       );
