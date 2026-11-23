@@ -21,15 +21,15 @@ jobs:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
 
       # 2. 更新第一個 Cloud Run 服務 (例如 frontend)
-      - name: Deploy Service 1 (Frontend)
+      - name: Deploy Frontend Service
         uses: google-github-actions/deploy-cloudrun@v2
         with:
           service: tabletop-hub-tw-frontend
           region: us-east1
-          image: us-east1-docker.pkg.dev/aerial-handbook-256212/tabletop-hub-tw-repo/gae265/tabletop-hub-tw-frontend:${{ github.event.workflow_run.head_sha }}
+          image: us-east1-docker.pkg.dev/aerial-handbook-256212/tabletop-hub-tw-repo/gae265/tabletop-hub-tw-frontend-dev:${{ github.event.workflow_run.head_sha }}
 
       # 3. 更新第二個 Cloud Run 服務 (例如 backend 或其他服務)
-      - name: Deploy Service 2
+      - name: Deploy Backend Service
         uses: google-github-actions/deploy-cloudrun@v2
         with:
           service: tabletop-hub-tw-backend # 替換為你的第 2 個 Cloud Run 服務名稱
