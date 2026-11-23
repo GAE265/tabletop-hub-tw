@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_spacing.dart';
+import '../../../app/theme/thick_widgets.dart';
+import '../../../app/theme/wood_background.dart';
 import '../../../core/dev/state/dev_user_state.dart';
 import '../../../core/layout/breakpoints.dart';
 import '../data/booking.dart';
@@ -14,6 +17,9 @@ import 'widgets/booking_widgets.dart';
 /// 可以用網址參數預先帶入表單（例如開團主從揪團按「訂位」）：
 /// `shop_id`、`date`（YYYY-MM-DD）、`start`／`end`（HH:MM，需為半點）、`party_size`、`requests`。
 /// 不合法的值改用預設值；人數限制在 1–30。
+///
+/// Stitch 版面（docs/ui/stitch/）：木紋背景，分段切換的分頁、厚的表單卡（每一項有小標，日期有今天／明天／後天快選）、
+/// 厚的預估費用卡；手機的浮動導覽列蓋住的高度留在最下面。
 class NewBookingPage extends ConsumerStatefulWidget {
   const NewBookingPage({
     super.key,
@@ -178,6 +184,8 @@ class _NewBookingPageState extends ConsumerState<NewBookingPage> {
       }),
       date: _date,
       onPickDate: _pickDate,
+      today: _todayInTaipei(),
+      onQuickDate: (d) => setState(() => _date = d),
       start: _start,
       end: _end,
       onStart: (v) => setState(() => _start = v),
@@ -189,46 +197,83 @@ class _NewBookingPageState extends ConsumerState<NewBookingPage> {
       onQuote: _quote,
       onSubmit: _submit,
     );
-    final quote = state.quote == null ? null : _QuoteCard(state.quote!);
+    final quote = state.quote == null
+        ? null
+        : _QuoteCard(state.quote!, party: _party);
 
-    return BookingScaffold(
-      pageKey: const Key('booking-page'),
-      title: '訂位',
-      current: 'new',
-      showBoard: isStaff,
-      maxWidth: wide ? AppSpacing.splitContentMaxWidth : null,
-      children: [
-        if (state.isError && state.message != null) ...[
-          BookingErrorBanner(
-            message: state.message!,
-            onRetry: state.shops.isEmpty ? _n.loadShops : null,
-            retryKey: const Key('booking-retry-shops'),
-          ),
-          const SizedBox(height: AppSpacing.medium),
-        ],
-        if (state.loading) ...[
-          const LinearProgressIndicator(),
-          const SizedBox(height: AppSpacing.small),
-        ],
-        if (wide)
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(child: form),
-              const SizedBox(width: AppSpacing.large),
-              Expanded(child: quote ?? const _QuoteHint()),
-            ],
-          )
-        else ...[
-          form,
-          if (quote != null) ...[
-            const SizedBox(height: AppSpacing.medium),
-            quote,
+    final children = <Widget>[
+      ThickCard(
+        radius: AppRadius.card,
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.small),
+          child: BookingTabs(current: 'new', showBoard: isStaff),
+        ),
+      ),
+      const SizedBox(height: AppSpacing.medium),
+      if (state.isError && state.message != null) ...[
+        BookingErrorBanner(
+          message: state.message!,
+          onRetry: state.shops.isEmpty ? _n.loadShops : null,
+          retryKey: const Key('booking-retry-shops'),
+        ),
+        const SizedBox(height: AppSpacing.medium),
+      ],
+      if (state.loading) ...[
+        const LinearProgressIndicator(),
+        const SizedBox(height: AppSpacing.small),
+      ],
+      if (wide)
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(child: form),
+            const SizedBox(width: AppSpacing.large),
+            Expanded(child: quote ?? const _QuoteHint()),
           ],
+        )
+      else ...[
+        form,
+        if (quote != null) ...[
+          const SizedBox(height: AppSpacing.medium),
+          quote,
         ],
       ],
+    ];
+
+    final body = Align(
+      alignment: Alignment.topCenter,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxWidth: wide ? AppSpacing.splitContentMaxWidth : double.infinity,
+        ),
+        child: ListView(
+          padding: EdgeInsets.fromLTRB(
+            AppSpacing.medium,
+            AppSpacing.medium,
+            AppSpacing.medium,
+            AppSpacing.medium + MediaQuery.paddingOf(context).bottom,
+          ),
+          children: children,
+        ),
+      ),
+    );
+    return Scaffold(
+      key: const Key('booking-page'),
+      backgroundColor: Colors.transparent,
+      body: SafeArea(
+        bottom: false,
+        child: WoodBackground.isPaintedAbove(context)
+            ? body
+            : WoodBackground(child: body),
+      ),
     );
   }
+}
+
+/// 台灣時間的今天（今天／明天／後天快選用）。
+DateTime _todayInTaipei() {
+  final now = taipeiNow();
+  return DateTime(now.year, now.month, now.day);
 }
 
 class _BookingForm extends StatelessWidget {
@@ -239,6 +284,8 @@ class _BookingForm extends StatelessWidget {
     required this.onShop,
     required this.date,
     required this.onPickDate,
+    required this.today,
+    required this.onQuickDate,
     required this.start,
     required this.end,
     required this.onStart,
@@ -258,6 +305,10 @@ class _BookingForm extends StatelessWidget {
   final ValueChanged<String?> onShop;
   final DateTime date;
   final VoidCallback onPickDate;
+
+  /// 台灣時間的今天（今天／明天／後天快選）。
+  final DateTime today;
+  final ValueChanged<DateTime> onQuickDate;
   final String start;
   final String end;
   final ValueChanged<String> onStart;
@@ -289,21 +340,22 @@ class _BookingForm extends StatelessWidget {
       onChanged: (v) => v == null ? null : onChanged(v),
     );
 
-    return Card(
+    const gap = SizedBox(height: AppSpacing.medium + AppSpacing.xSmall);
+    return ThickCard(
       child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.medium),
+        padding: const EdgeInsets.all(AppSpacing.medium + AppSpacing.xSmall),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            const _SectionTitle(icon: Icons.storefront_outlined, title: '預約店家'),
             KeyedSubtree(
               key: const Key('booking-shop'),
               child: DropdownButtonFormField<String>(
                 // 店家清單載入後重建，才會帶入店家人員所屬的店家
                 key: ValueKey((shops.length, initialShop)),
                 initialValue: initialShop,
+                hint: const Text('選擇店家'),
                 decoration: InputDecoration(
-                  labelText: '店家',
-                  prefixIcon: const Icon(Icons.storefront_outlined),
                   errorText: shopMissing ? '請先選擇店家' : null,
                 ),
                 items: [
@@ -313,14 +365,40 @@ class _BookingForm extends StatelessWidget {
                 onChanged: onShop,
               ),
             ),
-            const SizedBox(height: AppSpacing.medium),
+            gap,
+            const _SectionTitle(
+              icon: Icons.calendar_today_outlined,
+              title: '日期',
+            ),
+            Row(
+              children: [
+                for (final (i, (key, label)) in const [
+                  ('booking-date-today', '今天'),
+                  ('booking-date-tomorrow', '明天'),
+                  ('booking-date-after', '後天'),
+                ].indexed) ...[
+                  if (i > 0) const SizedBox(width: AppSpacing.small),
+                  Expanded(
+                    child: _DayChip(
+                      key: Key(key),
+                      label: label,
+                      day: today.add(Duration(days: i)),
+                      selected: date == today.add(Duration(days: i)),
+                      onTap: onQuickDate,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+            const SizedBox(height: AppSpacing.small),
             OutlinedButton.icon(
               key: const Key('booking-date'),
               onPressed: onPickDate,
-              icon: const Icon(Icons.calendar_today_outlined),
+              icon: const Icon(Icons.calendar_month_outlined),
               label: Text('日期：${shortDate(date)}'),
             ),
-            const SizedBox(height: AppSpacing.medium),
+            gap,
+            const _SectionTitle(icon: Icons.schedule, title: '時段'),
             Row(
               children: [
                 Expanded(
@@ -330,61 +408,95 @@ class _BookingForm extends StatelessWidget {
                 Expanded(child: timeField('結束', 'booking-end', end, onEnd)),
               ],
             ),
-            const SizedBox(height: AppSpacing.medium),
-            Row(
-              children: [
-                const Text('人數'),
-                const Spacer(),
-                IconButton.outlined(
-                  key: const Key('booking-party-minus'),
-                  onPressed: party > _minParty
-                      ? () => onParty(party - 1)
-                      : null,
-                  icon: const Icon(Icons.remove),
-                  tooltip: '減少人數',
+            gap,
+            const _SectionTitle(icon: Icons.group_outlined, title: '人數'),
+            DecoratedBox(
+              decoration: BoxDecoration(
+                color: AppColors.backgroundAlt,
+                borderRadius: BorderRadius.circular(AppRadius.button),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(AppSpacing.small),
+                child: Row(
+                  children: [
+                    IconButton.outlined(
+                      key: const Key('booking-party-minus'),
+                      onPressed: party > _minParty
+                          ? () => onParty(party - 1)
+                          : null,
+                      icon: const Icon(Icons.remove),
+                      tooltip: '減少人數',
+                    ),
+                    Expanded(
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.baseline,
+                        textBaseline: TextBaseline.alphabetic,
+                        children: [
+                          SizedBox(
+                            key: const Key('booking-party-size'),
+                            child: Text(
+                              '$party',
+                              style: Theme.of(context).textTheme.headlineSmall!
+                                  .copyWith(fontWeight: FontWeight.w700),
+                            ),
+                          ),
+                          const SizedBox(width: AppSpacing.xSmall),
+                          Text(
+                            '人',
+                            style: Theme.of(context).textTheme.titleMedium,
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton.outlined(
+                      key: const Key('booking-party-plus'),
+                      onPressed: party < _maxParty
+                          ? () => onParty(party + 1)
+                          : null,
+                      icon: const Icon(Icons.add),
+                      tooltip: '增加人數',
+                    ),
+                  ],
                 ),
-                SizedBox(
-                  key: const Key('booking-party-size'),
-                  width: AppSizes.minTouchTarget,
-                  child: Text(
-                    '$party',
-                    textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                ),
-                IconButton.outlined(
-                  key: const Key('booking-party-plus'),
-                  onPressed: party < _maxParty
-                      ? () => onParty(party + 1)
-                      : null,
-                  icon: const Icon(Icons.add),
-                  tooltip: '增加人數',
-                ),
-              ],
+              ),
             ),
-            const SizedBox(height: AppSpacing.medium),
+            gap,
+            const _SectionTitle(
+              icon: Icons.edit_note_outlined,
+              title: '特殊需求（選填）',
+            ),
             TextField(
               key: const Key('booking-requests'),
               controller: requests,
-              decoration: const InputDecoration(labelText: '特殊需求（選填）'),
+              decoration: const InputDecoration(hintText: '例如：想要靠窗的位子、有小朋友同行'),
               maxLines: 2,
             ),
             const SizedBox(height: AppSpacing.large),
             Row(
               children: [
                 Expanded(
-                  child: OutlinedButton(
-                    key: const Key('booking-quote'),
+                  child: ThickButton(
+                    buttonKey: const Key('booking-quote'),
+                    style: ThickStyle.light,
+                    expand: true,
+                    shadow: AppShadows.soft,
                     onPressed: busy ? null : onQuote,
-                    child: const Text('預估費用'),
+                    icon: Icons.calculate_outlined,
+                    label: '預估費用',
                   ),
                 ),
-                const SizedBox(width: AppSpacing.medium),
+                const SizedBox(width: AppSpacing.small + AppSpacing.xSmall),
                 Expanded(
-                  child: FilledButton(
-                    key: const Key('booking-submit'),
+                  child: ThickButton(
+                    buttonKey: const Key('booking-submit'),
+                    style: ThickStyle.primary,
+                    expand: true,
+                    shadow: AppShadows.soft,
                     onPressed: busy ? null : onSubmit,
-                    child: const Text('確認訂位'),
+                    icon: Icons.event_seat_outlined,
+                    label: '確認訂位',
                   ),
                 ),
               ],
@@ -396,32 +508,158 @@ class _BookingForm extends StatelessWidget {
   }
 }
 
-class _QuoteCard extends StatelessWidget {
-  const _QuoteCard(this.quote);
+/// 表單裡每一項的小標：橘色圖示＋文字。
+class _SectionTitle extends StatelessWidget {
+  const _SectionTitle({required this.icon, required this.title});
 
-  final QuoteResult quote;
+  final IconData icon;
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.small),
+      child: Row(
+        children: [
+          Icon(icon, size: AppSizes.inlineIcon, color: AppColors.primaryText),
+          const SizedBox(width: AppSpacing.small),
+          Text(title, style: Theme.of(context).textTheme.titleSmall),
+        ],
+      ),
+    );
+  }
+}
+
+/// 日期快選膠囊：今天／明天／後天，選中的是深炭底白字。
+class _DayChip extends StatelessWidget {
+  const _DayChip({
+    required this.label,
+    required this.day,
+    required this.selected,
+    required this.onTap,
+    super.key,
+  });
+
+  final String label;
+  final DateTime day;
+  final bool selected;
+  final ValueChanged<DateTime> onTap;
 
   @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
-    return Card(
+    final fg = selected ? AppColors.surface : AppColors.ink;
+    return Semantics(
+      selected: selected,
+      button: true,
+      child: Material(
+        color: selected ? AppColors.ink : AppColors.background,
+        shape: StadiumBorder(
+          side: BorderSide(color: selected ? AppColors.ink : AppColors.border),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: () => onTap(day),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: AppSpacing.small),
+            child: Column(
+              children: [
+                Text(label, style: text.labelLarge!.copyWith(color: fg)),
+                Text(
+                  '${day.month}/${day.day}',
+                  style: text.labelSmall!.copyWith(
+                    color: selected ? AppColors.onInkMuted : AppColors.inkMuted,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _QuoteCard extends StatelessWidget {
+  const _QuoteCard(this.quote, {required this.party});
+
+  final QuoteResult quote;
+  final int party;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    final fee = double.tryParse(quote.fee.venueFee);
+    String money(double v) =>
+        v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toStringAsFixed(1);
+    final perPerson = fee == null || party == 0 ? null : fee / party;
+    return ThickCard(
       key: const Key('booking-quote-card'),
       child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.medium),
+        padding: const EdgeInsets.all(AppSpacing.medium + AppSpacing.xSmall),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('預估費用', style: text.titleMedium),
+            Row(
+              children: [
+                const Icon(
+                  Icons.receipt_long_outlined,
+                  color: AppColors.primaryText,
+                ),
+                const SizedBox(width: AppSpacing.small),
+                Text(
+                  '預估場地費用',
+                  style: text.titleMedium!.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
             const SizedBox(height: AppSpacing.small),
             Text(formatBookingRange(quote.startAt, quote.endAt)),
             const SizedBox(height: AppSpacing.small),
             Text(
-              '${quote.fee.billableHours} 小時　場地費 ${quote.fee.venueFee} 元',
-              style: text.titleLarge,
+              'NT\$ ${fee == null ? quote.fee.venueFee : money(fee)}',
+              style: text.displaySmall!.copyWith(
+                color: AppColors.primaryText,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            Text(
+              [
+                '${quote.fee.billableHours} 小時',
+                if (perPerson != null) '每人約 \$${money(perPerson)}',
+              ].join('・'),
+              style: text.bodyMedium!.copyWith(color: AppColors.inkMuted),
             ),
             if (quote.tableCodes.isNotEmpty) ...[
-              const SizedBox(height: AppSpacing.small),
-              Text('安排桌位：${quote.tableCodes.join('、')}'),
+              const SizedBox(height: AppSpacing.medium),
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  color: AppColors.primaryTint,
+                  borderRadius: BorderRadius.circular(AppRadius.button),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(
+                    AppSpacing.small + AppSpacing.xSmall,
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.table_restaurant_outlined,
+                        color: AppColors.primaryText,
+                      ),
+                      const SizedBox(width: AppSpacing.small),
+                      Expanded(
+                        child: Text(
+                          '安排桌位：${quote.tableCodes.join('、')}',
+                          style: text.titleSmall,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             ],
           ],
         ),
@@ -435,7 +673,7 @@ class _QuoteHint extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
+    return ThickCard(
       child: Padding(
         padding: const EdgeInsets.all(AppSpacing.large),
         child: Text(

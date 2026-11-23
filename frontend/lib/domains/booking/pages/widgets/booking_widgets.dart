@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
+import '../../../../app/theme/thick_widgets.dart';
 import '../../../../core/widgets/pill_badge.dart';
 import '../../data/booking.dart';
 
@@ -66,30 +68,111 @@ class BookingTabs extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: SegmentedButton<String>(
-        showSelectedIcon: false,
-        segments: [
-          const ButtonSegment(
-            value: 'new',
-            icon: Icon(Icons.event_available_outlined),
-            label: Text('訂位', key: Key('booking-tab-new')),
-          ),
-          const ButtonSegment(
-            value: 'mine',
-            icon: Icon(Icons.receipt_long_outlined),
-            label: Text('我的訂位', key: Key('booking-tab-mine')),
-          ),
-          if (showBoard)
-            const ButtonSegment(
-              value: 'board',
-              icon: Icon(Icons.storefront_outlined),
-              label: Text('店家看板', key: Key('booking-tab-board')),
+    // 分段切換（Stitch 版面）：一條米色軌道，目前的分頁是浮起來的白色按鈕
+    final tabs = [
+      ('new', '訂位', Icons.event_available_outlined, 'booking-tab-new'),
+      ('mine', '我的訂位', Icons.receipt_long_outlined, 'booking-tab-mine'),
+      if (showBoard)
+        ('board', '店家看板', Icons.storefront_outlined, 'booking-tab-board'),
+    ];
+    return DecoratedBox(
+      key: const Key('booking-tabs'),
+      decoration: BoxDecoration(
+        color: AppColors.neutralTint,
+        borderRadius: BorderRadius.circular(AppRadius.pill),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.xSmall),
+        child: Row(
+          children: [
+            for (final (i, (value, label, icon, key)) in tabs.indexed) ...[
+              if (i > 0) const SizedBox(width: AppSpacing.xSmall),
+              Expanded(
+                child: _TabSegment(
+                  selected: value == current,
+                  label: label,
+                  labelKey: Key(key),
+                  icon: icon,
+                  onTap: () => context.go(_paths[value]!),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TabSegment extends StatelessWidget {
+  const _TabSegment({
+    required this.selected,
+    required this.label,
+    required this.labelKey,
+    required this.icon,
+    required this.onTap,
+  });
+
+  final bool selected;
+  final String label;
+  final Key labelKey;
+  final IconData icon;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      selected: selected,
+      button: true,
+      child: DecoratedBox(
+        decoration: selected
+            ? thickDecoration(
+                color: AppColors.surface,
+                edge: AppColors.cardEdge,
+                radius: AppRadius.pill,
+                thickness: AppSizes.smallThickness,
+                shadow: AppShadows.soft,
+              )
+            : BoxDecoration(
+                borderRadius: BorderRadius.circular(AppRadius.pill),
+              ),
+        child: Material(
+          type: MaterialType.transparency,
+          shape: const StadiumBorder(),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: selected ? null : onTap,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(
+                minHeight: AppSizes.minTouchTarget - AppSpacing.small,
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    icon,
+                    size: AppSizes.inlineIcon,
+                    color: selected
+                        ? AppColors.primaryText
+                        : AppColors.inkMuted,
+                  ),
+                  const SizedBox(width: AppSpacing.xSmall),
+                  Flexible(
+                    child: Text(
+                      label,
+                      key: labelKey,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.labelLarge!.copyWith(
+                        color: selected ? AppColors.ink : AppColors.inkMuted,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
-        ],
-        selected: {current},
-        onSelectionChanged: (s) => context.go(_paths[s.first]!),
+          ),
+        ),
       ),
     );
   }
