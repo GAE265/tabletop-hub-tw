@@ -128,7 +128,12 @@ void main() {
       repo: listRepo(onlyRegions),
     );
     expect(find.byKey(const Key('video-asset-shoot-board')), findsNothing);
-    await tapKey(tester, 'video-asset-regions-board');
+    final regions = find.byKey(const Key('video-asset-regions-board'));
+    await tester.ensureVisible(regions);
+    await tester.pumpAndSettle();
+    await tester.tap(regions);
+    // 標區域頁讀照片時一直在轉，不等它停
+    await tester.pump();
     expect(h.path, '/videos/p1/assets/board/regions');
   });
 
