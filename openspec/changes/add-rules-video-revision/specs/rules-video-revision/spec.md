@@ -90,7 +90,15 @@
 
 #### Scenario: 寫入後的涵蓋檢查失敗
 - **WHEN** 涵蓋檢查的 LLM 無法使用或回空清單
-- **THEN** 只印警告，修改照樣寫入
+- **THEN** 印出「這次沒有做規則涵蓋檢查」與原因，修改照樣寫入
+
+#### Scenario: 沒有 --pages 時沿用 source_pages
+- **WHEN** 沒有 `--pages`，段資料的 `source_pages` 記錄的頁面檔都找得到（先找 `<資料夾>/rulebook/`，再找上一層的 `rulebook/`）
+- **THEN** 沿用那些頁面做涵蓋檢查，並印出用了哪些頁（2026-11-21 永傑要求）
+
+#### Scenario: 沒有 --pages 且頁面找不齊
+- **WHEN** 沒有 `--pages`，`source_pages` 有任何一頁找不到頁面檔，或段資料沒有 `source_pages`
+- **THEN** 不做涵蓋檢查，明確印出「這次沒有做規則涵蓋檢查」與缺哪一頁
 
 #### Scenario: LLM 無法使用
 - **WHEN** LLM 服務無法連線
@@ -113,6 +121,22 @@ LLM 判斷修改要求超出版型能力時，`revise` SHALL 不寫入 `video.js
 #### Scenario: 超出能力
 - **WHEN** 修改要求是「讓牌旋轉著飛進盤面」（沒有旋轉動作），LLM 回報超出能力
 - **THEN** `video.json` 不變；印出替代做法；`requests.json` 多一筆需求
+
+#### Scenario: 替代做法在產生時就檢查
+- **WHEN** LLM 提出的替代做法不通過檢查（例如旁白用了「次」）
+- **THEN** 照「改寫一次」的規則要求 LLM 重新提出；存進 `pending.json` 的替代做法一定能用 `--choose` 套用（3.3 本機驗收發現）
+
+#### Scenario: 沒有實際變動的替代做法
+- **WHEN** 替代做法套用後和原本的內容完全相同（例如只加了預設值 `"anim": "pop"`；比較時補齊預設值）
+- **THEN** 視為無效，要求 LLM 改寫一次；改寫後仍無效的替代做法不列出，全部無效時結束代碼不為 0、不寫 `pending.json`（2026-11-21 永傑決定）
+
+#### Scenario: 預設值不算變動
+- **WHEN** 新內容只多寫了預設值
+- **THEN** 欄位差異與修改紀錄的 `changed` 不列出那個欄位
+
+#### Scenario: segment_json 省略了 segment_key
+- **WHEN** LLM 在 `segment_json` 裡沒寫 `segment_key`，外層有寫
+- **THEN** 用外層的 `segment_key` 補上；兩邊都有但不一樣時才算錯（3.3 本機驗收發現）
 
 #### Scenario: 用了五種以外的動作
 - **WHEN** LLM 回「可以做」，但新內容的 `do` 是 `rotate`

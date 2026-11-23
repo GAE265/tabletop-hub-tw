@@ -8,6 +8,10 @@
         --pages rulebook/en-005.txt --chapter-number 11 --chapter-title 步驟三 \
         [--reference-pages rulebook/en-003.txt] [--assets-from video.json]  # AI 產生草稿
     uv run python -m app.domains.rules_qa.video_commands compare <AI 草稿> <手寫>  # 逐項比對
+    uv run python -m app.domains.rules_qa.video_commands revise <資料夾> "<修改要求>" \
+        [--dry-run] [--segment s2] [--pages rulebook/en-005.txt]  # 用自然語言修改
+    uv run python -m app.domains.rules_qa.video_commands revise <資料夾> --apply  # 套用試算
+    uv run python -m app.domains.rules_qa.video_commands revise <資料夾> --choose 2  # 選替代做法
 
 <資料夾> 內有 video.json 與 assets/，輸出寫到 <資料夾>/out/，旁白與段影片快取在 <資料夾>/cache/。
 check、stills 不連資料庫、不需要 ffmpeg 與金鑰，旁白長度用估計值（每 4 個字 1 秒）。
@@ -22,6 +26,7 @@ from dataclasses import asdict
 from pathlib import Path
 
 from app.core.config import Settings, get_settings
+from app.domains.rules_qa import video_revision as revision
 from app.domains.rules_qa.video_coverage import (
     check_coverage,
     markdown_from_json,
@@ -106,6 +111,7 @@ def _build_parser() -> argparse.ArgumentParser:
         metavar="<頁面檔>",
         help="本章的規則書頁面（相對草稿資料夾，例如 ../rulebook/en-005.txt）；可指定多次",
     )
+    _add_revise(commands)
     compare = commands.add_parser("compare", help="逐項比對兩份段資料，輸出 compare.md")
     compare.add_argument("a", type=Path, metavar="<AI 草稿資料夾>")
     compare.add_argument("b", type=Path, metavar="<手寫資料夾>")
@@ -126,6 +132,8 @@ def main(
         return _compare(args.a, args.b)
     if args.command == "coverage":
         return _coverage(args, settings or get_settings(), llm)
+    if args.command == "revise":
+        return _revise(args, settings, llm)
     try:
         video = load_video(args.folder)
     except VideoDataError as exc:
@@ -215,6 +223,10 @@ def _render(
     for warning in result.warnings:
         if warning not in shown and not (estimated and "時間為估計值" in warning):
             print(f"警告：{warning}", file=sys.stderr)
+    hashes = {s.segment_key: s.content_hash for s in result.segments}
+    updated = revision.mark_rendered(folder, hashes)
+    if updated:
+        print(f"修改過的段已重新輸出，狀態改為 rendered：{'、'.join(updated)}")
     encoded = sum(1 for s in result.segments if not s.reused)
     suffix = "，時間為估計值" if estimated else ""
     print(f"已輸出影片：{result.video}（總長 {result.total_seconds:.1f} 秒{suffix}）")
@@ -381,6 +393,206 @@ def _coverage(args: argparse.Namespace, settings: Settings, llm: LLMProvider | N
         f"說反或規則書沒有的句子 {len(report.problems)} 句"
     )
     return EXIT_OK
+
+
+# --------------------------------------------------------------------------- revise
+
+
+def _add_revise(commands: argparse._SubParsersAction) -> None:
+    revise = commands.add_parser(
+        "revise", help="用自然語言修改段資料（只改受影響的段；做不到時提供替代做法）"
+    )
+    revise.add_argument("folder", type=Path, metavar="<資料夾>")
+    revise.add_argument("request", nargs="?", metavar="<修改要求>")
+    action = revise.add_mutually_exclusive_group()
+    action.add_argument(
+        "--dry-run", action="store_true", help="只產生提案、存成 revisions/pending.json，不寫入"
+    )
+    action.add_argument("--apply", action="store_true", help="套用 dry-run 的提案，不再呼叫 AI")
+    action.add_argument("--choose", type=int, metavar="<編號>", help="選擇第幾個替代做法")
+    revise.add_argument("--segment", metavar="<段>", help="目標不明確時，指定只改這一段")
+    revise.add_argument(
+        "--pages",
+        action="append",
+        default=[],
+        metavar="<頁面檔>",
+        help="寫入後對被改的段跑涵蓋檢查（相對資料夾）；只警告，不擋寫入",
+    )
+    revise.add_argument("--terms", default="terms.json", help="用語對照表（相對資料夾，可省略）")
+
+
+class _LazyLLM:
+    """只有真的需要 AI 時才建立 LLM（--apply、--choose 不呼叫 AI）。"""
+
+    def __init__(self, settings: Settings | None, llm: LLMProvider | None) -> None:
+        self.settings = settings
+        self.llm = llm
+
+    def get(self) -> LLMProvider:
+        if self.llm is None:
+            settings = self.settings or get_settings()
+            self.llm = get_llm_provider(settings.llm_provider, settings)
+        return self.llm
+
+
+def _revise(args: argparse.Namespace, settings: Settings | None, llm: LLMProvider | None) -> int:
+    folder: Path = args.folder
+    picking = args.apply or args.choose is not None
+    if picking and args.request:
+        print("--apply、--choose 不需要修改要求", file=sys.stderr)
+        return EXIT_FAILED
+    if not picking and not args.request:
+        print("請寫出修改要求，或用 --apply、--choose 套用待選的修改", file=sys.stderr)
+        return EXIT_FAILED
+    lazy = _LazyLLM(settings, llm)
+    try:
+        if args.apply:
+            pending = revision.load_pending(folder, "proposal")
+            entries = revision.entries_from_pending(pending["segments"])
+            # 重新算出欄位差異，供輸出與修改紀錄使用
+            revision.compute_changes(folder, revision.read_video(folder), entries)
+            _print_changes(entries)
+            return _write(folder, entries, pending["request"], "revision", args, lazy)
+        if args.choose is not None:
+            return _choose(folder, args, lazy)
+        result = revision.propose(
+            lazy.get(), folder, args.request, terms=_terms(folder, args), only_segment=args.segment
+        )
+    except (revision.RevisionError, ScriptInputError) as exc:
+        print(f"無法修改：{exc}", file=sys.stderr)
+        return EXIT_FAILED
+    except LLMError as exc:
+        print(f"LLM 暫時無法使用或拒絕輸出：{exc}", file=sys.stderr)
+        return EXIT_FAILED
+    except revision.RevisionRejected as exc:
+        rejected = folder / revision.REVISIONS_DIR
+        rejected.mkdir(parents=True, exist_ok=True)
+        for n, output in enumerate(exc.outputs, start=1):
+            _write_json(rejected / f"rejected-{n}.json", output)
+        print("AI 改寫一次後仍不通過檢查，沒有寫入：", file=sys.stderr)
+        for error in exc.errors:
+            print(f"- {error}", file=sys.stderr)
+        print(f"原始輸出存在 {rejected}/rejected-*.json", file=sys.stderr)
+        return EXIT_FAILED
+
+    if isinstance(result, revision.Ambiguous):
+        print(f"目標不明確，沒有寫入：{result.reason}")
+        for key, reason in result.candidates:
+            print(f"  - 段 {key}：{reason}")
+        print(f'請指定要改的段，例如：revise {folder} "{args.request}" --segment <段>')
+        return EXIT_OK
+    if isinstance(result, revision.Unsupported):
+        revision.save_alternatives(folder, result)
+        print(f"超出版型能力，沒有寫入：{result.reason}")
+        if result.unsupported_actions:
+            print(f"  不支援的動作：{'、'.join(result.unsupported_actions)}")
+        print("最接近的替代做法：")
+        for n, alt in enumerate(result.alternatives, start=1):
+            keys = "、".join(e.segment_key for e in alt.entries)
+            print(f"  {n}. {alt.title}：{alt.description}（改段 {keys}）")
+        print(f"這個需求已記到 {revision.REVISIONS_DIR}/{revision.REQUESTS_FILE}")
+        print(f"選擇替代做法：revise {folder} --choose <編號>")
+        return EXIT_OK
+
+    _print_changes(result.entries)
+    if args.dry_run:
+        revision.save_proposal(folder, result)
+        print(f"這是試算，沒有寫入（提案存在 {revision.REVISIONS_DIR}/{revision.PENDING_FILE}）")
+        print(f"確認後套用：revise {folder} --apply")
+        return EXIT_OK
+    return _write(folder, result.entries, args.request, "revision", args, lazy)
+
+
+def _terms(folder: Path, args: argparse.Namespace) -> list:
+    path = folder / args.terms
+    return load_terms(path) if path.is_file() else []
+
+
+def _choose(folder: Path, args: argparse.Namespace, lazy: _LazyLLM) -> int:
+    pending = revision.load_pending(folder, "alternatives")
+    alternatives = pending["alternatives"]
+    if not 1 <= args.choose <= len(alternatives):
+        raise revision.RevisionError(f"替代做法的編號是 1 到 {len(alternatives)}：{args.choose}")
+    entries = revision.entries_from_pending(alternatives[args.choose - 1]["segments"])
+    errors = revision.check_entries(
+        folder, revision.read_video(folder), entries, _terms(folder, args)
+    )
+    if errors:
+        print("這個替代做法不通過檢查，沒有寫入：", file=sys.stderr)
+        for error in errors:
+            print(f"- {error}", file=sys.stderr)
+        return EXIT_FAILED
+    _print_changes(entries)
+    return _write(folder, entries, pending["request"], "alternative", args, lazy)
+
+
+def _write(
+    folder: Path,
+    entries: list[revision.Entry],
+    request: str,
+    kind: str,
+    args: argparse.Namespace,
+    lazy: _LazyLLM,
+) -> int:
+    number = revision.apply_entries(folder, entries, request, kind=kind)
+    revision.clear_pending(folder)
+    keys = "、".join(e.segment_key for e in entries)
+    print(f"已修改段 {keys}（第 {number} 號修改；原本的檔案存在 revisions/{number}-before.json）")
+    print("重新輸出時只會重新編碼改過的段：render <資料夾>")
+    _coverage_after(folder, entries, args, lazy)
+    return EXIT_OK
+
+
+def _print_changes(entries: list[revision.Entry]) -> None:
+    for entry in entries:
+        line = f"- 段 {entry.segment_key}：改了 {'、'.join(entry.changed) or '（沒有變動）'}"
+        if entry.unrequested:
+            line += f"；未被要求修改：{'、'.join(entry.unrequested)}"
+        print(line)
+        if entry.summary:
+            print(f"    {entry.summary}")
+    if len(entries) > revision.MANY_SEGMENTS:
+        print(f"提醒：這次改了 {len(entries)} 段，請確認每一段都是你要改的。")
+
+
+NO_COVERAGE = "這次沒有做規則涵蓋檢查"
+
+
+def _coverage_after(
+    folder: Path, entries: list[revision.Entry], args: argparse.Namespace, lazy: _LazyLLM
+) -> None:
+    """寫入後對被改的段跑涵蓋檢查：只顯示警告，不擋寫入（design.md D8）。
+
+    沒有 --pages 時，沿用段資料 source_pages 記錄的頁面；找不齊就不做，並明確說沒有做。
+    """
+    pages = args.pages
+    if not pages:
+        pages, missing = revision.pages_from_source(folder, revision.read_video(folder))
+        if missing:
+            print(
+                f"{NO_COVERAGE}：未指定 --pages，且{'；'.join(missing)}。"
+                "要檢查請加上 --pages <頁面檔>"
+            )
+            return
+        print(f"未指定 --pages，沿用段資料 source_pages 記錄的頁面：{'、'.join(pages)}")
+    beat_keys = {beat.get("beat_key") for e in entries for beat in e.segment.get("beats", []) or []}
+    try:
+        report = check_coverage(
+            lazy.get(), load_video(folder, draft=True), load_pages(folder, pages)
+        )
+    except (LLMError, VideoDataError, ScriptInputError, KeyError, TypeError) as exc:
+        print(f"{NO_COVERAGE}：檢查沒有完成（{exc}），不影響已寫入的修改")
+        return
+    if not report.is_valid:
+        print(f"{NO_COVERAGE}：檢查無效（LLM 沒有拆出任何規則），不影響已寫入的修改")
+        return
+    warnings = revision.coverage_warnings(report, beat_keys)
+    if not warnings:
+        print("涵蓋檢查：被改的段沒有發現問題（AI 檢查，僅供參考）")
+        return
+    print("涵蓋檢查的警告（AI 檢查，僅供參考；不擋寫入）：")
+    for warning in warnings:
+        print(f"  - {warning}")
 
 
 def _cleanup_section(folder: Path) -> str:
