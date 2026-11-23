@@ -5,7 +5,6 @@ import 'package:go_router/go_router.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_spacing.dart';
 import '../../../app/theme/thick_widgets.dart';
-import '../../../app/theme/wood_background.dart';
 import '../../../core/dev/state/dev_user_state.dart';
 import '../../../core/layout/breakpoints.dart';
 import '../data/booking.dart';
@@ -202,14 +201,6 @@ class _NewBookingPageState extends ConsumerState<NewBookingPage> {
         : _QuoteCard(state.quote!, party: _party);
 
     final children = <Widget>[
-      ThickCard(
-        radius: AppRadius.card,
-        child: Padding(
-          padding: const EdgeInsets.all(AppSpacing.small),
-          child: BookingTabs(current: 'new', showBoard: isStaff),
-        ),
-      ),
-      const SizedBox(height: AppSpacing.medium),
       if (state.isError && state.message != null) ...[
         BookingErrorBanner(
           message: state.message!,
@@ -240,32 +231,11 @@ class _NewBookingPageState extends ConsumerState<NewBookingPage> {
       ],
     ];
 
-    final body = Align(
-      alignment: Alignment.topCenter,
-      child: ConstrainedBox(
-        constraints: BoxConstraints(
-          maxWidth: wide ? AppSpacing.splitContentMaxWidth : double.infinity,
-        ),
-        child: ListView(
-          padding: EdgeInsets.fromLTRB(
-            AppSpacing.medium,
-            AppSpacing.medium,
-            AppSpacing.medium,
-            AppSpacing.medium + MediaQuery.paddingOf(context).bottom,
-          ),
-          children: children,
-        ),
-      ),
-    );
-    return Scaffold(
-      key: const Key('booking-page'),
-      backgroundColor: Colors.transparent,
-      body: SafeArea(
-        bottom: false,
-        child: WoodBackground.isPaintedAbove(context)
-            ? body
-            : WoodBackground(child: body),
-      ),
+    return BookingPageFrame(
+      pageKey: const Key('booking-page'),
+      current: 'new',
+      showBoard: isStaff,
+      children: children,
     );
   }
 }

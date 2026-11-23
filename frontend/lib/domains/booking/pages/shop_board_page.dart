@@ -6,7 +6,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_spacing.dart';
 import '../../../app/theme/thick_widgets.dart';
-import '../../../app/theme/wood_background.dart';
 import '../../../core/dev/state/dev_user_state.dart';
 import '../../../core/layout/breakpoints.dart';
 import '../../../core/widgets/pill_badge.dart';
@@ -447,52 +446,18 @@ class _ShopBoardPageState extends ConsumerState<ShopBoardPage> {
     );
   }
 
-  /// 頁面外框：木紋背景、分段切換的分頁，內容可以捲動，最下面留出浮動導覽列的高度。
+  /// 頁面外框：三個訂位頁共用的 [BookingPageFrame]。
   Widget _page(
     BuildContext context, {
     required bool wide,
     required bool showBoard,
     required List<Widget> children,
   }) {
-    final body = Align(
-      alignment: Alignment.topCenter,
-      child: ConstrainedBox(
-        constraints: BoxConstraints(
-          maxWidth: wide
-              ? AppSpacing.splitContentMaxWidth
-              : (AppSpacing.contentMaxWidth(context.screenSize) ??
-                    double.infinity),
-        ),
-        child: ListView(
-          padding: EdgeInsets.fromLTRB(
-            AppSpacing.medium,
-            AppSpacing.medium,
-            AppSpacing.medium,
-            AppSpacing.medium + MediaQuery.paddingOf(context).bottom,
-          ),
-          children: [
-            ThickCard(
-              radius: AppRadius.card,
-              child: Padding(
-                padding: const EdgeInsets.all(AppSpacing.small),
-                child: BookingTabs(current: 'board', showBoard: showBoard),
-              ),
-            ),
-            const SizedBox(height: AppSpacing.medium),
-            ...children,
-          ],
-        ),
-      ),
-    );
-    return Scaffold(
-      key: const Key('shop-board-page'),
-      backgroundColor: Colors.transparent,
-      body: SafeArea(
-        bottom: false,
-        child: WoodBackground.isPaintedAbove(context)
-            ? body
-            : WoodBackground(child: body),
-      ),
+    return BookingPageFrame(
+      pageKey: const Key('shop-board-page'),
+      current: 'board',
+      showBoard: showBoard,
+      children: children,
     );
   }
 

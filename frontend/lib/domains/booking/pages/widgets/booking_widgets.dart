@@ -4,6 +4,8 @@ import 'package:go_router/go_router.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/thick_widgets.dart';
+import '../../../../app/theme/wood_background.dart';
+import '../../../../core/layout/breakpoints.dart';
 import '../../../../core/widgets/pill_badge.dart';
 
 /// 店家所在地（台灣）與 UTC 的時差；訂位時間一律以台灣時間顯示與送出。
@@ -53,6 +55,69 @@ String bookingErrorText(String message) =>
   'no_show' => ('未出席', PillTone.accent),
   _ => (status, PillTone.neutral),
 };
+
+/// 三個訂位頁（訂位、我的訂位、店家看板）共用的外框（Stitch 版面）：
+/// 木紋背景、同樣寬度、同樣位置的分頁卡，下面接各頁的內容；最下面留出手機浮動導覽列的高度。
+/// 三頁的頂部完全一樣，切換分頁時畫面不會跳動。
+class BookingPageFrame extends StatelessWidget {
+  const BookingPageFrame({
+    required this.pageKey,
+    required this.current,
+    required this.showBoard,
+    required this.children,
+    super.key,
+  });
+
+  final Key pageKey;
+
+  /// `new`、`mine`、`board`
+  final String current;
+  final bool showBoard;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    final wide = context.screenSize != ScreenSize.mobile;
+    final body = Align(
+      alignment: Alignment.topCenter,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxWidth: wide ? AppSpacing.splitContentMaxWidth : double.infinity,
+        ),
+        child: ListView(
+          padding: EdgeInsets.fromLTRB(
+            AppSpacing.medium,
+            AppSpacing.medium,
+            AppSpacing.medium,
+            AppSpacing.medium + MediaQuery.paddingOf(context).bottom,
+          ),
+          children: [
+            ThickCard(
+              key: const Key('booking-header'),
+              radius: AppRadius.card,
+              child: Padding(
+                padding: const EdgeInsets.all(AppSpacing.small),
+                child: BookingTabs(current: current, showBoard: showBoard),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.medium),
+            ...children,
+          ],
+        ),
+      ),
+    );
+    return Scaffold(
+      key: pageKey,
+      backgroundColor: Colors.transparent,
+      body: SafeArea(
+        bottom: false,
+        child: WoodBackground.isPaintedAbove(context)
+            ? body
+            : WoodBackground(child: body),
+      ),
+    );
+  }
+}
 
 /// 訂位頁上方的分頁：訂位／我的訂位／店家看板（店家人員與管理員才有）。
 class BookingTabs extends StatelessWidget {

@@ -5,7 +5,6 @@ import 'package:go_router/go_router.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_spacing.dart';
 import '../../../app/theme/thick_widgets.dart';
-import '../../../app/theme/wood_background.dart';
 import '../../../core/dev/state/dev_user_state.dart';
 import '../../../core/layout/breakpoints.dart';
 import '../../../core/widgets/pill_badge.dart';
@@ -90,16 +89,15 @@ class _MyBookingsPageState extends ConsumerState<MyBookingsPage> {
 
     final isStaff = user?.role == 'shop_staff' || user?.role == 'admin';
     final children = <Widget>[
+      // 狀態篩選：一排可以左右滑的膠囊，放在分頁卡下面另一張卡（三頁的分頁卡才會一樣）
       ThickCard(
+        key: const Key('booking-filters'),
         radius: AppRadius.card,
         child: Padding(
           padding: const EdgeInsets.all(AppSpacing.small),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              BookingTabs(current: 'mine', showBoard: isStaff),
-              const SizedBox(height: AppSpacing.small),
-              // 狀態篩選：一排可以左右滑的膠囊
               SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 child: Row(
@@ -139,64 +137,69 @@ class _MyBookingsPageState extends ConsumerState<MyBookingsPage> {
       else if (state.mine.isEmpty && !state.isError)
         _Empty(filtered: _status != null)
       else
-        for (final b in state.mine)
-          Padding(
-            padding: const EdgeInsets.only(bottom: AppSpacing.medium),
-            child: _MyBookingCard(
-              key: Key('booking-card-${b.id}'),
-              booking: b,
-              shopName: shopNames[b.shopId],
-              actions: [
-                if (b.status == 'confirmed' || b.status == 'seated')
-                  ThickButton(
-                    buttonKey: Key('booking-seats-${b.id}'),
-                    style: ThickStyle.light,
-                    shadow: AppShadows.soft,
-                    onPressed: () => _showSeats(b, shopNames[b.shopId]),
-                    icon: Icons.table_restaurant_outlined,
-                    label: '看座位',
-                  ),
-                if (b.status == 'confirmed')
-                  ThickButton(
-                    buttonKey: Key('booking-cancel-${b.id}'),
-                    style: ThickStyle.danger,
-                    shadow: AppShadows.soft,
-                    onPressed: state.loading ? null : () => _cancel(b),
-                    icon: Icons.event_busy_outlined,
-                    label: '取消訂位',
-                  ),
-              ],
-            ),
-          ),
+        _Columns(
+          columns: context.screenSize == ScreenSize.mobile ? 1 : 2,
+          children: [
+            for (final b in state.mine)
+              _MyBookingCard(
+                key: Key('booking-card-${b.id}'),
+                booking: b,
+                shopName: shopNames[b.shopId],
+                actions: [
+                  if (b.status == 'confirmed' || b.status == 'seated')
+                    ThickButton(
+                      buttonKey: Key('booking-seats-${b.id}'),
+                      style: ThickStyle.light,
+                      shadow: AppShadows.soft,
+                      onPressed: () => _showSeats(b, shopNames[b.shopId]),
+                      icon: Icons.table_restaurant_outlined,
+                      label: '看座位',
+                    ),
+                  if (b.status == 'confirmed')
+                    ThickButton(
+                      buttonKey: Key('booking-cancel-${b.id}'),
+                      style: ThickStyle.danger,
+                      shadow: AppShadows.soft,
+                      onPressed: state.loading ? null : () => _cancel(b),
+                      icon: Icons.event_busy_outlined,
+                      label: '取消訂位',
+                    ),
+                ],
+              ),
+          ],
+        ),
     ];
 
-    final body = Align(
-      alignment: Alignment.topCenter,
-      child: ConstrainedBox(
-        constraints: BoxConstraints(
-          maxWidth:
-              AppSpacing.contentMaxWidth(context.screenSize) ?? double.infinity,
-        ),
-        child: ListView(
-          padding: EdgeInsets.fromLTRB(
-            AppSpacing.medium,
-            AppSpacing.medium,
-            AppSpacing.medium,
-            AppSpacing.medium + MediaQuery.paddingOf(context).bottom,
-          ),
-          children: children,
-        ),
-      ),
+    return BookingPageFrame(
+      pageKey: const Key('my-bookings-page'),
+      current: 'mine',
+      showBoard: isStaff,
+      children: children,
     );
-    return Scaffold(
-      key: const Key('my-bookings-page'),
-      backgroundColor: Colors.transparent,
-      body: SafeArea(
-        bottom: false,
-        child: WoodBackground.isPaintedAbove(context)
-            ? body
-            : WoodBackground(child: body),
-      ),
+  }
+}
+
+/// 依欄數排卡片：手機一欄，平板與桌機兩欄（桌機版面較寬，一欄會太空）。
+class _Columns extends StatelessWidget {
+  const _Columns({required this.columns, required this.children});
+
+  final int columns;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    const gap = AppSpacing.medium;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = (constraints.maxWidth - gap * (columns - 1)) / columns;
+        return Wrap(
+          spacing: gap,
+          runSpacing: gap,
+          children: [
+            for (final child in children) SizedBox(width: width, child: child),
+          ],
+        );
+      },
     );
   }
 }
