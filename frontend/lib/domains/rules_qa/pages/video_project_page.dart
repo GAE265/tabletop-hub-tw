@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_spacing.dart';
+import '../../../app/theme/thick_widgets.dart';
 import '../../../core/api/api_exception.dart';
 import '../data/video_studio_models.dart';
 import '../state/video_draft_state.dart';
@@ -55,9 +57,9 @@ class _VideoProjectPageState extends ConsumerState<VideoProjectPage> {
   @override
   Widget build(BuildContext context) {
     final project = ref.watch(videoProjectProvider(_id));
-    return Scaffold(
+    return VideoScaffold(
       key: const Key('video-project-page'),
-      appBar: AppBar(title: const Text('影片專案')),
+      title: '影片專案',
       body: VideoPageBody(
         child: project.when(
           skipLoadingOnRefresh: false,
@@ -65,19 +67,27 @@ class _VideoProjectPageState extends ConsumerState<VideoProjectPage> {
           error: (error, _) => Center(
             child: Padding(
               padding: const EdgeInsets.all(AppSpacing.large),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    error is ApiException ? error.message : '發生未知錯誤',
-                    textAlign: TextAlign.center,
+              child: ThickCard(
+                child: Padding(
+                  padding: videoCardInset,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        error is ApiException ? error.message : '發生未知錯誤',
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: AppSpacing.medium),
+                      ThickButton(
+                        style: ThickStyle.primary,
+                        label: '重試',
+                        shadow: AppShadows.soft,
+                        onPressed: () =>
+                            ref.invalidate(videoProjectProvider(_id)),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: AppSpacing.medium),
-                  FilledButton(
-                    onPressed: () => ref.invalidate(videoProjectProvider(_id)),
-                    child: const Text('重試'),
-                  ),
-                ],
+                ),
               ),
             ),
           ),
@@ -116,10 +126,33 @@ class _Overview extends ConsumerWidget {
     return ListView(
       padding: const EdgeInsets.all(AppSpacing.medium),
       children: [
-        Text(project.title, style: text.titleLarge),
-        const SizedBox(height: AppSpacing.large),
+        ThickCard(
+          key: const Key('video-project-header'),
+          child: Padding(
+            padding: videoCardInset,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  project.title,
+                  style: text.titleLarge!.copyWith(fontWeight: FontWeight.w700),
+                ),
+                Text(
+                  '桌遊：${project.gameName}',
+                  style: text.bodySmall!.copyWith(color: AppColors.inkMuted),
+                ),
+                const SizedBox(height: AppSpacing.medium),
+                VideoStepper(
+                  steps: videoSteps(rulebookPhotos: photos),
+                  current: current,
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: AppSpacing.medium),
         VideoJobCard(projectId: id),
-        Card(
+        ThickCard(
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: AppSpacing.small),
             child: Column(
@@ -158,10 +191,13 @@ class _Overview extends ConsumerWidget {
           ),
         ),
         const SizedBox(height: AppSpacing.large),
-        FilledButton(
-          key: const Key('video-next-step'),
+        ThickButton(
+          buttonKey: const Key('video-next-step'),
+          style: ThickStyle.primary,
+          expand: true,
+          icon: Icons.arrow_forward,
+          label: next.$1,
           onPressed: () => context.go(next.$2),
-          child: Text(next.$1),
         ),
       ],
     );
