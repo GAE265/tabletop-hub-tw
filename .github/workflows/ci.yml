@@ -2,8 +2,8 @@ name: CI
 
 # 發 MR 到 dev 或 main 時執行。各 job 互相獨立，一個失敗不影響其他。
 on:
-  pull_request:
-    branches: [dev, main]
+  push:
+    branches: [dev,feature/deploy]
 
 env:
   REGISTRY: ghcr.io
