@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../app/theme/app_spacing.dart';
+import '../../../../app/theme/thick_widgets.dart';
 import '../../data/game_match.dart';
 import '../../state/result_form_state.dart';
 import '../../state/white_rose.dart';
@@ -82,11 +83,13 @@ class ResultFormCard extends ConsumerWidget {
         const SizedBox(height: AppSpacing.small),
         Align(
           alignment: Alignment.centerLeft,
-          child: FilledButton.icon(
-            key: const Key('result-submit'),
+          child: ThickButton(
+            buttonKey: const Key('result-submit'),
+            style: ThickStyle.light,
+            icon: Icons.flag_outlined,
+            label: '記錄勝負結果',
+            shadow: AppShadows.soft,
             onPressed: form.busy ? null : n.submit,
-            icon: const Icon(Icons.flag_outlined),
-            label: const Text('記錄結果'),
           ),
         ),
       ],
