@@ -36,14 +36,15 @@
 | 2 | `feature/rules_qa-video-jobs` | 工作資料表、背景執行緒、查詢 API、重新啟動的處理 | API、migration |
 | 3 | `feature/rules_qa-video-terms` | 用語對照表資料表、管理員上傳 API | API、migration |
 | 4 | `feature/rules_qa-video-draft-api` | 草稿工作（讀 `games_manual` → 草稿 → 涵蓋檢查）、草稿查詢；工作資料夾與存放介面 | API |
-| 5 | `feature/rules_qa-video-draft-page` | 手機：專案列表、建立專案、規則書頁面（沿用 `rules_ingest`）、選頁產生草稿、看草稿、素材清單與涵蓋檢查 | — |
+| 5 | `feature/rules_qa-video-draft-page` | 手機：專案列表、建立專案、規則書頁面（沿用 `rules_ingest`）、選頁產生草稿、看草稿、素材清單與涵蓋檢查；**這款遊戲從未上傳用語對照表時，提示店員草稿的用詞品質可能下降**（design.md D4） | — |
 | 6 | `feature/rules_qa-video-assets-api` | 素材照片上傳、方向、區域座標、缺什麼的檢查 | API |
 | 7 | `feature/rules_qa-video-assets-page` | 手機：素材清單、拍照上傳、旋轉、拖框標區域 | — |
 | 8 | `feature/rules_qa-video-render-api` | `render_video` 的進度回呼（`integrations/video`）、產生影片工作、成品網址 | API |
 | 9 | `feature/rules_qa-video-render-page` | 手機：產生影片、進度、播放（新增 `video_player`，`lesson_video_player` 補 `file`） | 新增套件 |
 
 - MR 1：測試先行、實作、自我檢查完成並 push（2026-11-21），等 Draft PR 與 CI
-- MR 2：測試先行、實作、自我檢查完成（2026-11-21），本機未 push
+- MR 2：測試先行、實作、自我檢查完成並 push（2026-11-21），等 Draft PR 與 CI
+- MR 3：測試先行、實作、自我檢查完成（2026-11-21），本機未 push（堆疊規則：MR 1 合併、MR 2 改回 dev 後才推）
 - 存放（D5）相關的 MR（4、6、8）的說明列出「保留期限與是否刪除」的選項與後果，由永傑與團隊決定。
 - 每個 MR 的 tasks（測試 → 實作 → 自我檢查 → MR 說明）在開工時補上。
 

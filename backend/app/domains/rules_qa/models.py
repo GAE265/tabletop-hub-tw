@@ -102,7 +102,7 @@ class RulesQaChunk(Base):
 class RulesQaVideoProject(Base):
     """規則影片專案（add-rules-video-mobile design.md D1）。
 
-    本章頁、參考頁、段資料等欄位等 MR 4 用到時再加；目前步驟（step）不存欄位，由狀態推出。
+    本章頁、參考頁、段資料等欄位由「頁面文字」「草稿工作」用到時再加；目前步驟（step）不存欄位，由狀態推出。
     """
 
     __tablename__ = "rules_qa_video_projects"
@@ -225,4 +225,33 @@ class RulesQaVideoJob(Base):
     )
     finished_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), comment="完成或失敗的時間；空值代表還沒結束"
+    )
+
+
+class RulesQaVideoTerms(Base):
+    """規則影片的用語對照表（add-rules-video-mobile design.md D4）。每款遊戲一份，所有店家共用。"""
+
+    __tablename__ = "rules_qa_video_terms"
+    __table_args__ = (
+        {"comment": "規則影片的用語對照表：每款遊戲一份，管理員上傳，AI 產生草稿時照表用詞"},
+    )
+
+    game_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("games.id"),
+        primary_key=True,
+        comment="哪一款遊戲的對照表；每款遊戲一份（桌遊被刪除時由資料庫擋下，ADR 0003）",
+    )
+    terms: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSONB,
+        comment=(
+            "用語對照，格式同 terms.json（en、zh、key、avoid、category）；"
+            "空陣列代表確認不使用對照表"
+        ),
+    )
+    updated_by: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("auth_users.id"), comment="最後一次上傳的管理員"
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), comment="最後一次上傳的時間"
     )
