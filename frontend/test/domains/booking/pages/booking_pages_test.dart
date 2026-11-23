@@ -212,8 +212,14 @@ void main() {
         size: const Size(400, 600),
         bottomInset: 120,
       );
-      await tester.drag(find.byType(Scrollable).first, const Offset(0, -5000));
-      await tester.pumpAndSettle();
+      // 清單是邊捲邊建立的，捲兩次才會到真正的最底
+      for (var i = 0; i < 2; i++) {
+        await tester.drag(
+          find.byType(Scrollable).first,
+          const Offset(0, -5000),
+        );
+        await tester.pumpAndSettle();
+      }
       expect(
         tester.getBottomLeft(find.byKey(const Key('booking-card-4'))).dy,
         lessThanOrEqualTo(600 - 120),
