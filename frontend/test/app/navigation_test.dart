@@ -319,7 +319,7 @@ void main() {
       }
     });
 
-    for (final location in ['/', '/groups']) {
+    for (final location in ['/', '/groups', '/matches', '/matches/m-1']) {
       testWidgets('$location：內容延伸到導覽列後面，並告訴頁面底部要留多少空間', (tester) async {
         await pumpShell(tester, location: location, size: const Size(400, 900));
         final page = find.byType(Scaffold).last;
