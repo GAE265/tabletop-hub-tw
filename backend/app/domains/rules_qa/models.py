@@ -21,7 +21,7 @@ from sqlalchemy import (
     func,
     text,
 )
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.db import Base
@@ -143,6 +143,27 @@ class RulesQaVideoProject(Base):
         DateTime(timezone=True),
         server_default=func.now(),
         comment="最後一次修改專案的時間；列表依此由新到舊排列",
+    )
+    # 頁面文字（design.md D11）
+    chapter_pages: Mapped[list[int]] = mapped_column(
+        ARRAY(Integer),
+        server_default="{}",
+        comment="本章用規則書的哪幾頁（games_manual 的頁碼）；空陣列代表還沒選",
+    )
+    reference_pages: Mapped[list[int]] = mapped_column(
+        ARRAY(Integer),
+        server_default="{}",
+        comment="參考頁：只查牌名與分類，不可寫成旁白；空陣列代表沒有參考頁",
+    )
+    page_texts: Mapped[dict[str, Any]] = mapped_column(
+        JSONB,
+        server_default=text("'{}'::jsonb"),
+        comment="店員編輯後的規則書文字（{頁碼: {text, original_hash}}）；空物件代表還沒存過",
+    )
+    pages_version: Mapped[int] = mapped_column(
+        Integer,
+        server_default="0",
+        comment="頁面文字每存一次加 1；草稿記下自己用的是哪一版",
     )
 
 

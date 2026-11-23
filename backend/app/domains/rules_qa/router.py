@@ -9,9 +9,12 @@ from sqlalchemy.orm import Session
 from app.core.auth import CurrentUser, get_current_user
 from app.core.db import get_session
 from app.domains.booking.repository import BookingRepository
+from app.domains.rules_ingest.repository import ManualPageRepository
+from app.domains.rules_ingest.service import read_manual_pages
 from app.domains.rules_qa.repository import (
     RulesQaRepository,
     VideoJobRepository,
+    VideoPagesRepository,
     VideoProjectRepository,
     VideoTermsRepository,
 )
@@ -23,6 +26,8 @@ from app.domains.rules_qa.schemas import (
     VideoJobList,
     VideoJobOut,
     VideoOut,
+    VideoPagesIn,
+    VideoPagesOut,
     VideoProjectCreate,
     VideoProjectList,
     VideoProjectOut,
@@ -33,6 +38,7 @@ from app.domains.rules_qa.schemas import (
 from app.domains.rules_qa.service import (
     RulesQaService,
     VideoJobService,
+    VideoPagesService,
     VideoProjectService,
     VideoTermsService,
 )
@@ -194,3 +200,37 @@ def get_video_terms(
 ) -> VideoTermsOut:
     """這款遊戲的用語對照表；從未上傳回 404（與上傳空表不同）。"""
     return service.get(user, game_id)
+
+
+# --------------------------------------------------------------------------- 規則書頁面文字
+
+
+def get_video_pages_service(
+    session: Annotated[Session, Depends(get_session)],
+) -> VideoPagesService:
+    # 原文用 rules_ingest 的 service 函式讀（AGENTS.md 4.2：domain 之間只呼叫對方的 service）
+    manual = ManualPageRepository(session)
+    return VideoPagesService(
+        VideoPagesRepository(session),
+        VideoProjectRepository(session),
+        lambda game_id: read_manual_pages(manual, game_id),
+    )
+
+
+VideoPagesServiceDep = Annotated[VideoPagesService, Depends(get_video_pages_service)]
+
+
+@videos_router.get("/{project_id}/pages", response_model=VideoPagesOut)
+def get_video_pages(
+    project_id: uuid.UUID, user: CurrentUserDep, service: VideoPagesServiceDep
+) -> VideoPagesOut:
+    """可選的頁、選了的本章頁與參考頁、每頁的原文與編輯後的文字、刪掉的段落與改過的行。"""
+    return service.get(user, project_id)
+
+
+@videos_router.put("/{project_id}/pages", response_model=VideoPagesOut)
+def replace_video_pages(
+    project_id: uuid.UUID, body: VideoPagesIn, user: CurrentUserDep, service: VideoPagesServiceDep
+) -> VideoPagesOut:
+    """選本章頁與參考頁、存編輯後的文字（整份取代；沒給文字的頁用原文）。不改 games_manual。"""
+    return service.replace(user, project_id, body)

@@ -26,26 +26,28 @@
   - 實驗頁不進 repo（盤面照片是遊戲素材，AGENTS.md 2.2）
 - [x] 1.4 建表前在群組告知表名：`rules_qa_video_projects`、`rules_qa_video_jobs`、`rules_qa_video_terms`（AGENTS.md 4.4；2026-11-21 永傑已告知）
 
-## 2. 檢查點前：MR 1–9
+## 2. 檢查點前：MR 1–10
 
-到 MR 9 為止，店員能在手機上從頭產出一支影片。順序依「做完一段就能在手機上看到結果」排列。
+到 MR 10 為止，店員能在手機上從頭產出一支影片（2026-11-21：原「MR 4 草稿 API」拆成 MR 4 頁面文字、MR 5 草稿工作，之後的編號順延，檢查點由 MR 9 改為 MR 10）。順序依「做完一段就能在手機上看到結果」排列。
 
 | 順序 | 分支 | 內容 | 契約 |
 |---|---|---|---|
 | 1 | `feature/rules_qa-video-projects` | 影片專案資料表、建立／列表／查看 API、權限 | API、migration |
 | 2 | `feature/rules_qa-video-jobs` | 工作資料表、背景執行緒、查詢 API、重新啟動的處理 | API、migration |
 | 3 | `feature/rules_qa-video-terms` | 用語對照表資料表、管理員上傳 API | API、migration |
-| 4 | `feature/rules_qa-video-draft-api` | 草稿工作（讀 `games_manual` → 草稿 → 涵蓋檢查）、草稿查詢；工作資料夾與存放介面 | API |
-| 5 | `feature/rules_qa-video-draft-page` | 手機：專案列表、建立專案、規則書頁面（沿用 `rules_ingest`）、選頁產生草稿、看草稿、素材清單與涵蓋檢查；**這款遊戲從未上傳用語對照表時，提示店員草稿的用詞品質可能下降**（design.md D4） | — |
-| 6 | `feature/rules_qa-video-assets-api` | 素材照片上傳、方向、區域座標、缺什麼的檢查 | API |
-| 7 | `feature/rules_qa-video-assets-page` | 手機：素材清單、拍照上傳、旋轉、拖框標區域 | — |
-| 8 | `feature/rules_qa-video-render-api` | `render_video` 的進度回呼（`integrations/video`）、產生影片工作、成品網址 | API |
-| 9 | `feature/rules_qa-video-render-page` | 手機：產生影片、進度、播放（新增 `video_player`，`lesson_video_player` 補 `file`） | 新增套件 |
+| 4 | `feature/rules_qa-video-pages` | migration 0019（本章頁、參考頁、編輯後的頁面文字、`pages_version`）；`GET`／`PUT /rules-videos/{id}/pages`；刪掉的段落與改過的行（design.md D11） | API、migration |
+| 5 | `feature/rules_qa-video-draft-api` | migration 0020（段資料正本、版本、涵蓋檢查）；草稿工作（讀編輯後的文字 → 草稿 → 涵蓋檢查）、`GET /rules-videos/{id}/draft`；在 `main.py` 註冊處理函式（design.md D11） | API、migration |
+| 6 | `feature/rules_qa-video-draft-page` | 手機：專案列表、建立專案、規則書頁面（沿用 `rules_ingest`）；**產生草稿前逐頁檢視與編輯文字：修正 OCR 錯字、刪除不屬於本章的段落；確認前列出「店員刪掉了哪些段落」（原文有、編輯後沒有）與改過的行，**每一處同時顯示原文與編輯後**，不只顯示分類**；產生草稿、看草稿、素材清單與涵蓋檢查；店員逐句檢查字幕（標出處頁）；**這款遊戲從未上傳用語對照表時，提示草稿的用詞品質可能下降**；**頁面文字在草稿產生後被改過時，標示「依舊文字產生」** | — |
+| 7 | `feature/rules_qa-video-assets-api` | 素材照片上傳（存放介面）、方向、區域座標、缺什麼的檢查；重新產生草稿時沿用照片與區域 | API |
+| 8 | `feature/rules_qa-video-assets-page` | 手機：素材清單、拍照上傳、旋轉、拖框標區域（提示用四個角對齊框線） | — |
+| 9 | `feature/rules_qa-video-render-api` | `render_video` 的進度回呼（`integrations/video`）、產生影片工作、成品網址 | API |
+| 10 | `feature/rules_qa-video-render-page` | 手機：產生影片、進度、播放（新增 `video_player`，`lesson_video_player` 補 `file`） | 新增套件 |
 
 - MR 1：測試先行、實作、自我檢查完成並 push（2026-11-21），等 Draft PR 與 CI
 - MR 2：測試先行、實作、自我檢查完成並 push（2026-11-21），等 Draft PR 與 CI
 - MR 3：測試先行、實作、自我檢查完成（2026-11-21），本機未 push（堆疊規則：MR 1 合併、MR 2 改回 dev 後才推）
-- 存放（D5）相關的 MR（4、6、8）的說明列出「保留期限與是否刪除」的選項與後果，由永傑與團隊決定。
+- MR 4：測試先行、實作、自我檢查完成（2026-11-21），本機未 push（堆疊規則）
+- 存放（D5）相關的 MR（4、5、7、9）的說明列出「保留期限與是否刪除」的選項與後果（含專案上的規則書文字副本），由永傑與團隊決定。
 - 每個 MR 的 tasks（測試 → 實作 → 自我檢查 → MR 說明）在開工時補上。
 
 ## 3. 檢查點：驗收
@@ -59,18 +61,29 @@
 
 | 順序 | 分支 | 內容 | 契約 |
 |---|---|---|---|
-| 10 | `feature/rules_qa-video-revise-api` | 修改的試算、套用、替代做法、選段 | API |
-| 11 | `feature/rules_qa-video-revise-page` | 手機：提出修改、看提案、套用、選替代做法 | — |
+| 11 | `feature/rules_qa-video-revise-api` | 修改的試算、套用、替代做法、選段 | API |
+| 12 | `feature/rules_qa-video-revise-page` | 手機：提出修改、看提案、套用、選替代做法 | — |
 
 **之後再決定**：伺服器部署（ffmpeg、中文字型、雲端存放）。
 
-**另外討論**：保留期限與是否刪除（永傑與團隊）。
+**排在修改頁之後**（2026-11-21 永傑暫定 Q1，推 MR 4 前與團隊確認）：
+
+| 順序 | 分支 | 內容 | 契約 |
+|---|---|---|---|
+| 13 | `feature/rules_qa-video-retention` | 「定案」動作；超過 `RULES_VIDEO_RETENTION_DAYS`（預設 3）天沒有動靜自動刪除；刪除規則書文字副本、素材照片、工作資料夾快取，保留成品影片與段資料；專案列表的「還有 N 天會自動刪除」（API 欄位與手機頁） | API |
 
 ## 已知限制
 
+- 每份草稿多約 15 秒改寫（第三輪實驗三次都因結構錯誤改寫一次；提示不調整，2026-11-21 永傑決定）
+- LLM 逾時維持 30 秒，餘裕約 1.5 倍（實驗最長一次 19.5 秒）；章節變長再處理
+- 涵蓋檢查看不到用語對照表，對照表改寫規則書用詞時可能誤報
+- 這一版不能輸出繪製的立體素材（骰子、白水晶等）：《血與刃》步驟三不受影響，其他需要較多素材的遊戲會在產生影片那一步被擋下
+- 中文規則書小實驗的合格結果，是工程師模擬店員編輯後的文字得到的；真正的驗證是手機實測（3.1）。三次第一份輸出都靠改寫修好「翻牌沒有牌背」，改寫是流程的關鍵一環
+
 - 伺服器重新啟動會中斷進行中的工作（標為失敗，可以重試）
-- 檢查點前不能在手機上用一句話修改草稿；檢查點驗收時，草稿需要改就用「重新產生草稿」（沿用照片與區域），不用命令列。手機修改頁是檢查點之後一定要做的 MR（10、11）
-- 規則書照片的 OCR 錯字、素材照片的反光與歪斜不會自動偵測（第 4 階段）
+- 檢查點前不能在手機上用一句話修改草稿；檢查點驗收時，草稿需要改就用「重新產生草稿」（沿用照片與區域），不用命令列。手機修改頁是檢查點之後一定要做的 MR（11、12）
+- 規則書照片的 OCR 錯字會直接帶進草稿的字幕（實驗中「蓋住的」被辨識成「有蓋牌的」，三次都照抄），不會自動偵測；產生草稿前店員可以修正文字，草稿頁也保留「店員檢查字幕」這一步（MR 6）
+- 素材照片的反光與歪斜不會自動偵測（第 4 階段）
 - 頁面語言一律記為 `zh`
 - 正式登入還沒做，驗收用開發模式的身分
 
