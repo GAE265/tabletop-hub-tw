@@ -177,7 +177,7 @@ void main() {
     });
 
     for (final key in ['home-cta-groups', 'home-cta-booking']) {
-      testWidgets('按住「$key」：底邊變薄、按鈕往下沉；放開後恢復', (tester) async {
+      testWidgets('按住「$key」：底邊變薄、按鈕往下沉；手指移開後彈回', (tester) async {
         await pumpHome(tester);
         final button = find.byKey(Key(key));
         await tester.ensureVisible(button);
@@ -204,12 +204,95 @@ void main() {
         await tester.pumpAndSettle();
         expect(edge(), lessThan(restEdge));
         expect(tester.getTopLeft(button).dy, greaterThan(restTop));
-        await gesture.up();
+        // 取消手勢（不算點擊），留在首頁檢查按鈕彈回
+        await gesture.cancel();
         await tester.pumpAndSettle();
         expect(edge(), restEdge);
         expect(tester.getTopLeft(button).dy, restTop);
       });
     }
+
+    /// 按住 [target]（不放開）時，[content] 往下沉、[frame] 的底邊變薄；手指移開後彈回。
+    Future<void> expectSinks(
+      WidgetTester tester, {
+      required Finder target,
+      required Finder content,
+      required Finder frame,
+    }) async {
+      await tester.ensureVisible(target);
+      await tester.pumpAndSettle();
+      double edge() =>
+          ((tester.widget<DecoratedBox>(frame.first).decoration
+                          as BoxDecoration)
+                      .border!
+                  as Border)
+              .bottom
+              .width;
+      final restEdge = edge();
+      final restTop = tester.getTopLeft(content).dy;
+      final gesture = await tester.startGesture(tester.getCenter(target));
+      await tester.pumpAndSettle();
+      expect(edge(), lessThan(restEdge));
+      expect(tester.getTopLeft(content).dy, greaterThan(restTop));
+      await gesture.cancel();
+      await tester.pumpAndSettle();
+      expect(edge(), restEdge);
+      expect(tester.getTopLeft(content).dy, restTop);
+    }
+
+    for (final MapEntry(key: key, value: (title, _, _)) in cards.entries) {
+      testWidgets('按住入口卡片「$title」：往下沉，移開後彈回', (tester) async {
+        await pumpHome(tester);
+        final card = find.byKey(Key(key));
+        await expectSinks(
+          tester,
+          target: card,
+          content: find.descendant(of: card, matching: find.text(title)),
+          frame: find.descendant(of: card, matching: find.byType(DecoratedBox)),
+        );
+      });
+    }
+
+    testWidgets('按住行程卡片：往下沉，移開後彈回', (tester) async {
+      final bookings = FakeBookingRepository(
+        mine: [homeBooking(id: 1, startAt: taipei(11, 21))],
+      );
+      await pumpHome(tester, bookings: bookings);
+      final card = find.byKey(const Key('home-upcoming-0'));
+      await expectSinks(
+        tester,
+        target: card,
+        content: find.descendant(of: card, matching: find.text('訂位代碼 BK1')),
+        frame: find.descendant(of: card, matching: find.byType(DecoratedBox)),
+      );
+    });
+
+    for (final key in ['home-empty-groups', 'home-empty-booking']) {
+      testWidgets('沒有行程時按住「$key」：往下沉，移開後彈回', (tester) async {
+        await pumpHome(tester);
+        final button = find.byKey(Key(key));
+        await expectSinks(
+          tester,
+          target: button,
+          content: button,
+          frame: find.ancestor(of: button, matching: find.byType(DecoratedBox)),
+        );
+      });
+    }
+
+    testWidgets('載入失敗時按住「重試」：往下沉，移開後彈回', (tester) async {
+      await pumpHome(
+        tester,
+        bookings: FakeBookingRepository()..mineError = networkError,
+      );
+      final button = find.byKey(const Key('home-upcoming-retry'));
+      await expectSinks(
+        tester,
+        target: button,
+        content: button,
+        frame: find.ancestor(of: button, matching: find.byType(DecoratedBox)),
+      );
+    });
 
     testWidgets('行程卡片有厚度：底部有一條較深的邊', (tester) async {
       final bookings = FakeBookingRepository(
