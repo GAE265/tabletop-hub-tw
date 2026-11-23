@@ -5,7 +5,6 @@ import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/thick_widgets.dart';
 import '../../../../core/widgets/pill_badge.dart';
-import '../../data/booking.dart';
 
 /// 店家所在地（台灣）與 UTC 的時差；訂位時間一律以台灣時間顯示與送出。
 const taipeiOffset = Duration(hours: 8);
@@ -228,108 +227,6 @@ class BookingErrorBanner extends StatelessWidget {
   }
 }
 
-/// 一筆訂位的卡片；按鈕由呼叫的頁面依角色決定。
-class BookingCard extends StatelessWidget {
-  const BookingCard({
-    required this.booking,
-    required this.shopName,
-    this.actions = const [],
-    this.overtimeMinutes,
-    super.key,
-  });
-
-  final Booking booking;
-  final String? shopName;
-  final List<Widget> actions;
-
-  /// 已入座且超過結束時間的分鐘數；有值時顯示「已超時 N 分鐘」（店家看板用）。
-  final int? overtimeMinutes;
-
-  @override
-  Widget build(BuildContext context) {
-    final b = booking;
-    final text = Theme.of(context).textTheme;
-    final muted = Theme.of(context).colorScheme.onSurfaceVariant;
-    final (statusText, tone) = bookingStatusLabel(b.status);
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.medium),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    formatBookingRange(b.startAt, b.endAt),
-                    style: text.titleMedium,
-                  ),
-                ),
-                PillBadge(label: statusText, tone: tone),
-              ],
-            ),
-            const SizedBox(height: AppSpacing.small),
-            Wrap(
-              spacing: AppSpacing.small,
-              runSpacing: AppSpacing.xSmall,
-              children: [
-                if (shopName != null)
-                  PillBadge(label: shopName!, icon: Icons.storefront_outlined),
-                PillBadge(
-                  label: '${b.partySize} 人',
-                  tone: PillTone.players,
-                  icon: Icons.people_outline,
-                ),
-                if (b.tableCodes.isNotEmpty)
-                  PillBadge(
-                    label: '桌位 ${b.tableCodes.join('、')}',
-                    icon: Icons.table_restaurant_outlined,
-                  ),
-                if (overtimeMinutes != null)
-                  PillBadge(
-                    key: Key('board-overtime-${b.id}'),
-                    label: '已超時 $overtimeMinutes 分鐘',
-                    tone: PillTone.accent,
-                    icon: Icons.timer_off_outlined,
-                  ),
-              ],
-            ),
-            const SizedBox(height: AppSpacing.small),
-            Text(
-              '訂位代碼 ${b.reservationCode}　預估 ${b.estimatedFee.venueFee} 元'
-              '${b.finalFee == null ? '' : '　結算 ${b.finalFee} 元'}',
-              style: text.bodyMedium!.copyWith(color: muted),
-            ),
-            if (b.notice != null) ...[
-              const SizedBox(height: AppSpacing.small),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(
-                    Icons.info_outline,
-                    size: text.bodyMedium!.fontSize,
-                    color: muted,
-                  ),
-                  const SizedBox(width: AppSpacing.xSmall),
-                  Expanded(child: Text(b.notice!, style: text.bodyMedium)),
-                ],
-              ),
-            ],
-            if (actions.isNotEmpty) ...[
-              const SizedBox(height: AppSpacing.small),
-              Wrap(
-                alignment: WrapAlignment.end,
-                spacing: AppSpacing.small,
-                children: actions,
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 /// 確認視窗；按「確定」回傳 true。[content] 是標題下方的說明文字。
 Future<bool> confirmBookingAction(
   BuildContext context, {
@@ -357,46 +254,4 @@ Future<bool> confirmBookingAction(
     ),
   );
   return ok ?? false;
-}
-
-/// 頁面共用的外框：置中、限制最大寬度、上方分頁。
-class BookingScaffold extends StatelessWidget {
-  const BookingScaffold({
-    required this.pageKey,
-    required this.title,
-    required this.current,
-    required this.showBoard,
-    required this.children,
-    this.maxWidth,
-    super.key,
-  });
-
-  final Key pageKey;
-  final String title;
-  final String current;
-  final bool showBoard;
-  final List<Widget> children;
-  final double? maxWidth;
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      key: pageKey,
-      appBar: AppBar(title: Text(title)),
-      body: Align(
-        alignment: Alignment.topCenter,
-        child: ConstrainedBox(
-          constraints: BoxConstraints(maxWidth: maxWidth ?? double.infinity),
-          child: ListView(
-            padding: const EdgeInsets.all(AppSpacing.medium),
-            children: [
-              BookingTabs(current: current, showBoard: showBoard),
-              const SizedBox(height: AppSpacing.medium),
-              ...children,
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 }
