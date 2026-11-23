@@ -445,6 +445,9 @@ void main() {
       repo: repo,
       userId: 'u-org',
     );
+    // 團務操作改成列表後，「取消揪團」在畫面下方，先捲過去
+    await tester.ensureVisible(find.text('取消揪團'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('取消揪團'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('確定'));
