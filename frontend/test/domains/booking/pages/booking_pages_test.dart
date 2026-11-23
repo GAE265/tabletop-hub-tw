@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tabletop_hub/app/theme/app_theme.dart';
+import 'package:tabletop_hub/app/theme/wood_background.dart';
 import 'package:tabletop_hub/core/api/api_exception.dart';
 import 'package:tabletop_hub/core/dev/data/dev_user.dart';
 import 'package:tabletop_hub/core/dev/state/dev_user_state.dart';
@@ -58,6 +59,9 @@ Future<FakeBookingRepository> pumpAt(
   DevUser? user = player,
   Size size = const Size(400, 900),
   DateTime Function()? clock,
+
+  /// 畫面底部被蓋住的高度（手機的浮動導覽列，見 AppShell）。
+  double bottomInset = 0,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
@@ -95,6 +99,12 @@ Future<FakeBookingRepository> pumpAt(
       child: MaterialApp.router(
         theme: buildAppTheme(const FakeAppFonts()),
         routerConfig: router,
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(
+            context,
+          ).copyWith(padding: EdgeInsets.only(bottom: bottomInset)),
+          child: child!,
+        ),
       ),
     ),
   );
@@ -116,7 +126,147 @@ Future<void> tapKey(WidgetTester tester, String key) async {
   await tester.pumpAndSettle();
 }
 
+/// [box] 的外框底邊比上邊粗，而且有陰影（有厚度）。
+void expectThick(WidgetTester tester, Finder box, [String? reason]) {
+  final decoration =
+      tester.widget<DecoratedBox>(box).decoration as BoxDecoration;
+  final border = decoration.border! as Border;
+  expect(border.bottom.width, greaterThan(border.top.width), reason: reason);
+  expect(decoration.boxShadow, isNotEmpty, reason: reason);
+}
+
+Finder firstBoxIn(Finder of) =>
+    find.descendant(of: of, matching: find.byType(DecoratedBox)).first;
+
 void main() {
+  // Stitch 版面（訂位頁）：木紋背景、分段切換的分頁、厚的表單卡與預估費用卡
+  group('訂位（Stitch 版面）', () {
+    testWidgets('木紋背景；分頁在分段切換的軌道裡', (tester) async {
+      await pumpAt(tester, '/booking', user: staff);
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('booking-page')),
+          matching: find.byType(WoodBackground),
+        ),
+        findsOneWidget,
+      );
+      final track = find.byKey(const Key('booking-tabs'));
+      for (final key in [
+        'booking-tab-new',
+        'booking-tab-mine',
+        'booking-tab-board',
+      ]) {
+        expect(
+          find.descendant(of: track, matching: find.byKey(Key(key))),
+          findsOneWidget,
+          reason: key,
+        );
+      }
+    });
+
+    testWidgets('表單卡有厚度，每一項有小標', (tester) async {
+      await pumpAt(tester, '/booking');
+      final form = find.byKey(const Key('booking-form'));
+      expectThick(tester, firstBoxIn(form));
+      for (final title in ['預約店家', '日期', '時段', '人數', '特殊需求（選填）']) {
+        expect(
+          find.descendant(of: form, matching: find.text(title)),
+          findsOneWidget,
+          reason: title,
+        );
+      }
+    });
+
+    testWidgets('日期快選「明天」：送出的日期是台灣時間的明天', (tester) async {
+      final repo = FakeBookingRepository()..mine = [sampleBooking()];
+      await pumpAt(tester, '/booking?shop_id=s-a', repo: repo);
+      await tapKey(tester, 'booking-date-tomorrow');
+      await tapKey(tester, 'booking-submit');
+      final now = DateTime.now().toUtc().add(const Duration(hours: 8));
+      final tomorrow = DateTime(now.year, now.month, now.day + 1);
+      String two(int n) => n.toString().padLeft(2, '0');
+      expect(
+        repo.createCalls.single.startAt,
+        startsWith(
+          '${tomorrow.year}-${two(tomorrow.month)}-${two(tomorrow.day)}T',
+        ),
+      );
+    });
+
+    testWidgets('日期快選：今天、明天、後天三顆，選中的看得出來', (tester) async {
+      await pumpAt(tester, '/booking?date=2026-01-01');
+      for (final key in [
+        'booking-date-today',
+        'booking-date-tomorrow',
+        'booking-date-after',
+      ]) {
+        expect(find.byKey(Key(key)), findsOneWidget, reason: key);
+      }
+      await tapKey(tester, 'booking-date-today');
+      expect(
+        tester
+            .widget<Semantics>(
+              find
+                  .ancestor(
+                    of: find.byKey(const Key('booking-date-today')),
+                    matching: find.byType(Semantics),
+                  )
+                  .first,
+            )
+            .properties
+            .selected,
+        isTrue,
+      );
+    });
+
+    testWidgets('預估費用卡：大字總額、每人約多少、安排桌位，有厚度', (tester) async {
+      await pumpAt(tester, '/booking');
+      await chooseShop(tester, '甲店');
+      await tapKey(tester, 'booking-quote');
+      final card = find.byKey(const Key('booking-quote-card'));
+      expectThick(tester, firstBoxIn(card));
+      expect(
+        find.descendant(of: card, matching: find.text('NT\$ 480')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: card, matching: find.textContaining('每人約 \$120')),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('「預估費用」「確認訂位」都是有厚度的按鈕', (tester) async {
+      await pumpAt(tester, '/booking');
+      for (final key in ['booking-quote', 'booking-submit']) {
+        expectThick(
+          tester,
+          find
+              .ancestor(
+                of: find.byKey(Key(key)),
+                matching: find.byType(DecoratedBox),
+              )
+              .first,
+          key,
+        );
+      }
+    });
+
+    testWidgets('手機底部被導覽列蓋住：捲到最底時「確認訂位」停在導覽列上方', (tester) async {
+      await pumpAt(
+        tester,
+        '/booking',
+        size: const Size(400, 600),
+        bottomInset: 120,
+      );
+      await tester.drag(find.byType(Scrollable).first, const Offset(0, -3000));
+      await tester.pumpAndSettle();
+      expect(
+        tester.getBottomLeft(find.byKey(const Key('booking-submit'))).dy,
+        lessThanOrEqualTo(600 - 120),
+      );
+    });
+  });
+
   group('訂位', () {
     testWidgets('開啟：載入店家清單，玩家預設沒有選店家', (tester) async {
       final repo = await pumpAt(tester, '/booking');
