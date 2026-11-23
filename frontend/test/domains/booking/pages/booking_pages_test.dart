@@ -140,6 +140,87 @@ Finder firstBoxIn(Finder of) =>
 
 void main() {
   // Stitch 版面（訂位頁）：木紋背景、分段切換的分頁、厚的表單卡與預估費用卡
+  group('我的訂位（Stitch 版面）', () {
+    testWidgets('木紋背景；分頁在分段切換的軌道裡；狀態篩選是一排膠囊', (tester) async {
+      await pumpAt(tester, '/booking/mine');
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('my-bookings-page')),
+          matching: find.byType(WoodBackground),
+        ),
+        findsOneWidget,
+      );
+      expect(find.byKey(const Key('booking-tabs')), findsOneWidget);
+      final all = find.descendant(
+        of: find.byKey(const Key('booking-status-all')),
+        matching: find.byType(Semantics),
+      );
+      expect(tester.widget<Semantics>(all.first).properties.selected, isTrue);
+    });
+
+    testWidgets('訂位卡片有厚度：店名當標題，時間、人數、桌位、注意事項，底部是代碼與預估費用', (tester) async {
+      final repo = FakeBookingRepository()
+        ..mine = [sampleBooking(notice: '週末每位客人至少需點一杯飲料')];
+      await pumpAt(tester, '/booking/mine', repo: repo);
+      final card = find.byKey(const Key('booking-card-7'));
+      expectThick(tester, firstBoxIn(card));
+      Finder inCard(String text) =>
+          find.descendant(of: card, matching: find.text(text));
+      expect(inCard('甲店'), findsOneWidget);
+      expect(inCard('訂位代碼 BK7'), findsOneWidget);
+      expect(inCard('預估 480 元'), findsOneWidget);
+    });
+
+    testWidgets('「看座位」「取消訂位」是有厚度的按鈕', (tester) async {
+      final repo = FakeBookingRepository()..mine = [sampleBooking()];
+      await pumpAt(tester, '/booking/mine', repo: repo);
+      for (final key in ['booking-seats-7', 'booking-cancel-7']) {
+        expectThick(
+          tester,
+          find
+              .ancestor(
+                of: find.byKey(Key(key)),
+                matching: find.byType(DecoratedBox),
+              )
+              .first,
+          key,
+        );
+      }
+    });
+
+    testWidgets('沒有訂位：空狀態卡片有厚度，「去訂位」是厚按鈕', (tester) async {
+      await pumpAt(tester, '/booking/mine');
+      expectThick(tester, firstBoxIn(find.byKey(const Key('booking-empty'))));
+      expectThick(
+        tester,
+        find
+            .ancestor(
+              of: find.byKey(const Key('booking-empty-new')),
+              matching: find.byType(DecoratedBox),
+            )
+            .first,
+      );
+    });
+
+    testWidgets('手機底部被導覽列蓋住：捲到最底時最後一張卡片停在導覽列上方', (tester) async {
+      final repo = FakeBookingRepository()
+        ..mine = [for (var i = 1; i <= 4; i++) sampleBooking(id: i)];
+      await pumpAt(
+        tester,
+        '/booking/mine',
+        repo: repo,
+        size: const Size(400, 600),
+        bottomInset: 120,
+      );
+      await tester.drag(find.byType(Scrollable).first, const Offset(0, -5000));
+      await tester.pumpAndSettle();
+      expect(
+        tester.getBottomLeft(find.byKey(const Key('booking-card-4'))).dy,
+        lessThanOrEqualTo(600 - 120),
+      );
+    });
+  });
+
   group('訂位（Stitch 版面）', () {
     testWidgets('木紋背景；分頁在分段切換的軌道裡', (tester) async {
       await pumpAt(tester, '/booking', user: staff);
