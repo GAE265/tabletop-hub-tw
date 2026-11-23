@@ -17,14 +17,18 @@ Future<GoRouter> pumpLesson(WidgetTester tester, int gameId) async {
   tester.view.physicalSize = const Size(400, 900);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
-  final repo = sampleRepo()
-    ..details[9] = const RulesLesson(
+  final repo = sampleRepo();
+  // sampleRepo 的 details 是 const，換成可以加東西的新 map
+  repo.details = {
+    ...repo.details,
+    9: const RulesLesson(
       gameId: 9,
       gameName: hostGameName,
       video: null,
       hasRulebook: true,
       suggestedQuestions: suggested,
-    );
+    ),
+  };
   final router = GoRouter(
     initialLocation: '/rules/$gameId',
     routes: [

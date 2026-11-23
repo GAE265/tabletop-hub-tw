@@ -7,9 +7,11 @@ import 'package:tabletop_hub/app/shell.dart';
 import 'package:tabletop_hub/app/theme/app_colors.dart';
 import 'package:tabletop_hub/app/theme/wood_background.dart';
 import 'package:tabletop_hub/domains/host/data/host_models.dart';
+import 'package:tabletop_hub/domains/host/data/host_stream.dart';
 
+import '../../../support/fakes.dart';
 import '../support.dart';
-import 'host_page_test.dart' show HostHarness;
+import 'host_page_test.dart' show HostPageHarness;
 
 void expectThick(WidgetTester tester, Finder box, [String? reason]) {
   final decoration =
@@ -33,7 +35,7 @@ Finder inKey(String key, Finder finder) =>
 void main() {
   group('開主持前', () {
     testWidgets('木紋背景；人數、接話方式、聲線是厚卡片，「開始主持」是厚按鈕', (tester) async {
-      final h = HostHarness();
+      final h = HostPageHarness();
       await h.pump(tester, size: const Size(390, 1600));
       expect(
         find.descendant(
@@ -53,7 +55,7 @@ void main() {
     });
 
     testWidgets('有保留的主持：「接著主持」「重新開始」是厚按鈕', (tester) async {
-      final h = HostHarness(
+      final h = HostPageHarness(
         sessions: [
           fakeHostingSession(
             step: HostStep.turn,
@@ -70,7 +72,7 @@ void main() {
 
   group('主持中', () {
     testWidgets('頁首卡：遊戲名稱與狀態「聆聽中」；暫停中、查規則中跟著變', (tester) async {
-      final h = HostHarness();
+      final h = HostPageHarness();
       await h.pump(tester);
       await h.start(tester);
       expectThick(tester, firstBoxIn('host-header'));
@@ -90,7 +92,7 @@ void main() {
     });
 
     testWidgets('自動接話：顯示「正在聽」大圓，不能按；沒有按住說話鍵', (tester) async {
-      final h = HostHarness();
+      final h = HostPageHarness();
       await h.pump(tester);
       await h.start(tester);
       expect(find.byKey(const Key('host-listening')), findsOneWidget);
@@ -100,7 +102,7 @@ void main() {
     });
 
     testWidgets('按住說話：橘色大圓；按著時寫「放開後主持人回答」', (tester) async {
-      final h = HostHarness();
+      final h = HostPageHarness();
       await h.pump(tester);
       await tester.tap(find.text('按住說話'));
       await tester.pump();
@@ -119,7 +121,7 @@ void main() {
     });
 
     testWidgets('目前進度與接話方式是厚卡片；流程鍵是厚按鈕', (tester) async {
-      final h = HostHarness();
+      final h = HostPageHarness();
       await h.pump(tester);
       await h.start(tester, live: liveState(turnNumber: 2, phaseNumber: 2));
       expectThick(tester, firstBoxIn('host-section-progress'));
@@ -130,7 +132,7 @@ void main() {
     });
 
     testWidgets('可以這樣說：每一句一張小卡', (tester) async {
-      final h = HostHarness();
+      final h = HostPageHarness();
       await h.pump(tester);
       await h.start(tester);
       expect(
@@ -147,7 +149,7 @@ void main() {
     });
 
     testWidgets('主持中要求藏起手機底部導覽列（流程鍵固定在底部，避免誤按）；開主持前不藏', (tester) async {
-      final h = HostHarness();
+      final h = HostPageHarness();
       await h.pump(tester);
       final container = ProviderScope.containerOf(
         tester.element(find.byKey(const Key('host-page'))),
@@ -158,7 +160,7 @@ void main() {
     });
 
     testWidgets('底部有一句小提醒：問規則直接說', (tester) async {
-      final h = HostHarness();
+      final h = HostPageHarness();
       await h.pump(tester);
       await h.start(tester);
       expect(find.byKey(const Key('host-tip')), findsOneWidget);
