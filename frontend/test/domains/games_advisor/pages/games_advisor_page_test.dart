@@ -161,17 +161,48 @@ void main() {
       expect(find.descendant(of: header, matching: newButton), findsOneWidget);
     });
 
-    testWidgets('空畫面：說明卡與範例按鈕都有厚度', (tester) async {
+    testWidgets('空畫面：推薦助理的第一句話，下面是小膠囊範例，都有厚度', (tester) async {
       await pumpPage(tester);
-      expectThick(tester, firstBoxIn(find.byKey(const Key('advisor-empty'))));
+      final greeting = find.byKey(const Key('advisor-empty'));
+      expect(
+        find.descendant(of: greeting, matching: find.text('我幫你挑桌遊')),
+        findsOneWidget,
+      );
+      expect(find.text('推薦助理'), findsOneWidget);
+      expectThick(tester, firstBoxIn(greeting));
+      final chip = find
+          .ancestor(
+            of: find.text('2 個人約會玩'),
+            matching: find.byType(DecoratedBox),
+          )
+          .first;
+      expectThick(tester, chip);
+      // 小膠囊：比一般按鈕矮
+      expect(tester.getSize(chip).height, lessThan(48));
+    });
+
+    testWidgets('對話泡泡（我的訊息、推薦助理的回覆）都有厚度', (tester) async {
+      final repo = await pumpPage(tester);
+      await ask(tester, repo, '我們 4 個人', textOnly);
       expectThick(
         tester,
         find
             .ancestor(
-              of: find.text('2 個人約會玩'),
+              of: find.text('我們 4 個人'),
               matching: find.byType(DecoratedBox),
             )
             .first,
+        '我的訊息',
+      );
+      expectThick(
+        tester,
+        find
+            .ancestor(
+              of: find.text('你們大概想玩多久呢？'),
+              matching: find.byType(DecoratedBox),
+            )
+            .first,
+        '推薦助理',
       );
     });
 
