@@ -3,7 +3,7 @@ name: CI
 # 發 MR 到 dev 或 main 時執行。各 job 互相獨立，一個失敗不影響其他。
 on:
   push:
-    branches: [dev,feature/deploy]
+    branches: [dev]
 
 env:
   REGISTRY: ghcr.io

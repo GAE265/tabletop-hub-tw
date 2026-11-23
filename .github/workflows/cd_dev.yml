@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     if: >
       github.event.workflow_run.conclusion == 'success' &&
-      (github.event.workflow_run.head_branch == 'dev' || github.event.workflow_run.head_branch == 'feature/deploy')
+      github.event.workflow_run.head_branch == 'dev'
 
     steps:
       # 1. 使用你設定好的 Secret 登入 GCP
