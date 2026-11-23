@@ -184,7 +184,7 @@ void main() {
       );
     });
 
-    testWidgets('送出是有厚度的大按鈕，下方說明送出後可以修改或取消', (tester) async {
+    testWidgets('送出是有厚度的大按鈕，下方沒有重複的提醒', (tester) async {
       await openForm(tester, FakeGroupsRepository(), valid());
       final button = find.ancestor(
         of: find.text('送出'),
@@ -192,7 +192,8 @@ void main() {
       );
       await tester.ensureVisible(find.text('送出'));
       expectThick(tester, button.first);
-      expect(find.text('送出後可以在揪團詳細頁修改或取消揪團'), findsOneWidget);
+      // 說明卡已經提醒過開團後在哪裡修改，按鈕下方不再重複
+      expect(find.textContaining('送出後可以'), findsNothing);
     });
   });
 
