@@ -305,12 +305,15 @@ void main() {
       }
     });
 
-    testWidgets('記錄回合、記錄結果、確認紀錄都是有厚度的按鈕', (tester) async {
+    testWidgets('記錄回合、記錄結果、新增沒有帳號的人都是有厚度的按鈕', (tester) async {
       await pumpMatches(tester, detail);
       for (final key in ['turn-submit', 'result-submit', 'add-named']) {
         await tester.ensureVisible(find.byKey(Key(key)));
         expectThick(tester, boxAround(key), key);
       }
+    });
+
+    testWidgets('確認這局的紀錄是有厚度的按鈕', (tester) async {
       await pumpMatches(
         tester,
         detail,
