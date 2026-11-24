@@ -66,6 +66,34 @@ void main() {
       expect(find.text('側欄：藍牌'), findsOneWidget);
     });
 
+    testWidgets('換完提醒影片要重新產生，按鈕直接前往產生影片', (tester) async {
+      final repo = swapRepo()..swapResult = sidebarSwapResult;
+      final h = await pumpVideo(
+        tester,
+        location: '/videos/p1/draft',
+        repo: repo,
+      );
+      expect(find.byKey(const Key('video-swap-go-render')), findsNothing);
+      await tapKey(tester, 'video-segment-s1-sidebar-swap');
+      await tapKey(tester, 'video-swap-option-blue');
+      expect(find.text('影片要重新產生才會用新的素材'), findsOneWidget);
+      await tapKey(tester, 'video-swap-go-render');
+      expect(h.path, '/videos/p1/render');
+    });
+
+    testWidgets('換素材失敗：不顯示前往產生影片', (tester) async {
+      final repo = swapRepo()
+        ..swapError = const ApiException(
+          code: 'RULES_VIDEO_CONFLICT',
+          message: '草稿已被修改，請重新整理後再換',
+          statusCode: 409,
+        );
+      await pumpVideo(tester, location: '/videos/p1/draft', repo: repo);
+      await tapKey(tester, 'video-segment-s1-sidebar-swap');
+      await tapKey(tester, 'video-swap-option-blue');
+      expect(find.byKey(const Key('video-swap-go-render')), findsNothing);
+    });
+
     testWidgets('版本衝突：顯示後端的說明', (tester) async {
       final repo = swapRepo()
         ..swapError = const ApiException(
