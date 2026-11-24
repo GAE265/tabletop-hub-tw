@@ -1,4 +1,8 @@
+import 'dart:math' as math;
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -189,19 +193,16 @@ class EntryCards extends StatelessWidget {
           children: [
             for (var start = 0; start < _entries.length; start += columns) ...[
               if (start > 0) SizedBox(height: gap),
-              IntrinsicHeight(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    for (var i = start; i < start + columns; i++) ...[
-                      if (i > start) SizedBox(width: gap),
-                      Expanded(
-                        flex: mobile ? _mobileFlex[i] : 1,
-                        child: _EntryCard(entry: _entries[i]),
-                      ),
-                    ],
-                  ],
-                ),
+              _EqualHeightRow(
+                gap: gap,
+                flexes: [
+                  for (var i = start; i < start + columns; i++)
+                    mobile ? _mobileFlex[i] : 1,
+                ],
+                children: [
+                  for (var i = start; i < start + columns; i++)
+                    _EntryCard(entry: _entries[i]),
+                ],
               ),
             ],
           ],
@@ -213,6 +214,118 @@ class EntryCards extends StatelessWidget {
 
 /// 手機版每張卡片的寬度比例：第一排 3:2，第二排 2:3。
 const _mobileFlex = [3, 2, 2, 3];
+
+/// 一排卡片，寬度依 [flexes] 分配，高度都等於最高的那張。
+///
+/// 不用 IntrinsicHeight 估高度：網頁的中文字型比畫面晚到，估的時候還是系統字，
+/// 字型到了之後說明變成兩行，卡片高度卻沒跟著變，內容就超出卡片。
+/// 這裡每次都先實際排一次、取最高的高度，再把每張卡片排成這個高度。
+class _EqualHeightRow extends MultiChildRenderObjectWidget {
+  const _EqualHeightRow({
+    required this.gap,
+    required this.flexes,
+    required super.children,
+  });
+
+  final double gap;
+  final List<int> flexes;
+
+  @override
+  RenderObject createRenderObject(BuildContext context) =>
+      _RenderEqualHeightRow(gap: gap, flexes: flexes);
+
+  @override
+  void updateRenderObject(
+    BuildContext context,
+    _RenderEqualHeightRow renderObject,
+  ) {
+    renderObject
+      ..gap = gap
+      ..flexes = flexes;
+  }
+}
+
+class _EqualHeightRowParentData extends ContainerBoxParentData<RenderBox> {}
+
+class _RenderEqualHeightRow extends RenderBox
+    with
+        ContainerRenderObjectMixin<RenderBox, _EqualHeightRowParentData>,
+        RenderBoxContainerDefaultsMixin<RenderBox, _EqualHeightRowParentData> {
+  _RenderEqualHeightRow({required double gap, required List<int> flexes})
+    : _gap = gap,
+      _flexes = flexes;
+
+  double _gap;
+  set gap(double value) {
+    if (value == _gap) return;
+    _gap = value;
+    markNeedsLayout();
+  }
+
+  List<int> _flexes;
+  set flexes(List<int> value) {
+    if (listEquals(value, _flexes)) return;
+    _flexes = value;
+    markNeedsLayout();
+  }
+
+  @override
+  void setupParentData(RenderBox child) {
+    if (child.parentData is! _EqualHeightRowParentData) {
+      child.parentData = _EqualHeightRowParentData();
+    }
+  }
+
+  /// 每張卡片的寬度。
+  List<double> _widths(double maxWidth) {
+    final total = _flexes.fold<int>(0, (sum, flex) => sum + flex);
+    final space = math.max(0.0, maxWidth - _gap * (childCount - 1));
+    return [for (final flex in _flexes) space * flex / total];
+  }
+
+  @override
+  void performLayout() {
+    final widths = _widths(constraints.maxWidth);
+    // 第一次：寬度固定、高度不限，量出每張卡片需要的高度
+    var height = 0.0;
+    var child = firstChild;
+    for (var i = 0; child != null; i++) {
+      child.layout(
+        BoxConstraints.tightFor(width: widths[i]),
+        parentUsesSize: true,
+      );
+      height = math.max(height, child.size.height);
+      child = childAfter(child);
+    }
+    // 第二次：每張卡片都排成最高的高度。
+    // 只給最小高度、不給上限（不是固定尺寸），卡片才不會變成 relayout boundary：
+    // 卡片裡的字變了（字型晚到、字放大），這一排會跟著重新量高度
+    var x = 0.0;
+    child = firstChild;
+    for (var i = 0; child != null; i++) {
+      child.layout(
+        BoxConstraints(
+          minWidth: widths[i],
+          maxWidth: widths[i],
+          minHeight: height,
+        ),
+        parentUsesSize: true,
+      );
+      (child.parentData! as _EqualHeightRowParentData).offset = Offset(x, 0);
+      x += widths[i] + _gap;
+      child = childAfter(child);
+    }
+    size = constraints.constrain(Size(constraints.maxWidth, height));
+  }
+
+  @override
+  bool hitTestChildren(BoxHitTestResult result, {required Offset position}) =>
+      defaultHitTestChildren(result, position: position);
+
+  @override
+  void paint(PaintingContext context, Offset offset) =>
+      defaultPaint(context, offset);
+}
 
 class _EntryCard extends StatelessWidget {
   const _EntryCard({required this.entry});
@@ -229,54 +342,70 @@ class _EntryCard extends StatelessWidget {
       onTap: () => context.go(entry.route),
       child: Padding(
         padding: const EdgeInsets.all(AppSpacing.medium + AppSpacing.xSmall),
+        // 高度固定時（同一排比較矮的卡片）「前往…」那一列推到最下面；
+        // 量高度時（高度不限）就照內容的高度，不能用 Spacer
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Container(
-              width: AppSizes.entryIconBox,
-              height: AppSizes.entryIconBox,
-              decoration: BoxDecoration(
-                color: style.iconBox,
-                borderRadius: BorderRadius.circular(AppRadius.button),
-              ),
-              child: Icon(entry.icon, color: style.iconColor),
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: AppSizes.entryIconBox,
+                  height: AppSizes.entryIconBox,
+                  decoration: BoxDecoration(
+                    color: style.iconBox,
+                    borderRadius: BorderRadius.circular(AppRadius.button),
+                  ),
+                  child: Icon(entry.icon, color: style.iconColor),
+                ),
+                const SizedBox(height: AppSpacing.medium),
+                Text(
+                  entry.title,
+                  style: textTheme.headlineSmall!.copyWith(
+                    color: style.title,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.xSmall),
+                Text(
+                  entry.body,
+                  style: textTheme.bodyMedium!.copyWith(color: style.body),
+                ),
+                const SizedBox(height: AppSpacing.medium),
+              ],
             ),
-            const SizedBox(height: AppSpacing.medium),
-            Text(
-              entry.title,
-              style: textTheme.headlineSmall!.copyWith(
-                color: style.title,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: AppSpacing.xSmall),
-            Text(
-              entry.body,
-              style: textTheme.bodyMedium!.copyWith(color: style.body),
-            ),
-            const Spacer(),
-            const SizedBox(height: AppSpacing.medium),
             Row(
               children: [
-                DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: style.pill,
-                    borderRadius: BorderRadius.circular(AppRadius.pill),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: AppSpacing.small + AppSpacing.xSmall / 2,
-                      vertical: AppSpacing.xSmall,
-                    ),
-                    child: Text(
-                      entry.goLabel,
-                      style: textTheme.labelMedium!.copyWith(
-                        color: style.pillText,
+                // 窄螢幕或字放大時，標籤縮短並加「…」，箭頭固定在右邊
+                Expanded(
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: style.pill,
+                        borderRadius: BorderRadius.circular(AppRadius.pill),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: AppSpacing.small + AppSpacing.xSmall / 2,
+                          vertical: AppSpacing.xSmall,
+                        ),
+                        child: Text(
+                          entry.goLabel,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: textTheme.labelMedium!.copyWith(
+                            color: style.pillText,
+                          ),
+                        ),
                       ),
                     ),
                   ),
                 ),
-                const Spacer(),
+                const SizedBox(width: AppSpacing.small),
                 Icon(Icons.arrow_forward, color: style.arrow),
               ],
             ),
