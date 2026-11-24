@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:tabletop_hub/core/platform/audio_capture.dart';
 import 'package:tabletop_hub/core/platform/audio_playback.dart';
@@ -806,6 +807,37 @@ class FakeLessonVideoPlayer implements LessonVideoPlayer {
     height: 180,
     child: Text('影片：${video.youtubeId ?? video.videoUrl}'),
   );
+}
+
+/// 記下 `pickFiles` 收到的選圖設定；回傳 [result]（預設 null＝店員取消）。
+class FakeFilePicker extends FilePicker {
+  FilePickerResult? result;
+  FileType? type;
+  List<String>? allowedExtensions;
+  bool? allowMultiple;
+  bool? withData;
+
+  @override
+  Future<FilePickerResult?> pickFiles({
+    String? dialogTitle,
+    String? initialDirectory,
+    FileType type = FileType.any,
+    List<String>? allowedExtensions,
+    Function(FilePickerStatus)? onFileLoading,
+    bool allowCompression = false,
+    int compressionQuality = 0,
+    bool allowMultiple = false,
+    bool withData = false,
+    bool withReadStream = false,
+    bool lockParentWindow = false,
+    bool readSequential = false,
+  }) async {
+    this.type = type;
+    this.allowedExtensions = allowedExtensions;
+    this.allowMultiple = allowMultiple;
+    this.withData = withData;
+    return result;
+  }
 }
 
 class FakeImagePicker implements ImagePicker {

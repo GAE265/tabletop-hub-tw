@@ -142,7 +142,8 @@ void main() {
       expect(state.busy, isFalse);
     });
 
-    test('選到 HEIC：整批都不上傳（避免頁的順序亂掉），說明要改成 JPEG', () async {
+    // 原本（2026-11-22）有 HEIC 就整批不上傳；2026-11-24 永傑決定改由後端轉成 JPEG，照常依序上傳
+    test('選到 HEIC：和其他照片一起依序上傳（後端會轉成 JPEG），沒有錯誤訊息', () async {
       final repo = FakeVideoStudioRepository();
       final picker = FakeImagePicker()
         ..images = [
@@ -152,12 +153,9 @@ void main() {
       final container = makeContainer(repo, picker: picker);
       final notifier = container.read(videoRulebookProvider('p1').notifier);
       await notifier.load();
-      expect(await notifier.addPhotos(), isFalse);
-      expect(repo.rulebookUploads, isEmpty);
-      expect(
-        container.read(videoRulebookProvider('p1')).error,
-        '不支援 HEIC，請把相機格式改為最相容（JPEG）',
-      );
+      expect(await notifier.addPhotos(), isTrue);
+      expect(repo.rulebookUploads.map((u) => u.$2), ['1.jpg', 'IMG_0002.HEIC']);
+      expect(container.read(videoRulebookProvider('p1')).error, isNull);
     });
 
     test('取消選圖：不上傳', () async {
