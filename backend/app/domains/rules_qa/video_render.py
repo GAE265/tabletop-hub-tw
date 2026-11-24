@@ -28,6 +28,7 @@ from app.domains.rules_qa.video_assets import (
     asset_label,
     is_skipped,
     photo_key,
+    project_work_folder,
     readiness,
     strip_skipped,
     strip_skipped_regions,
@@ -163,7 +164,7 @@ class RenderJobHandler:
         # 照片拍不到、店員略過的區域：拿掉區域與指向它的框選、標籤、移動（2026-11-22 永傑決定）
         output = strip_skipped_regions(output)
 
-        folder = self._config.work_dir / str(ctx.project_id)
+        folder = project_work_folder(self._config.work_dir, ctx.project_id)
         (folder / "assets").mkdir(parents=True, exist_ok=True)
         for asset in output.get("assets", []):
             if asset["asset_key"] in cards:

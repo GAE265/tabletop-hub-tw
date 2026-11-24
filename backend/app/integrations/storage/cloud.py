@@ -15,7 +15,7 @@ from azure.core.exceptions import (
 )
 from azure.storage.blob import BlobServiceClient, ContentSettings
 
-from app.integrations.storage.base import FileStorage, check_key
+from app.integrations.storage.base import FileStorage, check_key, check_prefix
 from app.integrations.storage.errors import FileNotFound, StorageError, StorageUnavailable
 
 # 單一請求的逾時秒數；影片檔較大，上傳給寬一點
@@ -52,6 +52,16 @@ class AzureBlobFileStorage(FileStorage):
                 self._container.get_blob_client(key).delete_blob()
         except FileNotFound:
             return
+
+    def delete_prefix(self, prefix: str) -> int:
+        folder = check_prefix(prefix) + "/"
+        count = 0
+        with _translate_errors():
+            names = [blob.name for blob in self._container.list_blobs(name_starts_with=folder)]
+        for name in names:
+            self.delete(name)
+            count += 1
+        return count
 
 
 @contextmanager

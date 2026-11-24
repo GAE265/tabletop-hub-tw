@@ -1,6 +1,7 @@
+import shutil
 from pathlib import Path
 
-from app.integrations.storage.base import FileStorage, check_key
+from app.integrations.storage.base import FileStorage, check_key, check_prefix
 from app.integrations.storage.errors import FileNotFound
 
 
@@ -33,3 +34,11 @@ class LocalFileStorage(FileStorage):
 
     def delete(self, key: str) -> None:
         self._path(key).unlink(missing_ok=True)
+
+    def delete_prefix(self, prefix: str) -> int:
+        folder = self._root / check_prefix(prefix)
+        if not folder.is_dir():
+            return 0
+        count = sum(1 for path in folder.rglob("*") if path.is_file())
+        shutil.rmtree(folder)
+        return count

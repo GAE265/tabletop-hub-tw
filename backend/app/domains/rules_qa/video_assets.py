@@ -8,6 +8,7 @@ import copy
 import io
 import uuid
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 import pillow_heif
@@ -95,6 +96,16 @@ def _to_jpeg(image: Image.Image) -> bytes:
     out = io.BytesIO()
     opaque.save(out, "JPEG", quality=JPEG_QUALITY, exif=exif)
     return out.getvalue()
+
+
+def project_files_prefix(project_id: uuid.UUID) -> str:
+    """存放空間裡這個專案的所有檔案（素材照片、規則書照片、成品影片）都在這個前綴底下。"""
+    return f"rules_videos/{project_id}"
+
+
+def project_work_folder(work_dir: Path, project_id: uuid.UUID) -> Path:
+    """產生影片的工作資料夾（展開的素材、旁白與段影片快取）。"""
+    return work_dir / str(project_id)
 
 
 def photo_key(project_id: uuid.UUID, file: str) -> str:
