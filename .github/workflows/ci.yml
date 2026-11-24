@@ -76,6 +76,6 @@ jobs:
         with:
           service: tabletop-hub-tw-backend-log # 替換為你的第 2 個 Cloud Run 服務名稱
           region: us-east1                  # 替換為該服務所在的 region
-          image: us-east1-docker.pkg.dev/aerial-handbook-256212/tabletop-hub-tw-repo/gae265/tabletop-hub-tw-backend-log:${{ github.event.pull_request.head.sha }}
+          image: us-east1-docker.pkg.dev/aerial-handbook-256212/tabletop-hub-tw-repo/gae265/tabletop-hub-tw-backend-log:${{ github.sha }}
           labels: |
-            commit-sha=${{ github.event.pull_request.head.sha }}
+            commit-sha=${{ github.sha }}
