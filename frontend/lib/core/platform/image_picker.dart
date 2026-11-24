@@ -15,12 +15,18 @@ abstract interface class ImagePicker {
 }
 
 class FilePickerImagePicker implements ImagePicker {
+  /// [filePicker] 給測試換成 fake；沒給就用 `FilePicker.platform`。
+  FilePickerImagePicker({FilePicker? filePicker}) : _filePicker = filePicker;
+
+  final FilePicker? _filePicker;
+
   @override
   Future<List<PickedImage>?> pickImages() async {
-    final result = await FilePicker.platform.pickFiles(
+    final result = await (_filePicker ?? FilePicker.platform).pickFiles(
       type: FileType.custom,
-      // HEIC 也讓店員選得到，選到時由畫面說明要改成 JPEG（不支援 HEIC）
-      allowedExtensions: ['jpg', 'jpeg', 'png', 'heic', 'heif'],
+      // 不列 HEIC：iPhone Safari 看到網頁只收 JPEG、PNG 時，會在上傳前自動把 HEIC 轉成 JPEG
+      // （暫行方案，只對 iPhone Safari 有效，待實測）。萬一沒有轉，選到的 HEIC 仍由 state 擋下並說明
+      allowedExtensions: ['jpg', 'jpeg', 'png'],
       allowMultiple: true,
       withData: true,
     );
