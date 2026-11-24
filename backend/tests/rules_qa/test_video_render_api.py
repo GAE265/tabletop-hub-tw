@@ -229,6 +229,36 @@ def test_only_changed_segment_is_reencoded(api, ready, rules_db, storage, tmp_pa
     assert job.result["reencoded"] == ["s1"] and job.result["reused"] == ["s2"]
 
 
+def _swap(api, project, segment, slot, asset):
+    version = api.get(f"{URL}/{project}/draft").json()["video_version"]
+    body = {"slot": slot, "asset_key": asset, "video_version": version}
+    response = api.patch(f"{URL}/{project}/segments/{segment}", json=body)
+    assert response.status_code == 200, response.text
+
+
+def test_swap_reencodes_only_that_segment(api, ready, rules_db, storage, tmp_path):
+    # 換素材（2026-11-25）：只有換過的那段重新編碼，另一段沿用快取
+    command = fake_ffmpeg(tmp_path / "bin")
+    assert _render(rules_db, storage, ready, tmp_path, command=command).status == "succeeded"
+    _swap(api, ready, "s2", "main", "blue")
+    job = _render(rules_db, storage, ready, tmp_path, command=command)
+    assert job.status == "succeeded", job.error
+    assert job.result["reencoded"] == ["s2"] and job.result["reused"] == ["s1"]
+
+
+def test_unused_asset_without_photo_does_not_block_render(
+    api, as_shop_staff, project, rules_db, storage, tmp_path
+):
+    # 換掉圖板後沒有段在用：不用拍、不用標區域，照樣可以產生影片
+    for key in ASSETS:
+        if key != "board":
+            _upload(api, project, key)
+    _swap(api, project, "s1", "sidebar", "blue")
+    assert api.get(f"{URL}/{project}/readiness").json()["ready"] is True
+    job = _render(rules_db, storage, project, tmp_path)
+    assert job.status == "succeeded", job.error
+
+
 def test_cache_removed_reencodes_everything(api, ready, rules_db, storage, tmp_path):
     command = fake_ffmpeg(tmp_path / "bin")
     _render(rules_db, storage, ready, tmp_path, command=command)

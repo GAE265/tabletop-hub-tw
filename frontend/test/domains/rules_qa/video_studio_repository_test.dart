@@ -315,4 +315,62 @@ void main() {
       );
     });
   });
+
+  group('換素材（2026-11-25）', () {
+    test(
+      'PATCH /api/v1/rules-videos/{id}/segments/{key}，帶格子、素材與版本；解析結果',
+      () async {
+        final adapter = RecordingAdapter(
+          body: '''
+{
+  "segment_key": "s1", "slot": "sidebar", "old_asset_key": "board", "new_asset_key": "blue",
+  "removed": {"highlights": ["h1"], "labels": [],
+              "cues": [{"beat_key": "b1", "do": "move", "target": "main.c1"}]},
+  "unused_assets": ["board"], "video_version": 4
+}
+''',
+        );
+        final result = await makeRepository(adapter).swapSegmentAsset(
+          'p1',
+          's1',
+          const SegmentSwapInput(
+            slot: 'sidebar',
+            assetKey: 'blue',
+            videoVersion: 3,
+          ),
+        );
+        final request = adapter.requests.single;
+        expect(request.method, 'PATCH');
+        expect(request.path, '/api/v1/rules-videos/p1/segments/s1');
+        expect(jsonDecode(adapter.bodies.single!), {
+          'slot': 'sidebar',
+          'asset_key': 'blue',
+          'video_version': 3,
+        });
+        expect(result.removed.highlights, ['h1']);
+        expect(result.removed.cues.single.action, 'move');
+        expect(result.unusedAssets, ['board']);
+        expect(result.videoVersion, 4);
+      },
+    );
+
+    test('草稿解析每段的格子與素材用在哪幾段', () {
+      final segment = DraftSegment.fromJson(const {
+        'segment_key': 's1',
+        'chapter': 'setup',
+        'source_pages': [3],
+        'beats': [],
+        'slots': [
+          {
+            'slot': 'sidebar',
+            'kind': 'asset',
+            'asset_keys': ['board'],
+            'swappable': true,
+          },
+        ],
+      });
+      expect(segment.slots.single.assetKeys, ['board']);
+      expect(segment.slots.single.swappable, isTrue);
+    });
+  });
 }

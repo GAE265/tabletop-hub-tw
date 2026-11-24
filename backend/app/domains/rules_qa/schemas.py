@@ -275,12 +275,27 @@ class DraftBeatOut(BaseModel):
     subtitle: str
 
 
+class DraftSlotOut(BaseModel):
+    """一段裡放素材的格子（換素材，2026-11-25）。文字、條列的格子不列。"""
+
+    # 格子名稱：main（主畫面）、sidebar（側欄）
+    slot: str
+    # asset＝單一素材；items＝放好幾張牌（正面與牌背都列在 asset_keys）
+    kind: Literal["asset", "items"]
+    # 這一格用到的素材（依出現順序、不重複）
+    asset_keys: list[str]
+    # 可以換素材：只有單一素材的格子可以
+    swappable: bool
+
+
 class DraftSegmentOut(BaseModel):
     segment_key: str
     # 屬於哪一格（setup／round／win）；單章專案是 c<章節編號>
     chapter: str
     source_pages: list[int]
     beats: list[DraftBeatOut]
+    # 放素材的格子（換素材，2026-11-25）
+    slots: list[DraftSlotOut] = []
 
 
 class DraftAssetOut(BaseModel):
@@ -301,6 +316,8 @@ class DraftAssetOut(BaseModel):
     skipped: bool = False
     # 可以略過：略過後每一段仍有主要內容（程式判斷，不看 priority）
     skippable: bool = False
+    # 用到這個素材的段號（從 1 開始）；空的代表沒有段在用，不用拍（換素材，2026-11-25）
+    used_in_segments: list[int] = []
 
 
 class CoverageIssueOut(BaseModel):
@@ -384,6 +401,42 @@ def _check_box(name: str, box: list[float] | None) -> None:
     x, y, w, h = box
     if x < 0 or y < 0 or w <= 0 or h <= 0 or x + w > 1 + 1e-9 or y + h > 1 + 1e-9:
         raise ValueError(f"區域 {name} 超出 0–1 的範圍：{box}")
+
+
+class SegmentAssetSwapIn(BaseModel):
+    """換某一段某一格的素材（2026-11-25 永傑決定，最小版）。"""
+
+    # 要換的格子（main、sidebar）；只有單一素材的格子可以換
+    slot: str
+    # 換成哪個素材：必須在素材清單裡，而且不是繪製、沒有略過
+    asset_key: str
+    # 店員看到的段資料版本；和目前的不同時 409，避免蓋掉別人的修改
+    video_version: int
+
+
+class RemovedCueOut(BaseModel):
+    beat_key: str
+    do: str
+    target: str
+
+
+class SwapRemovedOut(BaseModel):
+    """換素材時移除的東西（指向舊素材區域的框線、標籤、動作）。"""
+
+    highlights: list[str]
+    labels: list[str]
+    cues: list[RemovedCueOut]
+
+
+class SegmentAssetSwapOut(BaseModel):
+    segment_key: str
+    slot: str
+    old_asset_key: str
+    new_asset_key: str
+    removed: SwapRemovedOut
+    # 換完之後沒有段在用的素材：不用再拍
+    unused_assets: list[str]
+    video_version: int
 
 
 class VideoAssetUpdate(BaseModel):

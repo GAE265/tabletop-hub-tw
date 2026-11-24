@@ -105,6 +105,24 @@ abstract class DraftBeat with _$DraftBeat {
       _$DraftBeatFromJson(json);
 }
 
+/// 一段裡放素材的格子（換素材，2026-11-25）。`kind`：asset＝單一素材、items＝放好幾張牌。
+@freezed
+abstract class DraftSlot with _$DraftSlot {
+  @JsonSerializable(fieldRename: FieldRename.snake)
+  const factory DraftSlot({
+    // 格子名稱：main（主畫面）、sidebar（側欄）
+    required String slot,
+    required String kind,
+    // 這一格用到的素材（依出現順序、不重複；牌的正面與牌背都算）
+    required List<String> assetKeys,
+    // 可以換素材：只有單一素材的格子可以
+    required bool swappable,
+  }) = _DraftSlot;
+
+  factory DraftSlot.fromJson(Map<String, dynamic> json) =>
+      _$DraftSlotFromJson(json);
+}
+
 @freezed
 abstract class DraftSegment with _$DraftSegment {
   @JsonSerializable(fieldRename: FieldRename.snake)
@@ -114,6 +132,8 @@ abstract class DraftSegment with _$DraftSegment {
     @Default('') String chapter,
     required List<int> sourcePages,
     required List<DraftBeat> beats,
+    // 放素材的格子（換素材，2026-11-25）
+    @Default([]) List<DraftSlot> slots,
   }) = _DraftSegment;
 
   factory DraftSegment.fromJson(Map<String, dynamic> json) =>
@@ -141,6 +161,8 @@ abstract class DraftAsset with _$DraftAsset {
     @Default(false) bool skipped,
     // 可以略過：略過後每一段仍有主要內容（後端程式判斷，不看 priority）
     @Default(false) bool skippable,
+    // 用到這個素材的段號；[] 代表沒有段在用、不用拍；null 代表舊的回應沒有這個資訊
+    List<int>? usedInSegments,
   }) = _DraftAsset;
 
   factory DraftAsset.fromJson(Map<String, dynamic> json) =>
@@ -290,6 +312,66 @@ abstract class VideoAsset with _$VideoAsset {
 
   factory VideoAsset.fromJson(Map<String, dynamic> json) =>
       _$VideoAssetFromJson(json);
+}
+
+/// 換某一段某一格的素材（2026-11-25）。`videoVersion` 是店員看到的草稿版本，不同時後端回 409。
+@freezed
+abstract class SegmentSwapInput with _$SegmentSwapInput {
+  @JsonSerializable(fieldRename: FieldRename.snake)
+  const factory SegmentSwapInput({
+    required String slot,
+    required String assetKey,
+    required int videoVersion,
+  }) = _SegmentSwapInput;
+
+  factory SegmentSwapInput.fromJson(Map<String, dynamic> json) =>
+      _$SegmentSwapInputFromJson(json);
+}
+
+/// 換素材時移除的動作。`action` 對應後端的 `do`（Dart 的保留字）。
+@freezed
+abstract class SwapRemovedCue with _$SwapRemovedCue {
+  @JsonSerializable(fieldRename: FieldRename.snake)
+  const factory SwapRemovedCue({
+    required String beatKey,
+    @JsonKey(name: 'do') required String action,
+    required String target,
+  }) = _SwapRemovedCue;
+
+  factory SwapRemovedCue.fromJson(Map<String, dynamic> json) =>
+      _$SwapRemovedCueFromJson(json);
+}
+
+/// 換素材時移除的東西（指向舊素材區域的框線、標籤、動作）。
+@freezed
+abstract class SwapRemoved with _$SwapRemoved {
+  @JsonSerializable(fieldRename: FieldRename.snake)
+  const factory SwapRemoved({
+    required List<String> highlights,
+    required List<String> labels,
+    required List<SwapRemovedCue> cues,
+  }) = _SwapRemoved;
+
+  factory SwapRemoved.fromJson(Map<String, dynamic> json) =>
+      _$SwapRemovedFromJson(json);
+}
+
+@freezed
+abstract class SegmentSwapResult with _$SegmentSwapResult {
+  @JsonSerializable(fieldRename: FieldRename.snake)
+  const factory SegmentSwapResult({
+    required String segmentKey,
+    required String slot,
+    required String oldAssetKey,
+    required String newAssetKey,
+    required SwapRemoved removed,
+    // 換完之後沒有段在用的素材：不用再拍
+    required List<String> unusedAssets,
+    required int videoVersion,
+  }) = _SegmentSwapResult;
+
+  factory SegmentSwapResult.fromJson(Map<String, dynamic> json) =>
+      _$SegmentSwapResultFromJson(json);
 }
 
 /// 改方向或區域；沒給的欄位不送。只改方向時，後端把區域改回待量測。

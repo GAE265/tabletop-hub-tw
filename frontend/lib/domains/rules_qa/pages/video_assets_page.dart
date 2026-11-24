@@ -122,11 +122,13 @@ class _Content extends ConsumerWidget {
     final steps = videoSteps(rulebookPhotos: project?.rulebook == 'photos');
     final pending = r == null ? <String>[] : pendingAssetKeys(draft, r);
     final byKey = {for (final a in draft.assets) a.assetKey: a};
+    // 沒有段在用的素材（換素材之後）不用拍，另外列出（2026-11-25）
+    final unused = unusedAssets(draft);
     final done = r == null
         ? const <DraftAsset>[]
         : [
             for (final a in draft.assets)
-              if (!pending.contains(a.assetKey)) a,
+              if (!pending.contains(a.assetKey) && !isUnusedAsset(a)) a,
           ];
     const gap = SizedBox(height: AppSpacing.medium);
     return Column(
@@ -191,6 +193,34 @@ class _Content extends ConsumerWidget {
                       projectId: projectId,
                       asset: a,
                       missingRegions: 0,
+                    ),
+                  ],
+                ],
+                if (unused.isNotEmpty) ...[
+                  const SizedBox(height: AppSpacing.large),
+                  SectionBar(
+                    key: const Key('video-assets-unused-header'),
+                    title: '目前沒有段用到',
+                    icon: Icons.do_not_disturb_on_outlined,
+                    trailing: _Muted('${unused.length} 項'),
+                  ),
+                  for (final a in unused) ...[
+                    gap,
+                    ThickCard(
+                      key: Key('video-asset-unused-${a.assetKey}'),
+                      child: Padding(
+                        padding: _inset,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              assetDisplayName(a),
+                              style: Theme.of(context).textTheme.titleSmall,
+                            ),
+                            const _Muted('目前沒有段用到，不用拍'),
+                          ],
+                        ),
+                      ),
                     ),
                   ],
                 ],

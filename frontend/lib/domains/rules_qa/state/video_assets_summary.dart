@@ -14,7 +14,7 @@ class VideoAssetsProgress {
     required this.skipped,
   });
 
-  /// 全部素材數。
+  /// 要拍的素材數（不含沒有段在用的素材）。
   final int total;
 
   /// 完成的素材數：已拍且區域都標好，或已略過。
@@ -31,6 +31,16 @@ class VideoAssetsProgress {
 }
 
 /// 依素材清單與還缺什麼算完成進度；[readiness] 還沒讀到時只看有沒有照片或略過。
+/// 沒有段在用的素材（換素材之後）：不用拍。舊的回應沒有段號資訊（null）時不算。
+bool isUnusedAsset(DraftAsset asset) =>
+    asset.usedInSegments != null && asset.usedInSegments!.isEmpty;
+
+/// 沒有段在用的素材，依素材清單的順序。
+List<DraftAsset> unusedAssets(VideoDraft draft) => [
+  for (final a in draft.assets)
+    if (isUnusedAsset(a)) a,
+];
+
 VideoAssetsProgress assetsProgress(
   VideoDraft draft,
   VideoReadiness? readiness,
@@ -38,7 +48,11 @@ VideoAssetsProgress assetsProgress(
   final pending = readiness == null ? null : _pendingKeys(readiness);
   var done = 0;
   var skipped = 0;
+  var total = 0;
   for (final a in draft.assets) {
+    // 沒有段在用的素材不用拍，不算進進度
+    if (isUnusedAsset(a)) continue;
+    total++;
     if (a.skipped) {
       skipped++;
       done++;
@@ -46,11 +60,7 @@ VideoAssetsProgress assetsProgress(
       done++;
     }
   }
-  return VideoAssetsProgress(
-    total: draft.assets.length,
-    done: done,
-    skipped: skipped,
-  );
+  return VideoAssetsProgress(total: total, done: done, skipped: skipped);
 }
 
 Set<String> _pendingKeys(VideoReadiness readiness) => {

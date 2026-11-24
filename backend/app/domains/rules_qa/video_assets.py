@@ -335,18 +335,81 @@ def is_skippable(video: dict[str, Any], asset_key: str) -> bool:
     return not skip_impact(video, asset_key)[1]
 
 
+def _segment_asset_keys(segment: dict[str, Any]) -> list[str]:
+    """一段用到的素材（依出現順序、不重複）：單一素材的格子，以及牌的正面與牌背。"""
+    keys: list[str] = []
+    for slot in (segment.get("slots") or {}).values():
+        if slot.get("kind") == "asset" and slot.get("asset_key"):
+            found = [slot["asset_key"]]
+        elif slot.get("kind") == "items":
+            found = [
+                key
+                for item in slot.get("items") or []
+                for key in (item.get("asset_key"), item.get("back_asset_key"))
+                if key
+            ]
+        else:
+            found = []
+        keys += [key for key in found if key not in keys]
+    return keys
+
+
+def used_asset_keys(video: dict[str, Any]) -> set[str]:
+    """有段在用的素材（換素材之後，舊素材可能沒有段在用了）。"""
+    return {key for s in video.get("segments", []) for key in _segment_asset_keys(s)}
+
+
+def asset_segments(video: dict[str, Any], asset_key: str) -> list[int]:
+    """用到這個素材的段號（從 1 開始）。"""
+    return [
+        number
+        for number, segment in enumerate(video.get("segments", []), start=1)
+        if asset_key in _segment_asset_keys(segment)
+    ]
+
+
+def referenced_regions(video: dict[str, Any]) -> set[tuple[str, str]]:
+    """被框線、標籤或移動指到的（素材, 區域）。"""
+    used: set[tuple[str, str]] = set()
+    for segment in video.get("segments", []):
+        slots = segment.get("slots") or {}
+        for slot_name, region in _region_refs(segment):
+            slot = slots.get(slot_name) or {}
+            if slot.get("kind") == "asset" and slot.get("asset_key"):
+                used.add((slot["asset_key"], region))
+    return used
+
+
+def strip_unused(video: dict[str, Any]) -> dict[str, Any]:
+    """拿掉沒有段在用的素材，以及沒有被指到的區域（產生影片前用；不改傳入的資料）。"""
+    result = copy.deepcopy(video)
+    used = used_asset_keys(result)
+    regions = referenced_regions(result)
+    result["assets"] = [a for a in result.get("assets", []) if a["asset_key"] in used]
+    for asset in result["assets"]:
+        asset["regions"] = {
+            name: box
+            for name, box in (asset.get("regions") or {}).items()
+            if (asset["asset_key"], name) in regions
+        }
+    return result
+
+
 def readiness(video: dict[str, Any]) -> dict[str, Any]:
     """產生影片前還缺什麼：沒有照片的素材、沒有座標的區域、本版不支援的繪製素材。
 
     略過的素材不列。沒有照片都會擋住（第 1 階段的段資料要求每個照片素材都有檔案），
     但每個素材都附上略過的影響與可不可以略過，讓店員可以選擇略過（MR 9）。
+    沒有段在用的素材（換素材之後）、沒有被指到的區域都不要求（2026-11-25 換素材）。
     """
     missing_photos = []
     missing_regions = []
     unsupported = []
+    used = used_asset_keys(video)
+    referenced = referenced_regions(video)
     for asset in video.get("assets", []):
         key = asset["asset_key"]
-        if is_skipped(asset):
+        if is_skipped(asset) or key not in used:
             continue
         if asset.get("kind") == "drawn":
             unsupported.append(
@@ -369,7 +432,7 @@ def readiness(video: dict[str, Any]) -> dict[str, Any]:
             )
         skipped_regions = set(asset.get("skipped_regions") or [])
         for name, box in (asset.get("regions") or {}).items():
-            if box is None and name not in skipped_regions:
+            if box is None and name not in skipped_regions and (key, name) in referenced:
                 missing_regions.append({"asset_key": key, "region": name})
     return {
         "ready": not (missing_photos or missing_regions or unsupported),
