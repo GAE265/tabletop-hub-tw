@@ -358,6 +358,8 @@ void main() {
       '/matches/m-1',
       '/videos/p1/assets',
       '/rules-ingest',
+      '/videos',
+      '/videos/p1/draft',
     ]) {
       testWidgets('$location：內容延伸到導覽列後面，並告訴頁面底部要留多少空間', (tester) async {
         await pumpShell(tester, location: location, size: const Size(400, 900));

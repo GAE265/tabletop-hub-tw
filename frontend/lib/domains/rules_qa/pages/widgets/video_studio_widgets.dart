@@ -4,6 +4,8 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
+import '../../../../app/theme/thick_widgets.dart';
+import '../../../../app/theme/wood_background.dart';
 import '../../../../core/dev/state/dev_user_state.dart';
 import '../../../../core/layout/breakpoints.dart';
 import '../../data/video_studio_models.dart';
@@ -31,19 +33,76 @@ class VideoAccessGuard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final role = ref.watch(currentDevUserProvider)?.role;
     if (role == 'shop_staff' || role == 'admin') return child;
-    return Scaffold(
+    return VideoScaffold(
       key: const Key('video-no-permission'),
-      appBar: AppBar(title: const Text('規則影片')),
+      title: '規則影片',
       body: Center(
         child: Padding(
           padding: const EdgeInsets.all(AppSpacing.large),
-          child: Text(
-            '只有店家人員可以使用影片功能',
-            textAlign: TextAlign.center,
-            style: Theme.of(context).textTheme.titleMedium,
+          child: ThickCard(
+            child: Padding(
+              padding: videoCardInset,
+              child: Text(
+                '只有店家人員可以使用影片功能',
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+            ),
           ),
         ),
       ),
+    );
+  }
+}
+
+/// 有厚度卡片的標準內距（影片頁共用）。
+const videoCardInset = EdgeInsets.all(AppSpacing.medium + AppSpacing.xSmall);
+
+/// 影片頁的外框（Stitch 版面）：木紋背景、半透明白底的頁首，[bottom] 是固定在底部的按鈕列。
+///
+/// 手機的浮動導覽列蓋住的高度（MediaQuery 底部 padding）整個留在最下面，
+/// 內容與底部按鈕列都停在導覽列上方，木紋延伸到導覽列後面。
+class VideoScaffold extends StatelessWidget {
+  const VideoScaffold({
+    required this.title,
+    required this.body,
+    this.actions = const [],
+    this.bottom,
+    super.key,
+  });
+
+  final String title;
+  final Widget body;
+  final List<Widget> actions;
+  final Widget? bottom;
+
+  @override
+  Widget build(BuildContext context) {
+    final bottomInset = MediaQuery.paddingOf(context).bottom;
+    final content = Padding(
+      padding: EdgeInsets.only(bottom: bottomInset),
+      child: MediaQuery.removePadding(
+        context: context,
+        removeBottom: true,
+        child: Column(
+          children: [
+            Expanded(child: body),
+            ?bottom,
+          ],
+        ),
+      ),
+    );
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      appBar: AppBar(
+        title: Text(title),
+        // 放在木紋上，用半透明白底，文字才看得清楚
+        backgroundColor: AppColors.headerGlass,
+        actions: actions,
+      ),
+      body: WoodBackground.isPaintedAbove(context)
+          ? content
+          : WoodBackground(child: content),
     );
   }
 }
@@ -76,7 +135,7 @@ class VideoPageBody extends StatelessWidget {
   }
 }
 
-/// 頁面底部的按鈕列。
+/// 頁面底部的按鈕列：一張厚卡片，按鈕平分寬度。
 class VideoBottomActions extends StatelessWidget {
   const VideoBottomActions({required this.children, super.key});
 
@@ -84,22 +143,30 @@ class VideoBottomActions extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Theme.of(context).colorScheme.surface,
-      elevation: 2,
-      child: SafeArea(
-        top: false,
-        child: VideoPageBody(
-          shrinkHeight: true,
-          child: Padding(
-            padding: const EdgeInsets.all(AppSpacing.medium),
-            child: Row(
-              children: [
-                for (final (i, child) in children.indexed) ...[
-                  if (i > 0) const SizedBox(width: AppSpacing.small),
-                  Expanded(child: child),
+    return SafeArea(
+      top: false,
+      child: VideoPageBody(
+        shrinkHeight: true,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.medium,
+            0,
+            AppSpacing.medium,
+            AppSpacing.medium,
+          ),
+          child: ThickCard(
+            child: Padding(
+              padding: const EdgeInsets.all(
+                AppSpacing.small + AppSpacing.xSmall,
+              ),
+              child: Row(
+                children: [
+                  for (final (i, child) in children.indexed) ...[
+                    if (i > 0) const SizedBox(width: AppSpacing.small),
+                    Expanded(child: child),
+                  ],
                 ],
-              ],
+              ),
             ),
           ),
         ),
@@ -190,7 +257,7 @@ class VideoJobCard extends ConsumerWidget {
         VideoJobStatus.failed => _card(
           context,
           key: const Key('video-job-failed'),
-          color: scheme.errorContainer,
+          color: AppColors.errorTint,
           children: [
             Text(
               job.error ?? '沒有完成，請再試一次',
@@ -199,7 +266,12 @@ class VideoJobCard extends ConsumerWidget {
             const SizedBox(height: AppSpacing.small),
             Align(
               alignment: Alignment.centerRight,
-              child: FilledButton(onPressed: retry, child: const Text('重試')),
+              child: ThickButton(
+                style: ThickStyle.primary,
+                label: '重試',
+                shadow: AppShadows.soft,
+                onPressed: retry,
+              ),
             ),
           ],
         ),
@@ -226,11 +298,11 @@ class VideoJobCard extends ConsumerWidget {
     required Key key,
     required List<Widget> children,
     Color? color,
-  }) => Card(
+  }) => ThickCard(
     key: key,
-    color: color,
+    color: color ?? AppColors.surface,
     child: Padding(
-      padding: const EdgeInsets.all(AppSpacing.medium),
+      padding: videoCardInset,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: children,
@@ -257,7 +329,7 @@ class VideoReadinessCard extends StatelessWidget {
     final text = Theme.of(context).textTheme;
     final scheme = Theme.of(context).colorScheme;
     if (readiness.ready) {
-      return Card(
+      return ThickCard(
         key: const Key('video-readiness'),
         child: ListTile(
           leading: Icon(Icons.check_circle, color: scheme.primary),
@@ -265,10 +337,10 @@ class VideoReadinessCard extends StatelessWidget {
         ),
       );
     }
-    return Card(
+    return ThickCard(
       key: const Key('video-readiness'),
       child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.medium),
+        padding: videoCardInset,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
