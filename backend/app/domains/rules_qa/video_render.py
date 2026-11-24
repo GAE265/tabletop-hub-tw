@@ -32,6 +32,7 @@ from app.domains.rules_qa.video_assets import (
     readiness,
     strip_skipped,
     strip_skipped_regions,
+    strip_unused,
 )
 from app.domains.rules_qa.video_jobs import JobContext, JobFailed
 from app.integrations.storage.base import FileStorage
@@ -151,14 +152,16 @@ class RenderJobHandler:
         report = readiness(state.video)
         if not report["ready"]:
             raise JobFailed(not_ready_message(report))
-        skipped = {a["asset_key"] for a in state.video.get("assets", []) if is_skipped(a)}
+        # 換素材之後沒有段在用的素材、沒有被指到的區域：不用拍、不用標，先拿掉（2026-11-25）
+        video = strip_unused(state.video)
+        skipped = {a["asset_key"] for a in video.get("assets", []) if is_skipped(a)}
         # 略過後某段的主畫面會空掉的素材（拍不了的，例如「身上有花香的玩家」）：不拿掉，
         # 改成寫著素材名稱的文字卡（2026-11-22 永傑決定）；其他略過的照舊拿掉
-        cards = {k for k in skipped if strip_skipped(state.video, {k}).blocked}
-        stripped = strip_skipped(state.video, skipped - cards)
+        cards = {k for k in skipped if strip_skipped(video, {k}).blocked}
+        stripped = strip_skipped(video, skipped - cards)
         if stripped.blocked:  # 幾張一起略過才讓某段空掉：這幾張也改成文字卡
             cards = set(skipped)
-            stripped = strip_skipped(state.video, set())
+            stripped = strip_skipped(video, set())
         fonts, tts, estimated = self._tools()
         output = with_text_cards(stripped.video, cards)
         # 照片拍不到、店員略過的區域：拿掉區域與指向它的框選、標籤、移動（2026-11-22 永傑決定）

@@ -42,6 +42,7 @@ from app.domains.rules_qa.schemas import (
     DraftBeatOut,
     DraftCoverageOut,
     DraftSegmentOut,
+    DraftSlotOut,
     DraftTermsOut,
     MessageRequest,
     MessageResponse,
@@ -51,6 +52,9 @@ from app.domains.rules_qa.schemas import (
     RulesLessonItem,
     RulesLessonList,
     RulesLessonOut,
+    SegmentAssetSwapIn,
+    SegmentAssetSwapOut,
+    SwapRemovedOut,
     VideoAssetOut,
     VideoAssetUpdate,
     VideoDraftOut,
@@ -72,6 +76,7 @@ from app.domains.rules_qa.schemas import (
 from app.domains.rules_qa.video_assets import (
     PhotoRejected,
     asset_label,
+    asset_segments,
     find_asset,
     is_skippable,
     is_skipped,
@@ -105,6 +110,12 @@ from app.domains.rules_qa.video_rulebook import (
     sharpness,
 )
 from app.domains.rules_qa.video_script import REPRESENTATIVE, term_conflicts
+from app.domains.rules_qa.video_segments import (
+    SwapRejected,
+    record_swap,
+    segment_slots,
+    swap_segment_asset,
+)
 from app.domains.rules_qa.youtube import parse_youtube_id
 from app.integrations.embedding import EmbeddingError, EmbeddingProvider
 from app.integrations.llm import LLMProvider
@@ -929,6 +940,10 @@ def _draft_segment(segment: dict[str, Any]) -> DraftSegmentOut:
             )
             for b in segment.get("beats", [])
         ],
+        slots=[
+            DraftSlotOut(slot=s.slot, kind=s.kind, asset_keys=s.asset_keys, swappable=s.swappable)
+            for s in segment_slots(segment)
+        ],
     )
 
 
@@ -947,6 +962,7 @@ def _draft_asset(asset: dict[str, Any], video: dict[str, Any]) -> DraftAssetOut:
         has_photo=bool(asset.get("file")),
         skipped=is_skipped(asset),
         skippable=is_skippable(video, asset["asset_key"]),
+        used_in_segments=asset_segments(video, asset["asset_key"]),
     )
 
 
@@ -1186,6 +1202,37 @@ class VideoAssetsService:
         素材明細的 skip_blocked_segments 列出是哪幾段，手機頁在略過前說明。
         """
 
+    def swap_segment_asset(
+        self, user: CurrentUser, project_id: uuid.UUID, segment_key: str, body: SegmentAssetSwapIn
+    ) -> SegmentAssetSwapOut:
+        """換某一段某一格的素材（2026-11-25 永傑決定，最小版；規則見 video_segments）。
+
+        body.video_version 和目前的不同時 409（店員看的是舊的草稿）；寫入時版本又變了也是 409。
+        """
+        state = self._state(user, project_id)
+        if body.video_version != state.video_version:
+            raise AppError(409, "RULES_VIDEO_CONFLICT", SWAP_CONFLICT_MESSAGE)
+        try:
+            result = swap_segment_asset(state.video or {}, segment_key, body.slot, body.asset_key)
+        except SwapRejected as exc:
+            raise AppError(exc.status, exc.code, exc.message) from exc
+        record_swap(result, segment_key, by=str(user.id))
+        if not self._save(project_id, state.video_version, result.video):
+            raise AppError(409, "RULES_VIDEO_CONFLICT", SWAP_CONFLICT_MESSAGE)
+        return SegmentAssetSwapOut(
+            segment_key=segment_key,
+            slot=body.slot,
+            old_asset_key=result.old_asset_key,
+            new_asset_key=result.new_asset_key,
+            removed=SwapRemovedOut(
+                highlights=result.removed_highlights,
+                labels=result.removed_labels,
+                cues=result.removed_cues,
+            ),
+            unused_assets=result.unused_assets,
+            video_version=state.video_version + 1,
+        )
+
     def readiness(self, user: CurrentUser, project_id: uuid.UUID) -> VideoReadinessOut:
         state = self._state(user, project_id)
         return VideoReadinessOut.model_validate(readiness(state.video or {}))
@@ -1231,6 +1278,7 @@ class VideoAssetsService:
 
 
 STORAGE_DOWN_MESSAGE = "照片存放空間暫時無法使用，請稍後再試"
+SWAP_CONFLICT_MESSAGE = "草稿已被修改，請重新整理後再換"
 
 
 def _asset_out(asset: dict[str, Any], version: int, video: dict[str, Any]) -> VideoAssetOut:

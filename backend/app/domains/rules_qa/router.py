@@ -26,6 +26,8 @@ from app.domains.rules_qa.schemas import (
     RulebookOut,
     RulesLessonList,
     RulesLessonOut,
+    SegmentAssetSwapIn,
+    SegmentAssetSwapOut,
     VideoAssetOut,
     VideoAssetUpdate,
     VideoDraftOut,
@@ -364,6 +366,19 @@ def update_video_asset(
 ) -> VideoAssetOut:
     """改方向或區域座標；只改方向時區域改回待量測。"""
     return service.update_asset(user, project_id, asset_key, body)
+
+
+@videos_router.patch("/{project_id}/segments/{segment_key}", response_model=SegmentAssetSwapOut)
+def swap_video_segment_asset(
+    project_id: uuid.UUID,
+    segment_key: str,
+    body: SegmentAssetSwapIn,
+    user: CurrentUserDep,
+    service: VideoAssetsServiceDep,
+) -> SegmentAssetSwapOut:
+    """換某一段某一格的素材（單一素材的格子、清單裡可以用的素材）。指向舊素材區域的框線、
+    標籤、動作一律移除，回應列出移除了什麼；`video_version` 和目前的不同時 409。"""
+    return service.swap_segment_asset(user, project_id, segment_key, body)
 
 
 @videos_router.get("/{project_id}/readiness", response_model=VideoReadinessOut)
