@@ -6,6 +6,8 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from app.core.logging import mark_exception_logged
+
 logger = logging.getLogger(__name__)
 
 HTTP_ERROR_CODES = {
@@ -73,6 +75,11 @@ def register_error_handlers(app: FastAPI) -> None:
         return error_response(422, "VALIDATION_ERROR", "請求欄位驗證失敗", {"errors": errors})
 
     @app.exception_handler(Exception)
-    async def handle_unexpected(_: Request, exc: Exception) -> JSONResponse:
-        logger.exception("Unhandled error", exc_info=exc)
+    async def handle_unexpected(request: Request, exc: Exception) -> JSONResponse:
+        mark_exception_logged(exc)
+        logger.exception(
+            "Unhandled error",
+            exc_info=exc,
+            extra={"method": request.method, "path": request.url.path},
+        )
         return error_response(500, "INTERNAL_ERROR", "伺服器發生未預期的錯誤")

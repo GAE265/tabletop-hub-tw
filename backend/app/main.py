@@ -2,7 +2,7 @@ import importlib
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -11,6 +11,7 @@ from app.core.db import create_db_engine, create_session_factory
 from app.core.errors import register_error_handlers
 from app.core.games.repository import GameRepository
 from app.core.games.router import router as games_router
+from app.core.logging import configure_logging, reset_request_context, set_request_context
 from app.domains.booking.router import router as booking_router
 from app.domains.games_advisor.router import router as games_advisor_router
 from app.domains.groups.router import notifications_router as group_notifications_router
@@ -36,6 +37,7 @@ from app.integrations.ocr.factory import get_vision_provider
 from app.integrations.storage.factory import StorageConfig, get_file_storage
 
 API_PREFIX = "/api/v1"
+configure_logging()
 
 
 def _host_service(
@@ -106,6 +108,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             engine.dispose()
 
     app = FastAPI(title="遊任有娛 tabletop-hub-tw", lifespan=lifespan)
+
+    @app.middleware("http")
+    async def add_request_logging_context(request: Request, call_next):
+        token = set_request_context(request.method, request.url.path)
+        try:
+            return await call_next(request)
+        finally:
+            reset_request_context(token)
+
     app.state.settings = settings
     app.state.session_factory = create_session_factory(engine)
     # LLM_PROVIDER、GAMES_ADVISOR_EMBEDDING_* 設錯時在啟動就明確報錯
