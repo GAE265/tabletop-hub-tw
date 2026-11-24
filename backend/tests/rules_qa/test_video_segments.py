@@ -225,7 +225,7 @@ def test_swap_reports_assets_no_longer_used():
 
 
 @pytest.mark.parametrize(
-    ("segment", "slot", "asset", "status", "code"),
+    ("segment", "slot", "asset", "item", "face", "status", "code"),
     [
         ("s9", "main", "blue", None, "front", 404, "RULES_VIDEO_SEGMENT_NOT_FOUND"),
         ("s1", "side", "blue", None, "front", 422, "RULES_VIDEO_SLOT_NOT_FOUND"),
