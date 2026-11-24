@@ -65,6 +65,49 @@ def test_unsafe_key_is_rejected(storage: FileStorage, key: str) -> None:
         storage.put(key, b"x", "video/mp4")
 
 
+# --- 刪除整個前綴（刪除影片專案時清掉 rules_videos/<專案>/ 底下的所有檔案） ---
+
+
+def test_delete_prefix_removes_everything_under_it(storage: FileStorage) -> None:
+    for key in ("rv/p1/assets/a.jpg", "rv/p1/renders/j1.mp4", "rv/p1/rulebook/manifest.json"):
+        storage.put(key, b"x", "application/octet-stream")
+    storage.put("rv/p2/assets/a.jpg", b"keep", "image/jpeg")
+    assert storage.delete_prefix("rv/p1") == 3
+    for key in ("rv/p1/assets/a.jpg", "rv/p1/renders/j1.mp4", "rv/p1/rulebook/manifest.json"):
+        with pytest.raises(FileNotFound):
+            storage.get(key)
+    assert storage.get("rv/p2/assets/a.jpg") == b"keep"
+
+
+def test_delete_prefix_only_matches_whole_folder(storage: FileStorage) -> None:
+    # 「rv/abc」不可以刪到「rv/abcd/...」：前綴一律當成資料夾
+    storage.put("rv/abc/x.jpg", b"x", "image/jpeg")
+    storage.put("rv/abcd/x.jpg", b"keep", "image/jpeg")
+    assert storage.delete_prefix("rv/abc/") == 1
+    assert storage.get("rv/abcd/x.jpg") == b"keep"
+
+
+def test_delete_prefix_missing_returns_zero(storage: FileStorage) -> None:
+    assert storage.delete_prefix("rv/nothing") == 0
+    assert storage.delete_prefix("rv/nothing") == 0
+
+
+@pytest.mark.parametrize("prefix", ["", "/", "/abs", "..", "a/../b", "a\\b", "a//b"])
+def test_unsafe_prefix_is_rejected(storage: FileStorage, prefix: str) -> None:
+    storage.put("a/b.jpg", b"keep", "image/jpeg")
+    with pytest.raises(ValueError):
+        storage.delete_prefix(prefix)
+    assert storage.get("a/b.jpg") == b"keep"
+
+
+def test_local_delete_prefix_removes_folder(tmp_path: Path) -> None:
+    storage = LocalFileStorage(root=tmp_path, public_base_url="http://api.test/media")
+    storage.put("rv/p1/assets/a.jpg", b"x", "image/jpeg")
+    storage.delete_prefix("rv/p1")
+    assert not (tmp_path / "rv" / "p1").exists()
+    assert (tmp_path / "rv").is_dir()
+
+
 def test_local_url_is_public_base_url_plus_key(tmp_path: Path) -> None:
     storage = LocalFileStorage(root=tmp_path, public_base_url="http://api.test/media/")
     url = storage.put("videos/p1/final.mp4", b"mp4", "video/mp4")

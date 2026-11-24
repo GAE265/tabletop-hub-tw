@@ -24,6 +24,9 @@ from app.domains.rules_qa.models import (
     RulesQaVideoTerms,
 )
 
+# PostgreSQL 的外鍵違反（SQLSTATE 23503）
+FOREIGN_KEY_VIOLATION = "23503"
+
 
 @dataclass(frozen=True)
 class LessonSummary:
@@ -252,6 +255,27 @@ class VideoProjectRepository(SessionRepository):
         ).one_or_none()
         return None if row is None else self._record(*row)
 
+    def lock(self, project_id: uuid.UUID) -> bool:
+        """鎖住這一筆專案到交易結束（刪除時用；同時建立的工作會等鎖放開）。
+
+        沒有這個專案時回 False。
+        """
+        locked = self.session.scalar(
+            select(RulesQaVideoProject.id)
+            .where(RulesQaVideoProject.id == project_id)
+            .with_for_update()
+        )
+        return locked is not None
+
+    def delete(self, project_id: uuid.UUID) -> None:
+        """刪除專案與它的工作紀錄（工作的外鍵沒有連帶刪除，要先刪工作）。"""
+        self.session.execute(
+            delete(RulesQaVideoJob).where(RulesQaVideoJob.project_id == project_id)
+        )
+        self.session.execute(
+            delete(RulesQaVideoProject).where(RulesQaVideoProject.id == project_id)
+        )
+
     def list_projects(
         self, shop_id: uuid.UUID | None, offset: int, limit: int
     ) -> tuple[list[VideoProjectRecord], int]:
@@ -278,6 +302,10 @@ class VideoProjectRepository(SessionRepository):
 
 class ActiveJobExists(Exception):
     """這個專案已經有等待中或處理中的工作（部分唯一索引擋下）。"""
+
+
+class ProjectGone(Exception):
+    """建立工作時，專案剛好被刪除（外鍵擋下）。"""
 
 
 @dataclass(frozen=True)
@@ -334,6 +362,8 @@ class VideoJobRepository(SessionRepository):
         except IntegrityError as exc:
             if ACTIVE_JOB_INDEX in str(exc.orig):
                 raise ActiveJobExists from exc
+            if getattr(exc.orig, "sqlstate", None) == FOREIGN_KEY_VIOLATION:
+                raise ProjectGone from exc
             raise
         return job.id
 

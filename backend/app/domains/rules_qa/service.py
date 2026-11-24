@@ -6,9 +6,11 @@
 import copy
 import io
 import logging
+import shutil
 import uuid
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import AbstractContextManager, contextmanager
+from pathlib import Path
 from typing import Any, Protocol
 
 from PIL import Image
@@ -23,6 +25,7 @@ from app.domains.rules_qa.repository import (
     DraftState,
     LessonSummary,
     PagesRecord,
+    ProjectGone,
     VideoJobRecord,
     VideoProjectRecord,
     VideoRecord,
@@ -75,6 +78,8 @@ from app.domains.rules_qa.video_assets import (
     new_photo_file,
     normalize_photo,
     photo_key,
+    project_files_prefix,
+    project_work_folder,
     readiness,
     region_segments,
     skip_impact,
@@ -363,6 +368,8 @@ class VideoProjectStore(Protocol):
     def list_projects(
         self, shop_id: uuid.UUID | None, offset: int, limit: int
     ) -> tuple[list[VideoProjectRecord], int]: ...
+    def lock(self, project_id: uuid.UUID) -> bool: ...
+    def delete(self, project_id: uuid.UUID) -> None: ...
 
 
 class GameNames(Protocol):
@@ -377,6 +384,9 @@ class ShopLookup(Protocol):
 
 def _project_not_found() -> AppError:
     return AppError(404, "RULES_VIDEO_PROJECT_NOT_FOUND", "找不到這個影片專案")
+
+
+PROJECT_BUSY_MESSAGE = "正在產生草稿或影片，完成後再刪除"
 
 
 class ProjectPagesWriter(Protocol):
@@ -409,6 +419,9 @@ class VideoProjectService:
         read_pages: Callable[[int], list[tuple[int, str]]] | None = None,
         pages: ProjectPagesWriter | None = None,
         drafts: DraftStarter | None = None,
+        jobs: "VideoJobStore | None" = None,
+        storage: FileStorage | None = None,
+        work_dir: Path | None = None,
     ) -> None:
         self._projects = projects
         self._games = games
@@ -416,6 +429,9 @@ class VideoProjectService:
         self._read_pages = read_pages
         self._pages = pages
         self._drafts = drafts
+        self._jobs = jobs
+        self._storage = storage
+        self._work_dir = work_dir
 
     def create(self, user: CurrentUser, body: VideoProjectCreate) -> VideoProjectOut:
         require_role(user, "shop_staff", "admin")
@@ -472,6 +488,43 @@ class VideoProjectService:
             raise PermissionDenied("這個店家人員帳號沒有所屬店家")
         records, total = self._projects.list_projects(shop_id, (page - 1) * page_size, page_size)
         return VideoProjectList(items=[_project_out(r) for r in records], total=total)
+
+    def delete(self, user: CurrentUser, project_id: uuid.UUID) -> None:
+        """刪除專案（2026-11-24 永傑決定，最小版）：權限同其他操作（同店店員與管理員）。
+
+        有進行中的工作時 409，什麼都不刪（running 超過逾時上限的視為卡住，先標為逾時）。
+        先在一個交易裡刪資料庫（工作紀錄與專案），提交後才刪存放空間的 `rules_videos/<專案>/`
+        與工作資料夾：刪檔案失敗只記 log，不會留下指向不存在檔案的資料。
+        """
+        require_role(user, "shop_staff", "admin")
+        record = self._projects.get(project_id)
+        if record is None or not _can_access(user, record):
+            raise _project_not_found()
+        assert self._jobs is not None and self._storage is not None and self._work_dir is not None
+        with self._projects.transaction():
+            if not self._projects.lock(project_id):
+                raise _project_not_found()
+            self._jobs.expire_stale(project_id, JOB_TIMEOUT_MINUTES, TIMEOUT_MESSAGE)
+            if self._jobs.active_job_id(project_id) is not None:
+                raise AppError(409, "RULES_VIDEO_PROJECT_BUSY", PROJECT_BUSY_MESSAGE)
+            self._projects.delete(project_id)
+        try:
+            self._storage.delete_prefix(project_files_prefix(project_id))
+        except StorageError:
+            logger.warning(
+                "刪除影片專案 %s 的檔案失敗（資料庫已刪除，只留下沒有資料指向的檔案）",
+                project_id,
+                exc_info=True,
+            )
+        folder = project_work_folder(self._work_dir, project_id)
+        try:
+            shutil.rmtree(folder)
+        except FileNotFoundError:
+            pass
+        except OSError:
+            logger.warning(
+                "刪除影片專案 %s 的工作資料夾失敗：%s", project_id, folder, exc_info=True
+            )
 
     def _shop_for(self, user: CurrentUser, requested: uuid.UUID | None) -> uuid.UUID:
         """店家人員用登入身分的店家；管理員必須指定店家。"""
@@ -571,6 +624,9 @@ class VideoJobService:
         try:
             with self._jobs.transaction():
                 job_id = self._jobs.create(project_id=project_id, kind=kind, created_by=user.id)
+        except ProjectGone:
+            # 建立工作的同時專案被刪除了
+            raise _project_not_found() from None
         except ActiveJobExists:
             active = self._jobs.active_job_id(project_id)
             raise AppError(

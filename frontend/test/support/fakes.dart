@@ -1696,6 +1696,20 @@ class FakeVideoStudioRepository implements VideoStudioRepository {
   Future<VideoProject> getProject(String projectId) async =>
       projects.firstWhere((p) => p.id == projectId);
 
+  /// 刪除專案（有值就丟出，例如 409 正在產生）。
+  Object? deleteProjectError;
+  final deletedProjects = <String>[];
+
+  @override
+  Future<void> deleteProject(String projectId) async {
+    if (deleteProjectError != null) throw deleteProjectError!;
+    deletedProjects.add(projectId);
+    projects = [
+      for (final p in projects)
+        if (p.id != projectId) p,
+    ];
+  }
+
   // --- 店員拍規則書 ---
 
   /// 專案的規則書照片；沒有時是空的。

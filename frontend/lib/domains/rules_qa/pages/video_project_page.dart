@@ -199,6 +199,76 @@ class _Overview extends ConsumerWidget {
           label: next.$1,
           onPressed: () => context.go(next.$2),
         ),
+        const SizedBox(height: AppSpacing.large),
+        _DeleteProject(project: project),
+      ],
+    );
+  }
+}
+
+/// 刪除專案（2026-11-24 永傑決定，最小版）：先確認，刪除後回到專案列表；
+/// 正在產生草稿或影片時（409）在按鈕下方顯示後端的說明。
+class _DeleteProject extends ConsumerWidget {
+  const _DeleteProject({required this.project});
+
+  final VideoProject project;
+
+  Future<void> _confirmAndDelete(BuildContext context, WidgetRef ref) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('刪除「${project.title}」？'),
+        content: const Text('刪除後無法復原，成品影片也會一起刪除。草稿、素材照片與規則書照片也會一起刪除。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            key: const Key('video-project-delete-confirm'),
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+              foregroundColor: Theme.of(context).colorScheme.onError,
+            ),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('刪除'),
+          ),
+        ],
+      ),
+    );
+    if (!(ok ?? false) || !context.mounted) return;
+    final deleted = await ref
+        .read(videoProjectDeleteProvider(project.id).notifier)
+        .delete();
+    if (deleted && context.mounted) context.go('/videos');
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final state = ref.watch(videoProjectDeleteProvider(project.id));
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        ThickButton(
+          buttonKey: const Key('video-project-delete'),
+          style: ThickStyle.danger,
+          expand: true,
+          icon: Icons.delete_outline,
+          label: state.deleting ? '刪除中…' : '刪除專案',
+          onPressed: state.deleting
+              ? null
+              : () => _confirmAndDelete(context, ref),
+        ),
+        if (state.error case final error?) ...[
+          const SizedBox(height: AppSpacing.small),
+          Text(
+            error,
+            key: const Key('video-project-delete-error'),
+            style: Theme.of(context).textTheme.bodyMedium!.copyWith(
+              color: Theme.of(context).colorScheme.error,
+            ),
+          ),
+        ],
       ],
     );
   }

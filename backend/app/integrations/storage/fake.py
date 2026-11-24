@@ -1,4 +1,4 @@
-from app.integrations.storage.base import FileStorage, check_key
+from app.integrations.storage.base import FileStorage, check_key, check_prefix
 from app.integrations.storage.errors import FileNotFound
 
 
@@ -25,3 +25,10 @@ class FakeFileStorage(FileStorage):
         check_key(key)
         self.files.pop(key, None)
         self.content_types.pop(key, None)
+
+    def delete_prefix(self, prefix: str) -> int:
+        folder = check_prefix(prefix) + "/"
+        keys = [key for key in self.files if key.startswith(folder)]
+        for key in keys:
+            self.delete(key)
+        return len(keys)

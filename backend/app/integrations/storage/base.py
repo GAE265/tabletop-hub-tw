@@ -23,6 +23,22 @@ class FileStorage(ABC):
     def delete(self, key: str) -> None:
         """刪除檔案；不存在時不拋錯（可以重複執行）。"""
 
+    @abstractmethod
+    def delete_prefix(self, prefix: str) -> int:
+        """刪除這個資料夾（`<prefix>/`）底下的所有檔案，回傳刪了幾個；沒有檔案時回 0。
+
+        前綴一律當成資料夾：`rules_videos/abc` 不會刪到 `rules_videos/abcd/...`。
+        前綴和 key 一樣要是安全的相對路徑：空字串、`..` 等直接拒絕（ValueError），
+        避免誤刪整個儲存位置。
+        """
+
+
+def check_prefix(prefix: str) -> str:
+    """回傳去掉結尾 `/` 的前綴；不安全時拋 ValueError（規則同 check_key）。"""
+    trimmed = prefix[:-1] if prefix.endswith("/") else prefix
+    check_key(trimmed)
+    return trimmed
+
 
 def check_key(key: str) -> None:
     """所有實作共用：key 必須是安全的相對路徑，不能跳出儲存位置。"""

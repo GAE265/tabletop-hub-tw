@@ -1,6 +1,7 @@
 """規則教學與問答 API：只解析請求、取得目前使用者、呼叫 service（AGENTS.md 4.2）。"""
 
 import uuid
+from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, Query, Request, Response, UploadFile, status
@@ -125,6 +126,9 @@ def get_video_project_service(
         read_pages=lambda game_id: read_manual_pages(manual, game_id),
         pages=VideoPagesRepository(session),
         drafts=get_video_job_service(request, session),
+        jobs=VideoJobRepository(session),
+        storage=request.app.state.storage,
+        work_dir=Path(request.app.state.settings.rules_video_work_dir),
     )
 
 
@@ -155,6 +159,16 @@ def get_video_project(
 ) -> VideoProjectOut:
     """查看一個影片專案；別家店的專案回 404。"""
     return service.get(user, project_id)
+
+
+@videos_router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_video_project(
+    project_id: uuid.UUID, user: CurrentUserDep, service: VideoServiceDep
+) -> Response:
+    """刪除影片專案：資料庫的專案與工作紀錄、存放空間的照片與成品影片、工作資料夾一起刪除，
+    無法復原。同店店員與管理員可以刪；有進行中的工作時 409。"""
+    service.delete(user, project_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 def get_video_job_service(
