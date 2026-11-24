@@ -113,6 +113,19 @@ class _VideoRegionsPageState extends ConsumerState<VideoRegionsPage> {
     final size = photo == null ? null : imageSizeOf(photo);
     final text = Theme.of(context).textTheme;
     final scheme = Theme.of(context).colorScheme;
+    final current = state.current;
+    final segmentsText = Text(
+      regionSegmentsText(
+        current == null ? const [] : state.segments[current] ?? const [],
+      ),
+      key: const Key('video-region-segments'),
+      style: text.bodySmall!.copyWith(color: scheme.onSurfaceVariant),
+    );
+    // 面板裡的按鈕用緊湊尺寸，把高度留給照片
+    final compactButton = TextButton.styleFrom(
+      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      visualDensity: VisualDensity.compact,
+    );
     return PopScope(
       canPop: !state.dirty,
       onPopInvokedWithResult: (didPop, _) {
@@ -150,58 +163,72 @@ class _VideoRegionsPageState extends ConsumerState<VideoRegionsPage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        Text(
-                          '用四個角對齊框線',
-                          style: text.bodySmall!.copyWith(
-                            color: scheme.onSurfaceVariant,
-                          ),
-                        ),
-                        const SizedBox(height: AppSpacing.small),
-                        Text(
-                          '已標 ${state.doneCount}／${state.names.length}',
-                          style: text.titleSmall!.copyWith(
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        const SizedBox(height: AppSpacing.small),
-                        Wrap(
-                          spacing: AppSpacing.small,
-                          runSpacing: AppSpacing.xSmall,
+                        // 說明與進度放同一行，區域按鈕排成一排可以左右滑動：
+                        // 手機上面板高度才不會隨區域數量變高，把照片擠掉（2026-11-24 iPhone 實測）
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.baseline,
+                          textBaseline: TextBaseline.alphabetic,
                           children: [
-                            for (final name in state.names)
-                              ChoiceChip(
-                                key: Key('video-region-chip-$name'),
-                                avatar: state.skipped.contains(name)
-                                    ? const Icon(Icons.block)
-                                    : state.boxes[name] != null
-                                    ? const Icon(Icons.check)
-                                    : null,
-                                label: Text(name),
-                                selected: state.current == name,
-                                onSelected: (_) => notifier.select(name),
+                            Expanded(
+                              child: Text(
+                                '用四個角對齊框線',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: text.bodySmall!.copyWith(
+                                  color: scheme.onSurfaceVariant,
+                                ),
                               ),
+                            ),
+                            const SizedBox(width: AppSpacing.small),
+                            Text(
+                              '已標 ${state.doneCount}／${state.names.length}',
+                              style: text.titleSmall!.copyWith(
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
                           ],
                         ),
+                        const SizedBox(height: AppSpacing.small),
+                        SingleChildScrollView(
+                          key: const Key('video-region-chips'),
+                          scrollDirection: Axis.horizontal,
+                          child: Row(
+                            children: [
+                              for (final (i, name) in state.names.indexed) ...[
+                                if (i > 0)
+                                  const SizedBox(width: AppSpacing.small),
+                                ChoiceChip(
+                                  key: Key('video-region-chip-$name'),
+                                  avatar: state.skipped.contains(name)
+                                      ? const Icon(Icons.block)
+                                      : state.boxes[name] != null
+                                      ? const Icon(Icons.check)
+                                      : null,
+                                  label: Text(name),
+                                  selected: state.current == name,
+                                  onSelected: (_) => notifier.select(name),
+                                  materialTapTargetSize:
+                                      MaterialTapTargetSize.shrinkWrap,
+                                  visualDensity: VisualDensity.compact,
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
                         if (state.current case final name?) ...[
-                          const SizedBox(height: AppSpacing.small),
+                          const SizedBox(height: AppSpacing.xSmall),
                           if (state.hints[name] case final hint?
                               when hint.isNotEmpty)
                             Text(
                               hint,
                               key: const Key('video-region-hint'),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
                               style: text.bodyMedium,
                             ),
-                          Text(
-                            regionSegmentsText(
-                              state.segments[name] ?? const [],
-                            ),
-                            key: const Key('video-region-segments'),
-                            style: text.bodySmall!.copyWith(
-                              color: scheme.onSurfaceVariant,
-                            ),
-                          ),
                           const SizedBox(height: AppSpacing.xSmall),
-                          if (state.skipped.contains(name))
+                          if (state.skipped.contains(name)) ...[
+                            segmentsText,
                             Row(
                               children: [
                                 const Icon(Icons.block),
@@ -209,6 +236,7 @@ class _VideoRegionsPageState extends ConsumerState<VideoRegionsPage> {
                                 const Expanded(child: Text('已略過：照片拍不到這個區域')),
                                 TextButton(
                                   key: const Key('video-region-unskip'),
+                                  style: compactButton,
                                   onPressed: state.saving
                                       ? null
                                       : () => notifier.setRegionSkipped(
@@ -218,28 +246,34 @@ class _VideoRegionsPageState extends ConsumerState<VideoRegionsPage> {
                                   child: const Text('取消略過'),
                                 ),
                               ],
-                            )
-                          else
-                            Align(
-                              alignment: Alignment.centerLeft,
-                              child: TextButton.icon(
-                                key: const Key('video-region-skip'),
-                                onPressed: state.saving
-                                    ? null
-                                    : () => _confirmSkip(
-                                        name,
-                                        state.segments[name] ?? const [],
-                                      ),
-                                icon: const Icon(Icons.block),
-                                label: const Text('照片拍不到這個區域'),
-                              ),
+                            ),
+                          ] else
+                            // 寬度夠時「第 N 段會用到」和略過按鈕放同一行，不夠時換行
+                            Wrap(
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              spacing: AppSpacing.small,
+                              children: [
+                                segmentsText,
+                                TextButton.icon(
+                                  key: const Key('video-region-skip'),
+                                  style: compactButton,
+                                  onPressed: state.saving
+                                      ? null
+                                      : () => _confirmSkip(
+                                          name,
+                                          state.segments[name] ?? const [],
+                                        ),
+                                  icon: const Icon(Icons.block),
+                                  label: const Text('照片拍不到這個區域'),
+                                ),
+                              ],
                             ),
                         ],
                       ],
                     ),
                   ),
                 ),
-                const SizedBox(height: AppSpacing.medium),
+                const SizedBox(height: AppSpacing.small),
                 if (state.error != null) ...[
                   NoticeBanner(text: state.error!, isError: true),
                   const SizedBox(height: AppSpacing.medium),
