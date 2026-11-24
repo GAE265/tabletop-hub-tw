@@ -1,6 +1,6 @@
 """刪除影片專案：DELETE /api/v1/rules-videos/{project_id}（2026-11-24 永傑決定）。
 
-- 建立者與管理員可以刪；同店的其他店員 403；別家店 404（不透露專案存在）。
+- 權限沿用其他操作：同店的店員與管理員都可以刪；別家店 404（不透露專案存在）；玩家 403。
 - 有進行中（queued、running）的工作時 409，什麼都不刪；running 超過逾時上限的視為卡住，可以刪。
 - 先在一個交易裡刪資料庫（工作紀錄與專案），再刪存放空間的 `rules_videos/<專案>/` 與工作資料夾。
   刪檔案失敗只記 log，仍回 204：資料庫已經沒有這個專案，不會留下指向不存在檔案的資料。
@@ -237,13 +237,14 @@ def test_stuck_job_does_not_block_delete(api, app, rules_db, game):
 # --- 權限 ---
 
 
-def test_same_shop_other_staff_is_403(api, app, rules_db, storage, work_dir, game):
+def test_same_shop_other_staff_can_delete(api, app, rules_db, storage, work_dir, game):
+    # 權限沿用其他操作：同店的店員都可以，不限建立者（2026-11-24 永傑決定，最小版）
     project = insert_project(rules_db, game)  # 建立者是 TEST_SHOP_STAFF
-    keys = _fill(storage, work_dir, project)
+    _fill(storage, work_dir, project)
     _as(app, SAME_SHOP_STAFF)
-    assert api.delete(f"{URL}/{project}").status_code == 403
-    assert _counts(rules_db, project) == (1, 0)
-    assert all(key in storage.files for key in keys)
+    assert api.delete(f"{URL}/{project}").status_code == 204
+    assert _counts(rules_db, project) == (0, 0)
+    assert _files(storage, project) == []
 
 
 def test_other_shop_is_404(api, app, rules_db, game):
@@ -272,16 +273,3 @@ def test_unauthenticated_in_jwt_mode(test_db_url, make_settings, rules_db, game,
     )
     assert client.delete(f"{URL}/{project}").status_code == 401
     assert _counts(rules_db, project) == (1, 0)
-
-
-@pytest.mark.parametrize(
-    ("user", "expected"),
-    [(TEST_SHOP_STAFF, True), (TEST_ADMIN, True), (SAME_SHOP_STAFF, False)],
-    ids=["creator", "admin", "same-shop-other"],
-)
-def test_can_delete_flag(api, app, rules_db, game, user, expected):
-    project = insert_project(rules_db, game)
-    _as(app, user)
-    assert api.get(f"{URL}/{project}").json()["can_delete"] is expected
-    listed = api.get(URL).json()["items"]
-    assert [p["can_delete"] for p in listed if p["id"] == str(project)] == [expected]
