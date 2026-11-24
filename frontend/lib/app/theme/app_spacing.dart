@@ -79,7 +79,7 @@ abstract final class AppSizes {
   /// 品牌 logo 的高度：平板與桌機的頂部導覽列。
   static const double logoHeight = 44;
 
-  /// 品牌 logo 的高度：手機頂部列（較高，logo 裡的英文小字才看得清楚）。
+  /// 品牌 logo 的高度：手機頂部列（較高，logo 裡的英文小字才看得清楚；太窄時會自動縮小）。
   static const double logoHeightMobile = 60;
 
   /// 頂部列的圓形按鈕（鈴鐺、登入）。

@@ -373,11 +373,12 @@ class _NavButton extends StatelessWidget {
   }
 }
 
-/// 品牌 logo（橫式完整版：魚＋遊任有娛＋PLAY · GAME · FUN），讀屏唸「遊任有娛」。
+/// 品牌 logo（橫式完整版：新的正方形 logo 圖案＋「遊任有娛」＋PLAY · GAME · FUN，2026-11-24 改版），
+/// 讀屏唸「遊任有娛」。空間不夠時（例如寬 320 的手機）整張等比例縮小。
 class BrandMark extends StatelessWidget {
   const BrandMark({this.height = AppSizes.logoHeight, super.key});
 
-  /// logo 圖片的路徑（`pubspec.yaml` 的 assets）。ChatGPT 產生，已去背。
+  /// logo 圖片的路徑（`pubspec.yaml` 的 assets），已去背。
   static const asset = 'assets/images/logo-full.webp';
 
   final double height;
