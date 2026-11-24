@@ -24,8 +24,8 @@ class FilePickerImagePicker implements ImagePicker {
   Future<List<PickedImage>?> pickImages() async {
     final result = await (_filePicker ?? FilePicker.platform).pickFiles(
       type: FileType.custom,
-      // 不列 HEIC：iPhone Safari 看到網頁只收 JPEG、PNG 時，會在上傳前自動把 HEIC 轉成 JPEG
-      // （暫行方案，只對 iPhone Safari 有效，待實測）。萬一沒有轉，選到的 HEIC 仍由 state 擋下並說明
+      // 不列 HEIC：讓 iPhone Safari 有機會在上傳前自動轉成 JPEG。實測仍會交出 HEIC，
+      // 所以 HEIC 照常上傳，由後端轉成 JPEG（2026-11-24 永傑決定）
       allowedExtensions: ['jpg', 'jpeg', 'png'],
       allowMultiple: true,
       withData: true,

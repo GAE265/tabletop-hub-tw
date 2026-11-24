@@ -41,29 +41,3 @@ Size? _jpeg(Uint8List b) {
   }
   return null;
 }
-
-/// 選到 HEIC 時給店員的說明（2026-11-22 永傑決定：先不自動轉檔，請店員改相機設定）。
-const heicUnsupportedMessage = '不支援 HEIC，請把相機格式改為最相容（JPEG）';
-
-/// 是不是 HEIC／HEIF：看檔頭的 ftyp 品牌；檔頭看不出來時，副檔名是 .heic／.heif 且內容不是
-/// JPEG、PNG 也算（iPhone 選圖時常會先轉成 JPEG，這種照片可以上傳）。
-bool isHeicImage(String name, Uint8List bytes) {
-  const brands = {
-    'heic',
-    'heix',
-    'hevc',
-    'hevx',
-    'heim',
-    'heis',
-    'mif1',
-    'msf1',
-  };
-  if (bytes.length >= 12 &&
-      String.fromCharCodes(bytes.sublist(4, 8)) == 'ftyp' &&
-      brands.contains(String.fromCharCodes(bytes.sublist(8, 12)))) {
-    return true;
-  }
-  final lower = name.toLowerCase();
-  final named = lower.endsWith('.heic') || lower.endsWith('.heif');
-  return named && imageSizeOf(bytes) == null;
-}

@@ -5,7 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/api/api_exception.dart';
 import '../../../core/platform/image_picker.dart';
-import '../data/video_image_size.dart';
 import '../data/video_studio_models.dart';
 import '../data/video_studio_repository.dart';
 import 'video_job_state.dart';
@@ -85,11 +84,6 @@ class VideoRulebookNotifier extends Notifier<VideoRulebookState> {
     if (state.busy) return false;
     final images = await ref.read(imagePickerProvider).pickImages();
     if (images == null || images.isEmpty || !ref.mounted) return false;
-    // 有 HEIC 就整批不上傳：只跳過那幾張的話，頁的順序會亂掉
-    if (images.any((image) => isHeicImage(image.name, image.bytes))) {
-      state = state.copyWith(error: heicUnsupportedMessage);
-      return false;
-    }
     state = state.copyWith(busy: true, clearError: true);
     var uploaded = 0;
     try {
