@@ -10,6 +10,7 @@ import '../domains/games_advisor/pages/games_advisor_page.dart';
 import '../domains/groups/pages/group_detail_page.dart';
 import '../domains/groups/pages/groups_page.dart';
 import '../domains/health/pages/health_page.dart';
+import '../domains/host/pages/host_page.dart';
 import '../domains/matches/pages/match_detail_page.dart';
 import '../domains/matches/pages/matches_page.dart';
 import '../domains/rules_qa/pages/rules_lesson_page.dart';
@@ -18,7 +19,6 @@ import '../domains/rules_qa/pages/video_routes.dart';
 import '../domains/rules_ingest/pages/rules_ingest_page.dart';
 import '../prototypes/booking/booking_list_proto_page.dart';
 import '../prototypes/booking/booking_proto_page.dart';
-import '../prototypes/host/host_proto_page.dart';
 import '../prototypes/shops/shop_create_proto_page.dart';
 import '../prototypes/shops/shop_inventory_proto_page.dart';
 import '../prototypes/shops/shops_entry_proto_page.dart';
@@ -66,6 +66,8 @@ GoRouter createRouter(AppConfig config) => GoRouter(
           builder: (context, state) =>
               GamesAdvisorPage.fromQuery(state.uri.queryParameters),
         ),
+        // AI 語音主持（目前只支援血與刃的白薔薇，入口在它的規則教學頁）
+        GoRoute(path: '/host', builder: (context, state) => const HostPage()),
         GoRoute(
           path: '/matches',
           builder: (context, state) =>
@@ -131,10 +133,6 @@ GoRouter createRouter(AppConfig config) => GoRouter(
           GoRoute(
             path: '/proto/booking/list',
             builder: (context, state) => const BookingListProtoPage(),
-          ),
-          GoRoute(
-            path: '/proto/host',
-            builder: (context, state) => const HostProtoPage(),
           ),
           // 店家管理的參考畫面：新增店家、管理店家的桌遊庫存
           GoRoute(
