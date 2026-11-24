@@ -275,6 +275,15 @@ class DraftBeatOut(BaseModel):
     subtitle: str
 
 
+class DraftItemOut(BaseModel):
+    """放牌的格子裡的一張牌。"""
+
+    item_key: str
+    asset_key: str
+    # 沒有牌背時是 null
+    back_asset_key: str | None = None
+
+
 class DraftSlotOut(BaseModel):
     """一段裡放素材的格子（換素材，2026-11-25）。文字、條列的格子不列。"""
 
@@ -284,8 +293,10 @@ class DraftSlotOut(BaseModel):
     kind: Literal["asset", "items"]
     # 這一格用到的素材（依出現順序、不重複）
     asset_keys: list[str]
-    # 可以換素材：只有單一素材的格子可以
+    # 可以換素材（完整版：單一素材的格子、放牌的格子都可以）
     swappable: bool
+    # 放牌的格子的每一張牌；單一素材的格子是空的
+    items: list[DraftItemOut] = []
 
 
 class DraftSegmentOut(BaseModel):
@@ -404,38 +415,42 @@ def _check_box(name: str, box: list[float] | None) -> None:
 
 
 class SegmentAssetSwapIn(BaseModel):
-    """換某一段某一格的素材（2026-11-25 永傑決定，最小版）。"""
+    """換某一段某一格的素材（2026-11-25 永傑決定；完整版也支援放牌的格子）。"""
 
-    # 要換的格子（main、sidebar）；只有單一素材的格子可以換
+    # 要換的格子（main、sidebar）；文字格子不能換
     slot: str
     # 換成哪個素材：必須在素材清單裡，而且不是繪製、沒有略過
     asset_key: str
+    # 放牌的格子：換哪一張（item_key）的正面（front）或牌背（back）；單一素材的格子不用給
+    item_key: str | None = None
+    face: Literal["front", "back"] = "front"
     # 店員看到的段資料版本；和目前的不同時 409，避免蓋掉別人的修改
     video_version: int
-
-
-class RemovedCueOut(BaseModel):
-    beat_key: str
-    do: str
-    target: str
-
-
-class SwapRemovedOut(BaseModel):
-    """換素材時移除的東西（指向舊素材區域的框線、標籤、動作）。"""
-
-    highlights: list[str]
-    labels: list[str]
-    cues: list[RemovedCueOut]
 
 
 class SegmentAssetSwapOut(BaseModel):
     segment_key: str
     slot: str
+    # 放牌的格子換的是哪一張、正面或牌背；單一素材的格子 item_key 是 null
+    item_key: str | None
+    face: Literal["front", "back"]
     old_asset_key: str
     new_asset_key: str
-    removed: SwapRemovedOut
+    # 新素材上要重標的區域（沿用自舊素材、還沒有座標）；框線、標籤、動作都保留
+    regions_to_mark: list[str]
     # 換完之後沒有段在用的素材：不用再拍
     unused_assets: list[str]
+    video_version: int
+
+
+class VideoAssetCreate(BaseModel):
+    """新增一個照片素材（店員換素材時，正確的素材不在清單裡；2026-11-25）。"""
+
+    # 給店員看的中文名稱，不可和既有素材相同
+    label: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=30)]
+    # 拍攝說明（選填），例如「整張牌正面朝上，從正上方拍」
+    shot: Annotated[str, StringConstraints(strip_whitespace=True, max_length=200)] | None = None
+    # 店員看到的段資料版本；和目前的不同時 409
     video_version: int
 
 

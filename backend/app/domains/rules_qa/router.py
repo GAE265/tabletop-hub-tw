@@ -28,6 +28,7 @@ from app.domains.rules_qa.schemas import (
     RulesLessonOut,
     SegmentAssetSwapIn,
     SegmentAssetSwapOut,
+    VideoAssetCreate,
     VideoAssetOut,
     VideoAssetUpdate,
     VideoDraftOut,
@@ -376,9 +377,22 @@ def swap_video_segment_asset(
     user: CurrentUserDep,
     service: VideoAssetsServiceDep,
 ) -> SegmentAssetSwapOut:
-    """換某一段某一格的素材（單一素材的格子、清單裡可以用的素材）。指向舊素材區域的框線、
-    標籤、動作一律移除，回應列出移除了什麼；`video_version` 和目前的不同時 409。"""
+    """換某一段某一格的素材（放牌的格子指定哪一張的正面或牌背）；只能換成清單裡可以用的素材。
+    框線、標籤、動作都保留，區域沿用到新素材，回應列出要重標的區域；版本不同時 409。"""
     return service.swap_segment_asset(user, project_id, segment_key, body)
+
+
+@videos_router.post(
+    "/{project_id}/assets", response_model=VideoAssetOut, status_code=status.HTTP_201_CREATED
+)
+def create_video_asset(
+    project_id: uuid.UUID,
+    body: VideoAssetCreate,
+    user: CurrentUserDep,
+    service: VideoAssetsServiceDep,
+) -> VideoAssetOut:
+    """新增一個照片素材（中文名稱、拍攝說明），之後可以換到某一段並拍照。同名時 422。"""
+    return service.create_asset(user, project_id, body)
 
 
 @videos_router.get("/{project_id}/readiness", response_model=VideoReadinessOut)

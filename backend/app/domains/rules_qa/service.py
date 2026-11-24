@@ -41,6 +41,7 @@ from app.domains.rules_qa.schemas import (
     DraftAssetOut,
     DraftBeatOut,
     DraftCoverageOut,
+    DraftItemOut,
     DraftSegmentOut,
     DraftSlotOut,
     DraftTermsOut,
@@ -54,7 +55,7 @@ from app.domains.rules_qa.schemas import (
     RulesLessonOut,
     SegmentAssetSwapIn,
     SegmentAssetSwapOut,
-    SwapRemovedOut,
+    VideoAssetCreate,
     VideoAssetOut,
     VideoAssetUpdate,
     VideoDraftOut,
@@ -112,6 +113,7 @@ from app.domains.rules_qa.video_rulebook import (
 from app.domains.rules_qa.video_script import REPRESENTATIVE, term_conflicts
 from app.domains.rules_qa.video_segments import (
     SwapRejected,
+    create_asset,
     record_swap,
     segment_slots,
     swap_segment_asset,
@@ -941,7 +943,20 @@ def _draft_segment(segment: dict[str, Any]) -> DraftSegmentOut:
             for b in segment.get("beats", [])
         ],
         slots=[
-            DraftSlotOut(slot=s.slot, kind=s.kind, asset_keys=s.asset_keys, swappable=s.swappable)
+            DraftSlotOut(
+                slot=s.slot,
+                kind=s.kind,
+                asset_keys=s.asset_keys,
+                swappable=s.swappable,
+                items=[
+                    DraftItemOut(
+                        item_key=i.item_key,
+                        asset_key=i.asset_key,
+                        back_asset_key=i.back_asset_key,
+                    )
+                    for i in s.items
+                ],
+            )
             for s in segment_slots(segment)
         ],
     )
@@ -1213,7 +1228,14 @@ class VideoAssetsService:
         if body.video_version != state.video_version:
             raise AppError(409, "RULES_VIDEO_CONFLICT", SWAP_CONFLICT_MESSAGE)
         try:
-            result = swap_segment_asset(state.video or {}, segment_key, body.slot, body.asset_key)
+            result = swap_segment_asset(
+                state.video or {},
+                segment_key,
+                body.slot,
+                body.asset_key,
+                item_key=body.item_key,
+                face=body.face,
+            )
         except SwapRejected as exc:
             raise AppError(exc.status, exc.code, exc.message) from exc
         record_swap(result, segment_key, by=str(user.id))
@@ -1222,16 +1244,31 @@ class VideoAssetsService:
         return SegmentAssetSwapOut(
             segment_key=segment_key,
             slot=body.slot,
+            item_key=result.item_key,
+            face=result.face,  # type: ignore[arg-type]
             old_asset_key=result.old_asset_key,
             new_asset_key=result.new_asset_key,
-            removed=SwapRemovedOut(
-                highlights=result.removed_highlights,
-                labels=result.removed_labels,
-                cues=result.removed_cues,
-            ),
+            regions_to_mark=result.regions_to_mark,
             unused_assets=result.unused_assets,
             video_version=state.video_version + 1,
         )
+
+    def create_asset(
+        self, user: CurrentUser, project_id: uuid.UUID, body: VideoAssetCreate
+    ) -> VideoAssetOut:
+        """新增一個照片素材（換素材完整版，2026-11-25）。版本不同時 409；同名時 422。"""
+        state = self._state(user, project_id)
+        if body.video_version != state.video_version:
+            raise AppError(409, "RULES_VIDEO_CONFLICT", SWAP_CONFLICT_MESSAGE)
+        try:
+            created = create_asset(state.video or {}, body.label, body.shot)
+        except SwapRejected as exc:
+            raise AppError(exc.status, exc.code, exc.message) from exc
+        if not self._save(project_id, state.video_version, created.video):
+            raise AppError(409, "RULES_VIDEO_CONFLICT", SWAP_CONFLICT_MESSAGE)
+        asset = find_asset(created.video, created.asset_key)
+        assert asset is not None
+        return _asset_out(asset, state.video_version + 1, created.video)
 
     def readiness(self, user: CurrentUser, project_id: uuid.UUID) -> VideoReadinessOut:
         state = self._state(user, project_id)
