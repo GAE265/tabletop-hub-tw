@@ -22,7 +22,7 @@ from app.domains.rules_qa.video_draft import DraftJobHandler
 from app.domains.rules_qa.video_jobs import JobRunner
 from app.integrations.llm.fake import FakeLLMProvider
 from app.integrations.storage.fake import FakeFileStorage
-from tests.rules_qa.heic_support import broken_heic_bytes, heic_bytes, noisy_heic_bytes
+from tests.rules_qa.heic_support import broken_heic_bytes, heic_bytes, mpo_bytes, noisy_heic_bytes
 from tests.rules_qa.video_draft_support import FakeHookLLM, add_manual, project_row, set_pages
 from tests.rules_qa.video_script_support import coverage_output, llm_output
 from tests.rules_qa.video_support import OTHER_STAFF, insert_job, insert_project, seed_people
@@ -234,6 +234,28 @@ def test_large_heic_converts_in_reasonable_time(api, as_shop_staff, rules_db, st
     assert elapsed < 15
     image = Image.open(io.BytesIO(_stored(rules_db, storage, project)[1]))
     assert image.format == "JPEG" and image.size == (4032, 3024)
+
+
+# --- 多圖 JPEG（MPO）：iPhone 把 HEIC 轉成 JPEG 時會附 HDR 增益圖，只留主圖存成一般 JPEG ---
+
+
+def test_mpo_is_saved_as_single_jpeg(api, as_shop_staff, rules_db, storage, project):
+    response = _upload(api, project, data=mpo_bytes((40, 20)), name="IMG_0007.JPG")
+    assert response.status_code == 200, response.text
+    assert _asset(rules_db, project, "board")["file"].endswith(".jpg")
+    stored_key, stored = _stored(rules_db, storage, project)
+    assert storage.content_types[stored_key] == "image/jpeg"
+    image = Image.open(io.BytesIO(stored))
+    assert image.format == "JPEG" and image.size == (40, 20)
+    assert getattr(image, "n_frames", 1) == 1
+
+
+def test_mpo_orientation_is_applied(api, as_shop_staff, rules_db, storage, project):
+    data = mpo_bytes((40, 20), exif_orientation=6)
+    assert _upload(api, project, data=data, name="IMG_0008.JPG").status_code == 200
+    image = Image.open(io.BytesIO(_stored(rules_db, storage, project)[1]))
+    assert image.format == "JPEG" and image.size == (20, 40)
+    assert image.getexif().get(0x0112) in (None, 1)
 
 
 def test_unknown_asset_is_404(api, as_shop_staff, project):

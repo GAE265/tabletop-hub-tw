@@ -40,6 +40,22 @@ def encode_heic(image: Image.Image, exif_orientation: int | None, quality: int) 
     return data
 
 
+def mpo_bytes(size: tuple[int, int] = (40, 20), *, exif_orientation: int | None = None) -> bytes:
+    """多圖 JPEG（MPO）：主圖加一張小的附圖，像 iPhone 轉出來附 HDR 增益圖的 JPEG。"""
+    main = Image.new("RGB", size, (200, 30, 30))
+    extra = Image.new("RGB", (size[0] // 2, size[1] // 2), (0, 0, 0))
+    kwargs = {}
+    if exif_orientation is not None:
+        exif = Image.Exif()
+        exif[_EXIF_ORIENTATION] = exif_orientation
+        kwargs["exif"] = exif
+    out = io.BytesIO()
+    main.save(out, "MPO", save_all=True, append_images=[extra], **kwargs)
+    data = out.getvalue()
+    assert Image.open(io.BytesIO(data)).format == "MPO"
+    return data
+
+
 def broken_heic_bytes() -> bytes:
     """檔頭是 HEIC、內容被截斷的壞檔。"""
     data = heic_bytes((64, 48))
