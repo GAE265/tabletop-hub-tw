@@ -75,6 +75,9 @@ abstract interface class VideoStudioRepository {
 
   /// 第 index 張的圖檔（帶身分讀取）。
   Future<Uint8List> getRulebookPhoto(String projectId, int index);
+
+  /// 刪除專案（無法復原；照片與成品影片一起刪）。正在產生時後端回 409。
+  Future<void> deleteProject(String projectId);
 }
 
 class HttpVideoStudioRepository implements VideoStudioRepository {
@@ -275,6 +278,11 @@ class HttpVideoStudioRepository implements VideoStudioRepository {
         );
         return Rulebook.fromJson(response.data!);
       });
+
+  @override
+  Future<void> deleteProject(String projectId) => _guard(() async {
+    await _dio.delete<void>('$_base/$projectId');
+  });
 
   @override
   Future<void> deleteRulebookPhoto(String projectId, int index) =>

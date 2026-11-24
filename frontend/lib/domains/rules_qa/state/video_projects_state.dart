@@ -26,6 +26,45 @@ final videoProjectsProvider =
       retry: (_, _) => null,
     );
 
+class VideoProjectDeleteState {
+  const VideoProjectDeleteState({this.deleting = false, this.error});
+
+  final bool deleting;
+
+  /// 後端回的說明（例如正在產生草稿或影片時的 409）。
+  final String? error;
+}
+
+/// 刪除專案（2026-11-24 永傑決定，最小版）：成功後重新載入專案列表；畫面負責先確認、再回到列表。
+class VideoProjectDeleteNotifier extends Notifier<VideoProjectDeleteState> {
+  VideoProjectDeleteNotifier(this.projectId);
+
+  final String projectId;
+
+  @override
+  VideoProjectDeleteState build() => const VideoProjectDeleteState();
+
+  /// 刪除；成功回傳 true。刪除中再呼叫不重複送出，回傳 false。
+  Future<bool> delete() async {
+    if (state.deleting) return false;
+    state = const VideoProjectDeleteState(deleting: true);
+    try {
+      await ref.read(videoStudioRepositoryProvider).deleteProject(projectId);
+    } on ApiException catch (error) {
+      if (ref.mounted) state = VideoProjectDeleteState(error: error.message);
+      return false;
+    }
+    ref.invalidate(videoProjectsProvider);
+    if (ref.mounted) state = const VideoProjectDeleteState();
+    return true;
+  }
+}
+
+final videoProjectDeleteProvider = NotifierProvider.autoDispose
+    .family<VideoProjectDeleteNotifier, VideoProjectDeleteState, String>(
+      VideoProjectDeleteNotifier.new,
+    );
+
 /// 單一專案（專案總覽）。草稿工作完成時會重新讀取（步驟會變）。
 final videoProjectProvider = FutureProvider.family<VideoProject, String>(
   (ref, projectId) =>
