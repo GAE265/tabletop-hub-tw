@@ -373,24 +373,44 @@ class _NavButton extends StatelessWidget {
   }
 }
 
-/// 品牌 logo（橫式完整版：魚＋遊任有娛＋PLAY · GAME · FUN），讀屏唸「遊任有娛」。
+/// 品牌：左邊是正方形的 logo 圖案，右邊用文字顯示「遊任有娛」（系統字型，2026-11-24 改版；
+/// 排法同放 logo 之前）。讀屏只念一次「遊任有娛」：圖片帶讀屏文字，旁邊的文字不給讀屏。
 class BrandMark extends StatelessWidget {
   const BrandMark({this.height = AppSizes.logoHeight, super.key});
 
-  /// logo 圖片的路徑（`pubspec.yaml` 的 assets）。ChatGPT 產生，已去背。
-  static const asset = 'assets/images/logo-full.webp';
+  /// logo 圖案的路徑（`pubspec.yaml` 的 assets），已去背。
+  static const asset = 'assets/images/logo-mark.webp';
 
+  /// 圖案的邊長。
   final double height;
 
   @override
   Widget build(BuildContext context) {
-    return Image.asset(
-      asset,
-      height: height,
-      fit: BoxFit.contain,
-      alignment: Alignment.centerLeft,
-      semanticLabel: '遊任有娛',
-      filterQuality: FilterQuality.medium,
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Image.asset(
+          asset,
+          width: height,
+          height: height,
+          fit: BoxFit.contain,
+          semanticLabel: '遊任有娛',
+          filterQuality: FilterQuality.medium,
+        ),
+        const SizedBox(width: AppSpacing.small),
+        Flexible(
+          child: ExcludeSemantics(
+            child: Text(
+              '遊任有娛',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(
+                context,
+              ).textTheme.titleLarge!.copyWith(fontWeight: FontWeight.w700),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

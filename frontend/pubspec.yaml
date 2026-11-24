@@ -76,8 +76,8 @@ flutter:
   assets:
     # 背景木紋（Gemini 產生，已處理成可以無縫拼接）
     - assets/images/wood.webp
-    # 品牌 logo 橫式完整版（ChatGPT 產生，已去背）
-    - assets/images/logo-full.webp
+    # 品牌 logo 的正方形圖案（去背；店名「遊任有娛」用文字顯示，不在圖裡）
+    - assets/images/logo-mark.webp
 
   # To add assets to your application, add an assets section, like this:
   # assets:

@@ -76,10 +76,10 @@ abstract final class AppSizes {
   /// 步驟條圓點之間的連接線粗細。
   static const double stepLine = 3;
 
-  /// 品牌 logo 的高度：平板與桌機的頂部導覽列。
+  /// 品牌 logo 正方形圖案的邊長：平板與桌機的頂部導覽列。
   static const double logoHeight = 44;
 
-  /// 品牌 logo 的高度：手機頂部列（較高，logo 裡的英文小字才看得清楚）。
+  /// 品牌 logo 正方形圖案的邊長：手機頂部列。
   static const double logoHeightMobile = 60;
 
   /// 頂部列的圓形按鈕（鈴鐺、登入）。
