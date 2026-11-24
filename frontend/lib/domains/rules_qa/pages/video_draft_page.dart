@@ -9,6 +9,7 @@ import '../../../core/widgets/pill_badge.dart';
 import '../data/video_studio_models.dart';
 import '../state/video_draft_state.dart';
 import '../state/video_job_state.dart';
+import '../state/video_segment_swap_state.dart';
 import 'widgets/notice_banner.dart';
 import 'widgets/video_studio_widgets.dart';
 
@@ -175,6 +176,10 @@ class _VideoDraftPageState extends ConsumerState<VideoDraftPage> {
                     _Summary(draft: value),
                     const SizedBox(height: AppSpacing.medium),
                     _CoverageBySlot(coverage: value.coverage),
+                    if (value.segments.any((s) => s.slots.isNotEmpty)) ...[
+                      const SizedBox(height: AppSpacing.medium),
+                      _SegmentAssets(projectId: _id, draft: value),
+                    ],
                   ],
                 ),
         ),
@@ -191,6 +196,135 @@ class _VideoDraftPageState extends ConsumerState<VideoDraftPage> {
       if (coverage.status == 'not_done' && coverage.slots.isEmpty)
         _Banner('涵蓋檢查沒做成：${coverage.reason ?? '原因不明'}'),
     ];
+  }
+}
+
+/// 每段的素材（換素材，2026-11-25 永傑決定，最小版）：每段列出格子用了哪個素材；
+/// 單一素材的格子可以換成清單裡的另一個素材，放好幾張牌的格子寫明不支援。
+class _SegmentAssets extends ConsumerWidget {
+  const _SegmentAssets({required this.projectId, required this.draft});
+
+  final String projectId;
+  final VideoDraft draft;
+
+  Future<void> _pick(
+    BuildContext context,
+    WidgetRef ref,
+    DraftSegment segment,
+    DraftSlot slot,
+  ) async {
+    final candidates = swapCandidates(draft, slot);
+    final picked = await showDialog<String>(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: Text('${slotDisplayName(slot.slot)}換成哪個素材？'),
+        children: [
+          if (candidates.isEmpty)
+            const Padding(
+              padding: EdgeInsets.all(AppSpacing.medium),
+              child: Text('沒有其他可以換的素材'),
+            ),
+          for (final a in candidates)
+            SimpleDialogOption(
+              key: Key('video-swap-option-${a.assetKey}'),
+              onPressed: () => Navigator.of(context).pop(a.assetKey),
+              child: Text(assetDisplayName(a)),
+            ),
+        ],
+      ),
+    );
+    if (picked == null || !context.mounted) return;
+    await ref
+        .read(videoSegmentSwapProvider(projectId).notifier)
+        .swap(
+          draft: draft,
+          segmentKey: segment.segmentKey,
+          slot: slot,
+          assetKey: picked,
+        );
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final state = ref.watch(videoSegmentSwapProvider(projectId));
+    final text = Theme.of(context).textTheme;
+    final muted = text.bodySmall!.copyWith(
+      color: Theme.of(context).colorScheme.onSurfaceVariant,
+    );
+    final names = {
+      for (final a in draft.assets) a.assetKey: assetDisplayName(a),
+    };
+    return ThickCard(
+      key: const Key('video-draft-segment-assets'),
+      child: Padding(
+        padding: videoCardInset,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text('每段的素材', style: text.titleMedium),
+            Text('AI 指定錯素材時，可以換成清單裡的另一個素材', style: muted),
+            if (state.notice case final notice?) ...[
+              const SizedBox(height: AppSpacing.small),
+              NoticeBanner(key: const Key('video-swap-notice'), text: notice),
+            ],
+            if (state.error case final error?) ...[
+              const SizedBox(height: AppSpacing.small),
+              NoticeBanner(
+                key: const Key('video-swap-error'),
+                text: error,
+                isError: true,
+              ),
+            ],
+            for (final (i, segment) in draft.segments.indexed)
+              if (segment.slots.isNotEmpty) ...[
+                const Divider(height: AppSpacing.large),
+                Text(
+                  [
+                    '第 ${i + 1} 段',
+                    if (segment.beats.isNotEmpty) segment.beats.first.narration,
+                  ].join('　'),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: text.bodyMedium!.copyWith(fontWeight: FontWeight.w600),
+                ),
+                for (final slot in segment.slots) ...[
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          '${slotDisplayName(slot.slot)}：'
+                          '${slot.assetKeys.map((k) => names[k] ?? k).join('、')}',
+                          key: Key(
+                            'video-segment-${segment.segmentKey}-${slot.slot}',
+                          ),
+                        ),
+                      ),
+                      if (slot.swappable)
+                        TextButton(
+                          key: Key(
+                            'video-segment-${segment.segmentKey}-${slot.slot}-swap',
+                          ),
+                          onPressed: state.busy
+                              ? null
+                              : () => _pick(context, ref, segment, slot),
+                          child: const Text('換素材'),
+                        ),
+                    ],
+                  ),
+                  if (!slot.swappable)
+                    Text(
+                      '這一段目前不支援換素材',
+                      key: Key(
+                        'video-segment-${segment.segmentKey}-${slot.slot}-unsupported',
+                      ),
+                      style: muted,
+                    ),
+                ],
+              ],
+          ],
+        ),
+      ),
+    );
   }
 }
 
