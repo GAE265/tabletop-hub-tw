@@ -7,6 +7,7 @@
 
 import io
 import json
+import time
 import uuid
 
 import pytest
@@ -21,6 +22,7 @@ from app.domains.rules_qa.video_draft import DraftJobHandler
 from app.domains.rules_qa.video_jobs import JobRunner
 from app.integrations.llm.fake import FakeLLMProvider
 from app.integrations.storage.fake import FakeFileStorage
+from tests.rules_qa.heic_support import broken_heic_bytes, heic_bytes, noisy_heic_bytes
 from tests.rules_qa.video_draft_support import FakeHookLLM, add_manual, project_row, set_pages
 from tests.rules_qa.video_script_support import coverage_output, llm_output
 from tests.rules_qa.video_support import OTHER_STAFF, insert_job, insert_project, seed_people
@@ -163,6 +165,75 @@ def test_too_large_is_422(api, as_shop_staff, project):
     assert MAX_PHOTO_BYTES == 15 * 1024 * 1024
     response = _upload(api, project, data=b"x" * (MAX_PHOTO_BYTES + 1))
     assert response.status_code == 422 and _code(response) == "RULES_VIDEO_PHOTO_TOO_LARGE"
+
+
+# --- HEIC（iPhone 預設格式）：轉成 JPEG 再存 ---
+
+
+def _stored(rules_db, storage, project, key="board") -> tuple[str, bytes]:
+    stored_key = f"rules_videos/{project}/assets/{_asset(rules_db, project, key)['file']}"
+    return stored_key, storage.files[stored_key]
+
+
+def test_heic_is_saved_as_jpeg(api, as_shop_staff, rules_db, storage, project):
+    response = _upload(api, project, data=heic_bytes((40, 20)), name="IMG_0001.HEIC")
+    assert response.status_code == 200, response.text
+    assert _asset(rules_db, project, "board")["file"].endswith(".jpg")
+    stored_key, stored = _stored(rules_db, storage, project)
+    assert storage.content_types[stored_key] == "image/jpeg"
+    image = Image.open(io.BytesIO(stored))
+    assert image.format == "JPEG" and image.size == (40, 20)
+
+
+def test_heic_orientation_is_applied(api, as_shop_staff, rules_db, storage, project):
+    # 直拍的 iPhone 照片：方向標記 6（要順時針轉 90 度），存成轉正後的 JPEG、拿掉方向標記
+    data = heic_bytes((40, 20), exif_orientation=6)
+    assert _upload(api, project, data=data, name="IMG_0002.HEIC").status_code == 200
+    image = Image.open(io.BytesIO(_stored(rules_db, storage, project)[1]))
+    assert image.format == "JPEG" and image.size == (20, 40)
+    assert image.getexif().get(0x0112) in (None, 1)
+
+
+def test_read_heic_photo_is_jpeg(api, as_shop_staff, project):
+    assert _upload(api, project, data=heic_bytes(), name="IMG_0003.HEIC").status_code == 200
+    response = api.get(f"{URL}/{project}/assets/board/photo")
+    assert response.status_code == 200 and response.headers["content-type"] == "image/jpeg"
+
+
+def test_transparent_heic_becomes_opaque_jpeg(api, as_shop_staff, rules_db, storage, project):
+    data = heic_bytes((40, 20), mode="RGBA")
+    assert _upload(api, project, data=data, name="IMG_0004.HEIC").status_code == 200, data[:12]
+    image = Image.open(io.BytesIO(_stored(rules_db, storage, project)[1]))
+    assert image.format == "JPEG" and image.mode == "RGB"
+
+
+def test_broken_heic_is_422_and_leaves_no_file(api, as_shop_staff, rules_db, storage, project):
+    before_version = project_row(rules_db, project).video_version
+    response = _upload(api, project, data=broken_heic_bytes(), name="IMG_0005.HEIC")
+    assert response.status_code == 422 and _code(response) == "RULES_VIDEO_PHOTO_INVALID"
+    assert not [k for k in storage.files if k.startswith(f"rules_videos/{project}/")]
+    assert not _asset(rules_db, project, "board").get("file")
+    assert project_row(rules_db, project).video_version == before_version
+
+
+def test_unsupported_format_message_mentions_heic(api, as_shop_staff, project):
+    response = _upload(api, project, data=image_bytes("GIF"), name="x.gif", mime="image/gif")
+    assert response.status_code == 422
+    assert response.json()["error"]["message"].endswith("只能上傳 JPEG、PNG 或 HEIC 照片")
+
+
+def test_large_heic_converts_in_reasonable_time(api, as_shop_staff, rules_db, storage, project):
+    # iPhone 照片的尺寸（4032×3024）、接近 15 MB 的上限：轉檔（含上傳）要在 15 秒內完成
+    data = noisy_heic_bytes((4032, 3024), quality=80)
+    assert 14 * 1024 * 1024 < len(data) <= MAX_PHOTO_BYTES, len(data)
+    started = time.perf_counter()
+    response = _upload(api, project, data=data, name="IMG_0006.HEIC")
+    elapsed = time.perf_counter() - started
+    assert response.status_code == 200, response.text
+    print(f"\n大圖 HEIC {len(data) / 1024 / 1024:.1f} MiB 上傳加轉檔：{elapsed:.2f} 秒")
+    assert elapsed < 15
+    image = Image.open(io.BytesIO(_stored(rules_db, storage, project)[1]))
+    assert image.format == "JPEG" and image.size == (4032, 3024)
 
 
 def test_unknown_asset_is_404(api, as_shop_staff, project):

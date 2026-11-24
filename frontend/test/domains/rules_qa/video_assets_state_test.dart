@@ -110,30 +110,18 @@ void main() {
       expect(container.read(videoAssetProvider(ref)).photoReplaced, isTrue);
     });
 
-    // 2026-11-22 永傑決定：HEIC 讀不到，選檔時就擋下並說明怎麼改相機設定（不自動轉檔）
-    test('選到 HEIC：不上傳，說明要把相機格式改成 JPEG', () async {
-      final repo = assetsRepo();
+    // 原本（2026-11-22）選到 HEIC 就擋下；iPhone 實測選圖設定不列 HEIC 仍會交出 HEIC，
+    // 2026-11-24 永傑決定改由後端轉成 JPEG，前端照常上傳
+    test('選到 HEIC：照常上傳（後端會轉成 JPEG），沒有錯誤訊息', () async {
+      final repo = assetsRepo()..storedPhoto = (_) => jpegBytes;
       final picker = FakeImagePicker()
         ..images = [PickedImage(name: 'IMG_0001.HEIC', bytes: heicBytes())];
       final container = makeContainer(repo, picker: picker);
       final notifier = container.read(videoAssetProvider(ref).notifier);
       await notifier.load();
       await notifier.pickAndUpload();
-      expect(repo.uploads, isEmpty);
-      expect(
-        container.read(videoAssetProvider(ref)).error,
-        '不支援 HEIC，請把相機格式改為最相容（JPEG）',
-      );
-    });
-
-    test('判斷 HEIC：看檔頭，副檔名是 .heic 但內容是 JPEG 的不算', () {
-      expect(isHeicImage('a.jpg', heicBytes()), isTrue);
-      expect(
-        isHeicImage('IMG_0001.HEIC', Uint8List.fromList([1, 2, 3])),
-        isTrue,
-      );
-      expect(isHeicImage('IMG_0001.heic', jpegBytes), isFalse);
-      expect(isHeicImage('board.png', pngBytes), isFalse);
+      expect(repo.uploads.single.$3.name, 'IMG_0001.HEIC');
+      expect(container.read(videoAssetProvider(ref)).error, isNull);
     });
 
     test('取消選圖：不上傳', () async {

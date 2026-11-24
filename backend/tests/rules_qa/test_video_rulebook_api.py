@@ -22,6 +22,7 @@ from app.integrations.llm.fake import FakeLLMProvider
 from app.integrations.ocr.errors import OCRUnavailable
 from app.integrations.ocr.fake import FakeVisionProvider
 from app.integrations.storage.fake import FakeFileStorage
+from tests.rules_qa.heic_support import broken_heic_bytes, heic_bytes
 from tests.rules_qa.video_script_support import FAKE_PAGE
 from tests.rules_qa.video_support import seed_people
 from tests.rules_qa.whole_game_support import (
@@ -175,6 +176,27 @@ def test_not_an_image_is_422(api, as_shop_staff, game):
     project = _create(api, game)
     response = _upload(api, project, b"GIF89a not really", name="x.gif")
     assert response.status_code == 422 and _code(response) == "RULES_VIDEO_PHOTO_INVALID"
+
+
+def test_heic_rulebook_photo_is_saved_as_jpeg(api, as_shop_staff, storage, game):
+    # iPhone 預設格式：轉成 JPEG 再存，清晰度照常計算（直拍的方向標記 6 會轉正）
+    project = _create(api, game)
+    response = _upload(api, project, heic_bytes((400, 300), exif_orientation=6), "IMG_0001.HEIC")
+    assert response.status_code == 201, response.text
+    saved = response.json()["photos"][0]
+    assert saved["width"] == 300 and saved["quality"] in ("ok", "bad")
+    image = api.get(f"{URL}/{project}/rulebook/photos/1")
+    assert image.status_code == 200 and image.headers["content-type"] == "image/jpeg"
+    stored = Image.open(io.BytesIO(image.content))
+    assert stored.format == "JPEG" and stored.size == (300, 400)
+
+
+def test_broken_heic_rulebook_photo_is_422_and_leaves_no_file(api, as_shop_staff, storage, game):
+    project = _create(api, game)
+    response = _upload(api, project, broken_heic_bytes(), "IMG_0002.HEIC")
+    assert response.status_code == 422 and _code(response) == "RULES_VIDEO_PHOTO_INVALID"
+    assert api.get(f"{URL}/{project}/rulebook").json()["photos"] == []
+    assert not [k for k in storage.files if k.startswith(f"rules_videos/{project}/")]
 
 
 def test_unknown_photo_index_is_404(api, as_shop_staff, game):
