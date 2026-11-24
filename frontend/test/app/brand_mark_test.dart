@@ -1,6 +1,6 @@
-// 新的品牌 logo（2026-11-24 永傑決定）：回到放 logo 之前的排法，左邊是正方形的 logo 圖案，
-// 右邊用文字顯示「遊任有娛」（titleLarge、w700，系統字型），不放「PLAY · GAME · FUN」。
-// 網站分頁圖示與加到手機主畫面的圖示也換成新的正方形 logo。
+// 新的品牌 logo（2026-11-24 永傑決定）：橫式一整張圖，左邊是新的正方形 logo 圖案，
+// 右邊是上一版 logo 的字「遊任有娛」與「— PLAY · GAME · FUN —」（合成的第 2 版）。
+// 網站分頁圖示與加到手機主畫面的圖示用新的正方形 logo（橫式圖縮成圖示會看不清楚）。
 import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
@@ -34,66 +34,50 @@ int alphaAt(ByteData rgba, int width, int x, int y) =>
     rgba.getUint8((y * width + x) * 4 + 3);
 
 void main() {
-  test('logo 圖檔換成正方形的 logo-mark.webp，舊的橫式 logo 已移除', () {
-    expect(BrandMark.asset, 'assets/images/logo-mark.webp');
+  test('logo 圖檔換成新的橫式 logo-full.webp，沒有用到的圖檔已移除', () {
+    expect(BrandMark.asset, 'assets/images/logo-full.webp');
     expect(File(BrandMark.asset).existsSync(), isTrue);
-    expect(File('assets/images/logo-full.webp').existsSync(), isFalse);
+    expect(File('assets/images/logo-mark.webp').existsSync(), isFalse);
     final pubspec = File('pubspec.yaml').readAsStringSync();
-    expect(pubspec, contains('assets/images/logo-mark.webp'));
-    expect(pubspec, isNot(contains('logo-full.webp')));
+    expect(pubspec, contains('assets/images/logo-full.webp'));
+    expect(pubspec, isNot(contains('logo-mark.webp')));
   });
 
-  testWidgets('logo 圖檔是正方形、背景透明', (tester) async {
+  testWidgets('logo 圖檔是新的橫式合成圖：背景透明、寬約是高的 3.4 倍', (tester) async {
     final (width, height, rgba) = await decode(tester, BrandMark.asset);
-    expect(width, height);
-    expect(width, greaterThanOrEqualTo(256));
+    expect(width / height, closeTo(3.42, 0.15));
+    expect(height, greaterThanOrEqualTo(180));
     expect(alphaAt(rgba, width, 0, 0), 0);
   });
 
   group('手機頂部列', () {
-    testWidgets('正方形 logo（高 60）加上「遊任有娛」，沒有 PLAY · GAME · FUN', (tester) async {
+    testWidgets('一整張 logo 圖（高 60），讀屏唸「遊任有娛」；店名不另外用文字顯示', (tester) async {
       await pumpShell(tester, size: const Size(400, 900));
       final bar = find.byType(MobileTopBar);
       final logo = find.descendant(of: bar, matching: logoImage);
-      expect(tester.getSize(logo), const Size(60, 60));
-      final name = find.descendant(of: bar, matching: find.text('遊任有娛'));
-      expect(name, findsOneWidget);
-      expect(tester.widget<Text>(name).style!.fontWeight, FontWeight.w700);
-      expect(find.textContaining('PLAY'), findsNothing);
-      // 名稱在 logo 右邊
-      expect(
-        tester.getTopLeft(name).dx,
-        greaterThan(tester.getTopRight(logo).dx),
-      );
-    });
-
-    testWidgets('讀屏只念一次「遊任有娛」：圖片帶讀屏文字，旁邊的文字不給讀屏', (tester) async {
-      // 頂部列目前整個不在讀屏樹裡（鈴鐺、登入也是，原本就這樣，另案處理），
-      // 所以直接檢查元件的設定，不從讀屏樹找
-      await pumpShell(tester, size: const Size(400, 900));
-      final bar = find.byType(MobileTopBar);
-      final logo = find.descendant(of: bar, matching: logoImage);
+      expect(tester.getSize(logo).height, 60);
       expect(tester.widget<Image>(logo).semanticLabel, '遊任有娛');
-      final name = find.descendant(of: bar, matching: find.text('遊任有娛'));
       expect(
-        find.ancestor(of: name, matching: find.byType(ExcludeSemantics)),
-        findsWidgets,
+        find.descendant(of: bar, matching: find.text('遊任有娛')),
+        findsNothing,
       );
     });
 
     for (final width in [320.0, 360.0, 390.0, 430.0]) {
-      testWidgets('手機寬 $width：頂部列不超出，鈴鐺與登入都在畫面內', (tester) async {
+      testWidgets('手機寬 $width：頂部列不超出，logo 不壓到鈴鐺，登入在畫面內', (tester) async {
         await pumpShell(tester, size: Size(width, 900));
         expect(takeErrors(tester), isEmpty);
-        final login = find.byKey(const Key('shell-login'));
-        expect(tester.getTopRight(login).dx, lessThanOrEqualTo(width));
-        expect(
-          find.descendant(
-            of: find.byType(MobileTopBar),
-            matching: find.text('遊任有娛'),
-          ),
-          findsOneWidget,
+        final logo = find.descendant(
+          of: find.byType(MobileTopBar),
+          matching: logoImage,
         );
+        final bell = find.byKey(const Key('shell-notification-bell'));
+        final login = find.byKey(const Key('shell-login'));
+        expect(
+          tester.getTopRight(logo).dx,
+          lessThanOrEqualTo(tester.getTopLeft(bell).dx),
+        );
+        expect(tester.getTopRight(login).dx, lessThanOrEqualTo(width));
       });
     }
 
@@ -105,15 +89,14 @@ void main() {
     });
   });
 
-  testWidgets('桌機頂部導覽列：正方形 logo（高 44）加上「遊任有娛」', (tester) async {
+  testWidgets('桌機頂部導覽列：一整張 logo 圖（高 44）', (tester) async {
     await pumpShell(tester, size: const Size(1280, 900));
-    final nav = find.byType(TopNavigation);
-    final logo = find.descendant(of: nav, matching: logoImage);
-    expect(tester.getSize(logo), const Size(44, 44));
-    expect(
-      find.descendant(of: nav, matching: find.text('遊任有娛')),
-      findsOneWidget,
+    final logo = find.descendant(
+      of: find.byType(TopNavigation),
+      matching: logoImage,
     );
+    expect(tester.getSize(logo).height, 44);
+    expect(tester.getSize(logo).width, closeTo(44 * 3.42, 44 * 0.15));
   });
 
   group('網站圖示', () {
