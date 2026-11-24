@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tabletop_hub/core/api/api_client.dart';
+import 'package:tabletop_hub/core/api/api_exception.dart';
 import 'package:tabletop_hub/core/config/app_config.dart';
 import 'package:tabletop_hub/core/platform/image_picker.dart';
 import 'package:tabletop_hub/domains/rules_qa/data/video_studio_models.dart';
@@ -286,6 +287,32 @@ void main() {
       expect(asset.skipped, isTrue);
       expect(asset.skippable, isTrue);
       expect(asset.skipAffectedSegments, [1]);
+    });
+  });
+
+  group('刪除專案', () {
+    test('DELETE /api/v1/rules-videos/{id}', () async {
+      final adapter = RecordingAdapter(statusCode: 204, body: '');
+      await makeRepository(adapter).deleteProject('p1');
+      expect(adapter.requests.single.method, 'DELETE');
+      expect(adapter.requests.single.path, '/api/v1/rules-videos/p1');
+    });
+
+    test('正在產生（409）：丟出 ApiException，帶後端的代碼與說明', () async {
+      final adapter = RecordingAdapter(
+        statusCode: 409,
+        body:
+            '{"error": {"code": "RULES_VIDEO_PROJECT_BUSY", '
+            '"message": "正在產生草稿或影片，完成後再刪除", "details": {}}}',
+      );
+      await expectLater(
+        makeRepository(adapter).deleteProject('p1'),
+        throwsA(
+          isA<ApiException>()
+              .having((e) => e.code, 'code', 'RULES_VIDEO_PROJECT_BUSY')
+              .having((e) => e.message, 'message', '正在產生草稿或影片，完成後再刪除'),
+        ),
+      );
     });
   });
 }
