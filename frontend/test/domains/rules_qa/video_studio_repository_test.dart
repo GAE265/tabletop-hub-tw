@@ -318,15 +318,14 @@ void main() {
 
   group('換素材（2026-11-25）', () {
     test(
-      'PATCH /api/v1/rules-videos/{id}/segments/{key}，帶格子、素材與版本；解析結果',
+      'PATCH /api/v1/rules-videos/{id}/segments/{key}，帶格子、牌、素材與版本；解析結果',
       () async {
         final adapter = RecordingAdapter(
           body: '''
 {
-  "segment_key": "s1", "slot": "sidebar", "old_asset_key": "board", "new_asset_key": "blue",
-  "removed": {"highlights": ["h1"], "labels": [],
-              "cues": [{"beat_key": "b1", "do": "move", "target": "main.c1"}]},
-  "unused_assets": ["board"], "video_version": 4
+  "segment_key": "s1", "slot": "main", "item_key": "c1", "face": "back",
+  "old_asset_key": "back", "new_asset_key": "blue",
+  "regions_to_mark": [], "unused_assets": [], "video_version": 4
 }
 ''',
         );
@@ -334,8 +333,10 @@ void main() {
           'p1',
           's1',
           const SegmentSwapInput(
-            slot: 'sidebar',
+            slot: 'main',
             assetKey: 'blue',
+            itemKey: 'c1',
+            face: 'back',
             videoVersion: 3,
           ),
         );
@@ -343,18 +344,75 @@ void main() {
         expect(request.method, 'PATCH');
         expect(request.path, '/api/v1/rules-videos/p1/segments/s1');
         expect(jsonDecode(adapter.bodies.single!), {
-          'slot': 'sidebar',
+          'slot': 'main',
           'asset_key': 'blue',
+          'item_key': 'c1',
+          'face': 'back',
           'video_version': 3,
         });
-        expect(result.removed.highlights, ['h1']);
-        expect(result.removed.cues.single.action, 'move');
-        expect(result.unusedAssets, ['board']);
+        expect((result.itemKey, result.face), ('c1', 'back'));
+        expect(result.regionsToMark, isEmpty);
         expect(result.videoVersion, 4);
       },
     );
 
-    test('草稿解析每段的格子與素材用在哪幾段', () {
+    test('單一素材的格子：不送 item_key', () async {
+      final adapter = RecordingAdapter(
+        body: '''
+{
+  "segment_key": "s1", "slot": "sidebar", "item_key": null, "face": "front",
+  "old_asset_key": "board", "new_asset_key": "blue",
+  "regions_to_mark": ["甲區"], "unused_assets": ["board"], "video_version": 4
+}
+''',
+      );
+      final result = await makeRepository(adapter).swapSegmentAsset(
+        'p1',
+        's1',
+        const SegmentSwapInput(
+          slot: 'sidebar',
+          assetKey: 'blue',
+          videoVersion: 3,
+        ),
+      );
+      expect(jsonDecode(adapter.bodies.single!), {
+        'slot': 'sidebar',
+        'asset_key': 'blue',
+        'face': 'front',
+        'video_version': 3,
+      });
+      expect(result.regionsToMark, ['甲區']);
+    });
+
+    test('新增素材：POST /api/v1/rules-videos/{id}/assets', () async {
+      final adapter = RecordingAdapter(
+        statusCode: 201,
+        body: '''
+{
+  "asset_key": "custom_1", "label": "白薔薇", "kind": "flat_photo", "priority": "must",
+  "reason": "店員新增：白薔薇", "shot": null, "has_photo": false, "orientation": 0,
+  "regions": {}, "region_hints": {}, "region_segments": {}, "skipped_regions": [],
+  "video_version": 4, "skipped": false, "skippable": true,
+  "skip_affected_segments": [], "skip_blocked_segments": []
+}
+''',
+      );
+      final asset = await makeRepository(adapter).createAsset(
+        'p1',
+        const VideoAssetCreate(label: '白薔薇', videoVersion: 3),
+      );
+      final request = adapter.requests.single;
+      expect(request.method, 'POST');
+      expect(request.path, '/api/v1/rules-videos/p1/assets');
+      expect(jsonDecode(adapter.bodies.single!), {
+        'label': '白薔薇',
+        'video_version': 3,
+      });
+      expect(asset.assetKey, 'custom_1');
+      expect(asset.videoVersion, 4);
+    });
+
+    test('草稿解析每段的格子與每一張牌', () {
       final segment = DraftSegment.fromJson(const {
         'segment_key': 's1',
         'chapter': 'setup',
@@ -362,15 +420,17 @@ void main() {
         'beats': [],
         'slots': [
           {
-            'slot': 'sidebar',
-            'kind': 'asset',
-            'asset_keys': ['board'],
+            'slot': 'main',
+            'kind': 'items',
+            'asset_keys': ['red', 'back'],
             'swappable': true,
+            'items': [
+              {'item_key': 'c1', 'asset_key': 'red', 'back_asset_key': 'back'},
+            ],
           },
         ],
       });
-      expect(segment.slots.single.assetKeys, ['board']);
-      expect(segment.slots.single.swappable, isTrue);
+      expect(segment.slots.single.items.single.backAssetKey, 'back');
     });
   });
 }
