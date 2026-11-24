@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../app/theme/app_spacing.dart';
+import '../../../app/theme/thick_widgets.dart';
 import '../../../core/api/api_exception.dart';
 import '../data/video_studio_models.dart';
 import '../state/video_assets_state.dart';
@@ -41,18 +42,21 @@ class _VideoRenderPageState extends ConsumerState<VideoRenderPage> {
     final draft = ref.watch(videoDraftProvider(_id));
     final running = ref.watch(videoJobProvider(_id)).running;
     final ready = readiness.value?.ready ?? false;
-    return Scaffold(
+    return VideoScaffold(
       key: const Key('video-render-page'),
-      appBar: AppBar(title: const Text('產生影片')),
-      bottomNavigationBar: VideoBottomActions(
+      title: '產生影片',
+      bottom: VideoBottomActions(
         children: [
-          FilledButton.icon(
-            key: const Key('video-render-start'),
+          ThickButton(
+            buttonKey: const Key('video-render-start'),
+            style: ThickStyle.primary,
+            expand: true,
+            icon: Icons.movie_creation_outlined,
+            label: render.value == null ? '產生影片' : '重新產生影片',
+            shadow: AppShadows.soft,
             onPressed: ready && !running
                 ? ref.read(videoJobProvider(_id).notifier).startRender
                 : null,
-            icon: const Icon(Icons.movie_creation_outlined),
-            label: Text(render.value == null ? '產生影片' : '重新產生影片'),
           ),
         ],
       ),
@@ -63,8 +67,14 @@ class _VideoRenderPageState extends ConsumerState<VideoRenderPage> {
             VideoJobCard(projectId: _id),
             readiness.when(
               loading: () => const LinearProgressIndicator(),
-              error: (error, _) =>
-                  Text(error is ApiException ? error.message : '讀不到還缺什麼'),
+              error: (error, _) => ThickCard(
+                child: Padding(
+                  padding: videoCardInset,
+                  child: Text(
+                    error is ApiException ? error.message : '讀不到還缺什麼',
+                  ),
+                ),
+              ),
               data: (r) => Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -76,16 +86,22 @@ class _VideoRenderPageState extends ConsumerState<VideoRenderPage> {
                         a.assetKey: assetDisplayName(a),
                     },
                   ),
-                  if (!r.ready)
+                  if (!r.ready) ...[
+                    const SizedBox(
+                      height: AppSpacing.small + AppSpacing.xSmall,
+                    ),
                     Align(
                       alignment: Alignment.centerLeft,
-                      child: TextButton.icon(
-                        key: const Key('video-render-go-assets'),
+                      child: ThickButton(
+                        buttonKey: const Key('video-render-go-assets'),
+                        style: ThickStyle.light,
+                        icon: Icons.photo_camera_outlined,
+                        label: '去拍素材',
+                        shadow: AppShadows.soft,
                         onPressed: () => context.go('/videos/$_id/assets'),
-                        icon: const Icon(Icons.photo_camera_outlined),
-                        label: const Text('去拍素材'),
                       ),
                     ),
+                  ],
                 ],
               ),
             ),
@@ -109,14 +125,17 @@ class _RenderCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
     final seconds = render.totalSeconds.toStringAsFixed(1);
-    return Card(
+    return ThickCard(
       key: const Key('video-render-latest'),
       child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.medium),
+        padding: videoCardInset,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('最近的成品', style: text.titleSmall),
+            Text(
+              '最近的成品',
+              style: text.titleMedium!.copyWith(fontWeight: FontWeight.w700),
+            ),
             const SizedBox(height: AppSpacing.xSmall),
             Text('總長 $seconds 秒', style: text.bodyLarge),
             Text(
@@ -126,10 +145,12 @@ class _RenderCard extends StatelessWidget {
             if (render.estimated)
               Text('沒有設定文字轉語音：旁白是靜音、時間為估計值', style: text.bodySmall),
             const SizedBox(height: AppSpacing.small),
-            FilledButton.tonalIcon(
+            ThickButton(
+              style: ThickStyle.dark,
+              icon: Icons.play_circle_outline,
+              label: '看影片',
+              shadow: AppShadows.soft,
               onPressed: () => context.go('/videos/$projectId/watch'),
-              icon: const Icon(Icons.play_circle_outline),
-              label: const Text('看影片'),
             ),
           ],
         ),

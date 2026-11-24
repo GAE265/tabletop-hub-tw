@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_spacing.dart';
+import '../../../app/theme/thick_widgets.dart';
 import '../data/video_image_size.dart';
 import '../data/video_studio_models.dart';
 import '../state/video_assets_state.dart';
@@ -116,18 +118,21 @@ class _VideoAssetPageState extends ConsumerState<VideoAssetPage> {
     final scheme = Theme.of(context).colorScheme;
     final hasRegions = asset != null && asset.regions.isNotEmpty;
     final size = photo == null ? null : imageSizeOf(photo);
-    return Scaffold(
+    return VideoScaffold(
       key: const Key('video-asset-page'),
-      appBar: AppBar(title: Text(asset?.label ?? '素材')),
-      bottomNavigationBar: asset == null
+      title: asset?.label ?? '素材',
+      bottom: asset == null
           ? null
           : VideoBottomActions(
               children: [
-                FilledButton.icon(
-                  key: const Key('video-asset-pick'),
+                ThickButton(
+                  buttonKey: const Key('video-asset-pick'),
+                  style: ThickStyle.primary,
+                  expand: true,
+                  icon: Icons.photo_camera_outlined,
+                  label: asset.hasPhoto ? '重拍或換一張' : '拍照或選圖',
+                  shadow: AppShadows.soft,
                   onPressed: state.busy ? null : notifier.pickAndUpload,
-                  icon: const Icon(Icons.photo_camera_outlined),
-                  label: Text(asset.hasPhoto ? '重拍或換一張' : '拍照或選圖'),
                 ),
               ],
             ),
@@ -142,18 +147,25 @@ class _VideoAssetPageState extends ConsumerState<VideoAssetPage> {
             : ListView(
                 padding: const EdgeInsets.all(AppSpacing.medium),
                 children: [
-                  Card(
+                  ThickCard(
                     key: const Key('video-asset-shot'),
                     child: Padding(
-                      padding: const EdgeInsets.all(AppSpacing.medium),
+                      padding: videoCardInset,
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('拍攝說明', style: text.labelLarge),
+                          Text(
+                            '拍攝說明',
+                            style: text.labelLarge!.copyWith(
+                              color: AppColors.primaryText,
+                            ),
+                          ),
                           const SizedBox(height: AppSpacing.xSmall),
                           Text(
                             asset.shot ?? asset.reason,
-                            style: text.titleMedium,
+                            style: text.titleMedium!.copyWith(
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
                           if (asset.shot != null) ...[
                             const SizedBox(height: AppSpacing.xSmall),
@@ -188,8 +200,7 @@ class _VideoAssetPageState extends ConsumerState<VideoAssetPage> {
                     const SizedBox(height: AppSpacing.small),
                   ],
                   if (photo == null)
-                    Card(
-                      color: scheme.surfaceContainerHighest,
+                    ThickCard(
                       child: Padding(
                         padding: const EdgeInsets.all(AppSpacing.xLarge),
                         child: Column(
@@ -205,62 +216,81 @@ class _VideoAssetPageState extends ConsumerState<VideoAssetPage> {
                       ),
                     )
                   else
-                    Stack(
-                      key: const Key('video-asset-photo'),
-                      children: [
-                        GestureDetector(
-                          onTap: () => _showFull(context, state),
-                          child: AspectRatio(
-                            aspectRatio: size == null
-                                ? 4 / 3
-                                : displaySize(
-                                    size,
-                                    asset.orientation,
-                                  ).aspectRatio,
-                            child: RotatedBox(
-                              quarterTurns: asset.orientation ~/ 90,
-                              child: Image.memory(photo, fit: BoxFit.fill),
+                    ThickCard(
+                      child: Padding(
+                        padding: const EdgeInsets.all(AppSpacing.small),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(
+                                AppRadius.button,
+                              ),
+                              child: Stack(
+                                key: const Key('video-asset-photo'),
+                                children: [
+                                  GestureDetector(
+                                    onTap: () => _showFull(context, state),
+                                    child: AspectRatio(
+                                      aspectRatio: size == null
+                                          ? 4 / 3
+                                          : displaySize(
+                                              size,
+                                              asset.orientation,
+                                            ).aspectRatio,
+                                      child: RotatedBox(
+                                        quarterTurns: asset.orientation ~/ 90,
+                                        child: Image.memory(
+                                          photo,
+                                          fit: BoxFit.fill,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  Positioned(
+                                    top: AppSpacing.small,
+                                    right: AppSpacing.small,
+                                    child: IconButton.filledTonal(
+                                      key: const Key('video-asset-rotate'),
+                                      tooltip: '旋轉',
+                                      onPressed: state.busy
+                                          ? null
+                                          : notifier.rotate,
+                                      icon: const Icon(Icons.rotate_right),
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
-                          ),
+                            const SizedBox(height: AppSpacing.small),
+                            Row(
+                              children: [
+                                TextButton.icon(
+                                  onPressed: () => _showFull(context, state),
+                                  icon: const Icon(Icons.zoom_in),
+                                  label: const Text('看原圖'),
+                                ),
+                                const Spacer(),
+                                if (hasRegions)
+                                  ThickButton(
+                                    buttonKey: const Key('video-asset-regions'),
+                                    style: ThickStyle.dark,
+                                    icon: Icons.crop_free,
+                                    label:
+                                        '標區域（${asset.regions.values.where((b) => b != null).length}'
+                                        '／${asset.regions.length}）',
+                                    shadow: AppShadows.soft,
+                                    onPressed: () => context.go(
+                                      '/videos/${widget.projectId}/assets/'
+                                      '${widget.assetKey}/regions',
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ],
                         ),
-                        Positioned(
-                          top: AppSpacing.small,
-                          right: AppSpacing.small,
-                          child: IconButton.filledTonal(
-                            key: const Key('video-asset-rotate'),
-                            tooltip: '旋轉',
-                            onPressed: state.busy ? null : notifier.rotate,
-                            icon: const Icon(Icons.rotate_right),
-                          ),
-                        ),
-                      ],
+                      ),
                     ),
-                  if (photo != null) ...[
-                    const SizedBox(height: AppSpacing.small),
-                    Row(
-                      children: [
-                        TextButton.icon(
-                          onPressed: () => _showFull(context, state),
-                          icon: const Icon(Icons.zoom_in),
-                          label: const Text('看原圖'),
-                        ),
-                        const Spacer(),
-                        if (hasRegions)
-                          OutlinedButton.icon(
-                            key: const Key('video-asset-regions'),
-                            onPressed: () => context.go(
-                              '/videos/${widget.projectId}/assets/'
-                              '${widget.assetKey}/regions',
-                            ),
-                            icon: const Icon(Icons.crop_free),
-                            label: Text(
-                              '標區域（${asset.regions.values.where((b) => b != null).length}'
-                              '／${asset.regions.length}）',
-                            ),
-                          ),
-                      ],
-                    ),
-                  ],
                 ],
               ),
       ),
@@ -286,41 +316,55 @@ class _SkipSection extends StatelessWidget {
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
     if (asset.skipped) {
-      return Card(
+      return ThickCard(
         child: ListTile(
           leading: const Icon(Icons.block),
           title: const Text('已略過'),
           subtitle: const Text('產生影片時不用這張'),
-          trailing: OutlinedButton(
-            key: const Key('video-asset-unskip'),
+          trailing: ThickButton(
+            buttonKey: const Key('video-asset-unskip'),
+            style: ThickStyle.light,
+            label: '取消略過',
+            shadow: AppShadows.soft,
             onPressed: busy ? null : onUnskip,
-            child: const Text('取消略過'),
           ),
         ),
       );
     }
     if (!asset.skippable) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(textCardHint(asset.skipBlockedSegments), style: text.bodyMedium),
-          const SizedBox(height: AppSpacing.small),
-          OutlinedButton.icon(
-            key: const Key('video-asset-skip'),
-            onPressed: busy ? null : onSkip,
-            icon: const Icon(Icons.text_fields),
-            label: const Text('拍不了，改用文字卡'),
+      return ThickCard(
+        child: Padding(
+          padding: videoCardInset,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                textCardHint(asset.skipBlockedSegments),
+                style: text.bodyMedium,
+              ),
+              const SizedBox(height: AppSpacing.small),
+              ThickButton(
+                buttonKey: const Key('video-asset-skip'),
+                style: ThickStyle.light,
+                icon: Icons.text_fields,
+                label: '拍不了，改用文字卡',
+                shadow: AppShadows.soft,
+                onPressed: busy ? null : onSkip,
+              ),
+            ],
           ),
-        ],
+        ),
       );
     }
     return Align(
       alignment: Alignment.centerLeft,
-      child: OutlinedButton.icon(
-        key: const Key('video-asset-skip'),
+      child: ThickButton(
+        buttonKey: const Key('video-asset-skip'),
+        style: ThickStyle.light,
+        icon: Icons.block,
+        label: '略過這張',
+        shadow: AppShadows.soft,
         onPressed: busy ? null : onSkip,
-        icon: const Icon(Icons.block),
-        label: const Text('略過這張'),
       ),
     );
   }
