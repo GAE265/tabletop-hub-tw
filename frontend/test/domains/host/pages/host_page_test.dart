@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tabletop_hub/app/router.dart';
+import 'package:tabletop_hub/app/theme/app_colors.dart';
+import 'package:tabletop_hub/app/theme/app_theme.dart';
 import 'package:tabletop_hub/core/config/app_config.dart';
 import 'package:tabletop_hub/core/layout/breakpoints.dart';
 import 'package:tabletop_hub/core/platform/audio_capture.dart';
@@ -14,14 +16,15 @@ import 'package:tabletop_hub/domains/host/data/host_models.dart';
 import 'package:tabletop_hub/domains/host/data/host_stream.dart';
 import 'package:tabletop_hub/domains/host/data/hosting_sessions_repository.dart';
 import 'package:tabletop_hub/domains/host/state/host_controller.dart';
-import 'package:tabletop_hub/prototypes/host/host_proto_page.dart';
+import 'package:tabletop_hub/domains/host/pages/host_page.dart';
 
-import '../../domains/host/support.dart';
-import '../../support/fakes.dart';
+import '../../../support/fakes.dart';
+import '../support.dart';
 
-/// 參考畫面加上它用到的所有 fake（spec §14.4、§14.5）。
-class ProtoHarness {
-  ProtoHarness({List<HostingSession>? sessions})
+/// 語音主持正式頁面加上它用到的所有 fake（spec §14.4、§14.5）。
+/// 由參考畫面（/proto/host）的測試搬過來，正式頁面完成後參考畫面已刪除。
+class HostPageHarness {
+  HostPageHarness({List<HostingSession>? sessions})
     : repo = FakeHostingSessionsRepository(sessions: sessions);
 
   final FakeHostingSessionsRepository repo;
@@ -50,7 +53,10 @@ class ProtoHarness {
           screenWakeLockProvider.overrideWithValue(wakeLock),
           pageVisibilityProvider.overrideWithValue(visibility),
         ],
-        child: const MaterialApp(home: HostProtoPage()),
+        child: MaterialApp(
+          theme: buildAppTheme(const FakeAppFonts()),
+          home: const HostPage(),
+        ),
       ),
     );
     await tester.pumpAndSettle();
@@ -85,20 +91,20 @@ AppConfig config({required bool showPrototypes}) => AppConfig(
 
 void main() {
   group('路由', () {
-    test('/proto/host 只在 SHOW_PROTOTYPES=true 時出現', () {
+    test('正式路由 /host 不論 SHOW_PROTOTYPES 都有；參考畫面 /proto/host 已移除', () {
       final on = createRouter(config(showPrototypes: true));
       final off = createRouter(config(showPrototypes: false));
-      expect(routePaths(on.configuration.routes), contains('/proto/host'));
-      expect(
-        routePaths(off.configuration.routes),
-        isNot(contains('/proto/host')),
-      );
+      for (final router in [on, off]) {
+        final paths = routePaths(router.configuration.routes);
+        expect(paths, contains('/host'));
+        expect(paths, isNot(contains('/proto/host')));
+      }
     });
   });
 
   group('開主持前', () {
     testWidgets('人數、接話方式、聲線與「開始主持」，預設 7 人、自動接話、男聲', (tester) async {
-      final h = ProtoHarness();
+      final h = HostPageHarness();
       await h.pump(tester);
 
       expect(find.text('語音主持'), findsOneWidget);
@@ -116,7 +122,7 @@ void main() {
     });
 
     testWidgets('人數用加減鍵調整，只能在 5 到 10', (tester) async {
-      final h = ProtoHarness();
+      final h = HostPageHarness();
       await h.pump(tester);
       Text count() =>
           tester.widget<Text>(find.byKey(const Key('host-player-count')));
@@ -136,7 +142,7 @@ void main() {
     });
 
     testWidgets('選的接話方式與聲線會帶進開主持的請求', (tester) async {
-      final h = ProtoHarness();
+      final h = HostPageHarness();
       await h.pump(tester);
       await tester.tap(find.text('按住說話'));
       await tester.tap(find.text('女聲'));
@@ -150,7 +156,7 @@ void main() {
     });
 
     testWidgets('有保留的主持：顯示「接著主持（第 2 回合決定出牌）」與「重新開始」', (tester) async {
-      final h = ProtoHarness(
+      final h = HostPageHarness(
         sessions: [
           fakeHostingSession(
             step: HostStep.turn,
@@ -173,7 +179,7 @@ void main() {
 
   group('主持中', () {
     testWidgets('回合內顯示第幾回合與三個階段：已完成、進行中、還沒到', (tester) async {
-      final h = ProtoHarness();
+      final h = HostPageHarness();
       await h.pump(tester);
       await h.start(tester, live: liveState(turnNumber: 2, phaseNumber: 2));
 
@@ -189,7 +195,7 @@ void main() {
     });
 
     testWidgets('開場到夜晚顯示節點名稱', (tester) async {
-      final h = ProtoHarness();
+      final h = HostPageHarness();
       await h.pump(tester);
       await h.start(
         tester,
@@ -204,7 +210,7 @@ void main() {
     });
 
     testWidgets('查規則時顯示「正在查規則」', (tester) async {
-      final h = ProtoHarness();
+      final h = HostPageHarness();
       await h.pump(tester);
       await h.start(tester);
       expect(find.text('正在查規則'), findsNothing);
@@ -213,7 +219,7 @@ void main() {
     });
 
     testWidgets('三顆流程鍵與「結束主持」送出對應的按鍵訊息，結束不再確認', (tester) async {
-      final h = ProtoHarness();
+      final h = HostPageHarness();
       await h.pump(tester);
       await h.start(tester);
 
@@ -234,7 +240,7 @@ void main() {
     });
 
     testWidgets('暫停中那顆鍵變成「繼續」，並顯示「主持暫停中」', (tester) async {
-      final h = ProtoHarness();
+      final h = HostPageHarness();
       await h.pump(tester);
       await h.start(tester);
       expect(
@@ -266,7 +272,7 @@ void main() {
     });
 
     testWidgets('「可以這樣說」列出八句語音指令，不能點', (tester) async {
-      final h = ProtoHarness();
+      final h = HostPageHarness();
       await h.pump(tester);
       await h.start(tester);
 
@@ -294,7 +300,7 @@ void main() {
     });
 
     testWidgets('接話方式的標籤與「切換」：切到按住說話後出現大按鈕', (tester) async {
-      final h = ProtoHarness();
+      final h = HostPageHarness();
       await h.pump(tester);
       await h.start(tester);
       expect(find.byKey(const Key('host-mode-label')), findsOneWidget);
@@ -319,7 +325,7 @@ void main() {
     });
 
     testWidgets('按住說話的大按鈕：按下送 down，放開送 up', (tester) async {
-      final h = ProtoHarness();
+      final h = HostPageHarness();
       await h.pump(tester);
       await tester.tap(find.text('按住說話'));
       await tester.pump();
@@ -341,7 +347,7 @@ void main() {
     });
 
     testWidgets('已結束：顯示「接著主持」與「重新開始」', (tester) async {
-      final h = ProtoHarness();
+      final h = HostPageHarness();
       await h.pump(tester);
       await h.start(tester);
       await h.emit(
@@ -355,7 +361,7 @@ void main() {
     });
 
     testWidgets('已結束：流程鍵與「結束主持」收起來（按了也不會動）', (tester) async {
-      final h = ProtoHarness();
+      final h = HostPageHarness();
       await h.pump(tester);
       await h.start(tester);
       expect(find.byKey(const Key('host-next')), findsOneWidget);
@@ -379,7 +385,7 @@ void main() {
     });
 
     testWidgets('已結束、按住說話：按住說話鍵還在（結束後照常可以問規則）', (tester) async {
-      final h = ProtoHarness();
+      final h = HostPageHarness();
       await h.pump(tester);
       await tester.tap(find.text('按住說話'));
       await tester.pump();
@@ -403,7 +409,7 @@ void main() {
 
   group('提醒（spec §14.5）', () {
     testWidgets('頁面被切走後回來：「點一下繼續」，點了送 resume', (tester) async {
-      final h = ProtoHarness();
+      final h = HostPageHarness();
       await h.pump(tester);
       await h.start(tester);
       h.visibility.hide();
@@ -418,7 +424,7 @@ void main() {
     });
 
     testWidgets('螢幕常亮被拒：一行「請關掉自動鎖定」，主持照常', (tester) async {
-      final h = ProtoHarness();
+      final h = HostPageHarness();
       h.wakeLock.granted = false;
       await h.pump(tester);
       await h.start(tester);
@@ -427,7 +433,7 @@ void main() {
     });
 
     testWidgets('被別的裝置取代：「已在別的裝置接著主持」', (tester) async {
-      final h = ProtoHarness();
+      final h = HostPageHarness();
       await h.pump(tester);
       await h.start(tester);
       await h.emit(
@@ -441,7 +447,7 @@ void main() {
     });
 
     testWidgets('重新連線中：提醒出現再消失', (tester) async {
-      final h = ProtoHarness();
+      final h = HostPageHarness();
       await h.pump(tester);
       await h.start(tester);
       await h.emit(tester, const HostConnectionMessage(ready: false));
@@ -451,7 +457,7 @@ void main() {
     });
 
     testWidgets('麥克風被拒絕：「需要麥克風才能主持，請到瀏覽器設定允許」', (tester) async {
-      final h = ProtoHarness();
+      final h = HostPageHarness();
       h.capture.permissionGranted = false;
       await h.pump(tester);
       await tester.tap(find.byKey(const Key('host-start')));
@@ -461,7 +467,7 @@ void main() {
     });
 
     testWidgets('聲音待啟用：「點一下開啟聲音」', (tester) async {
-      final h = ProtoHarness();
+      final h = HostPageHarness();
       h.playback.unlockResult = false;
       await h.pump(tester);
       await h.start(tester);
@@ -473,7 +479,7 @@ void main() {
     });
 
     testWidgets('連不上：「主持人暫時連不上，請稍後再試」，附「接著主持」', (tester) async {
-      final h = ProtoHarness();
+      final h = HostPageHarness();
       await h.pump(tester);
       await h.start(tester);
       await h.emit(
@@ -488,7 +494,7 @@ void main() {
     });
 
     testWidgets('連線中：載入圖示', (tester) async {
-      final h = ProtoHarness();
+      final h = HostPageHarness();
       await h.pump(tester);
       expect(find.byKey(const Key('host-connecting')), findsNothing);
       expect(hostNoticeText(HostNotice.connecting), isNull);
@@ -521,7 +527,7 @@ void main() {
         find.descendant(of: find.byKey(Key(key)), matching: matching);
 
     testWidgets('手機：單欄，進度在上面，流程鍵固定在畫面底部，「結束主持」在標題列', (tester) async {
-      final h = ProtoHarness();
+      final h = HostPageHarness();
       await h.pump(tester, size: phone);
       await h.start(tester, live: liveState(turnNumber: 2, phaseNumber: 2));
 
@@ -545,7 +551,7 @@ void main() {
 
     for (final (name, size) in [('手機', phone), ('筆電', laptop)]) {
       testWidgets('$name：提醒出現或進度改變時，流程鍵不移位', (tester) async {
-        final h = ProtoHarness();
+        final h = HostPageHarness();
         await h.pump(tester, size: size);
         await h.start(
           tester,
@@ -582,7 +588,7 @@ void main() {
     }
 
     testWidgets('筆電：左欄進度與主持人的狀態，右欄接話方式、流程鍵、可以這樣說，「結束主持」在標題列', (tester) async {
-      final h = ProtoHarness();
+      final h = HostPageHarness();
       await h.pump(tester, size: laptop);
       await h.start(
         tester,
@@ -619,7 +625,7 @@ void main() {
     });
 
     testWidgets('目前進度最醒目：回合字最大，進行中的階段比其他階段大', (tester) async {
-      final h = ProtoHarness();
+      final h = HostPageHarness();
       await h.pump(tester, size: phone);
       await h.start(tester, live: liveState(turnNumber: 2, phaseNumber: 2));
 
@@ -630,7 +636,7 @@ void main() {
     });
 
     testWidgets('流程鍵：三顆同一列、一樣高、夠大，「下一步」是主要按鍵', (tester) async {
-      final h = ProtoHarness();
+      final h = HostPageHarness();
       await h.pump(tester, size: phone);
       await h.start(tester);
 
@@ -641,18 +647,19 @@ void main() {
         expect(rect.center.dy, rects.first.center.dy);
         expect(rect.height, rects.first.height);
       }
-      expect(
-        tester.widget(find.byKey(const Key('host-next'))),
-        isA<FilledButton>(),
-      );
-      expect(
-        tester.widget(find.byKey(const Key('host-previous'))),
-        isNot(isA<FilledButton>()),
-      );
+      // Stitch 版面三顆都是厚按鈕：「下一步」是主色，其他兩顆不是
+      Color? fill(String key) => tester
+          .widget<FilledButton>(find.byKey(Key(key)))
+          .style!
+          .backgroundColor!
+          .resolve(const {});
+      expect(fill('host-next'), AppColors.primary);
+      expect(fill('host-previous'), isNot(AppColors.primary));
+      expect(fill('host-pause'), isNot(AppColors.primary));
     });
 
     testWidgets('「結束主持」和流程鍵分開，不在同一個區塊', (tester) async {
-      final h = ProtoHarness();
+      final h = HostPageHarness();
       await h.pump(tester, size: phone);
       await h.start(tester);
 
@@ -674,25 +681,32 @@ void main() {
     });
 
     testWidgets('開主持前：接話方式與聲線用分段按鍵，「開始主持」是整排的主要按鍵', (tester) async {
-      final h = ProtoHarness();
+      final h = HostPageHarness();
       await h.pump(tester, size: phone);
 
-      expect(find.byType(SegmentedButton<TurnTakingMode>), findsOneWidget);
-      expect(find.byType(SegmentedButton<HostVoice>), findsOneWidget);
+      // Stitch 版面：分段按鍵放在同一條軌道裡（原本是 SegmentedButton）
+      for (final key in [
+        'host-mode-auto',
+        'host-mode-pushToTalk',
+        'host-voice-male',
+        'host-voice-female',
+      ]) {
+        expect(find.byKey(Key(key)), findsOneWidget, reason: key);
+      }
       final start = find.byKey(const Key('host-start'));
       expect(tester.widget(start), isA<FilledButton>());
       expect(tester.getSize(start).height, greaterThanOrEqualTo(56));
-      // 整排：和接話方式的分段按鍵一樣寬
+      // 整排：和接話方式的分段軌道一樣寬
       expect(
         tester.getSize(start).width,
         greaterThanOrEqualTo(
-          tester.getSize(find.byType(SegmentedButton<TurnTakingMode>)).width,
+          tester.getSize(find.byKey(const Key('host-mode-track'))).width,
         ),
       );
     });
 
     testWidgets('筆電開主持前：設定不拉滿整個畫面，寬度不超過手機斷點', (tester) async {
-      final h = ProtoHarness();
+      final h = HostPageHarness();
       await h.pump(tester, size: laptop);
       expect(
         tester.getSize(find.byKey(const Key('host-start'))).width,
@@ -704,14 +718,24 @@ void main() {
       Finder ancestorOf(String text, Type type) =>
           find.ancestor(of: find.text(text), matching: find.byType(type));
 
+      /// Stitch 版面：擋住主持的橫幅 Key 是 host-banner-…，只是告知的一行是 host-line-…
+      Finder keyedAncestor(String text, String prefix) => find.ancestor(
+        of: find.text(text),
+        matching: find.byWidgetPredicate(
+          (w) =>
+              w.key is ValueKey<String> &&
+              (w.key! as ValueKey<String>).value.startsWith(prefix),
+        ),
+      );
+
       testWidgets('擋住主持的用橫幅：麥克風被拒絕、被別的裝置取代、主持暫停中', (tester) async {
-        final h = ProtoHarness();
+        final h = HostPageHarness();
         h.capture.permissionGranted = false;
         await h.pump(tester);
         await tester.tap(find.byKey(const Key('host-start')));
         await tester.pumpAndSettle();
         expect(
-          ancestorOf('需要麥克風才能主持，請到瀏覽器設定允許', MaterialBanner),
+          keyedAncestor('需要麥克風才能主持，請到瀏覽器設定允許', 'host-banner-'),
           findsOneWidget,
         );
 
@@ -723,7 +747,7 @@ void main() {
             liveState(paused: true, pauseReason: HostPauseReason.command),
           ),
         );
-        expect(ancestorOf('主持暫停中', MaterialBanner), findsOneWidget);
+        expect(keyedAncestor('主持暫停中', 'host-banner-'), findsOneWidget);
         await h.emit(
           tester,
           const HostErrorMessage(
@@ -731,24 +755,32 @@ void main() {
             message: '已在別的裝置接著主持',
           ),
         );
-        expect(ancestorOf('已在別的裝置接著主持', MaterialBanner), findsOneWidget);
+        expect(keyedAncestor('已在別的裝置接著主持', 'host-banner-'), findsOneWidget);
       });
 
       testWidgets('只是告知的用一行：請關掉自動鎖定、重新連線中', (tester) async {
-        final h = ProtoHarness();
+        final h = HostPageHarness();
         h.wakeLock.granted = false;
         await h.pump(tester);
         await h.start(tester);
         await h.emit(tester, const HostConnectionMessage(ready: false));
 
         for (final text in ['請關掉自動鎖定', '重新連線中']) {
-          expect(ancestorOf(text, ListTile), findsOneWidget, reason: text);
-          expect(ancestorOf(text, MaterialBanner), findsNothing, reason: text);
+          expect(
+            keyedAncestor(text, 'host-line-'),
+            findsOneWidget,
+            reason: text,
+          );
+          expect(
+            keyedAncestor(text, 'host-banner-'),
+            findsNothing,
+            reason: text,
+          );
         }
       });
 
       testWidgets('要玩家點一下的是大按鈕：點一下繼續、點一下開啟聲音', (tester) async {
-        final h = ProtoHarness();
+        final h = HostPageHarness();
         h.playback.unlockResult = false;
         await h.pump(tester);
         await h.start(tester);

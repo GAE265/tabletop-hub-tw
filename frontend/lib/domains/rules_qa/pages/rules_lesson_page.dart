@@ -11,6 +11,7 @@ import '../../../core/api/api_exception.dart';
 import '../../../core/layout/breakpoints.dart';
 import '../../../core/platform/lesson_video_player.dart';
 import '../../../core/widgets/size_reporter.dart';
+import '../../host/state/host_labels.dart';
 import '../data/rules_qa_models.dart';
 import '../state/rules_lesson_state.dart';
 import 'widgets/notice_banner.dart';
@@ -40,7 +41,11 @@ class RulesLessonPage extends ConsumerWidget {
             AppSpacing.medium,
             0,
           ),
-          child: _Header(title: state.lesson.value?.gameName ?? '規則教學'),
+          child: _Header(
+            title: state.lesson.value?.gameName ?? '規則教學',
+            // 目前只有這一款支援 AI 語音主持
+            showHost: state.lesson.value?.gameName == hostGameName,
+          ),
         ),
         Expanded(
           child: state.lesson.when(
@@ -74,11 +79,12 @@ void _back(BuildContext context) {
   }
 }
 
-/// 頁首白底條：返回鍵與遊戲名稱。
+/// 頁首白底條：返回鍵與遊戲名稱；支援語音主持的遊戲在右邊多一顆「語音主持」。
 class _Header extends StatelessWidget {
-  const _Header({required this.title});
+  const _Header({required this.title, this.showHost = false});
 
   final String title;
+  final bool showHost;
 
   @override
   Widget build(BuildContext context) {
@@ -103,6 +109,17 @@ class _Header extends StatelessWidget {
               ).textTheme.headlineSmall!.copyWith(fontWeight: FontWeight.w700),
             ),
           ),
+          if (showHost) ...[
+            const SizedBox(width: AppSpacing.small),
+            ThickButton(
+              buttonKey: const Key('rules-host-entry'),
+              style: ThickStyle.primary,
+              icon: Icons.record_voice_over,
+              label: '語音主持',
+              shadow: AppShadows.soft,
+              onPressed: () => context.go('/host'),
+            ),
+          ],
         ],
       ),
     );
