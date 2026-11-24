@@ -266,6 +266,18 @@ class _SegmentAssets extends ConsumerWidget {
             if (state.notice case final notice?) ...[
               const SizedBox(height: AppSpacing.small),
               NoticeBanner(key: const Key('video-swap-notice'), text: notice),
+              // 換素材不會自動更新影片（已經完成的專案也一樣），提醒店員重新產生
+              const SizedBox(height: AppSpacing.small),
+              Text('影片要重新產生才會用新的素材', style: muted),
+              const SizedBox(height: AppSpacing.xSmall),
+              ThickButton(
+                buttonKey: const Key('video-swap-go-render'),
+                style: ThickStyle.primary,
+                expand: true,
+                icon: Icons.movie_outlined,
+                label: '前往產生影片',
+                onPressed: () => context.go('/videos/$projectId/render'),
+              ),
             ],
             if (state.error case final error?) ...[
               const SizedBox(height: AppSpacing.small),
