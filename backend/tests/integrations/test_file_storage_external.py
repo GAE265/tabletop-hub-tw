@@ -53,3 +53,30 @@ def test_blob_put_get_delete_roundtrip(storage_settings: Settings) -> None:
         storage.get(key)
     # 再刪一次也不拋錯
     storage.delete(key)
+
+
+def test_blob_delete_prefix_only_removes_own_test_files(storage_settings: Settings) -> None:
+    # 只動這個測試自己建立的隨機前綴；結束時確認沒有留下任何測試檔案
+    storage = get_file_storage(
+        StorageConfig(
+            provider="cloud",
+            connection_string=storage_settings.storage_connection_string,
+            container=storage_settings.storage_container,
+        )
+    )
+    prefix = f"external-test/{uuid.uuid4()}"
+    sibling = f"{prefix}-sibling/keep.txt"  # 名稱開頭相同、但不在這個資料夾裡
+    keys = [f"{prefix}/a.txt", f"{prefix}/sub/b.txt", f"{prefix}/sub/c.txt"]
+    try:
+        for key in [*keys, sibling]:
+            storage.put(key, b"x", "text/plain")
+        assert storage.delete_prefix(prefix) == 3
+        for key in keys:
+            with pytest.raises(FileNotFound):
+                storage.get(key)
+        assert storage.get(sibling) == b"x"
+    finally:
+        storage.delete_prefix(prefix)
+        storage.delete(sibling)
+    assert storage.delete_prefix(prefix) == 0
+    assert storage.delete_prefix(f"{prefix}-sibling") == 0
