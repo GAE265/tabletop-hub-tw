@@ -31,7 +31,7 @@ jobs:
       - name: Deploy Frontend DEV Service
         uses: google-github-actions/deploy-cloudrun@v2
         with:
-          service: tabletop-hub-tw-frontend
+          service: tabletop-hub-tw-frontend-dev
           region: us-east1
           image: us-east1-docker.pkg.dev/aerial-handbook-256212/tabletop-hub-tw-repo/gae265/tabletop-hub-tw-frontend-dev:${{ github.event.workflow_run.head_sha }}
 
