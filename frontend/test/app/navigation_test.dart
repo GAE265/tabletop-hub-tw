@@ -357,6 +357,7 @@ void main() {
       '/matches',
       '/matches/m-1',
       '/videos/p1/assets',
+      '/rules-ingest',
       '/videos',
       '/videos/p1/draft',
     ]) {
@@ -371,12 +372,8 @@ void main() {
     }
 
     testWidgets('其他頁面：內容停在導覽列上方', (tester) async {
-      // 揪團、訂位、戰績頁都改成浮動導覽列，這裡改用不會改版的規則書入庫頁
-      await pumpShell(
-        tester,
-        location: '/rules-ingest',
-        size: const Size(400, 900),
-      );
+      // 規則書入庫頁也改成浮動導覽列，這裡改用不會改版的健康檢查頁（示範用）
+      await pumpShell(tester, location: '/health', size: const Size(400, 900));
       final page = find.byType(Scaffold).last;
       final nav = tester.getTopLeft(find.byType(BottomNavigation)).dy;
       expect(tester.getBottomLeft(page).dy, lessThanOrEqualTo(nav));
