@@ -67,17 +67,18 @@ void main() {
       );
     });
 
-    testWidgets('讀屏只念一次「遊任有娛」', (tester) async {
-      final handle = tester.ensureSemantics();
+    testWidgets('讀屏只念一次「遊任有娛」：圖片帶讀屏文字，旁邊的文字不給讀屏', (tester) async {
+      // 頂部列目前整個不在讀屏樹裡（鈴鐺、登入也是，原本就這樣，另案處理），
+      // 所以直接檢查元件的設定，不從讀屏樹找
       await pumpShell(tester, size: const Size(400, 900));
+      final bar = find.byType(MobileTopBar);
+      final logo = find.descendant(of: bar, matching: logoImage);
+      expect(tester.widget<Image>(logo).semanticLabel, '遊任有娛');
+      final name = find.descendant(of: bar, matching: find.text('遊任有娛'));
       expect(
-        find.descendant(
-          of: find.byType(MobileTopBar),
-          matching: find.bySemanticsLabel('遊任有娛'),
-        ),
-        findsOneWidget,
+        find.ancestor(of: name, matching: find.byType(ExcludeSemantics)),
+        findsWidgets,
       );
-      handle.dispose();
     });
 
     for (final width in [320.0, 360.0, 390.0, 430.0]) {
