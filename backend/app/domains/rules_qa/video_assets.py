@@ -21,9 +21,10 @@ pillow_heif.register_heif_opener()
 # 每張照片的上限（2026-11-21 永傑決定）；寫在這裡不加設定
 MAX_PHOTO_BYTES = 15 * 1024 * 1024
 
-# Pillow 的格式名稱 → 副檔名、Content-Type。JPEG、PNG 照原格式存；HEIC 轉成 JPEG 再存
+# Pillow 的格式名稱 → 副檔名、Content-Type。JPEG、PNG 照原格式存；
+# HEIC（HEIF）與多圖 JPEG（MPO，iPhone 轉出來附 HDR 增益圖的 JPEG）轉成單張 JPEG 再存
 PHOTO_FORMATS = {"JPEG": ("jpg", "image/jpeg"), "PNG": ("png", "image/png")}
-CONVERT_TO_JPEG_FORMATS = {"HEIF"}
+CONVERT_TO_JPEG_FORMATS = {"HEIF", "MPO"}
 JPEG_QUALITY = 92
 
 PHOTO_INVALID_MESSAGE = "只能上傳 JPEG、PNG 或 HEIC 照片"
@@ -46,7 +47,7 @@ def normalize_photo(data: bytes) -> tuple[bytes, str, str]:
     """檢查格式與大小，依 EXIF 方向轉正；回傳（檔案內容、副檔名、Content-Type）。
 
     沒有 EXIF 方向（或已經是正的）時原樣保存，不重新壓縮；有的話轉正後重新存，並去掉方向標記，
-    之後的區域座標都以轉正後的圖為準。HEIC 一律轉成 JPEG（見 `_heic_to_jpeg`）。
+    之後的區域座標都以轉正後的圖為準。HEIC 與多圖 JPEG 一律轉成單張 JPEG（見 `_to_jpeg`）。
     只在記憶體裡處理，失敗時直接拋出 PhotoRejected，不會寫出半成品。
     """
     if len(data) > MAX_PHOTO_BYTES:
@@ -55,7 +56,7 @@ def normalize_photo(data: bytes) -> tuple[bytes, str, str]:
         image = Image.open(io.BytesIO(data))
         image.load()
         if image.format in CONVERT_TO_JPEG_FORMATS:
-            return _heic_to_jpeg(image), *PHOTO_FORMATS["JPEG"]
+            return _to_jpeg(image), *PHOTO_FORMATS["JPEG"]
     # pillow-heif 解不開壞檔時拋 ValueError
     except (UnidentifiedImageError, OSError, ValueError, Image.DecompressionBombError) as exc:
         raise PhotoRejected("RULES_VIDEO_PHOTO_INVALID", PHOTO_INVALID_MESSAGE) from exc
@@ -75,11 +76,13 @@ def normalize_photo(data: bytes) -> tuple[bytes, str, str]:
     return out.getvalue(), ext, content_type
 
 
-def _heic_to_jpeg(image: Image.Image) -> bytes:
-    """HEIC → JPEG（品質 92）：依方向標記轉正、拿掉方向標記，透明的地方鋪白底。
+def _to_jpeg(image: Image.Image) -> bytes:
+    """HEIC、多圖 JPEG → 單張 JPEG（品質 92）：依方向標記轉正、拿掉方向標記，透明的地方鋪白底。
 
+    多圖 JPEG 只留第一張（主圖），附帶的 HDR 增益圖等不保留。
     pillow-heif 讀檔時通常已經轉正並把方向設為 1，這裡再用 exif_transpose 保險一次。
     """
+    image.seek(0)
     upright = ImageOps.exif_transpose(image)
     exif = upright.getexif()
     exif.pop(_EXIF_ORIENTATION, None)
