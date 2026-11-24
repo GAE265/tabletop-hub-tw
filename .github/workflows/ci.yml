@@ -62,7 +62,7 @@ jobs:
           file: Dockerfile.backend
           push: true
           tags: |
-            ${{ env.BACKEND_IMAGE }}-backend-log:${{ github.sha }}
+            ${{ env.BACKEND_IMAGE }}-log:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
       # 1. 使用你設定好的 Secret 登入 GCP
