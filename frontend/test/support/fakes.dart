@@ -1789,6 +1789,63 @@ class FakeVideoStudioRepository implements VideoStudioRepository {
     return drafts[projectId];
   }
 
+  // --- 換素材（2026-11-25）---
+
+  /// 換素材的結果；沒給時依請求組一個沒有移除任何東西的結果。
+  SegmentSwapResult? swapResult;
+  Object? swapError;
+  final swaps = <(String, String, SegmentSwapInput)>[];
+
+  @override
+  Future<SegmentSwapResult> swapSegmentAsset(
+    String projectId,
+    String segmentKey,
+    SegmentSwapInput input,
+  ) async {
+    swaps.add((projectId, segmentKey, input));
+    if (swapError != null) throw swapError!;
+    final draft = drafts[projectId]!;
+    final slot = draft.segments
+        .firstWhere((s) => s.segmentKey == segmentKey)
+        .slots
+        .firstWhere((s) => s.slot == input.slot);
+    final result =
+        swapResult ??
+        SegmentSwapResult(
+          segmentKey: segmentKey,
+          slot: input.slot,
+          oldAssetKey: slot.assetKeys.single,
+          newAssetKey: input.assetKey,
+          removed: const SwapRemoved(highlights: [], labels: [], cues: []),
+          unusedAssets: const [],
+          videoVersion: draft.videoVersion + 1,
+        );
+    // 草稿跟著更新：那一格換成新素材、版本加 1、沒有段在用的素材標成空的段號
+    drafts[projectId] = draft.copyWith(
+      videoVersion: result.videoVersion,
+      segments: [
+        for (final s in draft.segments)
+          s.segmentKey != segmentKey
+              ? s
+              : s.copyWith(
+                  slots: [
+                    for (final x in s.slots)
+                      x.slot == input.slot
+                          ? x.copyWith(assetKeys: [input.assetKey])
+                          : x,
+                  ],
+                ),
+      ],
+      assets: [
+        for (final a in draft.assets)
+          result.unusedAssets.contains(a.assetKey)
+              ? a.copyWith(usedInSegments: const [])
+              : a,
+      ],
+    );
+    return result;
+  }
+
   // --- 素材（MR 8）：key 是 '<專案>/<asset_key>' ---
 
   final assets = <String, VideoAsset>{};
