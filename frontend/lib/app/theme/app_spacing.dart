@@ -64,6 +64,12 @@ abstract final class AppSizes {
   /// 頭像右下角的座位小圓（戰績的參加者）。
   static const double seatBadge = 18;
 
+  /// 語音主持的按住說話大圓（與「正在聽」大圓）。
+  static const double talkButton = 160;
+
+  /// 語音主持大圓裡的麥克風圖示。
+  static const double talkIcon = 48;
+
   /// 步驟條的圓點（規則影片的步驟）。
   static const double stepDot = 32;
 
