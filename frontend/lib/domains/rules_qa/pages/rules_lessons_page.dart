@@ -9,6 +9,7 @@ import '../../../app/theme/wood_background.dart';
 import '../../../core/api/api_exception.dart';
 import '../../../core/layout/breakpoints.dart';
 import '../../../core/widgets/pill_badge.dart';
+import '../../host/state/host_labels.dart';
 import '../data/rules_qa_models.dart';
 import '../state/rules_lessons_state.dart';
 
@@ -321,6 +322,13 @@ class _LessonCard extends StatelessWidget {
                           label: '可以問規則',
                           tone: PillTone.players,
                           icon: Icons.chat_bubble_outline,
+                        ),
+                      // 目前只有這款遊戲有 AI 語音主持（入口在規則教學頁頁首）
+                      if (item.gameName == hostGameName)
+                        const PillBadge(
+                          label: '有語音主持',
+                          tone: PillTone.duration,
+                          icon: Icons.record_voice_over_outlined,
                         ),
                     ],
                   ),
