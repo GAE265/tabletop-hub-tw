@@ -52,12 +52,16 @@ abstract interface class VideoStudioRepository {
     VideoAssetUpdate input,
   );
 
-  /// 換某一段某一格的素材（單一素材的格子）。版本不同時拋 `RULES_VIDEO_CONFLICT`（409）。
+  /// 換某一段某一格的素材（放牌的格子指定哪一張的正面或牌背）。
+  /// 版本不同時拋 `RULES_VIDEO_CONFLICT`（409）。
   Future<SegmentSwapResult> swapSegmentAsset(
     String projectId,
     String segmentKey,
     SegmentSwapInput input,
   );
+
+  /// 新增一個照片素材（換素材完整版）。同名時拋 `RULES_VIDEO_ASSET_LABEL_TAKEN`（422）。
+  Future<VideoAsset> createAsset(String projectId, VideoAssetCreate input);
 
   /// 產生影片前還缺什麼。
   Future<VideoReadiness> getReadiness(String projectId);
@@ -224,6 +228,16 @@ class HttpVideoStudioRepository implements VideoStudioRepository {
     );
     return SegmentSwapResult.fromJson(response.data!);
   });
+
+  @override
+  Future<VideoAsset> createAsset(String projectId, VideoAssetCreate input) =>
+      _guard(() async {
+        final response = await _dio.post<Map<String, dynamic>>(
+          '$_base/$projectId/assets',
+          data: input.toJson(),
+        );
+        return VideoAsset.fromJson(response.data!);
+      });
 
   @override
   Future<VideoAsset> updateAsset(

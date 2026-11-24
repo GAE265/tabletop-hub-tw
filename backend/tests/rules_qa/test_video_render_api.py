@@ -254,9 +254,23 @@ def test_unused_asset_without_photo_does_not_block_render(
         if key != "board":
             _upload(api, project, key)
     _swap(api, project, "s1", "sidebar", "blue")
+    # 完整版：甲區沿用到藍牌，要在藍牌上重標（2026-11-25）
+    body = {"regions": {"zone_a": [0.1, 0.1, 0.4, 0.4]}}
+    assert api.patch(f"{URL}/{project}/assets/blue", json=body).status_code == 200
     assert api.get(f"{URL}/{project}/readiness").json()["ready"] is True
     job = _render(rules_db, storage, project, tmp_path)
     assert job.status == "succeeded", job.error
+
+
+def test_item_swap_reencodes_only_that_segment(api, ready, rules_db, storage, tmp_path):
+    command = fake_ffmpeg(tmp_path / "bin")
+    assert _render(rules_db, storage, ready, tmp_path, command=command).status == "succeeded"
+    version = api.get(f"{URL}/{ready}/draft").json()["video_version"]
+    body = {"slot": "main", "asset_key": "red", "item_key": "c2", "video_version": version}
+    assert api.patch(f"{URL}/{ready}/segments/s1", json=body).status_code == 200
+    job = _render(rules_db, storage, ready, tmp_path, command=command)
+    assert job.status == "succeeded", job.error
+    assert job.result["reencoded"] == ["s1"] and job.result["reused"] == ["s2"]
 
 
 def test_cache_removed_reencodes_everything(api, ready, rules_db, storage, tmp_path):

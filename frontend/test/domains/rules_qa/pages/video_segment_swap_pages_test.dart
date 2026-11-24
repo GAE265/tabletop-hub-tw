@@ -27,21 +27,41 @@ void main() {
       expect(find.byKey(const Key('video-segment-s1-sidebar')), findsOneWidget);
       expect(find.text('側欄：圖板'), findsOneWidget);
       expect(find.text('主畫面：紅牌'), findsOneWidget);
-      expect(find.text('主畫面：紅牌、牌背、藍牌'), findsOneWidget);
     });
 
-    testWidgets('放好幾張牌的格子：寫明不支援、沒有換素材按鈕', (tester) async {
+    // 完整版：放好幾張牌的格子逐張列出，可以換正面；有牌背的也可以換牌背
+    testWidgets('放好幾張牌的格子：逐張列出，可以換正面或牌背', (tester) async {
       await pumpVideo(tester, location: '/videos/p1/draft', repo: swapRepo());
+      expect(find.text('第 1 張：紅牌（牌背：牌背）'), findsOneWidget);
+      expect(find.text('第 3 張：紅牌'), findsOneWidget);
+      for (final item in ['c1', 'c2', 'c3']) {
+        expect(
+          find.byKey(Key('video-segment-s1-main-$item-front')),
+          findsOneWidget,
+        );
+      }
       expect(
-        find.byKey(const Key('video-segment-s1-main-unsupported')),
+        find.byKey(const Key('video-segment-s1-main-c1-back')),
         findsOneWidget,
       );
-      expect(find.text('這一段目前不支援換素材'), findsOneWidget);
-      expect(find.byKey(const Key('video-segment-s1-main-swap')), findsNothing);
+      // c3 沒有牌背
       expect(
-        find.byKey(const Key('video-segment-s1-sidebar-swap')),
-        findsOneWidget,
+        find.byKey(const Key('video-segment-s1-main-c3-back')),
+        findsNothing,
       );
+      expect(find.text('這一段目前不支援換素材'), findsNothing);
+    });
+
+    testWidgets('換牌背：送出哪一張與牌背', (tester) async {
+      final repo = swapRepo();
+      await pumpVideo(tester, location: '/videos/p1/draft', repo: repo);
+      await tapKey(tester, 'video-segment-s1-main-c1-back');
+      // 目前的牌背、繪製、已略過的不列
+      expect(find.byKey(const Key('video-swap-option-back')), findsNothing);
+      await tapKey(tester, 'video-swap-option-blue');
+      final input = repo.swaps.single.$3;
+      expect((input.slot, input.itemKey, input.face), ('main', 'c1', 'back'));
+      expect(input.assetKey, 'blue');
     });
 
     testWidgets('按換素材：只列出可以換的素材', (tester) async {
@@ -55,14 +75,14 @@ void main() {
       }
     });
 
-    testWidgets('選了之後換掉，顯示移除了什麼，格子改成新素材', (tester) async {
+    testWidgets('選了之後換掉，顯示要重標的區域，格子改成新素材', (tester) async {
       final repo = swapRepo()..swapResult = sidebarSwapResult;
       await pumpVideo(tester, location: '/videos/p1/draft', repo: repo);
       await tapKey(tester, 'video-segment-s1-sidebar-swap');
       await tapKey(tester, 'video-swap-option-blue');
       expect(repo.swaps.single.$3.assetKey, 'blue');
       expect(find.byKey(const Key('video-swap-notice')), findsOneWidget);
-      expect(find.textContaining('已移除：框線 1 個、動作 1 個'), findsOneWidget);
+      expect(find.textContaining('要在新照片上標出：甲區、乙區'), findsOneWidget);
       expect(find.text('側欄：藍牌'), findsOneWidget);
     });
 
@@ -106,6 +126,42 @@ void main() {
       await tapKey(tester, 'video-swap-option-blue');
       expect(find.byKey(const Key('video-swap-error')), findsOneWidget);
       expect(find.text('草稿已被修改，請重新整理後再換'), findsOneWidget);
+    });
+
+    testWidgets('新增素材：填名稱後建立並直接換上', (tester) async {
+      final repo = swapRepo();
+      await pumpVideo(tester, location: '/videos/p1/draft', repo: repo);
+      await tapKey(tester, 'video-segment-s2-main-swap');
+      await tapKey(tester, 'video-swap-new');
+      await tester.enterText(
+        find.byKey(const Key('video-new-asset-label')),
+        '白薔薇',
+      );
+      await tester.enterText(
+        find.byKey(const Key('video-new-asset-shot')),
+        '整張牌正面朝上',
+      );
+      await tapKey(tester, 'video-new-asset-submit');
+      expect(repo.createdAssets.single.$2.label, '白薔薇');
+      expect(repo.swaps.single.$3.assetKey, 'custom_1');
+      expect(find.textContaining('已換成「白薔薇」'), findsOneWidget);
+    });
+
+    testWidgets('新增素材：名稱空白時不能送出', (tester) async {
+      final repo = swapRepo();
+      await pumpVideo(tester, location: '/videos/p1/draft', repo: repo);
+      await tapKey(tester, 'video-segment-s2-main-swap');
+      await tapKey(tester, 'video-swap-new');
+      await tester.enterText(
+        find.byKey(const Key('video-new-asset-label')),
+        '   ',
+      );
+      await tester.pump();
+      final submit = tester.widget<FilledButton>(
+        find.byKey(const Key('video-new-asset-submit')),
+      );
+      expect(submit.onPressed, isNull);
+      expect(repo.createdAssets, isEmpty);
     });
 
     testWidgets('手機寬 320：不超出', (tester) async {

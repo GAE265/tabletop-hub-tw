@@ -1,4 +1,4 @@
-// 換素材（2026-11-25 永傑決定，最小版）的測試共用資料（自編）。
+// 換素材（2026-11-25 永傑決定；完整版）的測試共用資料（自編）。
 import 'package:tabletop_hub/domains/rules_qa/data/video_studio_models.dart';
 
 import '../../support/fakes.dart';
@@ -23,8 +23,8 @@ DraftAsset swapAsset(
   usedInSegments: used,
 );
 
-/// s1：主畫面三張牌（紅牌、牌背、藍牌，不能換）、側欄是圖板（可以換）；s2：主畫面是紅牌（可以換）。
-/// 素材另有繪製的骰子、已略過的金幣（都不能拿來換）。
+/// s1：主畫面三張牌（c1 紅牌／牌背、c2 藍牌／牌背、c3 紅牌沒有牌背）、側欄是圖板；
+/// s2：主畫面是紅牌。素材另有繪製的骰子、已略過的金幣（都不能拿來換）。
 VideoDraft swapDraft({
   int version = 3,
   List<int>? boardUsed = const [1],
@@ -41,7 +41,12 @@ VideoDraft swapDraft({
           slot: 'main',
           kind: 'items',
           assetKeys: ['red', 'back', 'blue'],
-          swappable: false,
+          swappable: true,
+          items: [
+            DraftItem(itemKey: 'c1', assetKey: 'red', backAssetKey: 'back'),
+            DraftItem(itemKey: 'c2', assetKey: 'blue', backAssetKey: 'back'),
+            DraftItem(itemKey: 'c3', assetKey: 'red'),
+          ],
         ),
         DraftSlot(
           slot: 'sidebar',
@@ -85,17 +90,14 @@ VideoDraft swapDraft({
   pagesStale: false,
 );
 
-/// 換 s1 側欄（圖板 → 藍牌）的結果：移除框線 h1 與一個移動，圖板沒有段在用了。
+/// 換 s1 側欄（圖板 → 藍牌）的結果：框線等都保留，甲區、乙區要在藍牌上重標，圖板沒有段在用了。
 const sidebarSwapResult = SegmentSwapResult(
   segmentKey: 's1',
   slot: 'sidebar',
+  face: 'front',
   oldAssetKey: 'board',
   newAssetKey: 'blue',
-  removed: SwapRemoved(
-    highlights: ['h1'],
-    labels: [],
-    cues: [SwapRemovedCue(beatKey: 'b1', action: 'move', target: 'main.c1')],
-  ),
+  regionsToMark: ['甲區', '乙區'],
   unusedAssets: ['board'],
   videoVersion: 4,
 );

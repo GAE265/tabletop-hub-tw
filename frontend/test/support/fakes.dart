@@ -1789,9 +1789,9 @@ class FakeVideoStudioRepository implements VideoStudioRepository {
     return drafts[projectId];
   }
 
-  // --- 換素材（2026-11-25）---
+  // --- 換素材（2026-11-25；完整版）---
 
-  /// 換素材的結果；沒給時依請求組一個沒有移除任何東西的結果。
+  /// 換素材的結果；沒給時依請求組一個不用重標的結果。
   SegmentSwapResult? swapResult;
   Object? swapError;
   final swaps = <(String, String, SegmentSwapInput)>[];
@@ -1809,32 +1809,49 @@ class FakeVideoStudioRepository implements VideoStudioRepository {
         .firstWhere((s) => s.segmentKey == segmentKey)
         .slots
         .firstWhere((s) => s.slot == input.slot);
+    final item = input.itemKey == null
+        ? null
+        : slot.items.firstWhere((i) => i.itemKey == input.itemKey);
+    final oldKey = item == null
+        ? slot.assetKeys.single
+        : (input.face == 'back' ? item.backAssetKey! : item.assetKey);
     final result =
         swapResult ??
         SegmentSwapResult(
           segmentKey: segmentKey,
           slot: input.slot,
-          oldAssetKey: slot.assetKeys.single,
+          itemKey: input.itemKey,
+          face: input.face,
+          oldAssetKey: oldKey,
           newAssetKey: input.assetKey,
-          removed: const SwapRemoved(highlights: [], labels: [], cues: []),
+          regionsToMark: const [],
           unusedAssets: const [],
           videoVersion: draft.videoVersion + 1,
         );
-    // 草稿跟著更新：那一格換成新素材、版本加 1、沒有段在用的素材標成空的段號
+    // 草稿跟著更新：那一格（或那一張牌的那一面）換成新素材、版本加 1、
+    // 沒有段在用的素材標成空的段號
+    DraftSlot updated(DraftSlot x) {
+      if (x.slot != input.slot) return x;
+      if (item == null) return x.copyWith(assetKeys: [input.assetKey]);
+      return x.copyWith(
+        items: [
+          for (final i in x.items)
+            i.itemKey != item.itemKey
+                ? i
+                : input.face == 'back'
+                ? i.copyWith(backAssetKey: input.assetKey)
+                : i.copyWith(assetKey: input.assetKey),
+        ],
+      );
+    }
+
     drafts[projectId] = draft.copyWith(
       videoVersion: result.videoVersion,
       segments: [
         for (final s in draft.segments)
           s.segmentKey != segmentKey
               ? s
-              : s.copyWith(
-                  slots: [
-                    for (final x in s.slots)
-                      x.slot == input.slot
-                          ? x.copyWith(assetKeys: [input.assetKey])
-                          : x,
-                  ],
-                ),
+              : s.copyWith(slots: [for (final x in s.slots) updated(x)]),
       ],
       assets: [
         for (final a in draft.assets)
@@ -1844,6 +1861,51 @@ class FakeVideoStudioRepository implements VideoStudioRepository {
       ],
     );
     return result;
+  }
+
+  /// 新增素材（換素材完整版）：代號依序是 custom_1、custom_2…
+  Object? createAssetError;
+  final createdAssets = <(String, VideoAssetCreate)>[];
+
+  @override
+  Future<VideoAsset> createAsset(
+    String projectId,
+    VideoAssetCreate input,
+  ) async {
+    createdAssets.add((projectId, input));
+    if (createAssetError != null) throw createAssetError!;
+    final draft = drafts[projectId]!;
+    final key = 'custom_${createdAssets.length}';
+    drafts[projectId] = draft.copyWith(
+      videoVersion: draft.videoVersion + 1,
+      assets: [
+        ...draft.assets,
+        DraftAsset(
+          assetKey: key,
+          label: input.label,
+          kind: 'flat_photo',
+          priority: 'must',
+          reason: '店員新增：${input.label}',
+          shot: input.shot,
+          representative: false,
+          regions: const [],
+          hasPhoto: false,
+          usedInSegments: const [],
+        ),
+      ],
+    );
+    return VideoAsset(
+      assetKey: key,
+      label: input.label,
+      kind: 'flat_photo',
+      priority: 'must',
+      reason: '店員新增：${input.label}',
+      shot: input.shot,
+      hasPhoto: false,
+      orientation: 0,
+      regions: const {},
+      videoVersion: draft.videoVersion + 1,
+    );
   }
 
   // --- 素材（MR 8）：key 是 '<專案>/<asset_key>' ---

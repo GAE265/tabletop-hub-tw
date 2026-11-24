@@ -199,49 +199,74 @@ class _VideoDraftPageState extends ConsumerState<VideoDraftPage> {
   }
 }
 
-/// 每段的素材（換素材，2026-11-25 永傑決定，最小版）：每段列出格子用了哪個素材；
-/// 單一素材的格子可以換成清單裡的另一個素材，放好幾張牌的格子寫明不支援。
+/// 每段的素材（換素材，2026-11-25 永傑決定；完整版）：每段列出格子用了哪個素材。
+/// 單一素材的格子可以換；放好幾張牌的格子逐張列出，可以換正面或牌背。
+/// 選單裡可以「新增素材…」，建立後直接換上。框線、標籤、動作都保留，換完提示要重標的區域。
 class _SegmentAssets extends ConsumerWidget {
   const _SegmentAssets({required this.projectId, required this.draft});
 
   final String projectId;
   final VideoDraft draft;
 
+  static const _newAsset = '\u0000new';
+
   Future<void> _pick(
     BuildContext context,
-    WidgetRef ref,
-    DraftSegment segment,
-    DraftSlot slot,
-  ) async {
-    final candidates = swapCandidates(draft, slot);
+    WidgetRef ref, {
+    required DraftSegment segment,
+    required DraftSlot slot,
+    required String current,
+    required String title,
+    String? itemKey,
+    String face = 'front',
+  }) async {
+    final candidates = swapCandidates(draft, current);
     final picked = await showDialog<String>(
       context: context,
       builder: (context) => SimpleDialog(
-        title: Text('${slotDisplayName(slot.slot)}換成哪個素材？'),
+        title: Text(title),
         children: [
-          if (candidates.isEmpty)
-            const Padding(
-              padding: EdgeInsets.all(AppSpacing.medium),
-              child: Text('沒有其他可以換的素材'),
-            ),
           for (final a in candidates)
             SimpleDialogOption(
               key: Key('video-swap-option-${a.assetKey}'),
               onPressed: () => Navigator.of(context).pop(a.assetKey),
               child: Text(assetDisplayName(a)),
             ),
+          SimpleDialogOption(
+            key: const Key('video-swap-new'),
+            onPressed: () => Navigator.of(context).pop(_newAsset),
+            child: const Text('新增素材…'),
+          ),
         ],
       ),
     );
     if (picked == null || !context.mounted) return;
-    await ref
-        .read(videoSegmentSwapProvider(projectId).notifier)
-        .swap(
-          draft: draft,
-          segmentKey: segment.segmentKey,
-          slot: slot,
-          assetKey: picked,
-        );
+    final notifier = ref.read(videoSegmentSwapProvider(projectId).notifier);
+    if (picked != _newAsset) {
+      await notifier.swap(
+        draft: draft,
+        segmentKey: segment.segmentKey,
+        slot: slot,
+        assetKey: picked,
+        itemKey: itemKey,
+        face: face,
+      );
+      return;
+    }
+    final input = await showDialog<(String, String)>(
+      context: context,
+      builder: (context) => const _NewAssetDialog(),
+    );
+    if (input == null || !context.mounted) return;
+    await notifier.createAndSwap(
+      draft: draft,
+      segmentKey: segment.segmentKey,
+      slot: slot,
+      label: input.$1,
+      shot: input.$2,
+      itemKey: itemKey,
+      face: face,
+    );
   }
 
   @override
@@ -254,6 +279,86 @@ class _SegmentAssets extends ConsumerWidget {
     final names = {
       for (final a in draft.assets) a.assetKey: assetDisplayName(a),
     };
+    String name(String key) => names[key] ?? key;
+
+    Widget row(String label, Key labelKey, List<Widget> buttons) => Row(
+      children: [
+        Expanded(child: Text(label, key: labelKey)),
+        ...buttons,
+      ],
+    );
+
+    TextButton button(Key key, String label, VoidCallback onPressed) =>
+        TextButton(
+          key: key,
+          onPressed: state.busy ? null : onPressed,
+          child: Text(label),
+        );
+
+    List<Widget> slotRows(DraftSegment segment, DraftSlot slot) {
+      final base = 'video-segment-${segment.segmentKey}-${slot.slot}';
+      final where = slotDisplayName(slot.slot);
+      if (slot.kind != 'items') {
+        return [
+          row('$where：${slot.assetKeys.map(name).join('、')}', Key(base), [
+            button(
+              Key('$base-swap'),
+              '換素材',
+              () => _pick(
+                context,
+                ref,
+                segment: segment,
+                slot: slot,
+                current: slot.assetKeys.single,
+                title: '$where換成哪個素材？',
+              ),
+            ),
+          ]),
+        ];
+      }
+      return [
+        Text(where, style: muted),
+        for (final (i, item) in slot.items.indexed)
+          row(
+            [
+              '第 ${i + 1} 張：${name(item.assetKey)}',
+              if (item.backAssetKey case final back?) '（牌背：${name(back)}）',
+            ].join(),
+            Key('$base-${item.itemKey}'),
+            [
+              button(
+                Key('$base-${item.itemKey}-front'),
+                '換正面',
+                () => _pick(
+                  context,
+                  ref,
+                  segment: segment,
+                  slot: slot,
+                  current: item.assetKey,
+                  title: '第 ${i + 1} 張的正面換成哪個素材？',
+                  itemKey: item.itemKey,
+                ),
+              ),
+              if (item.backAssetKey case final back?)
+                button(
+                  Key('$base-${item.itemKey}-back'),
+                  '換牌背',
+                  () => _pick(
+                    context,
+                    ref,
+                    segment: segment,
+                    slot: slot,
+                    current: back,
+                    title: '第 ${i + 1} 張的牌背換成哪個素材？',
+                    itemKey: item.itemKey,
+                    face: 'back',
+                  ),
+                ),
+            ],
+          ),
+      ];
+    }
+
     return ThickCard(
       key: const Key('video-draft-segment-assets'),
       child: Padding(
@@ -262,7 +367,7 @@ class _SegmentAssets extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text('每段的素材', style: text.titleMedium),
-            Text('AI 指定錯素材時，可以換成清單裡的另一個素材', style: muted),
+            Text('AI 指定錯素材時，可以換成清單裡的另一個素材，或新增一個', style: muted),
             if (state.notice case final notice?) ...[
               const SizedBox(height: AppSpacing.small),
               NoticeBanner(key: const Key('video-swap-notice'), text: notice),
@@ -299,43 +404,70 @@ class _SegmentAssets extends ConsumerWidget {
                   overflow: TextOverflow.ellipsis,
                   style: text.bodyMedium!.copyWith(fontWeight: FontWeight.w600),
                 ),
-                for (final slot in segment.slots) ...[
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          '${slotDisplayName(slot.slot)}：'
-                          '${slot.assetKeys.map((k) => names[k] ?? k).join('、')}',
-                          key: Key(
-                            'video-segment-${segment.segmentKey}-${slot.slot}',
-                          ),
-                        ),
-                      ),
-                      if (slot.swappable)
-                        TextButton(
-                          key: Key(
-                            'video-segment-${segment.segmentKey}-${slot.slot}-swap',
-                          ),
-                          onPressed: state.busy
-                              ? null
-                              : () => _pick(context, ref, segment, slot),
-                          child: const Text('換素材'),
-                        ),
-                    ],
-                  ),
-                  if (!slot.swappable)
-                    Text(
-                      '這一段目前不支援換素材',
-                      key: Key(
-                        'video-segment-${segment.segmentKey}-${slot.slot}-unsupported',
-                      ),
-                      style: muted,
-                    ),
-                ],
+                for (final slot in segment.slots) ...slotRows(segment, slot),
               ],
           ],
         ),
       ),
+    );
+  }
+}
+
+/// 新增素材：中文名稱（必填）與拍攝說明（選填）。回傳（名稱, 拍攝說明）。
+class _NewAssetDialog extends StatefulWidget {
+  const _NewAssetDialog();
+
+  @override
+  State<_NewAssetDialog> createState() => _NewAssetDialogState();
+}
+
+class _NewAssetDialogState extends State<_NewAssetDialog> {
+  final _label = TextEditingController();
+  final _shot = TextEditingController();
+
+  @override
+  void dispose() {
+    _label.dispose();
+    _shot.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ready = _label.text.trim().isNotEmpty;
+    return AlertDialog(
+      title: const Text('新增素材'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            key: const Key('video-new-asset-label'),
+            controller: _label,
+            maxLength: 30,
+            decoration: const InputDecoration(labelText: '名稱（例如：白薔薇）'),
+            onChanged: (_) => setState(() {}),
+          ),
+          TextField(
+            key: const Key('video-new-asset-shot'),
+            controller: _shot,
+            maxLength: 200,
+            decoration: const InputDecoration(labelText: '怎麼拍（選填）'),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('取消'),
+        ),
+        FilledButton(
+          key: const Key('video-new-asset-submit'),
+          onPressed: ready
+              ? () => Navigator.of(context).pop((_label.text, _shot.text))
+              : null,
+          child: const Text('建立並換上'),
+        ),
+      ],
     );
   }
 }

@@ -2,7 +2,9 @@
 
 2026-11-25 永傑決定，最小版。
 
-請求 `{"slot", "asset_key", "video_version"}`；`video_version` 是店員看到的那一版，不同就 409。
+請求 `{"slot", "asset_key", "video_version"}`，放牌的格子另加 `item_key` 與 `face`（front／back）；
+`video_version` 是店員看到的那一版，不同就 409。完整版：框線、標籤、動作保留，區域沿用到新素材、
+回應的 `regions_to_mark` 列出要重標的區域（最小版是移除，2026-11-25 永傑改成沿用並重標）。
 草稿 API 的每一段帶出放素材的格子（`slots`），每個素材帶出哪幾段用到它（`used_in_segments`）。
 
 草稿用 tests/rules_qa/video_script_support.llm_output()：
@@ -61,12 +63,26 @@ def _version(rules_db: Engine, project: uuid.UUID) -> int:
     return project_row(rules_db, project).video_version
 
 
-def _swap(api, rules_db, project, segment="s1", slot="sidebar", asset="blue", version=None):
+def _swap(
+    api,
+    rules_db,
+    project,
+    segment="s1",
+    slot="sidebar",
+    asset="blue",
+    version=None,
+    item=None,
+    face=None,
+):
     body = {
         "slot": slot,
         "asset_key": asset,
         "video_version": _version(rules_db, project) if version is None else version,
     }
+    if item is not None:
+        body["item_key"] = item
+    if face is not None:
+        body["face"] = face
     return api.patch(f"{URL}/{project}/segments/{segment}", json=body)
 
 
@@ -81,17 +97,23 @@ def _segment(rules_db, project, key):
 def test_draft_lists_slots_and_asset_usage(api, as_shop_staff, project):
     draft = api.get(f"{URL}/{project}/draft").json()
     s1, s2 = draft["segments"]
-    assert s1["slots"] == [
-        {
-            "slot": "main",
-            "kind": "items",
-            "asset_keys": ["red", "back", "blue"],
-            "swappable": False,
-        },
-        {"slot": "sidebar", "kind": "asset", "asset_keys": ["board"], "swappable": True},
+    main, sidebar = s1["slots"]
+    assert (main["slot"], main["kind"], main["swappable"]) == ("main", "items", True)
+    assert main["asset_keys"] == ["red", "back", "blue"]
+    assert [(i["item_key"], i["asset_key"], i["back_asset_key"]) for i in main["items"]] == [
+        ("c1", "red", "back"),
+        ("c2", "blue", "back"),
+        ("c3", "red", "back"),
     ]
+    assert sidebar == {
+        "slot": "sidebar",
+        "kind": "asset",
+        "asset_keys": ["board"],
+        "swappable": True,
+        "items": [],
+    }
     assert s2["slots"] == [
-        {"slot": "main", "kind": "asset", "asset_keys": ["red"], "swappable": True}
+        {"slot": "main", "kind": "asset", "asset_keys": ["red"], "swappable": True, "items": []}
     ]
     used = {a["asset_key"]: a["used_in_segments"] for a in draft["assets"]}
     assert used == {"back": [1], "red": [1, 2], "blue": [1], "board": [1]}
@@ -107,14 +129,17 @@ def test_swap_sidebar_asset(api, as_shop_staff, rules_db, project):
     body = response.json()
     assert body["segment_key"] == "s1" and body["slot"] == "sidebar"
     assert (body["old_asset_key"], body["new_asset_key"]) == ("board", "blue")
-    assert body["removed"]["highlights"] == ["h1"]
-    assert body["removed"]["labels"] == []
-    assert [(c["do"], c["target"]) for c in body["removed"]["cues"]] == [("move", "main.c1")]
+    assert body["regions_to_mark"] == ["zone_a"]
+    assert "removed" not in body
     assert body["unused_assets"] == ["board"]
     assert body["video_version"] == before + 1
     s1 = _segment(rules_db, project, "s1")
     assert s1["slots"]["sidebar"]["asset_key"] == "blue"
-    assert s1["highlights"] == []
+    # 完整版：框線與移動保留，藍牌多了要重標的甲區
+    assert [h["key"] for h in s1["highlights"]] == ["h1"]
+    video = project_row(rules_db, project).video
+    blue = next(a for a in video["assets"] if a["asset_key"] == "blue")
+    assert blue["regions"] == {"zone_a": None}
     assert _version(rules_db, project) == before + 1
 
 
@@ -124,19 +149,37 @@ def test_swap_records_revision(api, as_shop_staff, rules_db, project):
     assert record["kind"] == "asset_swap"
     assert record["number"] == 1
     assert "換素材" in record["request"]
-    assert "slots" in record["changed"] and "highlights" in record["changed"]
+    assert record["changed"] == ["slots"]
     assert _segment(rules_db, project, "s1")["state"]["status"] == "stale"
     # 再換一次，編號接著往下
     assert _swap(api, rules_db, project, asset="board").status_code == 200
     assert _segment(rules_db, project, "s1")["revisions"][-1]["number"] == 2
 
 
-def test_swap_main_asset_removes_nothing(api, as_shop_staff, rules_db, project):
+def test_swap_main_asset_needs_no_marking(api, as_shop_staff, rules_db, project):
     response = _swap(api, rules_db, project, segment="s2", slot="main", asset="blue")
     assert response.status_code == 200, response.text
     body = response.json()
-    assert body["removed"] == {"highlights": [], "labels": [], "cues": []}
+    assert body["regions_to_mark"] == []
     assert body["unused_assets"] == []  # red 還用在 s1 的牌
+
+
+def test_swap_item_front(api, as_shop_staff, rules_db, project):
+    response = _swap(api, rules_db, project, slot="main", asset="red", item="c2")
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert (body["old_asset_key"], body["new_asset_key"]) == ("blue", "red")
+    assert body["item_key"] == "c2" and body["face"] == "front"
+    items = _segment(rules_db, project, "s1")["slots"]["main"]["items"]
+    assert items[1]["asset_key"] == "red" and items[1]["back_asset_key"] == "back"
+    assert body["unused_assets"] == ["blue"]  # 藍牌只用在 c2 的正面
+
+
+def test_swap_item_back(api, as_shop_staff, rules_db, project):
+    response = _swap(api, rules_db, project, slot="main", asset="blue", item="c1", face="back")
+    assert response.status_code == 200, response.text
+    items = _segment(rules_db, project, "s1")["slots"]["main"]["items"]
+    assert items[0]["asset_key"] == "red" and items[0]["back_asset_key"] == "blue"
 
 
 def test_unused_asset_not_required_any_more(api, as_shop_staff, rules_db, project):
@@ -146,6 +189,8 @@ def test_unused_asset_not_required_any_more(api, as_shop_staff, rules_db, projec
     after = api.get(f"{URL}/{project}/readiness").json()
     assert "board" not in [m["asset_key"] for m in after["missing_photos"]]
     assert "board" not in [m["asset_key"] for m in after["missing_regions"]]
+    # 甲區沿用到藍牌，要在藍牌上重標
+    assert {"asset_key": "blue", "region": "zone_a"} in after["missing_regions"]
     used = {
         a["asset_key"]: a["used_in_segments"]
         for a in api.get(f"{URL}/{project}/draft").json()["assets"]
@@ -158,11 +203,19 @@ def test_unused_asset_not_required_any_more(api, as_shop_staff, rules_db, projec
     [
         ("s9", "main", "blue", 404, "RULES_VIDEO_SEGMENT_NOT_FOUND"),
         ("s1", "side", "blue", 422, "RULES_VIDEO_SLOT_NOT_FOUND"),
-        ("s1", "main", "blue", 422, "RULES_VIDEO_SWAP_UNSUPPORTED"),
+        ("s1", "main_title", "blue", 422, "RULES_VIDEO_SWAP_UNSUPPORTED"),
+        ("s1", "main", "blue", 422, "RULES_VIDEO_ITEM_REQUIRED"),
         ("s1", "sidebar", "nope", 422, "RULES_VIDEO_SWAP_ASSET_INVALID"),
         ("s1", "sidebar", "board", 422, "RULES_VIDEO_SWAP_SAME_ASSET"),
     ],
-    ids=["segment-missing", "slot-missing", "items-slot", "asset-missing", "same-asset"],
+    ids=[
+        "segment-missing",
+        "slot-missing",
+        "text-slot",
+        "item-required",
+        "asset-missing",
+        "same-asset",
+    ],
 )
 def test_swap_rejected(api, as_shop_staff, rules_db, project, segment, slot, asset, status, code):
     before = project_row(rules_db, project).video
@@ -172,7 +225,7 @@ def test_swap_rejected(api, as_shop_staff, rules_db, project, segment, slot, ass
 
 
 def test_unsupported_slot_message(api, as_shop_staff, rules_db, project):
-    response = _swap(api, rules_db, project, slot="main")
+    response = _swap(api, rules_db, project, slot="main_title")
     assert response.json()["error"]["message"] == "這一段目前不支援換素材"
 
 
@@ -194,6 +247,18 @@ def test_drawn_asset_is_invalid(api, as_shop_staff, rules_db, project):
         )
     response = _swap(api, rules_db, project, asset="dice")
     assert response.status_code == 422 and _code(response) == "RULES_VIDEO_SWAP_ASSET_INVALID"
+
+
+@pytest.mark.parametrize(
+    ("item", "face", "code"),
+    [("c9", "front", "RULES_VIDEO_ITEM_NOT_FOUND"), ("c1", "side", None)],
+    ids=["item-missing", "bad-face"],
+)
+def test_item_swap_rejected(api, as_shop_staff, rules_db, project, item, face, code):
+    response = _swap(api, rules_db, project, slot="main", asset="blue", item=item, face=face)
+    assert response.status_code == 422
+    if code:
+        assert _code(response) == code
 
 
 @pytest.mark.parametrize("missing", ["slot", "asset_key", "video_version"])
