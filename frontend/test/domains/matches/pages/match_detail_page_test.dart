@@ -252,7 +252,10 @@ void main() {
       final repo = await pumpMatches(tester, detail);
       await tapKey(tester, 'turn-submit');
       expect(find.text('請至少選一個出牌的座位'), findsNothing);
-      expect(repo.turnCalls.single.input.gameData['played_seat_numbers'], isEmpty);
+      expect(
+        repo.turnCalls.single.input.gameData['played_seat_numbers'],
+        isEmpty,
+      );
       expect(find.byKey(const Key('turn-1')), findsOneWidget);
     });
 

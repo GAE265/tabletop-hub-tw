@@ -41,7 +41,7 @@ String turnTitle(MatchTurn turn) => [
 String turnPlayedText(Map<String, dynamic> data) =>
     '出牌座位 ${(data['played_seat_numbers'] as List?)?.join('、') ?? '-'}';
 
-/// 回合小卡的膠囊（白薔薇）：不是 0 的數量，例如「雙刃 2」，有白薔薇時加「白薔薇」。
+/// 回合小卡的膠囊（白薔薇）：不是 0 的數量，例如「雙刃 2」，有白薔薇時加「白薔薇」、有司教時加「司教」。
 List<String> turnChips(Map<String, dynamic> data) {
   int count(String key) => (data[key] as num?)?.toInt() ?? 0;
   return [
@@ -53,6 +53,7 @@ List<String> turnChips(Map<String, dynamic> data) {
     ])
       if (count(key) > 0) '$label ${count(key)}',
     if (data['has_white_rose'] == true) '白薔薇',
+    if (data['has_cardinal'] == true) '司教',
   ];
 }
 
