@@ -654,7 +654,15 @@ void main() {
 
     testWidgets('客人到店、離店結帳：依狀態顯示按鈕，按下後更新', (tester) async {
       final repo = FakeBookingRepository()..board = [sampleBooking()];
-      await pumpAt(tester, '/booking/board', repo: repo, user: staff);
+      // 固定在訂位時段中間（台灣時間 15:00）。用真的現在的話，
+      // 過了 sampleBooking 的結束時間，看板會顯示「已超時」而不是「已入座」
+      await pumpAt(
+        tester,
+        '/booking/board',
+        repo: repo,
+        user: staff,
+        clock: () => DateTime.utc(2026, 11, 25, 7),
+      );
       expect(find.byKey(const Key('board-complete-7')), findsNothing);
       expect(
         find.descendant(
