@@ -48,9 +48,9 @@ jobs:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
           JOB_STATUS: ${{ job.status }}
           REPO: ${{ github.repository }}
-          BRANCH: ${{ github.ref_name }}
-          COMMIT: ${{ github.sha }}
-          ACTOR: ${{ github.actor }}
+          BRANCH: ${{ github.event.workflow_run.head_branch }}
+          COMMIT: ${{ github.event.workflow_run.head_sha }}
+          ACTOR: ${{ github.event.workflow_run.actor.login }}
         run: |
           if [ "$JOB_STATUS" = "success" ]; then
             STATUS="✅ 部署成功"
@@ -68,3 +68,24 @@ jobs:
             '{content: $content}' |
             curl -sS -H "Content-Type: application/json" \
             -d @- "$DISCORD_WEBHOOK"
+
+  # 部署成功後才觸發 E2E（deploy 失敗或被跳過時此 job 不會執行）。
+  # 只送出請求（202）就結束，不等測試跑完；結果由 E2E server 直接發 Discord 通知。
+  e2e:
+    needs: deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Trigger E2E tests
+        env:
+          E2E_URL: ${{ secrets.E2E_URL }}
+          E2E_API_TOKEN: ${{ secrets.E2E_API_TOKEN }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+          IDEM: ${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          RESP=$(curl -fsS --retry 3 --retry-all-errors -X POST "$E2E_URL/api/v1/test-runs" \
+            -H "Authorization: Bearer $E2E_API_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{\"project\":\"tabletop-hub-tw\",\"git_sha\":\"$SHA\",\"backend_tag\":\"$SHA\",\"frontend_tag\":\"$SHA\",\"idempotency_key\":\"$IDEM\"}")
+          echo "$RESP"
+          echo "E2E 已排入佇列：$(jq -r .run_id <<<"$RESP")（結果將由 E2E server 發送 Discord 通知）" >> "$GITHUB_STEP_SUMMARY"
