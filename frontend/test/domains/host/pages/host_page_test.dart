@@ -407,6 +407,74 @@ void main() {
     });
   });
 
+  group('按「結束主持」回到開主持前', () {
+    Future<HostPageHarness> pressEnd(WidgetTester tester) async {
+      final h = HostPageHarness();
+      await h.pump(tester);
+      await h.start(tester);
+      await tester.tap(find.byKey(const Key('host-end')));
+      await tester.pump();
+      return h;
+    }
+
+    /// widget 測試的假時間裡，關連線的等待要給它一點真的時間才會完成。
+    Future<void> settleClosing(WidgetTester tester) async {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 50)),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    void expectSetup() {
+      expect(find.byKey(const Key('host-setup-header')), findsOneWidget);
+      expect(find.byKey(const Key('host-player-count')), findsOneWidget);
+      expect(find.byKey(const Key('host-end')), findsNothing);
+      expect(find.byKey(const Key('host-next')), findsNothing);
+    }
+
+    testWidgets('後端回已結束：換到開主持前的畫面，有「接著主持」「重新開始」', (tester) async {
+      final h = await pressEnd(tester);
+      await h.emit(
+        tester,
+        HostStateMessage(liveState(status: HostStatus.ended)),
+      );
+      expectSetup();
+      expect(find.byKey(const Key('host-resume')), findsOneWidget);
+      expect(find.byKey(const Key('host-restart')), findsOneWidget);
+      expect(find.text('這一局已經結束'), findsNothing);
+    });
+
+    testWidgets('結束台詞 10 秒沒播完：一樣關連線，不顯示連不上', (tester) async {
+      final h = await pressEnd(tester);
+      await h.emit(
+        tester,
+        HostStateMessage(liveState(status: HostStatus.ended)),
+      );
+      await tester.pump(const Duration(seconds: 9));
+      expect(h.stream.closed, isFalse);
+
+      await tester.pump(const Duration(seconds: 2));
+      await settleClosing(tester);
+      expect(h.stream.closed, isTrue);
+      expectSetup();
+      expect(find.text('主持人暫時連不上，請稍後再試'), findsNothing);
+    });
+
+    testWidgets('後端 10 秒沒回應：關連線並換到開主持前的畫面', (tester) async {
+      final h = await pressEnd(tester);
+      await tester.pump(const Duration(seconds: 9));
+      expect(find.byKey(const Key('host-next')), findsOneWidget);
+
+      await tester.pump(const Duration(seconds: 2));
+      await settleClosing(tester);
+      expect(h.stream.closed, isTrue);
+      expect(h.capture.capturing, isFalse);
+      expect(h.wakeLock.held, isFalse);
+      expectSetup();
+      expect(find.text('主持人暫時連不上，請稍後再試'), findsNothing);
+    });
+  });
+
   group('提醒（spec §14.5）', () {
     testWidgets('頁面被切走後回來：「點一下繼續」，點了送 resume', (tester) async {
       final h = HostPageHarness();
