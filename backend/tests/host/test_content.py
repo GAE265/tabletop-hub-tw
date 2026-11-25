@@ -113,8 +113,17 @@ def test_opening_does_not_read_numbers() -> None:
 def test_night_lines_carry_the_countdowns() -> None:
     assert "三、二、一" in content.fixed_line("night_1")
     night_2 = content.fixed_line("night_2")
-    assert "十、九、八、七、六、五、四、三、二、一" in night_2
+    assert "五、四、三、二、一" in night_2
     assert "天亮了" in night_2
+
+
+def test_night_2_sends_the_twin_blade_card_by_dealer() -> None:
+    """夜晚第二步改由發牌機把雙刃牌送給雙刃（立倫 2026-11-25）：不再敲桌子，也沒有十秒的倒數。"""
+    night_2 = content.fixed_line("night_2")
+    for words in ("發牌機", "雙刃牌", "發牌機正在運作", "幽魂牌"):
+        assert words in night_2
+    assert "敲桌子" not in night_2
+    assert "十、九" not in night_2
 
 
 def test_back_to_inside_a_turn_names_turn_and_phase() -> None:
