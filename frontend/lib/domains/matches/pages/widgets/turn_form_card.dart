@@ -118,6 +118,7 @@ class _TurnFormCardState extends ConsumerState<TurnFormCard> {
               ),
           ],
         ),
+        FieldError(form.errors['playedSeats']),
         const SizedBox(height: AppSpacing.small),
         Wrap(
           spacing: AppSpacing.large,
@@ -151,18 +152,28 @@ class _TurnFormCardState extends ConsumerState<TurnFormCard> {
               ),
           ],
         ),
-        SwitchListTile(
-          key: const Key('turn-white-rose'),
-          contentPadding: EdgeInsets.zero,
-          title: const Text('有白薔薇'),
+        _OnceCardSwitch(
+          switchKey: const Key('turn-white-rose'),
+          label: '有白薔薇',
           value: form.hasWhiteRose,
+          recordedTurn: recordedTurnOf(
+            OnceCard.whiteRose,
+            widget.match.turns,
+            editingTurn: form.turnNumber,
+          ),
+          error: form.errors['hasWhiteRose'],
           onChanged: n.setHasWhiteRose,
         ),
-        SwitchListTile(
-          key: const Key('turn-cardinal'),
-          contentPadding: EdgeInsets.zero,
-          title: const Text('司教'),
+        _OnceCardSwitch(
+          switchKey: const Key('turn-cardinal'),
+          label: '司教',
           value: form.hasCardinal,
+          recordedTurn: recordedTurnOf(
+            OnceCard.cardinal,
+            widget.match.turns,
+            editingTurn: form.turnNumber,
+          ),
+          error: form.errors['hasCardinal'],
           onChanged: n.setHasCardinal,
         ),
         if (form.overwrite case final prompt?) ...[
@@ -204,6 +215,45 @@ class _TurnFormCardState extends ConsumerState<TurnFormCard> {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// 一局只出現一次的牌（白薔薇、司教）的開關。
+///
+/// 別的回合已經記過（[recordedTurn] 不為 null）時，開關關著就不能打開，下方顯示是哪一回合；
+/// 如果已經打開（例如打開後才改了回合編號），仍然可以關掉。
+class _OnceCardSwitch extends StatelessWidget {
+  const _OnceCardSwitch({
+    required this.switchKey,
+    required this.label,
+    required this.value,
+    required this.recordedTurn,
+    required this.error,
+    required this.onChanged,
+  });
+
+  final Key switchKey;
+  final String label;
+  final bool value;
+  final int? recordedTurn;
+  final String? error;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final turn = recordedTurn;
+    return SwitchListTile(
+      key: switchKey,
+      contentPadding: EdgeInsets.zero,
+      title: Text(label),
+      subtitle: error != null
+          ? FieldError(error)
+          : turn == null
+          ? null
+          : Text(onceCardReason(turn)),
+      value: value,
+      onChanged: turn == null || value ? onChanged : null,
     );
   }
 }

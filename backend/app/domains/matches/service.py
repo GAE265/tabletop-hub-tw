@@ -327,20 +327,46 @@ class MatchesService:
                 )
 
             existing = self._repo.find_turn(match_id, data.turn_number)
-            if existing is None:
-                turn = self._repo.add_turn(
-                    match_id, data.turn_number, data.seat_number, game_data, user.id
-                )
-                return self._turn_response(turn), True
-            if not overwrite:
+            if existing is not None and not overwrite:
                 raise AppError(
                     409,
                     "MATCH_TURN_ALREADY_RECORDED",
                     f"第 {data.turn_number} 回合已經有紀錄",
                     {"existing": self._existing_turn_details(existing)},
                 )
+            self._check_once_per_match(match_id, data.turn_number, definition, game_data)
+            if existing is None:
+                turn = self._repo.add_turn(
+                    match_id, data.turn_number, data.seat_number, game_data, user.id
+                )
+                return self._turn_response(turn), True
             turn = self._repo.update_turn(existing.id, data.seat_number, game_data, user.id)
             return self._turn_response(turn), False
+
+    def _check_once_per_match(
+        self,
+        match_id: uuid.UUID,
+        turn_number: int,
+        definition: GameDefinition,
+        game_data: dict,
+    ) -> None:
+        """白薔薇、司教這類一局只出現一次的欄位，別的回合已經記過就是 409。
+
+        正在記錄（或覆蓋）的這一回合不算，所以編輯原本就有白薔薇的回合可以保留。
+        """
+        wanted = [once for once in definition.once_per_match if game_data.get(once.field)]
+        if not wanted:
+            return
+        others = [t for t in self._repo.list_turns(match_id) if t.turn_number != turn_number]
+        for once in wanted:
+            taken = [t.turn_number for t in others if t.game_data.get(once.field)]
+            if taken:
+                raise AppError(
+                    409,
+                    once.error_code,
+                    f"這一局第 {taken[0]} 回合已經記錄過{once.label}",
+                    {"turn_numbers": taken},
+                )
 
     # --- 結果 ---
 

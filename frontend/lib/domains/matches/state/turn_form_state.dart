@@ -3,12 +3,44 @@ import 'dart:math' as math;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/api/api_exception.dart';
+import '../data/game_match.dart';
 import '../data/match_input.dart';
 import '../data/matches_repository.dart';
 import 'match_detail_state.dart';
 
 /// 同一回合已有紀錄時，請使用者確認的提示文字。
 const overwritePromptText = '已經有人記錄了，要更新嗎？';
+
+/// 有記錄到牌（任何數量大於 0，或有白薔薇、司教）卻沒選出牌座位時的欄位錯誤；和後端一致。
+const playedSeatsRequiredText = '這回合有記錄到牌，請選出牌的座位';
+
+/// 一局只能出現在一個回合的牌（白薔薇、司教）；[field] 是 game_data 的欄位名稱。
+enum OnceCard {
+  whiteRose('has_white_rose'),
+  cardinal('has_cardinal');
+
+  const OnceCard(this.field);
+
+  final String field;
+}
+
+/// 這一局已經記錄 [card] 的回合編號；[editingTurn] 那一回合不算（覆蓋同一回合時可以保留）。
+/// 沒有記錄過時為 null。
+int? recordedTurnOf(
+  OnceCard card,
+  Iterable<MatchTurn> turns, {
+  required int editingTurn,
+}) {
+  for (final t in turns) {
+    if (t.turnNumber != editingTurn && t.gameData[card.field] == true) {
+      return t.turnNumber;
+    }
+  }
+  return null;
+}
+
+/// 開關不能按的原因，例如「第 3 回合已記錄」。
+String onceCardReason(int turnNumber) => '第 $turnNumber 回合已記錄';
 
 /// 白薔薇一個回合要記錄的四種數量。
 enum TurnCounter { doubleBlade, darkBlade, giantBlade, faithful }
@@ -67,7 +99,7 @@ class TurnFormState {
   /// 後端回的錯誤（不含「已有紀錄」，那個走 [overwrite]）。
   final ApiException? error;
 
-  /// 欄位錯誤：鍵是 turnNumber。
+  /// 欄位錯誤：鍵是 turnNumber、playedSeats、hasWhiteRose、hasCardinal。
   final Map<String, String> errors;
 
   /// 不為 null 時，畫面要顯示 [overwritePromptText] 與確認、取消按鈕。
@@ -152,9 +184,28 @@ class TurnFormNotifier extends Notifier<TurnFormState> {
 
   void setHasCardinal(bool value) => state = state.copyWith(hasCardinal: value);
 
-  Map<String, String> _validate() => {
-    if (state.turnNumber < 1) 'turnNumber': '回合編號要從 1 開始',
-  };
+  bool get _cardsRecorded =>
+      TurnCounter.values.any((c) => state.count(c) > 0) ||
+      state.hasWhiteRose ||
+      state.hasCardinal;
+
+  Map<String, String> _validate() {
+    final turns =
+        ref.read(matchDetailProvider(matchId)).match.value?.turns ??
+        const <MatchTurn>[];
+    String? taken(OnceCard card) =>
+        switch (recordedTurnOf(card, turns, editingTurn: state.turnNumber)) {
+          final turn? => onceCardReason(turn),
+          null => null,
+        };
+    return {
+      if (state.turnNumber < 1) 'turnNumber': '回合編號要從 1 開始',
+      if (state.playedSeats.isEmpty && _cardsRecorded)
+        'playedSeats': playedSeatsRequiredText,
+      if (state.hasWhiteRose) 'hasWhiteRose': ?taken(OnceCard.whiteRose),
+      if (state.hasCardinal) 'hasCardinal': ?taken(OnceCard.cardinal),
+    };
+  }
 
   TurnInput _buildInput() => TurnInput(
     turnNumber: state.turnNumber,
