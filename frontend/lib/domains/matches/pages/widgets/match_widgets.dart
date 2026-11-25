@@ -31,10 +31,10 @@ String matchErrorText(Object error) {
   ].join();
 }
 
-/// 回合清單一列的標題，例如「第 1 回合・首家座位 1」；沒有首家時只有「第 1 回合」。
+/// 回合清單一列的標題，例如「第 1 回合・首家（有金幣）座位 1」；沒有首家時只有「第 1 回合」。
 String turnTitle(MatchTurn turn) => [
   '第 ${turn.turnNumber} 回合',
-  if (turn.seatNumber case final seat?) '首家座位 $seat',
+  if (turn.seatNumber case final seat?) '首家（有金幣）座位 $seat',
 ].join('・');
 
 /// 回合小卡的出牌座位，例如「出牌座位 1、2」。

@@ -182,7 +182,7 @@ void main() {
       expect(find.text('還沒有回合紀錄（回合紀錄是選填的，只記結果也可以）'), findsOneWidget);
     });
 
-    testWidgets('回合清單：第幾回合、首家座位、出牌座位與數量', (tester) async {
+    testWidgets('回合清單：第幾回合、首家（有金幣）座位、出牌座位與數量', (tester) async {
       await pumpMatches(
         tester,
         detail,
@@ -190,7 +190,7 @@ void main() {
           match: fakeMatch(turns: [fakeMatchTurn(turnNumber: 1)]),
         ),
       );
-      expect(inKey('turn-1', find.text('第 1 回合・首家座位 1')), findsOneWidget);
+      expect(inKey('turn-1', find.text('第 1 回合・首家（有金幣）座位 1')), findsOneWidget);
       expect(inKey('turn-1', find.textContaining('出牌座位 1、2')), findsOneWidget);
     });
 
