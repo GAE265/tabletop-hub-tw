@@ -1,8 +1,11 @@
 FROM python:3.13-slim
 
+# ffmpeg、fonts-noto-cjk：規則影片生產器產生影片用（編碼與畫面上的中文字）
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq5 \
     ca-certificates \
+    ffmpeg \
+    fonts-noto-cjk \
     && rm -rf /var/lib/apt/lists/*
 
 RUN useradd --create-home --shell /bin/bash appuser
@@ -31,6 +34,14 @@ USER appuser
 
 ENV PATH="/app/.venv/bin:$PATH"
 ENV PYTHONUNBUFFERED=1
+
+# 規則影片的預設值（部署時可用環境變數覆寫）
+# 字型：fonts-noto-cjk 的 .ttc 裡第 3 個是繁體中文（Noto Sans CJK TC）
+# 工作資料夾：程式預設的 /backend/.local 在容器裡沒有寫入權限，改放 /tmp
+ENV VIDEO_FONT_REGULAR=/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc
+ENV VIDEO_FONT_BOLD=/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc
+ENV VIDEO_FONT_INDEX=3
+ENV RULES_VIDEO_WORK_DIR=/tmp/rules_videos
 
 EXPOSE 8000
 
