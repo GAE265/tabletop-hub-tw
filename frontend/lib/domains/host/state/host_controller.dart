@@ -17,9 +17,12 @@ import 'host_labels.dart';
 const hostMinPlayers = 5;
 const hostMaxPlayers = 10;
 
+/// 按「結束主持」後最多等這麼久：等後端回已結束、等結束台詞播完，各算一次。
+const hostEndTimeout = Duration(seconds: 10);
+
 /// 和後端的 WebSocket 連線狀態。
 enum HostConnectionStatus {
-  /// 還沒開始主持。
+  /// 還沒開始主持；或按了「結束主持」，回到開主持前的畫面。
   idle,
 
   /// 正在開主持、拿通行碼或連 WebSocket。
@@ -244,6 +247,15 @@ class HostController extends Notifier<HostState> {
   bool _dropAudio = false;
   String? _utteranceId;
 
+  /// 按了「結束主持」之後的等待；有值代表正在結束。
+  Timer? _endTimer;
+
+  /// 已經回到開主持前的畫面，連線只留著唸結束台詞。
+  bool _leaving = false;
+
+  /// 結束台詞那一段；按「結束主持」之前就在說的不算。
+  String? _closingUtteranceId;
+
   HostingSessionsRepository get _repo =>
       ref.read(hostingSessionsRepositoryProvider);
   HostStreamConnector get _connector => ref.read(hostStreamConnectorProvider);
@@ -303,6 +315,7 @@ class HostController extends Notifier<HostState> {
   /// 開始主持：請求麥克風與出聲 → POST → 連 WebSocket → 開始收音 → 要求螢幕常亮。
   Future<void> start() async {
     if (state.connection == HostConnectionStatus.connecting) return;
+    _dropClosingLine();
     if (!await _prepareDevice()) return;
     await _closeStream();
     state = state.copyWith(
@@ -338,6 +351,7 @@ class HostController extends Notifier<HostState> {
     if (id == null || state.connection == HostConnectionStatus.connecting) {
       return;
     }
+    _dropClosingLine();
     if (!await _prepareDevice()) return;
     await _reconnect(id);
   }
@@ -363,8 +377,13 @@ class HostController extends Notifier<HostState> {
     state.paused ? HostCommandAction.resume : HostCommandAction.pause,
   );
 
-  /// 結束主持，不再確認（spec §3.3）。
-  void end() => _sendCommand(HostCommandAction.end);
+  /// 結束主持，不再確認（spec §3.3）：送「結束」→ 後端回已結束 → 回到開主持前的畫面
+  /// → 結束台詞播完才關連線。太早關，後端會丟掉還沒處理的「結束」，台詞也會被切斷。
+  void end() {
+    if (!state.isLive || _endTimer != null) return;
+    _sendCommand(HostCommandAction.end);
+    _endTimer = Timer(hostEndTimeout, _finishEnding);
+  }
 
   /// 按住說話：按下。本機先停播，不等後端的 `flush`。
   void talkDown() {
@@ -491,15 +510,20 @@ class HostController extends Notifier<HostState> {
 
   void _onMessage(HostServerMessage message) {
     switch (message) {
+      // 已經回到開主持前的畫面：現況與重連都不再影響畫面
+      case HostStateMessage() || HostConnectionMessage() when _leaving:
+        return;
       case HostStateMessage(:final state):
         this.state = this.state.copyWith(
           live: () => state,
           turnTakingMode: state.turnTakingMode,
           voice: state.voice,
         );
+        if (_endTimer != null && this.state.ended) _leaveHosting();
       case HostUtteranceMessage(:final utteranceId, start: true):
         _utteranceId = utteranceId;
         _dropAudio = false;
+        if (_leaving) _closingUtteranceId ??= utteranceId;
       case HostUtteranceMessage(:final utteranceId, start: false):
         if (_dropAudio || utteranceId != _utteranceId) return;
         final stream = _stream;
@@ -507,6 +531,7 @@ class HostController extends Notifier<HostState> {
           // ✅ 這一段在裝置上播完：回報給後端，後端才會自動往下走
           if (identical(stream, _stream)) {
             stream?.send(HostPlaybackDoneMessage(utteranceId));
+            if (utteranceId == _closingUtteranceId) _finishEnding();
           }
         });
       case HostAudioMessage(:final pcm):
@@ -543,6 +568,11 @@ class HostController extends Notifier<HostState> {
 
   /// 連線出錯或被取代：停止收音與播音，放開常亮，關掉連線。
   Future<void> _shutDown(HostProblem problem) async {
+    if (_leaving) {
+      // 已經回到開主持前的畫面：只是唸不完結束台詞，不用提醒
+      _finishEnding();
+      return;
+    }
     _stopPlayback();
     state = state.copyWith(
       connection: HostConnectionStatus.closed,
@@ -553,6 +583,37 @@ class HostController extends Notifier<HostState> {
     await _closeStream();
     await _stopCapture();
     await _wakeLock.release();
+  }
+
+  /// 回到開主持前的畫面：停止收音、放開常亮；連線留著唸結束台詞。
+  void _leaveHosting() {
+    _leaving = true;
+    _endTimer?.cancel();
+    _endTimer = Timer(hostEndTimeout, _finishEnding);
+    // 還在說的那一段不播了，接下來只唸結束台詞
+    _stopPlayback();
+    state = state.copyWith(
+      connection: HostConnectionStatus.idle,
+      talkHeld: false,
+      problem: () => null,
+      needsTapToResume: false,
+      audioLocked: false,
+    );
+    unawaited(_stopCapture());
+    unawaited(_wakeLock.release());
+  }
+
+  /// ✅ 結束台詞播完、等太久，或連線斷了：關連線。
+  void _finishEnding() {
+    if (!_leaving) _leaveHosting(); // 後端沒有回應
+    _dropClosingLine();
+  }
+
+  /// 還在唸結束台詞就停播、關連線；沒有在唸就不做事。
+  void _dropClosingLine() {
+    if (!_leaving) return;
+    _stopPlayback();
+    unawaited(_closeStream());
   }
 
   void _onVisibilityChanged(bool visible) {
@@ -612,6 +673,10 @@ class HostController extends Notifier<HostState> {
     final subscription = _streamSubscription;
     _stream = null;
     _streamSubscription = null;
+    _endTimer?.cancel();
+    _endTimer = null;
+    _leaving = false;
+    _closingUtteranceId = null;
     await subscription?.cancel();
     await stream?.close();
   }

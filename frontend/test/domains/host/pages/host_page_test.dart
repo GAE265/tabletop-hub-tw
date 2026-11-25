@@ -417,6 +417,14 @@ void main() {
       return h;
     }
 
+    /// widget 測試的假時間裡，關連線的等待要給它一點真的時間才會完成。
+    Future<void> settleClosing(WidgetTester tester) async {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 50)),
+      );
+      await tester.pumpAndSettle();
+    }
+
     void expectSetup() {
       expect(find.byKey(const Key('host-setup-header')), findsOneWidget);
       expect(find.byKey(const Key('host-player-count')), findsOneWidget);
@@ -446,7 +454,7 @@ void main() {
       expect(h.stream.closed, isFalse);
 
       await tester.pump(const Duration(seconds: 2));
-      await tester.pumpAndSettle();
+      await settleClosing(tester);
       expect(h.stream.closed, isTrue);
       expectSetup();
       expect(find.text('主持人暫時連不上，請稍後再試'), findsNothing);
@@ -458,7 +466,7 @@ void main() {
       expect(find.byKey(const Key('host-next')), findsOneWidget);
 
       await tester.pump(const Duration(seconds: 2));
-      await tester.pumpAndSettle();
+      await settleClosing(tester);
       expect(h.stream.closed, isTrue);
       expect(h.capture.capturing, isFalse);
       expect(h.wakeLock.held, isFalse);
