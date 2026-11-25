@@ -420,6 +420,150 @@ void main() {
     });
   });
 
+  group('按「結束主持」', () {
+    /// 開一場主持、按「結束主持」，後端回已結束。
+    Future<HostHarness> endedByButton() async {
+      final h = HostHarness();
+      await h.startHosting();
+      h.stream.emit(HostStateMessage(liveState(turnNumber: 3, phaseNumber: 2)));
+      h.controller.end();
+      h.stream.emit(
+        HostStateMessage(
+          liveState(
+            status: HostStatus.ended,
+            step: HostStep.ended,
+            turnNumber: 3,
+            phaseNumber: 2,
+          ),
+        ),
+      );
+      await pumpEventQueue();
+      return h;
+    }
+
+    /// 主持人的一段話：開始、一小段聲音、結束。
+    void speak(HostHarness h, String id) {
+      h.stream.emit(HostUtteranceMessage(utteranceId: id, start: true));
+      h.stream.emit(HostAudioMessage(pcm([1, 0])));
+      h.stream.emit(HostUtteranceMessage(utteranceId: id, start: false));
+    }
+
+    test('後端回已結束：回到開主持前，停止收音、放開常亮，連線留著唸結束台詞', () async {
+      final h = await endedByButton();
+      expect(h.state.isLive, isFalse);
+      expect(h.state.connection, HostConnectionStatus.idle);
+      expect(h.capture.capturing, isFalse);
+      expect(h.wakeLock.held, isFalse);
+      expect(h.stream.closed, isFalse);
+      expect(h.state.notices, isEmpty);
+    });
+
+    test('結束台詞播完：回報播完、關連線，不顯示連不上', () async {
+      final h = await endedByButton();
+      speak(h, 'u-end');
+      expect(h.playback.queued, hasLength(1));
+      expect(h.stream.closed, isFalse);
+
+      h.playback.finishSegments();
+      await pumpEventQueue();
+      expect(h.stream.sentJson.last, {
+        'type': 'playback_done',
+        'utterance_id': 'u-end',
+      });
+      expect(h.stream.closed, isTrue);
+      expect(h.state.connection, HostConnectionStatus.idle);
+      expect(h.state.problem, isNull);
+    });
+
+    test('按之前就在說的那一段不算結束台詞：不再播，也不關連線', () async {
+      final h = HostHarness();
+      await h.startHosting();
+      h.stream.emit(
+        const HostUtteranceMessage(utteranceId: 'u-old', start: true),
+      );
+      h.stream.emit(HostAudioMessage(pcm([1, 0])));
+      h.controller.end();
+      h.stream.emit(HostStateMessage(liveState(status: HostStatus.ended)));
+      expect(h.playback.queued, isEmpty);
+
+      h.stream.emit(HostAudioMessage(pcm([2, 0])));
+      h.stream.emit(
+        const HostUtteranceMessage(utteranceId: 'u-old', start: false),
+      );
+      h.playback.finishSegments();
+      await pumpEventQueue();
+      expect(h.playback.queued, isEmpty);
+      expect(h.stream.closed, isFalse);
+
+      speak(h, 'u-end');
+      h.playback.finishSegments();
+      await pumpEventQueue();
+      expect(h.stream.closed, isTrue);
+    });
+
+    test('連按兩次只送一次結束', () async {
+      final h = HostHarness();
+      await h.startHosting();
+      h.controller.end();
+      h.controller.end();
+      expect(h.stream.sentJson.where((m) => m['action'] == 'end').length, 1);
+    });
+
+    test('回到開主持前之後，後端斷線或重連語音模型都不影響畫面', () async {
+      final h = await endedByButton();
+      h.stream.emit(const HostConnectionMessage(ready: false));
+      expect(h.state.isLive, isFalse);
+      h.stream.emit(const HostConnectionMessage(ready: true));
+      expect(h.state.isLive, isFalse);
+
+      h.stream.serverClose();
+      await pumpEventQueue();
+      expect(h.state.connection, HostConnectionStatus.idle);
+      expect(h.state.notices, isEmpty);
+    });
+
+    test('結束台詞還在唸就按「接著主持」：停播、關舊連線、開新連線', () async {
+      final h = await endedByButton();
+      expect(h.state.resumeLabel, '接著主持（第 3 回合決定出牌）');
+      final old = h.stream;
+      speak(h, 'u-end');
+      await h.controller.resume();
+
+      expect(old.closed, isTrue);
+      expect(h.playback.queued, isEmpty);
+      expect(h.connector.streams, hasLength(2));
+      expect(h.stream.closed, isFalse);
+      expect(h.state.connection, HostConnectionStatus.connected);
+      expect(h.capture.capturing, isTrue);
+      expect(h.wakeLock.held, isTrue);
+    });
+
+    test('結束台詞還在唸就按「重新開始」：停播、關舊連線、開新的一場', () async {
+      final h = await endedByButton();
+      final old = h.stream;
+      speak(h, 'u-end');
+      await h.controller.restart();
+
+      expect(old.closed, isTrue);
+      expect(h.playback.queued, isEmpty);
+      expect(h.repo.createRequests, hasLength(2));
+      expect(h.state.connection, HostConnectionStatus.connected);
+      expect(h.capture.capturing, isTrue);
+    });
+
+    test('用說的結束：照舊留在主持中，繼續收音', () async {
+      final h = HostHarness();
+      await h.startHosting();
+      h.stream.emit(HostStateMessage(liveState(status: HostStatus.ended)));
+      speak(h, 'u-end');
+      h.playback.finishSegments();
+      await pumpEventQueue();
+      expect(h.state.isLive, isTrue);
+      expect(h.capture.capturing, isTrue);
+      expect(h.stream.closed, isFalse);
+    });
+  });
+
   group('進度文字', () {
     test('開場到夜晚顯示節點名稱，回合內顯示第幾回合與階段', () {
       expect(hostProgressLabel(HostStep.opening, null, null), '開場');
