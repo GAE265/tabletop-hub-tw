@@ -85,15 +85,14 @@ cd backend
 uv sync
 uv run alembic upgrade head
 uv run python -m app.dev.seed        # 建立開發用資料：測試帳號、共用桌遊、推薦 Agent 的資料、教學影片
-uv run python -m app.dev.seed_shop
 uv run uvicorn app.main:create_app --factory --reload # http://localhost:8000/docs
 ```
 
 測試帳號只存在於後端的 `app/dev/`，前端身分切換器會從 `GET /api/v1/dev/users` 讀取。
 
-#### 兩個 seed 指令會建立哪些資料
+#### 升級與 seed 指令會建立哪些資料
 
-`uv run alembic upgrade head` 只建好資料表（另外寫入 8 個遊戲類型 `genres`），其他資料表是空的。開發用的資料由上面兩個指令寫入，都只能在 `AUTH_MODE=dev` 執行，都可以重複執行。
+`uv run alembic upgrade head` 除了建好資料表，也會寫入 8 個遊戲類型（`genres`）和「測試桌遊店」的 demo 資料（見下方）。其他開發用的資料由 `uv run python -m app.dev.seed` 寫入，這個指令只能在 `AUTH_MODE=dev` 執行，可以重複執行。
 
 **`uv run python -m app.dev.seed`**：測試帳號、共用桌遊、推薦 Agent 的資料、教學影片。
 
@@ -106,7 +105,7 @@ uv run uvicorn app.main:create_app --factory --reload # http://localhost:8000/do
 
 跑完 seed，每個人的桌遊與編號都相同，講「3 號」都是同一款。資料檔放在 repo 的原因與後果見 [ADR 0005](docs/adr/0005-seed-data-in-repo.md)；資料檔的來源與更新方法見 [`backend/app/dev/seed_data/README.md`](backend/app/dev/seed_data/README.md)。
 
-**`uv run python -m app.dev.seed_shop`**：「測試桌遊店」的訂位設定。店家和 `app.dev.seed` 建立的測試店家是同一間；資料寫在 `backend/app/dev/seed_shop.py`，已經存在的資料不會被覆蓋。
+**店家 demo 資料（隨 `uv run alembic upgrade head` 寫入）**：「測試桌遊店」的訂位設定，由 migration `backend/migrations/versions/0022_demo_seed_data.py` 寫入，不需要另外跑指令。店家和 `app.dev.seed` 建立的測試店家是同一間（同一個 UUID，誰先寫入都可以）；已經存在的資料不會被覆蓋。
 
 | 資料 | 資料表 |
 |---|---|
