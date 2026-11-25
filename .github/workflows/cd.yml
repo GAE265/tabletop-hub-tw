@@ -2,9 +2,14 @@ name: CD
 
 on:
   workflow_run:
-    workflows: ["CI"]
+    workflows: ["Build"]
     types: [completed]
 
+
+# 連續合併時排隊依序部署，不取消進行中的部署，避免部署順序錯亂。
+concurrency:
+  group: cd-dev
+  cancel-in-progress: false
 
 jobs:
   deploy:
@@ -20,7 +25,15 @@ jobs:
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
 
-      # 2. 更新第一個 Cloud Run 服務 (例如 frontend)
+      # 2. 先更新 backend（API 與 migration 先就緒，frontend 再上線）
+      - name: Deploy Backend Service
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: tabletop-hub-tw-backend
+          region: us-east1
+          image: us-east1-docker.pkg.dev/aerial-handbook-256212/tabletop-hub-tw-repo/gae265/tabletop-hub-tw-backend:${{ github.event.workflow_run.head_sha }}
+
+      # 3. 更新 frontend 服務
       - name: Deploy Frontend Service
         uses: google-github-actions/deploy-cloudrun@v2
         with:
@@ -35,13 +48,6 @@ jobs:
           region: us-east1
           image: us-east1-docker.pkg.dev/aerial-handbook-256212/tabletop-hub-tw-repo/gae265/tabletop-hub-tw-frontend-dev:${{ github.event.workflow_run.head_sha }}
 
-      # 3. 更新第二個 Cloud Run 服務 (例如 backend 或其他服務)
-      - name: Deploy Backend Service
-        uses: google-github-actions/deploy-cloudrun@v2
-        with:
-          service: tabletop-hub-tw-backend # 替換為你的第 2 個 Cloud Run 服務名稱
-          region: us-east1                  # 替換為該服務所在的 region
-          image: us-east1-docker.pkg.dev/aerial-handbook-256212/tabletop-hub-tw-repo/gae265/tabletop-hub-tw-backend:${{ github.event.workflow_run.head_sha }}
       # 4. 部署成功後才觸發 E2E（前面任一部署步驟失敗，此步驟會被跳過）。
       #    只送出請求（202）就繼續，不等測試跑完；結果由 E2E server 另外發 Discord 通知。
       #    continue-on-error：E2E 觸發失敗不應讓「部署成功」變成「部署失敗」，改在通知中標示。

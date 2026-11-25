@@ -1,9 +1,14 @@
-name: CI
+name: PR Check
 
 # 發 MR 到 dev 或 main 時執行。各 job 互相獨立，一個失敗不影響其他。
 on:
   pull_request:
     branches: [dev, main]
+
+# 同一個 PR 有新的 push 時，取消舊的檢查。
+concurrency:
+  group: pr-check-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 
 env:
   REGISTRY: ghcr.io
@@ -16,7 +21,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: write
     defaults:
       run:
         working-directory: backend
@@ -52,7 +56,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: write
     defaults:
       run:
         working-directory: frontend
@@ -83,3 +86,29 @@ jobs:
       - run: uv run ruff check .
       - run: uv run ruff format --check .
       - run: uv run pytest
+
+  # 只驗證 Dockerfile 能 build（不推送），避免合併進 dev 後才發現 build 失敗。
+  docker-build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: backend
+            file: Dockerfile.backend
+          - name: frontend
+            file: Dockerfile.frontend
+          - name: frontend-dev
+            file: Dockerfile.frontend_dev
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build ${{ matrix.name }} (no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.file }}
+          push: false
+          cache-from: type=gha,scope=${{ matrix.name }}
