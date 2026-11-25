@@ -281,6 +281,7 @@ void main() {
                   'giant_blade_count': 1,
                   'faithful_count': 0,
                   'has_white_rose': true,
+                  'has_cardinal': true,
                 },
               ),
             ],
@@ -289,7 +290,7 @@ void main() {
       );
       final turn = find.byKey(const Key('turn-1'));
       await tester.ensureVisible(turn);
-      for (final text in ['雙刃 2', '巨刃 1', '白薔薇']) {
+      for (final text in ['雙刃 2', '巨刃 1', '白薔薇', '司教']) {
         expect(
           find.descendant(of: turn, matching: find.text(text)),
           findsOneWidget,

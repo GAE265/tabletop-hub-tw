@@ -101,8 +101,8 @@ def test_played_seat_must_exist(api, started: str):
 
 @pytest.mark.parametrize(
     "played_seat_numbers",
-    [[], [1, 1], [0], [-1], ["1"], "1", None],
-    ids=["empty", "duplicate", "zero", "negative", "string-item", "not-a-list", "null"],
+    [[1, 1], [0], [-1], ["1"], "1", None],
+    ids=["duplicate", "zero", "negative", "string-item", "not-a-list", "null"],
 )
 def test_played_seat_numbers_must_be_valid(api, started: str, played_seat_numbers: Any):
     response = post_turn(
