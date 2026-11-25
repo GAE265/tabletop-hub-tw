@@ -5,6 +5,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tabletop_hub/core/api/api_exception.dart';
+import 'package:tabletop_hub/domains/matches/data/match_input.dart';
 import 'package:tabletop_hub/domains/matches/pages/matches_page.dart';
 
 import '../../../support/fakes.dart';
@@ -257,6 +258,43 @@ void main() {
         isEmpty,
       );
       expect(find.byKey(const Key('turn-1')), findsOneWidget);
+    });
+
+    testWidgets('有計數但沒選出牌座位：顯示欄位錯誤，不送出', (tester) async {
+      final repo = await pumpMatches(tester, detail);
+      await tapKey(tester, 'turn-doubleBlade-inc');
+      await tapKey(tester, 'turn-submit');
+      expect(find.text('這回合有記錄到牌，請選出牌的座位'), findsOneWidget);
+      expect(repo.turnCalls, isEmpty);
+    });
+
+    testWidgets('白薔薇已經出現過：「有白薔薇」開關不能按，顯示是哪一回合', (tester) async {
+      await pumpMatches(
+        tester,
+        detail,
+        repo: FakeMatchesRepository(
+          match: fakeMatch(
+            turns: [
+              fakeMatchTurn(
+                turnNumber: 3,
+                gameData: const WhiteRoseTurnData(
+                  playedSeatNumbers: [1],
+                  hasWhiteRose: true,
+                ).toJson(),
+              ),
+            ],
+          ),
+        ),
+      );
+      final whiteRose = find.byKey(const Key('turn-white-rose'));
+      await tester.ensureVisible(whiteRose);
+      expect(tester.widget<SwitchListTile>(whiteRose).onChanged, isNull);
+      expect(
+        find.descendant(of: whiteRose, matching: find.text('第 3 回合已記錄')),
+        findsOneWidget,
+      );
+      final cardinal = find.byKey(const Key('turn-cardinal'));
+      expect(tester.widget<SwitchListTile>(cardinal).onChanged, isNotNull);
     });
 
     testWidgets('回合表單有「司教」開關', (tester) async {
