@@ -208,10 +208,11 @@ void main() {
       expect(inKey('turn-2', find.textContaining('首家')), findsNothing);
     });
 
-    testWidgets('回合表單：標籤是「本回合首家（選填）」，畫面不再出現「主導」', (tester) async {
+    testWidgets('回合表單：標籤是「首家（有金幣，選填）」，畫面不再出現「主導」', (tester) async {
       await pumpMatches(tester, detail);
       await tester.ensureVisible(find.byKey(const Key('turn-first-seat')));
-      expect(find.text('本回合首家（選填）'), findsOneWidget);
+      expect(find.text('首家（有金幣，選填）'), findsOneWidget);
+      expect(find.text('本回合首家（選填）'), findsNothing);
       expect(find.textContaining('主導'), findsNothing);
     });
 
@@ -232,6 +233,7 @@ void main() {
       await tapKey(tester, 'turn-seat-2');
       await tapKey(tester, 'turn-doubleBlade-inc');
       await tapKey(tester, 'turn-white-rose');
+      await tapKey(tester, 'turn-cardinal');
       await tapKey(tester, 'turn-submit');
 
       final call = repo.turnCalls.single;
@@ -242,14 +244,28 @@ void main() {
       expect(data['played_seat_numbers'], [1, 2]);
       expect(data['double_blade_count'], 1);
       expect(data['has_white_rose'], isTrue);
+      expect(data['has_cardinal'], isTrue);
       expect(find.byKey(const Key('turn-1')), findsOneWidget);
     });
 
-    testWidgets('沒選出牌座位：顯示欄位錯誤，不送出', (tester) async {
+    testWidgets('整桌都不出牌：不選出牌座位也能送出，沒有欄位錯誤', (tester) async {
       final repo = await pumpMatches(tester, detail);
       await tapKey(tester, 'turn-submit');
-      expect(find.text('請至少選一個出牌的座位'), findsOneWidget);
-      expect(repo.turnCalls, isEmpty);
+      expect(find.text('請至少選一個出牌的座位'), findsNothing);
+      expect(repo.turnCalls.single.input.gameData['played_seat_numbers'], isEmpty);
+      expect(find.byKey(const Key('turn-1')), findsOneWidget);
+    });
+
+    testWidgets('回合表單有「司教」開關', (tester) async {
+      await pumpMatches(tester, detail);
+      await tester.ensureVisible(find.byKey(const Key('turn-cardinal')));
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('turn-cardinal')),
+          matching: find.text('司教'),
+        ),
+        findsOneWidget,
+      );
     });
 
     testWidgets('同一回合已有人記錄：顯示覆蓋提示；「取消」只關提示，「更新」帶 overwrite 重送', (tester) async {

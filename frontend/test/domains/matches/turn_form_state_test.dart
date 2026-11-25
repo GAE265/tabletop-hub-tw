@@ -30,7 +30,8 @@ void fillOne(TurnFormNotifier form) {
     ..togglePlayedSeat(1)
     ..setCount(TurnCounter.doubleBlade, 1)
     ..setCount(TurnCounter.faithful, 2)
-    ..setHasWhiteRose(true);
+    ..setHasWhiteRose(true)
+    ..setHasCardinal(true);
 }
 
 void main() {
@@ -42,6 +43,7 @@ void main() {
     expect(state.playedSeats, isEmpty);
     expect(state.doubleBladeCount, 0);
     expect(state.hasWhiteRose, isFalse);
+    expect(state.hasCardinal, isFalse);
   });
 
   test('點選出牌的座位：再點一次取消', () async {
@@ -63,17 +65,23 @@ void main() {
     expect(stateOf(container).giantBladeCount, 2);
   });
 
-  test('本回合首家預設不選，也不是必填；沒選出牌座位才不送出', () async {
+  test('首家（有金幣）預設不選，也不是必填', () async {
+    final container = makeContainer(FakeMatchesRepository());
+    await openForm(container);
+    expect(stateOf(container).firstSeat, isNull);
+  });
+
+  test('整桌都不出牌：不選出牌座位也能送出，played_seat_numbers 送空陣列', () async {
     final repo = FakeMatchesRepository();
     final container = makeContainer(repo);
     final form = await openForm(container);
-    expect(stateOf(container).firstSeat, isNull);
     await form.submit();
-    expect(stateOf(container).errors.keys, ['playedSeats']);
-    expect(repo.turnCalls, isEmpty);
+    expect(stateOf(container).errors, isEmpty);
+    final data = repo.turnCalls.single.input.gameData;
+    expect(data['played_seat_numbers'], isEmpty);
   });
 
-  test('沒選本回合首家也能送出：seat_number 送 null', () async {
+  test('沒選首家（有金幣）也能送出：seat_number 送 null', () async {
     final repo = FakeMatchesRepository();
     final container = makeContainer(repo);
     final form = await openForm(container)
@@ -87,7 +95,7 @@ void main() {
     expect(repo.match.turns.single.seatNumber, isNull);
   });
 
-  test('選了本回合首家再改成不選：送 null', () async {
+  test('選了首家（有金幣）再改成不選：送 null', () async {
     final repo = FakeMatchesRepository();
     final container = makeContainer(repo);
     final form = await openForm(container)
@@ -128,6 +136,7 @@ void main() {
         'giant_blade_count': 0,
         'faithful_count': 2,
         'has_white_rose': true,
+        'has_cardinal': true,
       },
     });
     final state = stateOf(container);
