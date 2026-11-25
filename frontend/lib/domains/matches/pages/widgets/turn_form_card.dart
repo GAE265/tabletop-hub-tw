@@ -14,7 +14,8 @@ const _counterLabels = {
   TurnCounter.faithful: '信者',
 };
 
-/// 記錄回合（白薔薇）：第幾回合、本回合首家（選填）、出牌的座位、四種數量、有沒有白薔薇。
+/// 記錄回合（白薔薇）：第幾回合、首家（有金幣，選填）、出牌的座位（可以都不選）、四種數量、
+/// 有沒有白薔薇、有沒有司教。
 class TurnFormCard extends ConsumerStatefulWidget {
   const TurnFormCard({required this.matchId, required this.match, super.key});
 
@@ -76,14 +77,14 @@ class _TurnFormCardState extends ConsumerState<TurnFormCard> {
             ),
             const SizedBox(width: AppSpacing.small),
             Expanded(
-              // 記錄成功後本回合首家會清空；換 Key 讓下拉選單跟著重建
+              // 記錄成功後首家（有金幣）會清空；換 Key 讓下拉選單跟著重建
               child: KeyedSubtree(
                 key: const Key('turn-first-seat'),
                 child: DropdownButtonFormField<int>(
                   key: ValueKey(('first', form.turnNumber, form.firstSeat)),
                   initialValue: form.firstSeat,
                   isExpanded: true,
-                  decoration: const InputDecoration(labelText: '本回合首家（選填）'),
+                  decoration: const InputDecoration(labelText: '首家（有金幣，選填）'),
                   items: [
                     const DropdownMenuItem<int>(
                       value: null,
@@ -117,7 +118,6 @@ class _TurnFormCardState extends ConsumerState<TurnFormCard> {
               ),
           ],
         ),
-        FieldError(form.errors['playedSeats']),
         const SizedBox(height: AppSpacing.small),
         Wrap(
           spacing: AppSpacing.large,
@@ -158,13 +158,21 @@ class _TurnFormCardState extends ConsumerState<TurnFormCard> {
           value: form.hasWhiteRose,
           onChanged: n.setHasWhiteRose,
         ),
+        SwitchListTile(
+          key: const Key('turn-cardinal'),
+          contentPadding: EdgeInsets.zero,
+          title: const Text('司教'),
+          value: form.hasCardinal,
+          onChanged: n.setHasCardinal,
+        ),
         if (form.overwrite case final prompt?) ...[
           OverwritePrompt(
             keyPrefix: 'turn-overwrite',
             text: overwritePromptText,
             existing: [
               '第 ${prompt.existing['turn_number']} 回合',
-              if (prompt.existing['seat_number'] case final seat?) '首家座位 $seat',
+              if (prompt.existing['seat_number'] case final seat?)
+                '首家（有金幣）座位 $seat',
             ].join('・'),
             busy: form.busy,
             onConfirm: n.confirmOverwrite,

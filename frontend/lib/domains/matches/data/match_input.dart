@@ -62,15 +62,19 @@ class WhiteRoseTurnData {
     this.giantBladeCount = 0,
     this.faithfulCount = 0,
     this.hasWhiteRose = false,
+    this.hasCardinal = false,
   });
 
-  /// 這回合出牌的座位編號，至少一個、不可重複。
+  /// 這回合出牌的座位編號，不可重複；整桌都不出牌時是空的。
   final List<int> playedSeatNumbers;
   final int doubleBladeCount;
   final int darkBladeCount;
   final int giantBladeCount;
   final int faithfulCount;
   final bool hasWhiteRose;
+
+  /// 這回合有沒有出現司教。
+  final bool hasCardinal;
 
   Map<String, dynamic> toJson() => {
     'played_seat_numbers': playedSeatNumbers,
@@ -79,6 +83,7 @@ class WhiteRoseTurnData {
     'giant_blade_count': giantBladeCount,
     'faithful_count': faithfulCount,
     'has_white_rose': hasWhiteRose,
+    'has_cardinal': hasCardinal,
   };
 }
 

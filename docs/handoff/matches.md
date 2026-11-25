@@ -73,13 +73,14 @@
 | 加入這一局＋座位 | 按鈕＋輸入欄位（不在這局且進行中） | 自己加入，座位選填 | `joinSelf({seatNumber})` | `POST /api/v1/matches/{id}/participants`，body 為 `{}` 或 `{"seat_number": n}` |
 | 新增沒有帳號的人 | 名字＋座位輸入＋按鈕（在這局且進行中） | 名字不能空白；成功後清空欄位 | `addNamed(name, {seatNumber})` | `POST /api/v1/matches/{id}/participants`，body 帶 `display_name` |
 | 確認這局的紀錄 | 按鈕（已結束、我是參加者、還沒確認） | 確認自己的紀錄 | `confirmMine()` | `PATCH /api/v1/matches/{id}/participants/{pid}`，`{"is_confirmed": true}` |
-| 回合清單 | 清單 | 第幾回合、首家座位（沒填就不顯示）、出牌座位、雙刃／暗刃／巨刃／信者數量、有沒有白薔薇 | `match.turns` | 同上 |
+| 回合清單 | 清單 | 第幾回合、首家座位（沒填就不顯示）、出牌座位、雙刃／暗刃／巨刃／信者數量、有沒有白薔薇、有沒有司教 | `match.turns` | 同上 |
 | 第幾回合 | 輸入欄位 | 預設從 1 開始，記完自動加 1 | `setTurnNumber(int)` | — |
-| 本回合首家（選填） | 下拉選單 | 預設不選（選項「不指定」）；沒選時送出 `seat_number = null` | `setFirstSeat(int?)` | — |
-| 出牌的座位 | 可點選的標籤（每個座位一個） | 點選／取消 | `togglePlayedSeat(seat)` | — |
+| 首家（有金幣，選填） | 下拉選單 | 預設不選（選項「不指定」）；沒選時送出 `seat_number = null` | `setFirstSeat(int?)` | — |
+| 出牌的座位 | 可點選的標籤（每個座位一個） | 點選／取消；可以都不選（整桌都不出牌的回合），送出空陣列 | `togglePlayedSeat(seat)` | — |
 | 雙刃、暗刃、巨刃、信者 | 加減按鈕與數字 | 不小於 0 | `setCount(TurnCounter, value)` | — |
 | 有白薔薇 | 開關 | | `setHasWhiteRose(bool)` | — |
-| 記錄這個回合 | 按鈕 | 驗證（出牌座位必填，本回合首家選填）後送出；成功後清空表單並前進到下一回合 | `submit()` | `POST /api/v1/matches/{id}/turns` |
+| 司教 | 開關 | 一局只有一位司教，只記這回合有沒有出現 | `setHasCardinal(bool)` | — |
+| 記錄這個回合 | 按鈕 | 驗證（回合編號從 1 開始；出牌座位與首家都選填）後送出；成功後清空表單並前進到下一回合 | `submit()` | `POST /api/v1/matches/{id}/turns` |
 | 覆蓋提示＋更新／取消 | 提示區塊與兩個按鈕（`turnFormState.overwrite` 不為 null 時顯示） | 「更新」帶 `overwrite=true` 重送；「取消」只清除提示 | `confirmOverwrite()`／`cancelOverwrite()` | `POST /api/v1/matches/{id}/turns?overwrite=true` |
 | 獲勝陣營 | 下拉選單 | 薔薇陣營／血刃陣營 | `setWinningFaction(code)`；選項 `whiteRoseFactions` | — |
 | 每個座位的陣營 | 下拉選單（每個座位一個） | 每個座位都要選 | `setFaction(seat, code)` | — |

@@ -28,16 +28,23 @@ _Seat = Annotated[StrictInt, Field(ge=1)]
 
 
 class WhiteRoseTurnData(BaseModel):
-    """白薔薇一個回合的內容。幽魂不記；五個計數與出牌座位都必填，不接受其他欄位。"""
+    """白薔薇一個回合的內容。幽魂不記；不接受其他欄位。
+
+    - played_seat_numbers：這回合出牌的座位，必填、不可重複；整桌都不出牌時是空陣列。
+    - 四種數量與 has_white_rose：必填。
+    - has_cardinal：這回合有沒有出現司教（一局只有一位司教，所以只記有沒有）。
+      選填、預設 False，舊紀錄與舊版前端沒有這個欄位也能通過驗證。
+    """
 
     model_config = ConfigDict(extra="forbid")
 
-    played_seat_numbers: Annotated[list[_Seat], Field(min_length=1)]
+    played_seat_numbers: list[_Seat]
     double_blade_count: _Count
     dark_blade_count: _Count
     giant_blade_count: _Count
     faithful_count: _Count
     has_white_rose: StrictBool
+    has_cardinal: StrictBool = False
 
     @model_validator(mode="after")
     def _seats_are_unique(self) -> Self:
