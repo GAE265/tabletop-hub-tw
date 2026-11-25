@@ -3,7 +3,6 @@
 不 import FastAPI（AGENTS.md 4.2）；錯誤一律拋 AppError，由錯誤處理器轉成統一格式。
 """
 
-import logging
 import uuid
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -67,9 +66,6 @@ class GroupsRepositoryProtocol(Protocol):
     def get_group(self, group_id: uuid.UUID, viewer_id: uuid.UUID) -> GroupView | None: ...
     def list_groups(self, **filters: Any) -> tuple[list[GroupView], int]: ...
     def list_members(self, group_id: uuid.UUID) -> list[Any]: ...
-
-
-logger = logging.getLogger(__name__)
 
 
 def _utc_now() -> datetime:
@@ -148,8 +144,6 @@ class GroupsService:
         page: int = 1,
         page_size: int = 20,
     ) -> GroupListResponse:
-        if start_from is not None and start_from < datetime.now():
-            start_from = datetime.now(UTC)
         views, total = self._repo.list_groups(
             viewer_id=user.id,
             start_from=start_from,
@@ -160,9 +154,6 @@ class GroupsService:
             limit=page_size,
         )
         now = self._now()
-        if shop_id is not None:
-            shop_names = {v.shop_id: v.shop_name for v in views}
-            logger.info("list_groups shop=%s total=%s", shop_names[shop_id], total)
         return GroupListResponse(items=[self._to_response(v, now) for v in views], total=total)
 
     def list_members(self, user: CurrentUser, group_id: uuid.UUID) -> MemberListResponse:

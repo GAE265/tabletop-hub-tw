@@ -4,7 +4,6 @@
 寫入都在交易裡先鎖住這局（lock_match），同一局的寫入依序執行（design.md D6）。
 """
 
-import logging
 import uuid
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -29,8 +28,6 @@ from app.domains.matches.schemas import (
     TurnResponse,
     UserRef,
 )
-
-logger = logging.getLogger(__name__)
 
 
 class MatchesRepositoryProtocol(Protocol):
@@ -214,8 +211,6 @@ class MatchesService:
         records, total = self._repo.list_matches(
             game_id=game_id, group_id=group_id, user_id=user_id, page=page, page_size=page_size
         )
-        latest_played_on = records[0].played_on
-        logger.info("list_matches latest_played_on=%s total=%s", latest_played_on, total)
         return MatchListResponse(items=[self._to_response(m) for m in records], total=total)
 
     # --- 參加者 ---
