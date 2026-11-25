@@ -1,9 +1,15 @@
-name: CI
+name: Build
 
-# 發 MR 到 dev 或 main 時執行。各 job 互相獨立，一個失敗不影響其他。
+# 合併到 dev（push）後執行：測試、建置 image 並推到 ghcr.io，成功後由 CD 部署。
+# 發 MR 時的檢查在 pr_check.yml（PR Check）。各 job 互相獨立，一個失敗不影響其他。
 on:
   push:
     branches: [dev]
+
+# 連續合併時，取消同分支較舊的建置，只留最新的。
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   REGISTRY: ghcr.io
@@ -64,8 +70,8 @@ jobs:
           tags: |
             ${{ env.BACKEND_IMAGE }}:latest
             ${{ env.BACKEND_IMAGE }}:${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=backend
+          cache-to: type=gha,scope=backend,mode=max
 
   frontend:
     runs-on: ubuntu-latest
@@ -104,8 +110,8 @@ jobs:
           tags: |
             ${{ env.FRONTEND_IMAGE }}:latest
             ${{ env.FRONTEND_IMAGE }}:${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,scope=frontend,mode=max
 
   device:
     runs-on: ubuntu-latest
@@ -146,5 +152,5 @@ jobs:
           tags: |
             ${{ env.FRONTEND_DEV_IMAGE }}:latest
             ${{ env.FRONTEND_DEV_IMAGE }}:${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=frontend-dev
+          cache-to: type=gha,scope=frontend-dev,mode=max
