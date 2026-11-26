@@ -199,7 +199,7 @@ void main() {
       },
     );
 
-    test('沒有本回合首家：seat_number 送 null，回應的 seat_number 為 null 也能解析', () async {
+    test('沒有首家（有金幣）：seat_number 送 null，回應的 seat_number 為 null 也能解析', () async {
       const noFirst = TurnInput(
         turnNumber: 1,
         gameData: {

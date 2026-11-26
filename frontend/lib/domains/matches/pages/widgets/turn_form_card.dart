@@ -14,7 +14,8 @@ const _counterLabels = {
   TurnCounter.faithful: '信者',
 };
 
-/// 記錄回合（白薔薇）：第幾回合、本回合首家（選填）、出牌的座位、四種數量、有沒有白薔薇。
+/// 記錄回合（白薔薇）：第幾回合、首家（有金幣，選填）、出牌的座位（可以都不選）、四種數量、
+/// 有沒有白薔薇、有沒有司教。
 class TurnFormCard extends ConsumerStatefulWidget {
   const TurnFormCard({required this.matchId, required this.match, super.key});
 
@@ -76,14 +77,14 @@ class _TurnFormCardState extends ConsumerState<TurnFormCard> {
             ),
             const SizedBox(width: AppSpacing.small),
             Expanded(
-              // 記錄成功後本回合首家會清空；換 Key 讓下拉選單跟著重建
+              // 記錄成功後首家（有金幣）會清空；換 Key 讓下拉選單跟著重建
               child: KeyedSubtree(
                 key: const Key('turn-first-seat'),
                 child: DropdownButtonFormField<int>(
                   key: ValueKey(('first', form.turnNumber, form.firstSeat)),
                   initialValue: form.firstSeat,
                   isExpanded: true,
-                  decoration: const InputDecoration(labelText: '本回合首家（選填）'),
+                  decoration: const InputDecoration(labelText: '首家（有金幣，選填）'),
                   items: [
                     const DropdownMenuItem<int>(
                       value: null,
@@ -151,12 +152,29 @@ class _TurnFormCardState extends ConsumerState<TurnFormCard> {
               ),
           ],
         ),
-        SwitchListTile(
-          key: const Key('turn-white-rose'),
-          contentPadding: EdgeInsets.zero,
-          title: const Text('有白薔薇'),
+        _OnceCardSwitch(
+          switchKey: const Key('turn-white-rose'),
+          label: '有白薔薇',
           value: form.hasWhiteRose,
+          recordedTurn: recordedTurnOf(
+            OnceCard.whiteRose,
+            widget.match.turns,
+            editingTurn: form.turnNumber,
+          ),
+          error: form.errors['hasWhiteRose'],
           onChanged: n.setHasWhiteRose,
+        ),
+        _OnceCardSwitch(
+          switchKey: const Key('turn-cardinal'),
+          label: '司教',
+          value: form.hasCardinal,
+          recordedTurn: recordedTurnOf(
+            OnceCard.cardinal,
+            widget.match.turns,
+            editingTurn: form.turnNumber,
+          ),
+          error: form.errors['hasCardinal'],
+          onChanged: n.setHasCardinal,
         ),
         if (form.overwrite case final prompt?) ...[
           OverwritePrompt(
@@ -164,7 +182,8 @@ class _TurnFormCardState extends ConsumerState<TurnFormCard> {
             text: overwritePromptText,
             existing: [
               '第 ${prompt.existing['turn_number']} 回合',
-              if (prompt.existing['seat_number'] case final seat?) '首家座位 $seat',
+              if (prompt.existing['seat_number'] case final seat?)
+                '首家（有金幣）座位 $seat',
             ].join('・'),
             busy: form.busy,
             onConfirm: n.confirmOverwrite,
@@ -196,6 +215,45 @@ class _TurnFormCardState extends ConsumerState<TurnFormCard> {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// 一局只出現一次的牌（白薔薇、司教）的開關。
+///
+/// 別的回合已經記過（[recordedTurn] 不為 null）時，開關關著就不能打開，下方顯示是哪一回合；
+/// 如果已經打開（例如打開後才改了回合編號），仍然可以關掉。
+class _OnceCardSwitch extends StatelessWidget {
+  const _OnceCardSwitch({
+    required this.switchKey,
+    required this.label,
+    required this.value,
+    required this.recordedTurn,
+    required this.error,
+    required this.onChanged,
+  });
+
+  final Key switchKey;
+  final String label;
+  final bool value;
+  final int? recordedTurn;
+  final String? error;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final turn = recordedTurn;
+    return SwitchListTile(
+      key: switchKey,
+      contentPadding: EdgeInsets.zero,
+      title: Text(label),
+      subtitle: error != null
+          ? FieldError(error)
+          : turn == null
+          ? null
+          : Text(onceCardReason(turn)),
+      value: value,
+      onChanged: turn == null || value ? onChanged : null,
     );
   }
 }

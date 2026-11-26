@@ -5,6 +5,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tabletop_hub/core/api/api_exception.dart';
+import 'package:tabletop_hub/domains/matches/data/match_input.dart';
 import 'package:tabletop_hub/domains/matches/pages/matches_page.dart';
 
 import '../../../support/fakes.dart';
@@ -182,7 +183,7 @@ void main() {
       expect(find.text('還沒有回合紀錄（回合紀錄是選填的，只記結果也可以）'), findsOneWidget);
     });
 
-    testWidgets('回合清單：第幾回合、首家座位、出牌座位與數量', (tester) async {
+    testWidgets('回合清單：第幾回合、首家（有金幣）座位、出牌座位與數量', (tester) async {
       await pumpMatches(
         tester,
         detail,
@@ -190,7 +191,7 @@ void main() {
           match: fakeMatch(turns: [fakeMatchTurn(turnNumber: 1)]),
         ),
       );
-      expect(inKey('turn-1', find.text('第 1 回合・首家座位 1')), findsOneWidget);
+      expect(inKey('turn-1', find.text('第 1 回合・首家（有金幣）座位 1')), findsOneWidget);
       expect(inKey('turn-1', find.textContaining('出牌座位 1、2')), findsOneWidget);
     });
 
@@ -208,10 +209,11 @@ void main() {
       expect(inKey('turn-2', find.textContaining('首家')), findsNothing);
     });
 
-    testWidgets('回合表單：標籤是「本回合首家（選填）」，畫面不再出現「主導」', (tester) async {
+    testWidgets('回合表單：標籤是「首家（有金幣，選填）」，畫面不再出現「主導」', (tester) async {
       await pumpMatches(tester, detail);
       await tester.ensureVisible(find.byKey(const Key('turn-first-seat')));
-      expect(find.text('本回合首家（選填）'), findsOneWidget);
+      expect(find.text('首家（有金幣，選填）'), findsOneWidget);
+      expect(find.text('本回合首家（選填）'), findsNothing);
       expect(find.textContaining('主導'), findsNothing);
     });
 
@@ -232,6 +234,7 @@ void main() {
       await tapKey(tester, 'turn-seat-2');
       await tapKey(tester, 'turn-doubleBlade-inc');
       await tapKey(tester, 'turn-white-rose');
+      await tapKey(tester, 'turn-cardinal');
       await tapKey(tester, 'turn-submit');
 
       final call = repo.turnCalls.single;
@@ -242,14 +245,68 @@ void main() {
       expect(data['played_seat_numbers'], [1, 2]);
       expect(data['double_blade_count'], 1);
       expect(data['has_white_rose'], isTrue);
+      expect(data['has_cardinal'], isTrue);
       expect(find.byKey(const Key('turn-1')), findsOneWidget);
     });
 
-    testWidgets('沒選出牌座位：顯示欄位錯誤，不送出', (tester) async {
+    testWidgets('整桌都不出牌：不選出牌座位也能送出，沒有欄位錯誤', (tester) async {
       final repo = await pumpMatches(tester, detail);
       await tapKey(tester, 'turn-submit');
-      expect(find.text('請至少選一個出牌的座位'), findsOneWidget);
+      expect(find.text('請至少選一個出牌的座位'), findsNothing);
+      expect(
+        repo.turnCalls.single.input.gameData['played_seat_numbers'],
+        isEmpty,
+      );
+      expect(find.byKey(const Key('turn-1')), findsOneWidget);
+    });
+
+    testWidgets('有計數但沒選出牌座位：顯示欄位錯誤，不送出', (tester) async {
+      final repo = await pumpMatches(tester, detail);
+      await tapKey(tester, 'turn-doubleBlade-inc');
+      await tapKey(tester, 'turn-submit');
+      expect(find.text('這回合有記錄到牌，請選出牌的座位'), findsOneWidget);
       expect(repo.turnCalls, isEmpty);
+    });
+
+    testWidgets('白薔薇已經出現過：「有白薔薇」開關不能按，顯示是哪一回合', (tester) async {
+      await pumpMatches(
+        tester,
+        detail,
+        repo: FakeMatchesRepository(
+          match: fakeMatch(
+            turns: [
+              fakeMatchTurn(
+                turnNumber: 3,
+                gameData: const WhiteRoseTurnData(
+                  playedSeatNumbers: [1],
+                  hasWhiteRose: true,
+                ).toJson(),
+              ),
+            ],
+          ),
+        ),
+      );
+      final whiteRose = find.byKey(const Key('turn-white-rose'));
+      await tester.ensureVisible(whiteRose);
+      expect(tester.widget<SwitchListTile>(whiteRose).onChanged, isNull);
+      expect(
+        find.descendant(of: whiteRose, matching: find.text('第 3 回合已記錄')),
+        findsOneWidget,
+      );
+      final cardinal = find.byKey(const Key('turn-cardinal'));
+      expect(tester.widget<SwitchListTile>(cardinal).onChanged, isNotNull);
+    });
+
+    testWidgets('回合表單有「司教」開關', (tester) async {
+      await pumpMatches(tester, detail);
+      await tester.ensureVisible(find.byKey(const Key('turn-cardinal')));
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('turn-cardinal')),
+          matching: find.text('司教'),
+        ),
+        findsOneWidget,
+      );
     });
 
     testWidgets('同一回合已有人記錄：顯示覆蓋提示；「取消」只關提示，「更新」帶 overwrite 重送', (tester) async {

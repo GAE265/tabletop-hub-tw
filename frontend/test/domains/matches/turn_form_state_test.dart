@@ -5,6 +5,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tabletop_hub/core/api/api_exception.dart';
+import 'package:tabletop_hub/domains/matches/data/match_input.dart';
 import 'package:tabletop_hub/domains/matches/state/match_detail_state.dart';
 import 'package:tabletop_hub/domains/matches/state/turn_form_state.dart';
 
@@ -30,7 +31,8 @@ void fillOne(TurnFormNotifier form) {
     ..togglePlayedSeat(1)
     ..setCount(TurnCounter.doubleBlade, 1)
     ..setCount(TurnCounter.faithful, 2)
-    ..setHasWhiteRose(true);
+    ..setHasWhiteRose(true)
+    ..setHasCardinal(true);
 }
 
 void main() {
@@ -42,6 +44,7 @@ void main() {
     expect(state.playedSeats, isEmpty);
     expect(state.doubleBladeCount, 0);
     expect(state.hasWhiteRose, isFalse);
+    expect(state.hasCardinal, isFalse);
   });
 
   test('點選出牌的座位：再點一次取消', () async {
@@ -63,17 +66,23 @@ void main() {
     expect(stateOf(container).giantBladeCount, 2);
   });
 
-  test('本回合首家預設不選，也不是必填；沒選出牌座位才不送出', () async {
+  test('首家（有金幣）預設不選，也不是必填', () async {
+    final container = makeContainer(FakeMatchesRepository());
+    await openForm(container);
+    expect(stateOf(container).firstSeat, isNull);
+  });
+
+  test('整桌都不出牌：不選出牌座位也能送出，played_seat_numbers 送空陣列', () async {
     final repo = FakeMatchesRepository();
     final container = makeContainer(repo);
     final form = await openForm(container);
-    expect(stateOf(container).firstSeat, isNull);
     await form.submit();
-    expect(stateOf(container).errors.keys, ['playedSeats']);
-    expect(repo.turnCalls, isEmpty);
+    expect(stateOf(container).errors, isEmpty);
+    final data = repo.turnCalls.single.input.gameData;
+    expect(data['played_seat_numbers'], isEmpty);
   });
 
-  test('沒選本回合首家也能送出：seat_number 送 null', () async {
+  test('沒選首家（有金幣）也能送出：seat_number 送 null', () async {
     final repo = FakeMatchesRepository();
     final container = makeContainer(repo);
     final form = await openForm(container)
@@ -87,7 +96,7 @@ void main() {
     expect(repo.match.turns.single.seatNumber, isNull);
   });
 
-  test('選了本回合首家再改成不選：送 null', () async {
+  test('選了首家（有金幣）再改成不選：送 null', () async {
     final repo = FakeMatchesRepository();
     final container = makeContainer(repo);
     final form = await openForm(container)
@@ -128,6 +137,7 @@ void main() {
         'giant_blade_count': 0,
         'faithful_count': 2,
         'has_white_rose': true,
+        'has_cardinal': true,
       },
     });
     final state = stateOf(container);
@@ -262,5 +272,79 @@ void main() {
     gate.complete();
     await first;
     expect(repo.turnCalls, hasLength(1));
+  });
+
+  group('有記錄到牌，就一定要選出牌座位', () {
+    test('計數加 1 但沒選座位：顯示欄位錯誤，不送出', () async {
+      final repo = FakeMatchesRepository();
+      final container = makeContainer(repo);
+      final form = await openForm(container)
+        ..setCount(TurnCounter.darkBlade, 1);
+      await form.submit();
+      expect(stateOf(container).errors, {
+        'playedSeats': playedSeatsRequiredText,
+      });
+      expect(playedSeatsRequiredText, '這回合有記錄到牌，請選出牌的座位');
+      expect(repo.turnCalls, isEmpty);
+    });
+
+    test('打開白薔薇或司教但沒選座位：顯示欄位錯誤，不送出', () async {
+      for (final open in [
+        (TurnFormNotifier f) => f.setHasWhiteRose(true),
+        (TurnFormNotifier f) => f.setHasCardinal(true),
+      ]) {
+        final repo = FakeMatchesRepository();
+        final container = makeContainer(repo);
+        final form = await openForm(container);
+        open(form);
+        await form.submit();
+        expect(stateOf(container).errors.keys, ['playedSeats']);
+        expect(repo.turnCalls, isEmpty);
+      }
+    });
+  });
+
+  group('一局只有一朵白薔薇、一位司教', () {
+    final turns = [
+      fakeMatchTurn(turnNumber: 1),
+      fakeMatchTurn(
+        turnNumber: 3,
+        gameData: const WhiteRoseTurnData(
+          playedSeatNumbers: [1],
+          hasWhiteRose: true,
+        ).toJson(),
+      ),
+    ];
+
+    test('找出已經記了白薔薇的回合；正在編輯的那一回合不算', () {
+      expect(recordedTurnOf(OnceCard.whiteRose, turns, editingTurn: 5), 3);
+      expect(recordedTurnOf(OnceCard.whiteRose, turns, editingTurn: 3), isNull);
+      expect(recordedTurnOf(OnceCard.cardinal, turns, editingTurn: 5), isNull);
+      expect(onceCardReason(3), '第 3 回合已記錄');
+    });
+
+    test('這一局已有白薔薇，在別的回合再打開：顯示原因，不送出', () async {
+      final repo = FakeMatchesRepository(match: fakeMatch(turns: turns));
+      final container = makeContainer(repo);
+      final form = await openForm(container)
+        ..setTurnNumber(5)
+        ..togglePlayedSeat(1)
+        ..setHasWhiteRose(true);
+      await form.submit();
+      expect(stateOf(container).errors, {'hasWhiteRose': '第 3 回合已記錄'});
+      expect(repo.turnCalls, isEmpty);
+    });
+
+    test('這一局已有白薔薇，但送的是同一回合（覆蓋）：照常送出', () async {
+      final repo = FakeMatchesRepository(match: fakeMatch(turns: turns));
+      final container = makeContainer(repo);
+      final form = await openForm(container)
+        ..setTurnNumber(3)
+        ..togglePlayedSeat(1)
+        ..setHasWhiteRose(true);
+      await form.submit();
+      expect(stateOf(container).errors, isEmpty);
+      expect(repo.turnCalls, hasLength(1));
+    });
   });
 }

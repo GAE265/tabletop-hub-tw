@@ -23,6 +23,7 @@ def game_data(**overrides: Any) -> dict[str, Any]:
         "giant_blade_count": 0,
         "faithful_count": 2,
         "has_white_rose": False,
+        "has_cardinal": False,
     }
     data.update(overrides)
     return data

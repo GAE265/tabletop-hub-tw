@@ -31,17 +31,17 @@ String matchErrorText(Object error) {
   ].join();
 }
 
-/// 回合清單一列的標題，例如「第 1 回合・首家座位 1」；沒有首家時只有「第 1 回合」。
+/// 回合清單一列的標題，例如「第 1 回合・首家（有金幣）座位 1」；沒有首家時只有「第 1 回合」。
 String turnTitle(MatchTurn turn) => [
   '第 ${turn.turnNumber} 回合',
-  if (turn.seatNumber case final seat?) '首家座位 $seat',
+  if (turn.seatNumber case final seat?) '首家（有金幣）座位 $seat',
 ].join('・');
 
 /// 回合小卡的出牌座位，例如「出牌座位 1、2」。
 String turnPlayedText(Map<String, dynamic> data) =>
     '出牌座位 ${(data['played_seat_numbers'] as List?)?.join('、') ?? '-'}';
 
-/// 回合小卡的膠囊（白薔薇）：不是 0 的數量，例如「雙刃 2」，有白薔薇時加「白薔薇」。
+/// 回合小卡的膠囊（白薔薇）：不是 0 的數量，例如「雙刃 2」，有白薔薇時加「白薔薇」、有司教時加「司教」。
 List<String> turnChips(Map<String, dynamic> data) {
   int count(String key) => (data[key] as num?)?.toInt() ?? 0;
   return [
@@ -53,6 +53,7 @@ List<String> turnChips(Map<String, dynamic> data) {
     ])
       if (count(key) > 0) '$label ${count(key)}',
     if (data['has_white_rose'] == true) '白薔薇',
+    if (data['has_cardinal'] == true) '司教',
   ];
 }
 
