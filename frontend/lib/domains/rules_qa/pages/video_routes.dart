@@ -8,6 +8,7 @@ import 'video_project_page.dart';
 import 'video_projects_page.dart';
 import 'video_regions_page.dart';
 import 'video_render_page.dart';
+import 'video_revise_page.dart';
 import 'video_rulebook_page.dart';
 import 'video_watch_page.dart';
 import 'widgets/video_studio_widgets.dart';
@@ -40,6 +41,12 @@ final videoStudioRoute = GoRoute(
           path: 'draft',
           builder: (context, state) => VideoAccessGuard(
             child: VideoDraftPage(projectId: state.pathParameters['id']!),
+          ),
+        ),
+        GoRoute(
+          path: 'revise',
+          builder: (context, state) => VideoAccessGuard(
+            child: VideoRevisePage(projectId: state.pathParameters['id']!),
           ),
         ),
         GoRoute(

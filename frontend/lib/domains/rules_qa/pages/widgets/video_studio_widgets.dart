@@ -212,7 +212,10 @@ class VideoJobCard extends ConsumerWidget {
       final (doneLabel, donePath) = render
           ? ('看影片', '/videos/$projectId/watch')
           : ('查看草稿', '/videos/$projectId/draft');
+      // 修改的工作（MR 12）結束後不顯示：結果在修改頁看，這裡的「重試」也不適用
+      final revise = job.kind == 'revise';
       final card = switch (job.status) {
+        VideoJobStatus.succeeded || VideoJobStatus.failed when revise => null,
         VideoJobStatus.queued || VideoJobStatus.running => _card(
           context,
           key: const Key('video-job-running'),

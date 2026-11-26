@@ -89,6 +89,22 @@ abstract interface class VideoStudioRepository {
 
   /// 刪除專案（無法復原；照片與成品影片一起刪）。正在產生時後端回 409。
   Future<void> deleteProject(String projectId);
+
+  /// 用一句話修改：送出修改要求，建立修改的工作（AI 算出提案，不寫入草稿）。
+  Future<VideoRevision> createRevision(
+    String projectId,
+    VideoRevisionCreate input,
+  );
+
+  /// 看修改的進度與結果。
+  Future<VideoRevision> getRevision(String projectId, String revisionId);
+
+  /// 套用提案或選的替代做法。
+  Future<VideoRevision> applyRevision(
+    String projectId,
+    String revisionId,
+    VideoRevisionApply input,
+  );
 }
 
 class HttpVideoStudioRepository implements VideoStudioRepository {
@@ -312,6 +328,40 @@ class HttpVideoStudioRepository implements VideoStudioRepository {
         );
         return Rulebook.fromJson(response.data!);
       });
+
+  @override
+  Future<VideoRevision> createRevision(
+    String projectId,
+    VideoRevisionCreate input,
+  ) => _guard(() async {
+    final response = await _dio.post<Map<String, dynamic>>(
+      '$_base/$projectId/revisions',
+      data: input.toJson(),
+    );
+    return VideoRevision.fromJson(response.data!);
+  });
+
+  @override
+  Future<VideoRevision> getRevision(String projectId, String revisionId) =>
+      _guard(() async {
+        final response = await _dio.get<Map<String, dynamic>>(
+          '$_base/$projectId/revisions/$revisionId',
+        );
+        return VideoRevision.fromJson(response.data!);
+      });
+
+  @override
+  Future<VideoRevision> applyRevision(
+    String projectId,
+    String revisionId,
+    VideoRevisionApply input,
+  ) => _guard(() async {
+    final response = await _dio.patch<Map<String, dynamic>>(
+      '$_base/$projectId/revisions/$revisionId',
+      data: input.toJson(),
+    );
+    return VideoRevision.fromJson(response.data!);
+  });
 
   @override
   Future<void> deleteProject(String projectId) => _guard(() async {

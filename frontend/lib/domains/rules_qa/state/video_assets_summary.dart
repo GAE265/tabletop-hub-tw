@@ -5,6 +5,7 @@ import '../data/video_studio_models.dart';
 import '../data/video_studio_repository.dart';
 import 'video_assets_state.dart';
 import 'video_draft_state.dart';
+import 'video_projects_state.dart';
 
 /// 素材清單上方的完成進度。
 class VideoAssetsProgress {
@@ -124,6 +125,7 @@ class VideoAssetListNotifier extends Notifier<VideoAssetListState> {
       ref
         ..invalidate(videoReadinessProvider(projectId))
         ..invalidate(videoDraftProvider(projectId))
+        ..invalidate(videoProjectProvider(projectId))
         ..invalidate(
           videoAssetProvider((projectId: projectId, assetKey: assetKey)),
         );
