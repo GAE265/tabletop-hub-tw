@@ -176,6 +176,8 @@ class _VideoDraftPageState extends ConsumerState<VideoDraftPage> {
                     _Summary(draft: value),
                     const SizedBox(height: AppSpacing.medium),
                     _CoverageBySlot(coverage: value.coverage),
+                    const SizedBox(height: AppSpacing.medium),
+                    _ReviseEntry(projectId: _id, running: running),
                     if (value.segments.any((s) => s.slots.isNotEmpty)) ...[
                       const SizedBox(height: AppSpacing.medium),
                       _SegmentAssets(projectId: _id, draft: value),
@@ -196,6 +198,46 @@ class _VideoDraftPageState extends ConsumerState<VideoDraftPage> {
       if (coverage.status == 'not_done' && coverage.slots.isEmpty)
         _Banner('涵蓋檢查沒做成：${coverage.reason ?? '原因不明'}'),
     ];
+  }
+}
+
+/// 用一句話修改的入口（MR 12）：AI 算出提案，店員看過再套用。有工作在跑時不能修改。
+class _ReviseEntry extends StatelessWidget {
+  const _ReviseEntry({required this.projectId, required this.running});
+
+  final String projectId;
+  final bool running;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    final muted = text.bodySmall!.copyWith(
+      color: Theme.of(context).colorScheme.onSurfaceVariant,
+    );
+    return ThickCard(
+      key: const Key('video-draft-revise-card'),
+      child: Padding(
+        padding: videoCardInset,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text('用一句話修改', style: text.titleMedium),
+            Text('例如「情況二的紅框改成金框」「第 3 段字幕講短一點」', style: muted),
+            const SizedBox(height: AppSpacing.small),
+            ThickButton(
+              buttonKey: const Key('video-draft-revise'),
+              style: ThickStyle.light,
+              expand: true,
+              icon: Icons.edit_note,
+              label: '提出修改',
+              onPressed: running
+                  ? null
+                  : () => context.go('/videos/$projectId/revise'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 

@@ -529,3 +529,144 @@ abstract class Rulebook with _$Rulebook {
   factory Rulebook.fromJson(Map<String, dynamic> json) =>
       _$RulebookFromJson(json);
 }
+
+// --------------------------------------------------------------------------- 用一句話修改（MR 11、12）
+
+/// 送出修改要求（`POST /rules-videos/{id}/revisions`）；`segmentKey` 指定只改哪一段（選填）。
+@freezed
+abstract class VideoRevisionCreate with _$VideoRevisionCreate {
+  @JsonSerializable(fieldRename: FieldRename.snake, includeIfNull: false)
+  const factory VideoRevisionCreate({
+    required String request,
+    String? segmentKey,
+    required int videoVersion,
+  }) = _VideoRevisionCreate;
+
+  factory VideoRevisionCreate.fromJson(Map<String, dynamic> json) =>
+      _$VideoRevisionCreateFromJson(json);
+}
+
+/// 套用提案或選的替代做法（`PATCH /rules-videos/{id}/revisions/{revision_id}`）。
+@freezed
+abstract class VideoRevisionApply with _$VideoRevisionApply {
+  @JsonSerializable(fieldRename: FieldRename.snake, includeIfNull: false)
+  const factory VideoRevisionApply({
+    @Default('applied') String status,
+    // 版型做不到時選的替代做法（從 1 開始）
+    int? alternative,
+    required int videoVersion,
+  }) = _VideoRevisionApply;
+
+  factory VideoRevisionApply.fromJson(Map<String, dynamic> json) =>
+      _$VideoRevisionApplyFromJson(json);
+}
+
+@freezed
+abstract class RevisionText with _$RevisionText {
+  const factory RevisionText({
+    required String narration,
+    required String subtitle,
+  }) = _RevisionText;
+
+  factory RevisionText.fromJson(Map<String, dynamic> json) =>
+      _$RevisionTextFromJson(json);
+}
+
+/// 旁白或字幕有變的一句；新增的句子 `before` 是 null，刪除的句子 `after` 是 null。
+@freezed
+abstract class RevisionBeat with _$RevisionBeat {
+  @JsonSerializable(fieldRename: FieldRename.snake)
+  const factory RevisionBeat({
+    required String beatKey,
+    RevisionText? before,
+    RevisionText? after,
+  }) = _RevisionBeat;
+
+  factory RevisionBeat.fromJson(Map<String, dynamic> json) =>
+      _$RevisionBeatFromJson(json);
+}
+
+/// 提案裡的一段：AI 的說明、改了哪些欄位分類、改了但沒被要求的分類、旁白字幕的前後對照。
+@freezed
+abstract class RevisionSegment with _$RevisionSegment {
+  @JsonSerializable(fieldRename: FieldRename.snake)
+  const factory RevisionSegment({
+    required String segmentKey,
+    required int segmentNumber,
+    required String summary,
+    required List<String> changed,
+    required List<String> unrequested,
+    @Default([]) List<RevisionBeat> beats,
+  }) = _RevisionSegment;
+
+  factory RevisionSegment.fromJson(Map<String, dynamic> json) =>
+      _$RevisionSegmentFromJson(json);
+}
+
+/// 版型做不到時的替代做法；套用時帶 `number`。
+@freezed
+abstract class RevisionAlternative with _$RevisionAlternative {
+  @JsonSerializable(fieldRename: FieldRename.snake)
+  const factory RevisionAlternative({
+    required int number,
+    required String title,
+    required String description,
+    @Default([]) List<RevisionSegment> segments,
+  }) = _RevisionAlternative;
+
+  factory RevisionAlternative.fromJson(Map<String, dynamic> json) =>
+      _$RevisionAlternativeFromJson(json);
+}
+
+/// 不確定改哪一段時的候選段。
+@freezed
+abstract class RevisionCandidate with _$RevisionCandidate {
+  @JsonSerializable(fieldRename: FieldRename.snake)
+  const factory RevisionCandidate({
+    required String segmentKey,
+    required int segmentNumber,
+    required String reason,
+  }) = _RevisionCandidate;
+
+  factory RevisionCandidate.fromJson(Map<String, dynamic> json) =>
+      _$RevisionCandidateFromJson(json);
+}
+
+/// 一次修改的進度與結果；`id` 是修改的工作編號。
+/// `outcome`：proposal＝可以做、unsupported＝版型做不到（看替代做法）、
+/// ambiguous＝不確定改哪一段（選一段後重新送出）；還沒算完或失敗時是 null。
+@freezed
+abstract class VideoRevision with _$VideoRevision {
+  const VideoRevision._();
+
+  @JsonSerializable(fieldRename: FieldRename.snake)
+  const factory VideoRevision({
+    required String id,
+    required String projectId,
+    required VideoJobStatus status,
+    required double progress,
+    String? message,
+    String? error,
+    required String request,
+    String? segmentKey,
+    String? outcome,
+    String? reason,
+    @Default([]) List<RevisionSegment> segments,
+    @Default([]) List<RevisionAlternative> alternatives,
+    @Default([]) List<RevisionCandidate> candidates,
+    @Default(false) bool manySegments,
+    @Default(false) bool applied,
+    int? appliedAlternative,
+    // 套用後的段資料版本
+    int? videoVersion,
+    @Default(false) bool coverageChecked,
+    String? coverageMessage,
+  }) = _VideoRevision;
+
+  factory VideoRevision.fromJson(Map<String, dynamic> json) =>
+      _$VideoRevisionFromJson(json);
+
+  /// AI 還在算。
+  bool get active =>
+      status == VideoJobStatus.queued || status == VideoJobStatus.running;
+}
