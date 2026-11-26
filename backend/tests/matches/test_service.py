@@ -311,6 +311,27 @@ def test_list_matches_filters_and_total(service, shared):
     assert by_user.total == 1
 
 
+def test_list_matches_without_matches_returns_empty(service):
+    """命中零筆時必須回傳空清單：不得因取用第一筆而拋出例外。"""
+    by_game = service.list_matches(OUTSIDER, game_id=999999)
+    assert (by_game.items, by_game.total) == ([], 0)
+
+    by_group = service.list_matches(OUTSIDER, group_id=uuid.uuid4())
+    assert (by_group.items, by_group.total) == ([], 0)
+
+    by_user = service.list_matches(OUTSIDER, user_id=uuid.uuid4())
+    assert (by_user.items, by_user.total) == ([], 0)
+
+
+def test_list_matches_page_beyond_total_returns_empty_items(service):
+    """翻到超出總筆數的 page：同一條空列表路徑，total 仍要正確。"""
+    service.create_match(CREATOR, create_input(game_id=WHITE_ROSE))
+    service.create_match(CREATOR, create_input(game_id=OTHER_GAME))
+
+    beyond = service.list_matches(OUTSIDER, page=5, page_size=20)
+    assert (beyond.items, beyond.total) == ([], 2)
+
+
 # --- 加入參加者 ---
 
 

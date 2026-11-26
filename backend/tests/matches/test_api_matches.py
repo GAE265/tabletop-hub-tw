@@ -245,5 +245,31 @@ def test_list_matches_filters_orders_and_paginates(
     assert len(page["items"]) == 1
 
 
+def test_list_matches_without_matches_returns_empty_list(api, white_rose_id: int):
+    """命中零筆的查詢必須是 200 空清單，不能變成 500。"""
+    api(TEST_PLAYER, "POST", BASE, json=match_body(white_rose_id))
+
+    missing_game = api(OUTSIDER, "GET", BASE, params={"game_id": 999999})
+    assert missing_game.status_code == 200
+    assert missing_game.json() == {"items": [], "total": 0}
+
+    missing_group = api(OUTSIDER, "GET", BASE, params={"group_id": str(uuid.uuid4())})
+    assert missing_group.status_code == 200
+    assert missing_group.json() == {"items": [], "total": 0}
+
+    missing_user = api(OUTSIDER, "GET", BASE, params={"user_id": str(uuid.uuid4())})
+    assert missing_user.status_code == 200
+    assert missing_user.json() == {"items": [], "total": 0}
+
+
+def test_list_matches_page_beyond_total_returns_empty_items(api, white_rose_id: int):
+    api(TEST_PLAYER, "POST", BASE, json=match_body(white_rose_id, played_on="2026-11-18"))
+    api(TEST_PLAYER, "POST", BASE, json=match_body(white_rose_id, played_on="2026-11-19"))
+
+    beyond = api(OUTSIDER, "GET", BASE, params={"page": 5, "page_size": 20})
+    assert beyond.status_code == 200
+    assert beyond.json() == {"items": [], "total": 2}
+
+
 def test_admin_can_list(api, white_rose_id: int):
     assert api(TEST_ADMIN, "GET", BASE).status_code == 200
