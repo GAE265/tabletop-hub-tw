@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:tabletop_hub/app/navigation.dart';
 import 'package:tabletop_hub/app/theme/app_theme.dart';
 import 'package:tabletop_hub/core/config/app_config.dart';
 import 'package:tabletop_hub/core/dev/data/dev_users_repository.dart';
@@ -80,6 +81,23 @@ void main() {
       expect(find.text(user.displayName), findsOneWidget);
       expect(find.text(user.role), findsOneWidget);
     }
+  });
+
+  testWidgets('最上方是導覽列共用的品牌 logo，置中', (tester) async {
+    tester.view.physicalSize = const Size(1280, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await pumpLogin(tester, repo: FakeDevUsersRepository());
+    final logo = find.descendant(
+      of: find.byKey(const Key('dev-login-page')),
+      matching: find.byType(BrandMark),
+    );
+    expect(logo, findsOneWidget);
+    expect(tester.getCenter(logo).dx, 640);
+    expect(
+      tester.getBottomLeft(logo).dy,
+      lessThan(tester.getTopLeft(find.text('選擇要登入的帳號')).dy),
+    );
   });
 
   testWidgets('還沒選帳號時，「登入」不能按', (tester) async {
