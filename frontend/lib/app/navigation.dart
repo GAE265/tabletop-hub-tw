@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../core/config/app_config.dart';
 import '../core/dev/state/dev_user_state.dart';
 import 'notifications/notification_bell.dart';
 import 'theme/app_colors.dart';
@@ -396,18 +397,20 @@ class BrandMark extends StatelessWidget {
   }
 }
 
-/// 登入按鈕。`auth` 尚未完成，按下只提示「登入功能即將推出」。
+/// 登入按鈕：導到開發用登入畫面 `/login`。和 `/login` 一樣只在 `devUserEnabled` 時出現，
+/// 正式環境不顯示。`auth` 完成後改成導到真正的登入。
 /// [compact] 時是白底的圓形按鈕＋深色人形（手機頂部列），和鈴鐺一樣大、一樣顏色、按得下去。
-class LoginButton extends StatelessWidget {
+class LoginButton extends ConsumerWidget {
   const LoginButton({this.compact = false, super.key});
 
   final bool compact;
 
   @override
-  Widget build(BuildContext context) {
-    void onPressed() => ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('登入功能即將推出')));
+  Widget build(BuildContext context, WidgetRef ref) {
+    if (!ref.watch(appConfigProvider).devUserEnabled) {
+      return const SizedBox.shrink();
+    }
+    void onPressed() => context.go('/login');
     if (compact) {
       return ThickIconButton(
         tooltip: '登入',

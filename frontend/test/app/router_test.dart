@@ -140,7 +140,34 @@ void main() {
 
   testWidgets('開發環境框架顯示身分切換器', (tester) async {
     await pumpApp(tester, showPrototypes: false, dev: true);
+    // 開發環境啟動後先停在全螢幕的 /login（不在框架裡），先走到框架裡再驗證
+    goTo(tester, '/');
+    await tester.pumpAndSettle();
     expect(find.byType(DropdownButton<String>), findsOneWidget);
+  });
+
+  // 開發用登入畫面（feature/frontend-dev-login）：只在開發環境註冊，沒有 redirect
+  testWidgets('開發環境啟動後停在 /login', (tester) async {
+    await pumpApp(tester, showPrototypes: false, dev: true);
+    expect(find.byKey(const Key('dev-login-page')), findsOneWidget);
+    expect(find.byKey(const Key('home-page')), findsNothing);
+  });
+
+  testWidgets('正式環境啟動後停在 /，沒有 /login', (tester) async {
+    await pumpApp(tester, showPrototypes: false, dev: false);
+    expect(find.byKey(const Key('home-page')), findsOneWidget);
+    goTo(tester, '/login');
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('dev-login-page')), findsNothing);
+    expect(find.text('找不到頁面'), findsOneWidget);
+  });
+
+  testWidgets('開發環境沒登入也能直接進其他頁（不會被導回 /login）', (tester) async {
+    await pumpApp(tester, showPrototypes: false, dev: true);
+    goTo(tester, '/matches');
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('matches-page')), findsOneWidget);
+    expect(find.byKey(const Key('dev-login-page')), findsNothing);
   });
 
   testWidgets('正式環境框架沒有身分切換器', (tester) async {

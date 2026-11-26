@@ -10,6 +10,7 @@ import 'package:tabletop_hub/app/theme/app_theme.dart';
 import 'package:tabletop_hub/app/theme/wood_background.dart';
 import 'package:tabletop_hub/core/config/app_config.dart';
 import 'package:tabletop_hub/core/dev/data/dev_user.dart';
+import 'package:tabletop_hub/core/dev/data/dev_users_repository.dart';
 import 'package:tabletop_hub/core/dev/state/dev_user_state.dart';
 import 'package:tabletop_hub/domains/booking/data/booking_repository.dart';
 import 'package:tabletop_hub/domains/groups/data/groups_repository.dart';
@@ -31,6 +32,7 @@ Future<GoRouter> pumpShell(
   String location = '/',
   Size size = const Size(400, 900),
   DevUser? user,
+  bool dev = false,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
@@ -61,6 +63,7 @@ Future<GoRouter> pumpShell(
             '/booking/mine',
             '/health',
             '/proto/theme',
+            '/login',
           ])
             GoRoute(path: path, builder: (context, state) => page(state)),
         ],
@@ -77,11 +80,16 @@ Future<GoRouter> pumpShell(
         // （add-groups-notifications、add-booking-notifications）
         groupsRepositoryProvider.overrideWithValue(FakeGroupsRepository()),
         bookingRepositoryProvider.overrideWithValue(FakeBookingRepository()),
+        // 開發環境：登入按鈕與身分切換器才會出現；切換器讀測試帳號清單，用假的 repository
+        if (dev)
+          devUsersRepositoryProvider.overrideWithValue(
+            FakeDevUsersRepository(),
+          ),
         appConfigProvider.overrideWithValue(
-          const AppConfig(
+          AppConfig(
             apiBaseUrl: 'http://api.test',
             showPrototypes: false,
-            devUserEnabled: false,
+            devUserEnabled: dev,
           ),
         ),
       ],
@@ -222,7 +230,8 @@ void main() {
 
   group('Stitch 版面（手機）', () {
     testWidgets('頂部列：品牌 logo（讀屏唸「遊任有娛」）、鈴鐺與登入', (tester) async {
-      await pumpShell(tester, size: const Size(400, 900));
+      // 登入按鈕只在開發環境出現
+      await pumpShell(tester, size: const Size(400, 900), dev: true);
       final bar = find.byType(MobileTopBar);
       Finder inBar(Finder f) => find.descendant(of: bar, matching: f);
       expect(inBar(logoImage), findsOneWidget);
@@ -234,11 +243,23 @@ void main() {
       expect(inBar(find.byKey(const Key('shell-login'))), findsOneWidget);
     });
 
-    testWidgets('頂部列的登入：提示「登入功能即將推出」', (tester) async {
-      await pumpShell(tester, size: const Size(400, 900));
+    // feature/frontend-dev-login：登入按鈕改成導到開發用登入畫面，只在開發環境出現
+    testWidgets('頂部列的登入：點了到 /login', (tester) async {
+      final router = await pumpShell(
+        tester,
+        size: const Size(400, 900),
+        dev: true,
+      );
       await tester.tap(find.byKey(const Key('shell-login')));
-      await tester.pump();
-      expect(find.text('登入功能即將推出'), findsOneWidget);
+      await tester.pumpAndSettle();
+      expect(router.state.uri.path, '/login');
+    });
+
+    testWidgets('正式環境沒有登入按鈕', (tester) async {
+      await pumpShell(tester, size: const Size(400, 900));
+      expect(find.byTooltip('登入'), findsNothing);
+      expect(find.text('登入'), findsNothing);
+      expect(tester.getSize(find.byKey(const Key('shell-login'))), Size.zero);
     });
 
     testWidgets('頂部列：白色滿版，底部有較粗的邊與陰影；logo 高 60', (tester) async {
@@ -267,7 +288,7 @@ void main() {
     });
 
     testWidgets('頂部列：鈴鐺與登入一樣大，右邊留白和左邊一樣 16', (tester) async {
-      await pumpShell(tester, size: const Size(400, 900));
+      await pumpShell(tester, size: const Size(400, 900), dev: true);
       final bell = find.byKey(const Key('shell-notification-bell'));
       final login = find.byKey(const Key('shell-login'));
       expect(tester.getSize(bell), tester.getSize(login));
@@ -280,7 +301,7 @@ void main() {
     });
 
     testWidgets('頂部列：鈴鐺與登入的底色、圖示顏色一樣（白底深色圖示）', (tester) async {
-      await pumpShell(tester, size: const Size(400, 900));
+      await pumpShell(tester, size: const Size(400, 900), dev: true);
       Color? fill(String key) =>
           (tester
                       .widget<DecoratedBox>(
@@ -312,7 +333,7 @@ void main() {
 
     for (final key in ['shell-notification-bell', 'shell-login']) {
       testWidgets('按住頂部列的「$key」：底邊變薄、往下沉，移開後彈回', (tester) async {
-        await pumpShell(tester, size: const Size(400, 900));
+        await pumpShell(tester, size: const Size(400, 900), dev: true);
         final button = find.byKey(Key(key));
         final frame = find
             .descendant(of: button, matching: find.byType(DecoratedBox))
