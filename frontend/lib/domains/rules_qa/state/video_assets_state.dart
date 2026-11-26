@@ -8,6 +8,7 @@ import '../../../core/platform/image_picker.dart';
 import '../data/video_studio_models.dart';
 import '../data/video_studio_repository.dart';
 import 'video_draft_state.dart';
+import 'video_projects_state.dart';
 
 /// 一個素材：哪個專案的哪個 asset_key。
 typedef VideoAssetRef = ({String projectId, String assetKey});
@@ -168,11 +169,12 @@ class VideoAssetNotifier extends Notifier<VideoAssetState> {
     }
   }
 
-  /// 照片或方向改了：素材清單、缺什麼、標區域頁都要重新讀。
+  /// 照片或方向改了：素材清單、缺什麼、標區域頁、專案總覽的步驟都要重新讀。
   void _changed() {
     ref
       ..invalidate(videoReadinessProvider(target.projectId))
       ..invalidate(videoDraftProvider(target.projectId))
+      ..invalidate(videoProjectProvider(target.projectId))
       ..invalidate(videoRegionsProvider(target));
   }
 }
@@ -350,7 +352,8 @@ class VideoRegionsNotifier extends Notifier<VideoRegionsState> {
       state = state.copyWith(saving: false, saved: state.boxes);
       ref
         ..invalidate(videoReadinessProvider(target.projectId))
-        ..invalidate(videoDraftProvider(target.projectId));
+        ..invalidate(videoDraftProvider(target.projectId))
+        ..invalidate(videoProjectProvider(target.projectId));
       return true;
     } on ApiException catch (error) {
       if (ref.mounted) {
@@ -386,7 +389,8 @@ class VideoRegionsNotifier extends Notifier<VideoRegionsState> {
       state = state.copyWith(saving: false, skipped: skipped);
       ref
         ..invalidate(videoReadinessProvider(target.projectId))
-        ..invalidate(videoDraftProvider(target.projectId));
+        ..invalidate(videoDraftProvider(target.projectId))
+        ..invalidate(videoProjectProvider(target.projectId));
       return true;
     } on ApiException catch (error) {
       if (ref.mounted) {

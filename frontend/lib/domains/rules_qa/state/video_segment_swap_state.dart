@@ -5,6 +5,7 @@ import '../data/video_studio_models.dart';
 import '../data/video_studio_repository.dart';
 import 'video_assets_state.dart';
 import 'video_draft_state.dart';
+import 'video_projects_state.dart';
 
 /// 換素材（2026-11-25 永傑決定；完整版）：單一素材的格子、放牌的格子（逐張換正面或牌背）都可以換，
 /// 只能換成清單裡可以用的素材；正確的素材不在清單裡時可以先新增再換上。
@@ -162,11 +163,13 @@ class VideoSegmentSwapNotifier extends Notifier<VideoSegmentSwapState> {
       // 版本衝突，或新增成功後換失敗：草稿已經變了，重新讀取
       ref.invalidate(videoDraftProvider(projectId));
       ref.invalidate(videoReadinessProvider(projectId));
+      ref.invalidate(videoProjectProvider(projectId));
       return false;
     }
     if (!ref.mounted) return true;
     ref.invalidate(videoDraftProvider(projectId));
     ref.invalidate(videoReadinessProvider(projectId));
+    ref.invalidate(videoProjectProvider(projectId));
     return true;
   }
 }
