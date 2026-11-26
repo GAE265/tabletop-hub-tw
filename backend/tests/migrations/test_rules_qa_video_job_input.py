@@ -30,12 +30,12 @@ def engine(url: str) -> Iterator[Engine]:
 def _column(engine: Engine) -> tuple[str, str, str | None] | None:
     sql = text(
         "SELECT c.data_type, c.is_nullable, "
-        "col_description(CAST(:t AS regclass), c.ordinal_position) "
+        f"col_description('{TABLE}'::regclass, c.ordinal_position) "
         "FROM information_schema.columns c "
-        "WHERE c.table_name = :t AND c.column_name = 'input'"
+        f"WHERE c.table_name = '{TABLE}' AND c.column_name = 'input'"
     )
     with engine.connect() as conn:
-        row = conn.execute(sql, {"t": TABLE}).one_or_none()
+        row = conn.execute(sql).one_or_none()
     return None if row is None else (row[0], row[1], row[2])
 
 
