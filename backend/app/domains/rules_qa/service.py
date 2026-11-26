@@ -10,6 +10,7 @@ import shutil
 import uuid
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import AbstractContextManager, contextmanager
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -48,6 +49,11 @@ from app.domains.rules_qa.schemas import (
     MessageRequest,
     MessageResponse,
     RemovedBlockOut,
+    RevisionAlternativeOut,
+    RevisionBeatOut,
+    RevisionCandidateOut,
+    RevisionSegmentOut,
+    RevisionText,
     RulebookOut,
     RulebookPhotoOut,
     RulesLessonItem,
@@ -71,6 +77,9 @@ from app.domains.rules_qa.schemas import (
     VideoReadinessOut,
     VideoRenderOut,
     VideoRequest,
+    VideoRevisionApply,
+    VideoRevisionCreate,
+    VideoRevisionOut,
     VideoTermsIn,
     VideoTermsOut,
 )
@@ -101,6 +110,13 @@ from app.domains.rules_qa.video_draft import (
 )
 from app.domains.rules_qa.video_jobs import JOB_TIMEOUT_MINUTES, TIMEOUT_MESSAGE
 from app.domains.rules_qa.video_pages import page_diff, text_hash
+from app.domains.rules_qa.video_revise import (
+    COVERAGE_NOT_DONE_MESSAGE,
+    beat_changes,
+    segment_numbers,
+    stored_entries,
+)
+from app.domains.rules_qa.video_revision import MANY_SEGMENTS, apply_to_data, next_number_in
 from app.domains.rules_qa.video_rulebook import (
     MAX_RULEBOOK_PHOTOS,
     is_read,
@@ -602,7 +618,14 @@ def _project_out(record: VideoProjectRecord) -> VideoProjectOut:
 
 class VideoJobStore(Protocol):
     def transaction(self) -> AbstractContextManager[None]: ...
-    def create(self, *, project_id: uuid.UUID, kind: str, created_by: uuid.UUID) -> uuid.UUID: ...
+    def create(
+        self,
+        *,
+        project_id: uuid.UUID,
+        kind: str,
+        created_by: uuid.UUID,
+        input: dict[str, Any] | None = None,
+    ) -> uuid.UUID: ...
     def active_job_id(self, project_id: uuid.UUID) -> uuid.UUID | None: ...
     def expire_stale(self, project_id: uuid.UUID, minutes: int, error: str) -> int: ...
     def get(self, job_id: uuid.UUID) -> VideoJobRecord | None: ...
@@ -628,7 +651,13 @@ class VideoJobService:
         self._projects = projects
         self._notify = notify
 
-    def create(self, user: CurrentUser, project_id: uuid.UUID, kind: str) -> VideoJobOut:
+    def create(
+        self,
+        user: CurrentUser,
+        project_id: uuid.UUID,
+        kind: str,
+        input: dict[str, Any] | None = None,
+    ) -> VideoJobOut:
         require_role(user, "shop_staff", "admin")
         self._project(user, project_id)
         # 卡死的工作的出口：running 超過上限的先標為逾時，才不會一直擋住新工作
@@ -636,7 +665,9 @@ class VideoJobService:
             self._jobs.expire_stale(project_id, JOB_TIMEOUT_MINUTES, TIMEOUT_MESSAGE)
         try:
             with self._jobs.transaction():
-                job_id = self._jobs.create(project_id=project_id, kind=kind, created_by=user.id)
+                job_id = self._jobs.create(
+                    project_id=project_id, kind=kind, created_by=user.id, input=input
+                )
         except ProjectGone:
             # 建立工作的同時專案被刪除了
             raise _project_not_found() from None
@@ -1342,6 +1373,224 @@ def _asset_out(asset: dict[str, Any], version: int, video: dict[str, Any]) -> Vi
 
 
 # --------------------------------------------------------------------------- 成品影片（MR 9）
+
+
+# --------------------------------------------------------------------------- 用一句話修改
+
+
+class RevisionJobStore(Protocol):
+    def get(self, job_id: uuid.UUID) -> VideoJobRecord | None: ...
+    def mark_applied(self, job_id: uuid.UUID, applied: dict[str, Any]) -> bool: ...
+
+
+REVISION_CONFLICT_MESSAGE = "草稿已被修改，請重新整理後再試一次"
+REVISION_STALE_MESSAGE = "算出提案之後草稿被改過（例如換了素材），請重新送出修改"
+REVISION_APPLIED_MESSAGE = "這個修改已經套用過了"
+
+
+class VideoRevisionService:
+    """手機上用一句話修改草稿（add-rules-video-mobile MR 11；邏輯見 video_revise）。
+
+    送出修改只建立工作；工作算出提案後，店員看過才套用。權限同影片專案。
+    """
+
+    def __init__(
+        self,
+        drafts: VideoAssetStore,
+        projects: VideoProjectStore,
+        jobs: VideoJobService,
+        job_store: RevisionJobStore,
+    ) -> None:
+        self._drafts = drafts
+        self._projects = projects
+        self._jobs = jobs
+        self._job_store = job_store
+
+    def create(
+        self, user: CurrentUser, project_id: uuid.UUID, body: VideoRevisionCreate
+    ) -> VideoRevisionOut:
+        state = self._state(user, project_id)
+        video = state.video or {}
+        if body.video_version != state.video_version:
+            raise AppError(409, "RULES_VIDEO_CONFLICT", REVISION_CONFLICT_MESSAGE)
+        if body.segment_key is not None and body.segment_key not in segment_numbers(video):
+            raise AppError(404, "RULES_VIDEO_SEGMENT_NOT_FOUND", "草稿沒有這一段，請重新整理")
+        job = self._jobs.create(
+            user,
+            project_id,
+            "revise",
+            input={"request": body.request, "segment_key": body.segment_key},
+        )
+        record = self._job_store.get(job.id)
+        assert record is not None
+        return _revision_out(record, video)
+
+    def get(
+        self, user: CurrentUser, project_id: uuid.UUID, revision_id: uuid.UUID
+    ) -> VideoRevisionOut:
+        state = self._state(user, project_id)
+        return _revision_out(self._revision(project_id, revision_id), state.video or {})
+
+    def apply(
+        self,
+        user: CurrentUser,
+        project_id: uuid.UUID,
+        revision_id: uuid.UUID,
+        body: VideoRevisionApply,
+    ) -> VideoRevisionOut:
+        """取代提案（或選的替代做法）裡的段、寫修改紀錄、標成要重做；草稿版本加 1。"""
+        state = self._state(user, project_id)
+        video = state.video or {}
+        record = self._revision(project_id, revision_id)
+        if record.status in ("queued", "running"):
+            raise AppError(409, "RULES_VIDEO_REVISION_NOT_READY", "AI 還在算，請等它完成")
+        if record.status == "failed":
+            raise AppError(409, "RULES_VIDEO_REVISION_FAILED", "這次修改沒有成功，請重新送出")
+        result = record.result or {}
+        if result.get("applied"):
+            raise AppError(409, "RULES_VIDEO_REVISION_APPLIED", REVISION_APPLIED_MESSAGE)
+        raw, kind = _chosen(result, body.alternative)
+        if body.video_version != state.video_version:
+            raise AppError(409, "RULES_VIDEO_CONFLICT", REVISION_CONFLICT_MESSAGE)
+        if result.get("base_video_version") != state.video_version:
+            raise AppError(409, "RULES_VIDEO_REVISION_STALE", REVISION_STALE_MESSAGE)
+
+        merged = apply_to_data(
+            video,
+            stored_entries(raw),
+            result.get("request", ""),
+            number=next_number_in(video),
+            kind=kind,
+            by=str(user.id),
+        )
+        applied = {
+            "at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "by": str(user.id),
+            "alternative": body.alternative,
+            "video_version": state.video_version + 1,
+        }
+        # 寫入草稿與記下「已套用」在同一個交易：任一個失敗就都不寫
+        with self._drafts.transaction():
+            if not self._drafts.save_video(
+                project_id, expected_version=state.video_version, video=merged
+            ):
+                raise AppError(409, "RULES_VIDEO_CONFLICT", REVISION_CONFLICT_MESSAGE)
+            if not self._job_store.mark_applied(record.id, applied):
+                raise AppError(409, "RULES_VIDEO_REVISION_APPLIED", REVISION_APPLIED_MESSAGE)
+        updated = self._job_store.get(record.id)
+        assert updated is not None
+        return _revision_out(updated, merged)
+
+    def _state(self, user: CurrentUser, project_id: uuid.UUID) -> DraftState:
+        require_role(user, "shop_staff", "admin")
+        record = self._projects.get(project_id)
+        if record is None or not _can_access(user, record):
+            raise _project_not_found()
+        state = self._drafts.get_state(project_id)
+        assert state is not None
+        if state.video is None:
+            raise AppError(404, "RULES_VIDEO_DRAFT_NOT_FOUND", "這個專案還沒有草稿")
+        return state
+
+    def _revision(self, project_id: uuid.UUID, revision_id: uuid.UUID) -> VideoJobRecord:
+        record = self._job_store.get(revision_id)
+        if record is None or record.project_id != project_id or record.kind != "revise":
+            raise AppError(404, "RULES_VIDEO_REVISION_NOT_FOUND", "找不到這次修改")
+        return record
+
+
+def _chosen(result: dict[str, Any], alternative: int | None) -> tuple[list[dict[str, Any]], str]:
+    """要套用的段（工作結果裡的格式）與修改紀錄的 kind。"""
+    outcome = result.get("outcome")
+    if outcome == "ambiguous":
+        raise AppError(409, "RULES_VIDEO_REVISION_AMBIGUOUS", "請先選要改哪一段，再重新送出修改")
+    if outcome == "proposal":
+        if alternative is not None:
+            raise AppError(422, "RULES_VIDEO_REVISION_ALTERNATIVE_INVALID", "這次修改沒有替代做法")
+        return result.get("segments", []), "revision"
+    alternatives = result.get("alternatives", [])
+    if alternative is None:
+        raise AppError(
+            422, "RULES_VIDEO_REVISION_ALTERNATIVE_REQUIRED", "版型做不到，請選一個替代做法"
+        )
+    if alternative > len(alternatives):
+        raise AppError(
+            422,
+            "RULES_VIDEO_REVISION_ALTERNATIVE_INVALID",
+            f"替代做法的編號是 1 到 {len(alternatives)}",
+        )
+    return alternatives[alternative - 1].get("segments", []), "alternative"
+
+
+def _revision_out(record: VideoJobRecord, video: dict[str, Any]) -> VideoRevisionOut:
+    params = record.input or {}
+    result = record.result or {}
+    done = record.status == "succeeded"
+    numbers = segment_numbers(video)
+    applied = result.get("applied") or None
+    segments = [_revision_segment(e, numbers) for e in result.get("segments", [])]
+    alternatives = [
+        RevisionAlternativeOut(
+            number=i,
+            title=alt.get("title", ""),
+            description=alt.get("description", ""),
+            segments=[_revision_segment(e, numbers) for e in alt.get("segments", [])],
+        )
+        for i, alt in enumerate(result.get("alternatives", []), start=1)
+    ]
+    candidates = [
+        RevisionCandidateOut(
+            segment_key=c["segment_key"],
+            segment_number=numbers.get(c["segment_key"], 0),
+            reason=c.get("reason", ""),
+        )
+        for c in result.get("candidates", [])
+    ]
+    outcome = result.get("outcome") if done else None
+    return VideoRevisionOut(
+        id=record.id,
+        project_id=record.project_id,
+        status=record.status,  # type: ignore[arg-type]
+        progress=record.progress,
+        message=record.message,
+        error=record.error,
+        request=params.get("request", ""),
+        segment_key=params.get("segment_key"),
+        outcome=outcome,
+        reason=result.get("reason") if done else None,
+        segments=segments,
+        alternatives=alternatives,
+        candidates=candidates,
+        many_segments=len(segments) > MANY_SEGMENTS,
+        applied=applied is not None,
+        applied_alternative=applied.get("alternative") if applied else None,
+        video_version=applied.get("video_version") if applied else None,
+        coverage_checked=False,
+        coverage_message=(
+            COVERAGE_NOT_DONE_MESSAGE if outcome in ("proposal", "unsupported") else None
+        ),
+        created_at=record.created_at,
+        finished_at=record.finished_at,
+    )
+
+
+def _revision_segment(entry: dict[str, Any], numbers: dict[str, int]) -> RevisionSegmentOut:
+    key = entry["segment_key"]
+    return RevisionSegmentOut(
+        segment_key=key,
+        segment_number=numbers.get(key, 0),
+        summary=entry.get("summary", ""),
+        changed=list(entry.get("changed", [])),
+        unrequested=list(entry.get("unrequested", [])),
+        beats=[
+            RevisionBeatOut(
+                beat_key=b["beat_key"],
+                before=RevisionText(**b["before"]) if b["before"] else None,
+                after=RevisionText(**b["after"]) if b["after"] else None,
+            )
+            for b in beat_changes(entry.get("before") or {}, entry.get("segment") or {})
+        ],
+    )
 
 
 class RenderJobsReader(Protocol):

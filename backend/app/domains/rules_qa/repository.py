@@ -322,6 +322,8 @@ class VideoJobRecord:
     created_at: datetime
     started_at: datetime | None
     finished_at: datetime | None
+    # 工作的輸入（修改的工作是修改要求與指定段）；其他工作是 None
+    input: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -352,10 +354,18 @@ class VideoJobRepository(SessionRepository):
             created_at=job.created_at,
             started_at=job.started_at,
             finished_at=job.finished_at,
+            input=job.input,
         )
 
-    def create(self, *, project_id: uuid.UUID, kind: str, created_by: uuid.UUID) -> uuid.UUID:
-        job = RulesQaVideoJob(project_id=project_id, kind=kind, created_by=created_by)
+    def create(
+        self,
+        *,
+        project_id: uuid.UUID,
+        kind: str,
+        created_by: uuid.UUID,
+        input: dict[str, Any] | None = None,
+    ) -> uuid.UUID:
+        job = RulesQaVideoJob(project_id=project_id, kind=kind, created_by=created_by, input=input)
         self.session.add(job)
         try:
             self.session.flush()
@@ -455,6 +465,17 @@ class VideoJobRepository(SessionRepository):
         self._update_running(
             job_id, status="succeeded", progress=1, result=result, finished_at=func.now()
         )
+
+    def mark_applied(self, job_id: uuid.UUID, applied: dict[str, Any]) -> bool:
+        """修改的提案套用後，在成功的工作結果記下 applied；已經記過（套用過）時不寫、回 False。"""
+        job = self.session.get(RulesQaVideoJob, job_id, with_for_update=True)
+        if job is None or job.status != "succeeded" or job.result is None:
+            return False
+        if job.result.get("applied") is not None:
+            return False
+        job.result = {**job.result, "applied": applied}
+        self.session.flush()
+        return True
 
     def finish_failed(self, job_id: uuid.UUID, error: str, detail: str | None) -> None:
         self._update_running(

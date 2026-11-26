@@ -268,6 +268,13 @@ class RulesQaVideoJob(Base):
     error_detail: Mapped[str | None] = mapped_column(
         Text, comment="失敗時的例外類型與訊息，給開發者看；空值代表沒有未預期的例外"
     )
+    input: Mapped[dict[str, Any] | None] = mapped_column(
+        JSONB,
+        comment=(
+            "工作的輸入：修改的工作（revise）是 request（店員的修改要求）與 segment_key"
+            "（指定只改哪一段，空值代表不指定）；空值代表這種工作不需要輸入（草稿、產生影片）"
+        ),
+    )
     result: Mapped[dict[str, Any] | None] = mapped_column(
         JSONB, comment="完成時的結果；空值代表還沒完成或失敗"
     )
