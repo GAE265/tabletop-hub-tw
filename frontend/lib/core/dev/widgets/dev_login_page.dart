@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../app/navigation.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_spacing.dart';
 import '../../layout/breakpoints.dart';
@@ -45,12 +46,11 @@ class _DevLoginPageState extends ConsumerState<DevLoginPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Text(
-                    '遊任有娛',
-                    style: textTheme.headlineMedium,
-                    textAlign: TextAlign.center,
+                  // 導覽列共用的品牌 logo。元件本身靠左對齊，包 Center 才會置中
+                  const Center(
+                    child: BrandMark(height: AppSizes.logoHeightMobile),
                   ),
-                  const SizedBox(height: AppSpacing.small),
+                  const SizedBox(height: AppSpacing.medium),
                   Text(
                     '選擇要登入的帳號',
                     style: textTheme.bodyMedium!.copyWith(
