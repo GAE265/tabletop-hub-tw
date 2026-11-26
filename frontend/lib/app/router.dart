@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../core/config/app_config.dart';
+import '../core/dev/widgets/dev_login_page.dart';
 import '../domains/booking/pages/new_booking_page.dart';
 import '../domains/booking/pages/my_bookings_page.dart';
 import '../domains/booking/pages/shop_board_page.dart';
@@ -28,8 +29,17 @@ import 'shell.dart';
 import 'theme/theme_preview_page.dart';
 
 /// 路由表。`/proto/...` 只有在 `SHOW_PROTOTYPES=true` 時才註冊，正式部署看不到。
+/// 開發用登入畫面 `/login` 和身分切換器一樣只在 `devUserEnabled` 時註冊，並當作起始頁；
+/// 沒有 redirect：直接打其他網址不會被擋。
 GoRouter createRouter(AppConfig config) => GoRouter(
+  initialLocation: config.devUserEnabled ? '/login' : '/',
   routes: [
+    // 全螢幕，不在畫面框架裡
+    if (config.devUserEnabled)
+      GoRoute(
+        path: '/login',
+        builder: (context, state) => const DevLoginPage(),
+      ),
     ShellRoute(
       builder: (context, state, child) =>
           AppShell(location: state.uri.path, child: child),
