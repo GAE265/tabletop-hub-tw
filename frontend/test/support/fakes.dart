@@ -2009,7 +2009,108 @@ class FakeVideoStudioRepository implements VideoStudioRepository {
   @override
   Future<VideoReadiness> getReadiness(String projectId) async =>
       readiness[projectId]!;
+
+  // --- 用一句話修改（MR 12）---
+
+  /// 送出修改時丟出的錯誤（有值就丟）。
+  Object? createRevisionError;
+
+  /// 送出修改後回傳的（預設是排隊中、修改要求照送出的）。
+  VideoRevision? createdRevision;
+
+  /// [getRevision] 依序回傳的狀態；用完後一直回最後一個。
+  List<VideoRevision> revisionSequence = [];
+  int _revisionIndex = 0;
+
+  /// 套用時丟出的錯誤（有值就丟）。
+  Object? applyRevisionError;
+
+  final createdRevisions = <(String, VideoRevisionCreate)>[];
+  final polledRevisions = <String>[];
+  final appliedRevisions = <(String, String, VideoRevisionApply)>[];
+
+  @override
+  Future<VideoRevision> createRevision(
+    String projectId,
+    VideoRevisionCreate input,
+  ) async {
+    createdRevisions.add((projectId, input));
+    if (createRevisionError != null) throw createRevisionError!;
+    _revisionIndex = 0;
+    return createdRevision ??
+        sampleVideoRevision(
+          projectId: projectId,
+          request: input.request,
+          segmentKey: input.segmentKey,
+        );
+  }
+
+  @override
+  Future<VideoRevision> getRevision(String projectId, String revisionId) async {
+    polledRevisions.add(revisionId);
+    final index = _revisionIndex < revisionSequence.length
+        ? _revisionIndex++
+        : revisionSequence.length - 1;
+    return revisionSequence[index];
+  }
+
+  @override
+  Future<VideoRevision> applyRevision(
+    String projectId,
+    String revisionId,
+    VideoRevisionApply input,
+  ) async {
+    appliedRevisions.add((projectId, revisionId, input));
+    if (applyRevisionError != null) throw applyRevisionError!;
+    final last = revisionSequence.isEmpty
+        ? sampleVideoRevision(projectId: projectId)
+        : revisionSequence.last;
+    final draft = drafts[projectId];
+    if (draft != null) {
+      drafts[projectId] = draft.copyWith(videoVersion: draft.videoVersion + 1);
+    }
+    return last.copyWith(
+      applied: true,
+      appliedAlternative: input.alternative,
+      videoVersion: input.videoVersion + 1,
+    );
+  }
 }
+
+/// 一次修改的假資料：預設是排隊中、還沒有結果。
+VideoRevision sampleVideoRevision({
+  String id = 'r1',
+  String projectId = 'p1',
+  String request = '情況一的金框改成紅框',
+  String? segmentKey,
+  VideoJobStatus status = VideoJobStatus.queued,
+  String? message,
+  String? error,
+  String? outcome,
+  String? reason,
+  List<RevisionSegment> segments = const [],
+  List<RevisionAlternative> alternatives = const [],
+  List<RevisionCandidate> candidates = const [],
+  bool manySegments = false,
+}) => VideoRevision(
+  id: id,
+  projectId: projectId,
+  status: status,
+  progress: status == VideoJobStatus.succeeded ? 1 : 0,
+  message: message,
+  error: error,
+  request: request,
+  segmentKey: segmentKey,
+  outcome: outcome,
+  reason: reason,
+  segments: segments,
+  alternatives: alternatives,
+  candidates: candidates,
+  manySegments: manySegments,
+  coverageMessage: outcome == 'proposal' || outcome == 'unsupported'
+      ? '這次沒有做規則涵蓋檢查'
+      : null,
+);
 
 VideoProject sampleVideoProject({
   String id = 'p1',
