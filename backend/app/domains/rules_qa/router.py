@@ -44,6 +44,9 @@ from app.domains.rules_qa.schemas import (
     VideoReadinessOut,
     VideoRenderOut,
     VideoRequest,
+    VideoRevisionApply,
+    VideoRevisionCreate,
+    VideoRevisionOut,
     VideoTermsIn,
     VideoTermsOut,
 )
@@ -55,6 +58,7 @@ from app.domains.rules_qa.service import (
     VideoPagesService,
     VideoProjectService,
     VideoRenderService,
+    VideoRevisionService,
     VideoRulebookService,
     VideoTermsService,
 )
@@ -393,6 +397,58 @@ def create_video_asset(
 ) -> VideoAssetOut:
     """新增一個照片素材（中文名稱、拍攝說明），之後可以換到某一段並拍照。同名時 422。"""
     return service.create_asset(user, project_id, body)
+
+
+def get_video_revision_service(
+    request: Request, session: Annotated[Session, Depends(get_session)]
+) -> VideoRevisionService:
+    return VideoRevisionService(
+        VideoDraftRepository(session),
+        VideoProjectRepository(session),
+        get_video_job_service(request, session),
+        VideoJobRepository(session),
+    )
+
+
+VideoRevisionServiceDep = Annotated[VideoRevisionService, Depends(get_video_revision_service)]
+
+
+@videos_router.post(
+    "/{project_id}/revisions",
+    response_model=VideoRevisionOut,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+def create_video_revision(
+    project_id: uuid.UUID,
+    body: VideoRevisionCreate,
+    user: CurrentUserDep,
+    service: VideoRevisionServiceDep,
+) -> VideoRevisionOut:
+    """用一句話修改草稿：建立修改的工作，AI 算出提案（不寫入草稿）。版本不同時 409。"""
+    return service.create(user, project_id, body)
+
+
+@videos_router.get("/{project_id}/revisions/{revision_id}", response_model=VideoRevisionOut)
+def get_video_revision(
+    project_id: uuid.UUID,
+    revision_id: uuid.UUID,
+    user: CurrentUserDep,
+    service: VideoRevisionServiceDep,
+) -> VideoRevisionOut:
+    """看修改的進度與結果：提案、替代做法或候選段。"""
+    return service.get(user, project_id, revision_id)
+
+
+@videos_router.patch("/{project_id}/revisions/{revision_id}", response_model=VideoRevisionOut)
+def apply_video_revision(
+    project_id: uuid.UUID,
+    revision_id: uuid.UUID,
+    body: VideoRevisionApply,
+    user: CurrentUserDep,
+    service: VideoRevisionServiceDep,
+) -> VideoRevisionOut:
+    """套用提案或選的替代做法：只取代那幾段並標成要重做。草稿在提案之後被改過時 409。"""
+    return service.apply(user, project_id, revision_id, body)
 
 
 @videos_router.get("/{project_id}/readiness", response_model=VideoReadinessOut)

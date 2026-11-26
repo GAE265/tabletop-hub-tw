@@ -29,6 +29,7 @@ from app.domains.rules_qa.service import RulesQaService
 from app.domains.rules_qa.video_draft import DraftJobHandler
 from app.domains.rules_qa.video_jobs import JobRunner, recover_interrupted_jobs
 from app.domains.rules_qa.video_render import RenderJobHandler
+from app.domains.rules_qa.video_revise import RevisionJobHandler
 from app.domains.shops.router import router as shops_router
 from app.integrations.embedding import EmbeddingConfig, EmbeddingProvider, get_embedding_provider
 from app.integrations.llm import LLMProvider, get_llm_provider
@@ -126,6 +127,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.rules_video_job_handlers = {
         "draft": DraftJobHandler(app.state.llm, vision=app.state.vision, storage=app.state.storage),
         "render": RenderJobHandler.from_settings(settings, app.state.storage),
+        "revise": RevisionJobHandler(app.state.llm),
     }
     app.state.rules_video_runner = None
     app.state.games_advisor_embedding_config = EmbeddingConfig(

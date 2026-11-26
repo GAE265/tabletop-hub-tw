@@ -443,6 +443,108 @@ class SegmentAssetSwapOut(BaseModel):
     video_version: int
 
 
+# 用一句話修改（add-rules-video-mobile MR 11）：修改要求去掉前後空白後 1–200 字
+REVISION_REQUEST_MAX_CHARS = 200
+
+
+class VideoRevisionCreate(BaseModel):
+    """送出修改要求；建立修改的工作，AI 算出提案後才由店員決定要不要套用。"""
+
+    # 店員的修改要求，例如「情況二的紅框改成金框」
+    request: Annotated[
+        str,
+        StringConstraints(
+            strip_whitespace=True, min_length=1, max_length=REVISION_REQUEST_MAX_CHARS
+        ),
+    ]
+    # 只改這一段（選填）；不給時由 AI 判斷要改哪幾段
+    segment_key: str | None = None
+    # 店員看到的段資料版本；和目前的不同時 409
+    video_version: int
+
+
+class VideoRevisionApply(BaseModel):
+    """套用提案或某個替代做法。"""
+
+    status: Literal["applied"]
+    # 版型做不到時選的替代做法（從 1 開始）；AI 回「可以做」時不給
+    alternative: int | None = Field(default=None, ge=1)
+    # 店員看到的段資料版本；和目前的不同時 409
+    video_version: int
+
+
+class RevisionText(BaseModel):
+    narration: str
+    subtitle: str
+
+
+class RevisionBeatOut(BaseModel):
+    """旁白或字幕有變的一句；新增的句子 before 是 null，刪除的句子 after 是 null。"""
+
+    beat_key: str
+    before: RevisionText | None
+    after: RevisionText | None
+
+
+class RevisionSegmentOut(BaseModel):
+    segment_key: str
+    # 第幾段（從 1 開始）
+    segment_number: int
+    # AI 用一句話說明改了什麼
+    summary: str
+    # 改了哪些欄位分類（narration、subtitle、highlights 等），由程式比對新舊段算出
+    changed: list[str]
+    # 改了但修改要求沒提到的分類：店員要特別確認
+    unrequested: list[str]
+    beats: list[RevisionBeatOut]
+
+
+class RevisionAlternativeOut(BaseModel):
+    # 套用時帶的編號（從 1 開始）
+    number: int
+    title: str
+    description: str
+    segments: list[RevisionSegmentOut]
+
+
+class RevisionCandidateOut(BaseModel):
+    segment_key: str
+    segment_number: int
+    reason: str
+
+
+class VideoRevisionOut(BaseModel):
+    """一次修改：進度、AI 的結果、是否已套用。id 就是修改的工作編號。"""
+
+    id: uuid.UUID
+    project_id: uuid.UUID
+    status: JobStatus
+    progress: float
+    message: str | None
+    error: str | None
+    request: str
+    segment_key: str | None
+    # proposal＝可以做；unsupported＝版型做不到（看 alternatives）；ambiguous＝不確定改哪一段
+    # （看 candidates，選一段後重新送出）；還沒算完或失敗時是 null
+    outcome: Literal["proposal", "unsupported", "ambiguous"] | None
+    reason: str | None
+    segments: list[RevisionSegmentOut]
+    alternatives: list[RevisionAlternativeOut]
+    candidates: list[RevisionCandidateOut]
+    # 一次改超過 2 段：提醒店員確認
+    many_segments: bool
+    applied: bool
+    # 套用的替代做法編號；套用的是提案或還沒套用時是 null
+    applied_alternative: int | None
+    # 套用後的段資料版本；還沒套用時是 null
+    video_version: int | None
+    # 套用後不做規則涵蓋檢查（之後再加），畫面上照實說
+    coverage_checked: bool
+    coverage_message: str | None
+    created_at: datetime
+    finished_at: datetime | None
+
+
 class VideoAssetCreate(BaseModel):
     """新增一個照片素材（店員換素材時，正確的素材不在清單裡；2026-11-25）。"""
 

@@ -556,15 +556,34 @@ def apply_entries(
 ) -> int:
     """備份後取代各段、寫修改紀錄；回傳這次的修改編號。沒有任何變動的段不記錄。"""
     data = read_video(folder)
-    originals = {s["segment_key"]: s for s in data["segments"]}
     revisions = folder / REVISIONS_DIR
     revisions.mkdir(parents=True, exist_ok=True)
     number = _next_number(revisions)
     (revisions / f"{number}-before.json").write_bytes((folder / "video.json").read_bytes())
+    compute_changes(folder, data, entries)
+    merged = apply_to_data(data, entries, request, number=number, kind=kind, by=by, now=now)
+    write_json(folder / "video.json", merged)
+    return number
 
+
+def apply_to_data(
+    data: dict[str, Any],
+    entries: list[Entry],
+    request: str,
+    *,
+    number: int,
+    kind: str = "revision",
+    by: str = "staff",
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    """回傳取代各段、加上修改紀錄、標成要重做（stale）後的段資料複本；不動 data。
+
+    entry.changed 要先算好（check_entries 或 compute_changes）。命令列與手機的 API 共用。
+    """
+    data = copy.deepcopy(data)
+    originals = {s["segment_key"]: s for s in data["segments"]}
     at = (now or datetime.now(UTC)).strftime("%Y-%m-%dT%H:%M:%SZ")
     replaced: dict[str, dict[str, Any]] = {}
-    compute_changes(folder, data, entries)
     for entry in entries:
         old = originals[entry.segment_key]
         new = copy.deepcopy(entry.segment)
@@ -584,8 +603,15 @@ def apply_entries(
         new["revisions"] = [*(old.get("revisions") or []), record]
         replaced[entry.segment_key] = new
     data["segments"] = [replaced.get(s["segment_key"], s) for s in data["segments"]]
-    write_json(folder / "video.json", data)
-    return number
+    return data
+
+
+def next_number_in(data: dict[str, Any]) -> int:
+    """接在所有段既有修改紀錄（含換素材）的最大編號之後；手機的 API 用（沒有備份檔可數）。"""
+    return 1 + max(
+        (r.get("number", 0) for s in data.get("segments", []) for r in s.get("revisions") or []),
+        default=0,
+    )
 
 
 def _next_number(revisions: Path) -> int:
