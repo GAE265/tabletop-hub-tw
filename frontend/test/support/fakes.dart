@@ -44,6 +44,7 @@ import 'package:tabletop_hub/domains/host/data/hosting_sessions_repository.dart'
 import 'package:tabletop_hub/domains/health/data/health_status.dart';
 import 'package:tabletop_hub/domains/matches/data/game_match.dart';
 import 'package:tabletop_hub/domains/matches/data/match_input.dart';
+import 'package:tabletop_hub/domains/matches/data/match_notification.dart';
 import 'package:tabletop_hub/domains/matches/data/matches_repository.dart';
 import 'package:tabletop_hub/domains/shops/data/shop_models.dart';
 import 'package:tabletop_hub/domains/shops/data/shops_repository.dart';
@@ -1283,7 +1284,72 @@ class FakeMatchesRepository implements MatchesRepository {
     );
     return match;
   }
+
+  // --- 通知 ---
+
+  /// 目前使用者的戰績通知，新的在前。
+  List<MatchNotification> notifications = [];
+
+  /// listNotifications 丟出的錯誤。
+  Object? notificationsError;
+
+  /// markNotificationRead 丟出的錯誤。
+  Object? markReadError;
+
+  /// 標成已讀時寫入的時間。
+  DateTime readAt = DateTime.utc(2026, 11, 20, 4, 30);
+  final notificationCalls = <({int page, int pageSize})>[];
+  final markReadCalls = <String>[];
+
+  @override
+  Future<MatchNotificationPage> listNotifications({
+    int page = 1,
+    int pageSize = 20,
+  }) async {
+    notificationCalls.add((page: page, pageSize: pageSize));
+    if (notificationsError != null) throw notificationsError!;
+    return MatchNotificationPage(
+      items: notifications.skip((page - 1) * pageSize).take(pageSize).toList(),
+      total: notifications.length,
+      unreadCount: notifications.where((n) => n.readAt == null).length,
+    );
+  }
+
+  @override
+  Future<MatchNotification> markNotificationRead(String id) async {
+    markReadCalls.add(id);
+    if (markReadError != null) throw markReadError!;
+    final index = notifications.indexWhere((n) => n.id == id);
+    final read = notifications[index].readAt == null
+        ? notifications[index].copyWith(readAt: readAt)
+        : notifications[index];
+    notifications[index] = read;
+    return read;
+  }
 }
+
+/// 一則戰績通知：測試玩家記錄了《血與刃的白薔薇》（11/20）的結果；[readAt] 為 null 代表未讀。
+MatchNotification fakeMatchNotification({
+  String id = 'mn-1',
+  String matchId = fakeMatchId,
+  String gameName = '血與刃的白薔薇',
+  DateTime? playedOn,
+  String recorderId = 'u-player',
+  String recorderName = '測試玩家',
+  DateTime? readAt,
+  DateTime? createdAt,
+}) => MatchNotification(
+  id: id,
+  type: 'match_result_recorded',
+  match: NotificationMatchRef(
+    id: matchId,
+    gameName: gameName,
+    playedOn: playedOn ?? DateTime.utc(2026, 11, 20),
+  ),
+  recordedBy: MatchUserRef(id: recorderId, displayName: recorderName),
+  readAt: readAt,
+  createdAt: createdAt ?? DateTime.utc(2026, 11, 20, 3),
+);
 
 // --- host（AI 語音主持）---
 
