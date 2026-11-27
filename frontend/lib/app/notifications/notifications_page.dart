@@ -5,13 +5,16 @@ import '../../domains/booking/pages/widgets/booking_notifications_list.dart';
 import '../../domains/booking/state/booking_notifications_state.dart';
 import '../../domains/groups/pages/widgets/group_notifications_list.dart';
 import '../../domains/groups/state/group_notifications_state.dart';
+import '../../domains/matches/pages/widgets/match_notifications_list.dart';
+import '../../domains/matches/state/match_notifications_state.dart';
 import '../../core/widgets/pill_badge.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../theme/thick_widgets.dart';
 import '../theme/wood_background.dart';
 
-/// 通知頁 `/notifications`：「揪團」「訂位」兩個分頁（add-booking-notifications D4）。
+/// 通知頁 `/notifications`：「揪團」「訂位」「戰績」三個分頁（add-booking-notifications D4、
+/// feature-matches-notifications）。
 ///
 /// Stitch 版面：木紋背景，頁首白底條有「通知」、總未讀數與分頁膠囊；每則通知一張厚卡片，依日期分段。
 class NotificationsPage extends StatelessWidget {
@@ -20,15 +23,17 @@ class NotificationsPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const DefaultTabController(
-      length: 2,
+      length: 3,
       child: _NotificationsScaffold(),
     );
   }
 }
 
-/// 只有訂位有未讀時開「訂位」分頁，其他情況開「揪團」。
-int preferredNotificationTab(int? groups, int? bookings) =>
-    (groups ?? 0) == 0 && (bookings ?? 0) > 0 ? 1 : 0;
+/// 依「揪團、訂位、戰績」的順序，開第一個有未讀的分頁；都沒有未讀時開「揪團」。
+int preferredNotificationTab(int? groups, int? bookings, int? matches) {
+  final index = [groups, bookings, matches].indexWhere((c) => (c ?? 0) > 0);
+  return index < 0 ? 0 : index;
+}
 
 class _NotificationsScaffold extends ConsumerStatefulWidget {
   const _NotificationsScaffold();
@@ -48,6 +53,7 @@ class _NotificationsScaffoldState
     final index = preferredNotificationTab(
       ref.read(groupUnreadCountProvider),
       ref.read(bookingUnreadCountProvider),
+      ref.read(matchUnreadCountProvider),
     );
     final controller = DefaultTabController.of(context);
     if (controller.index != index) controller.index = index;
@@ -64,9 +70,11 @@ class _NotificationsScaffoldState
   Widget build(BuildContext context) {
     final groups = ref.watch(groupUnreadCountProvider);
     final bookings = ref.watch(bookingUnreadCountProvider);
+    final matches = ref.watch(matchUnreadCountProvider);
     ref.listen(groupUnreadCountProvider, (_, _) => _selectPreferred());
     ref.listen(bookingUnreadCountProvider, (_, _) => _selectPreferred());
-    final total = (groups ?? 0) + (bookings ?? 0);
+    ref.listen(matchUnreadCountProvider, (_, _) => _selectPreferred());
+    final total = (groups ?? 0) + (bookings ?? 0) + (matches ?? 0);
     final body = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -112,7 +120,7 @@ class _NotificationsScaffoldState
                                   .copyWith(fontWeight: FontWeight.w700),
                             ),
                             Text(
-                              '揪團與訂位的最新消息',
+                              '揪團、訂位與戰績的最新消息',
                               style: Theme.of(context).textTheme.bodySmall,
                             ),
                           ],
@@ -155,6 +163,17 @@ class _NotificationsScaffoldState
                               onTap: () => _touched = true,
                             ),
                           ),
+                          const SizedBox(width: AppSpacing.xSmall),
+                          Expanded(
+                            child: _Segment(
+                              key: const Key('notifications-tab-matches'),
+                              index: 2,
+                              icon: Icons.emoji_events_outlined,
+                              label: '戰績',
+                              count: matches,
+                              onTap: () => _touched = true,
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -166,7 +185,11 @@ class _NotificationsScaffoldState
         ),
         const Expanded(
           child: TabBarView(
-            children: [GroupNotificationsList(), BookingNotificationsList()],
+            children: [
+              GroupNotificationsList(),
+              BookingNotificationsList(),
+              MatchNotificationsList(),
+            ],
           ),
         ),
       ],

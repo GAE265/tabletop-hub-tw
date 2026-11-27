@@ -16,6 +16,7 @@ from sqlalchemy import (
     Date,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     Text,
     UniqueConstraint,
@@ -45,6 +46,15 @@ class LocationType(StrEnum):
     SHOP = "shop"
     # 自家：在朋友或自己家玩，不需要地址、也沒有店家。例：週末在 Amy 家玩阿瓦隆
     HOME = "home"
+
+
+class MatchNotificationType(StrEnum):
+    """戰績通知的種類。文字不存，由前端依種類與那一局的資料組成。"""
+
+    # 結果已記錄：這一局的結果剛被記錄（第一次記錄或帶 overwrite 覆蓋），收件人需要（重新）確認。
+    # 記錄成功時發給記錄者以外、有帳號的參加者；覆蓋會清掉大家的確認，所以每次都發。
+    # 例：血與刃的白薔薇一局 4 人，玩家甲記錄「薔薇陣營獲勝」，有帳號的玩家乙、丙各收到一則
+    RESULT_RECORDED = "match_result_recorded"
 
 
 def _created_at() -> Mapped[datetime]:
@@ -201,3 +211,45 @@ class MatchTurn(Base):
     )
     created_at: Mapped[datetime] = _created_at()
     updated_at: Mapped[datetime] = _updated_at()
+
+
+class MatchNotification(Base):
+    """戰績的站內通知；文字不儲存，由 type 與那一局目前的資料組成（照 groups／booking 的做法）。"""
+
+    __tablename__ = "matches_notifications"
+    __table_args__ = (
+        CheckConstraint("type IN ('match_result_recorded')", name="ck_matches_notifications_type"),
+        Index("ix_matches_notifications_user_created", "user_id", "created_at"),
+        {"comment": "戰績的站內通知：一局的結果被記錄或覆蓋時，通知其他有帳號的參加者去確認"},
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        primary_key=True,
+        default=uuid.uuid4,
+        server_default=text("gen_random_uuid()"),
+        comment="通知編號（UUID）",
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("auth_users.id"), comment="收到通知的玩家"
+    )
+    match_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        ForeignKey("matches.id", ondelete="CASCADE"),
+        comment="通知的那一局；一局刪除時通知一併刪除",
+    )
+    recorded_by: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        ForeignKey("auth_users.id"),
+        comment="記錄（或覆蓋）這一局結果、觸發這則通知的使用者",
+    )
+    type: Mapped[str] = mapped_column(
+        Text,
+        comment="通知種類：match_result_recorded＝這一局的結果被記錄或覆蓋，收件人需要重新確認",
+    )
+    read_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, comment="玩家標成已讀的時間；空值代表未讀"
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), comment="建立通知的時間"
+    )

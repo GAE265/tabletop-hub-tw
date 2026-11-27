@@ -18,6 +18,9 @@ from app.domains.matches.repository import MatchesRepository
 from app.domains.matches.schemas import (
     MatchCreate,
     MatchListResponse,
+    MatchNotificationListResponse,
+    MatchNotificationResponse,
+    MatchNotificationUpdate,
     MatchResponse,
     ParticipantConfirm,
     ParticipantCreate,
@@ -29,6 +32,8 @@ from app.domains.matches.schemas import (
 from app.domains.matches.service import MatchesService
 
 router = APIRouter(prefix="/matches", tags=["matches"])
+# 通知屬於目前使用者，不屬於某一局，所以不放在 /matches 底下（照 groups 的做法）
+notifications_router = APIRouter(prefix="/match-notifications", tags=["matches"])
 
 CurrentUserDep = Annotated[CurrentUser, Depends(get_current_user)]
 
@@ -135,3 +140,25 @@ def record_result(
 ) -> MatchResponse:
     """記錄結果。已有結果時回 409；帶 overwrite=true 才覆蓋，並清除其他人的確認。"""
     return service.record_result(user, match_id, body, overwrite=overwrite)
+
+
+@notifications_router.get("", response_model=MatchNotificationListResponse)
+def list_notifications(
+    user: CurrentUserDep,
+    service: ServiceDep,
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=100)] = 20,
+) -> MatchNotificationListResponse:
+    """自己的戰績通知，新的在前；附全部未讀數。"""
+    return service.list_notifications(user, page=page, page_size=page_size)
+
+
+@notifications_router.patch("/{notification_id}", response_model=MatchNotificationResponse)
+def update_notification(
+    notification_id: uuid.UUID,
+    body: MatchNotificationUpdate,
+    user: CurrentUserDep,
+    service: ServiceDep,
+) -> MatchNotificationResponse:
+    """標成已讀（body 只接受 {"read": true}）。別人的通知回 404。"""
+    return service.mark_notification_read(user, notification_id)

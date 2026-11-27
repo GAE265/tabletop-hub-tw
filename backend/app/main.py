@@ -19,6 +19,7 @@ from app.domains.health.router import router as health_router
 from app.domains.host.graph import HostGraph, WhiteRoseRules
 from app.domains.host.router import router as host_router
 from app.domains.host.service import HostService
+from app.domains.matches.router import notifications_router as match_notifications_router
 from app.domains.matches.router import router as matches_router
 from app.domains.rules_ingest.router import router as rules_ingest_router
 from app.domains.rules_qa.repository import ChunkHit, RulesQaRepository
@@ -183,6 +184,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(rules_qa_videos_router, prefix=API_PREFIX)
     app.include_router(rules_qa_video_terms_router, prefix=API_PREFIX)
     app.include_router(matches_router, prefix=API_PREFIX)
+    app.include_router(match_notifications_router, prefix=API_PREFIX)
     app.include_router(host_router, prefix=API_PREFIX)
     app.include_router(shops_router, prefix=API_PREFIX)
 

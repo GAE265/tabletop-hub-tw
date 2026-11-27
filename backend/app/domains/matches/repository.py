@@ -5,15 +5,15 @@
 """
 
 import uuid
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Any
 
-from sqlalchemy import delete, exists, func, insert, or_, select, update
+from sqlalchemy import Select, delete, exists, func, insert, or_, select, update
 
 from app.core.db import SessionRepository
-from app.domains.matches.models import Match, MatchParticipant, MatchTurn
+from app.domains.matches.models import Match, MatchNotification, MatchParticipant, MatchTurn
 
 
 @dataclass(frozen=True)
@@ -57,6 +57,26 @@ class TurnRecord:
     recorded_by: uuid.UUID
     created_at: datetime
     updated_at: datetime
+
+
+@dataclass(frozen=True)
+class NotificationRecord:
+    id: uuid.UUID
+    user_id: uuid.UUID
+
+
+@dataclass(frozen=True)
+class NotificationView:
+    """通知加上那一局的遊戲與日期；遊戲名稱與記錄者名稱由 service 透過共用表讀取。"""
+
+    id: uuid.UUID
+    type: str
+    match_id: uuid.UUID
+    game_id: int
+    played_on: date
+    recorded_by: uuid.UUID
+    read_at: datetime | None
+    created_at: datetime
 
 
 _MATCH_COLUMNS = (
@@ -280,3 +300,99 @@ class MatchesRepository(SessionRepository):
             .order_by(MatchTurn.turn_number)
         )
         return list(rows)
+
+    # --- 通知 ---
+
+    def add_notifications(
+        self,
+        match_id: uuid.UUID,
+        user_ids: Sequence[uuid.UUID],
+        recorded_by: uuid.UUID,
+        type_: str,
+        created_at: datetime,
+    ) -> None:
+        if user_ids:
+            self.session.execute(
+                insert(MatchNotification),
+                [
+                    {
+                        "user_id": user_id,
+                        "match_id": match_id,
+                        "recorded_by": recorded_by,
+                        "type": type_,
+                        "created_at": created_at,
+                    }
+                    for user_id in user_ids
+                ],
+            )
+
+    def mark_match_notifications_read(
+        self, match_id: uuid.UUID, type_: str, read_at: datetime
+    ) -> None:
+        """這一局這種通知中，還沒讀的全部標成已讀（不刪除，保留通知歷史）。"""
+        self.session.execute(
+            update(MatchNotification)
+            .where(
+                MatchNotification.match_id == match_id,
+                MatchNotification.type == type_,
+                MatchNotification.read_at.is_(None),
+            )
+            .values(read_at=read_at)
+        )
+
+    def list_notifications(
+        self, user_id: uuid.UUID, offset: int, limit: int
+    ) -> tuple[list[NotificationView], int, int]:
+        """回傳（這一頁的通知，總數，未讀數），新的在前。"""
+        mine = MatchNotification.user_id == user_id
+        total = self.session.scalar(select(func.count()).where(mine)) or 0
+        unread = (
+            self.session.scalar(
+                select(func.count()).where(mine, MatchNotification.read_at.is_(None))
+            )
+            or 0
+        )
+        rows = self.session.execute(
+            _notification_statement()
+            .where(mine)
+            .order_by(MatchNotification.created_at.desc(), MatchNotification.id.desc())
+            .offset(offset)
+            .limit(limit)
+        )
+        return [NotificationView(**row._mapping) for row in rows], total, unread
+
+    def find_notification(self, notification_id: uuid.UUID) -> NotificationRecord | None:
+        row = self.session.execute(
+            select(MatchNotification.id, MatchNotification.user_id).where(
+                MatchNotification.id == notification_id
+            )
+        ).one_or_none()
+        return None if row is None else NotificationRecord(**row._mapping)
+
+    def mark_read(self, notification_id: uuid.UUID, read_at: datetime) -> None:
+        """只在未讀時寫入，重複標成已讀不改時間。"""
+        self.session.execute(
+            update(MatchNotification)
+            .where(MatchNotification.id == notification_id, MatchNotification.read_at.is_(None))
+            .values(read_at=read_at)
+        )
+
+    def get_notification(self, notification_id: uuid.UUID) -> NotificationView | None:
+        row = self.session.execute(
+            _notification_statement().where(MatchNotification.id == notification_id)
+        ).one_or_none()
+        return None if row is None else NotificationView(**row._mapping)
+
+
+def _notification_statement() -> Select[Any]:
+    """通知加上那一局的遊戲與日期。"""
+    return select(
+        MatchNotification.id,
+        MatchNotification.type,
+        MatchNotification.match_id,
+        Match.game_id,
+        Match.played_on,
+        MatchNotification.recorded_by,
+        MatchNotification.read_at,
+        MatchNotification.created_at,
+    ).join(Match, Match.id == MatchNotification.match_id)
