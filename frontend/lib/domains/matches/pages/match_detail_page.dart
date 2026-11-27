@@ -18,7 +18,7 @@ import 'widgets/match_widgets.dart';
 import 'widgets/result_form_card.dart';
 import 'widgets/turn_form_card.dart';
 
-/// 一局（`/matches/<id>`）：資料與統計、參加者、回合紀錄、結果與確認。
+/// 一局（`/matches/<id>`）：資料與統計、確認、參加者、回合紀錄、結果。
 ///
 /// Stitch 版面：木紋背景，每個區塊一張有厚度的卡片；手機的浮動導覽列蓋住的高度留在最下面。
 /// 沒有即時推送：其他人記錄的內容按右上角「重新整理」取得。
@@ -120,7 +120,8 @@ class _Body extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final userId = ref.watch(matchUserIdProvider);
-    final isParticipant = state.mine(userId) != null;
+    final me = state.mine(userId);
+    final isParticipant = me != null;
     final canConfirm = state.actionsFor(userId).contains(MatchAction.confirm);
     final bottomInset = MediaQuery.paddingOf(context).bottom;
     final notifier = ref.read(matchDetailProvider(matchId).notifier);
@@ -143,6 +144,21 @@ class _Body extends ConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 _InfoCard(match: match, state: state),
+                // 確認放在資料正下方，點進來不用捲就看得到；不是參加者完全不顯示
+                if (canConfirm) ...[
+                  gap,
+                  ThickButton(
+                    buttonKey: const Key('confirm'),
+                    style: ThickStyle.primary,
+                    icon: Icons.verified_outlined,
+                    label: '確認這局的紀錄',
+                    expand: true,
+                    onPressed: state.busy ? null : notifier.confirmMine,
+                  ),
+                ] else if (me?.isConfirmed ?? false) ...[
+                  gap,
+                  const _ConfirmedNote(),
+                ],
                 gap,
                 _ParticipantsCard(matchId: matchId, match: match, state: state),
                 gap,
@@ -175,17 +191,6 @@ class _Body extends ConsumerWidget {
                         '只有這一局的參加者可以記錄結果',
                         key: Key('result-readonly'),
                       ),
-                    if (canConfirm) ...[
-                      const SizedBox(height: AppSpacing.medium),
-                      ThickButton(
-                        buttonKey: const Key('confirm'),
-                        style: ThickStyle.primary,
-                        icon: Icons.verified_outlined,
-                        label: '確認這局的紀錄',
-                        expand: true,
-                        onPressed: state.busy ? null : notifier.confirmMine,
-                      ),
-                    ],
                   ],
                 ),
               ],
@@ -313,6 +318,39 @@ class _InfoCard extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// 我已確認這局的紀錄：取代「確認這局的紀錄」按鈕的位置。
+class _ConfirmedNote extends StatelessWidget {
+  const _ConfirmedNote();
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    return Container(
+      key: const Key('confirmed-note'),
+      padding: const EdgeInsets.all(AppSpacing.small + AppSpacing.xSmall),
+      decoration: BoxDecoration(
+        color: AppColors.backgroundAlt,
+        border: Border.all(color: AppColors.cardEdge),
+        borderRadius: BorderRadius.circular(AppRadius.button),
+      ),
+      child: Row(
+        children: [
+          const Icon(
+            Icons.check_circle,
+            size: AppSizes.inlineIcon,
+            color: AppColors.sage,
+          ),
+          const SizedBox(width: AppSpacing.small),
+          Text(
+            '你已確認這局的紀錄',
+            style: text.bodyMedium!.copyWith(color: AppColors.sage),
+          ),
+        ],
       ),
     );
   }
