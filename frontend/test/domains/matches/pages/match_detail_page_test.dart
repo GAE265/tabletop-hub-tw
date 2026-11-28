@@ -5,6 +5,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tabletop_hub/core/api/api_exception.dart';
+import 'package:tabletop_hub/domains/matches/data/game_match.dart';
 import 'package:tabletop_hub/domains/matches/data/match_input.dart';
 import 'package:tabletop_hub/domains/matches/pages/matches_page.dart';
 
@@ -404,6 +405,70 @@ void main() {
       expect(repo.confirmCalls, ['p-1']);
       expect(find.byKey(const Key('confirm')), findsNothing);
       expect(find.text('已確認'), findsWidgets);
+      expect(find.byKey(const Key('confirmed-note')), findsOneWidget);
+    });
+  });
+
+  group('確認的位置與顯示', () {
+    GameMatch finished({bool meConfirmed = false}) => fakeMatch(
+      status: 'finished',
+      result: const {'type': 'faction', 'winning_faction': 'rose'},
+      participants: [
+        fakeMatchParticipant(isConfirmed: meConfirmed),
+        fakeMatchParticipant(
+          id: 'p-2',
+          seatNumber: 2,
+          userId: 'u-b',
+          displayName: '玩家乙',
+        ),
+      ],
+    );
+
+    testWidgets('參加者、尚未確認：按鈕在資料正下方、參加者之前，不用捲動就看得到', (tester) async {
+      await pumpMatches(
+        tester,
+        detail,
+        repo: FakeMatchesRepository(match: finished()),
+      );
+      final button = find.byKey(const Key('confirm'));
+      expect(button, findsOneWidget);
+      final top = tester.getTopLeft(button).dy;
+      expect(
+        top,
+        greaterThan(
+          tester.getBottomLeft(find.byKey(const Key('match-info'))).dy,
+        ),
+      );
+      expect(top, lessThan(tester.getTopLeft(find.text('參加者')).dy));
+      // 測試畫面高 900：按鈕整個落在第一屏
+      expect(tester.getBottomLeft(button).dy, lessThanOrEqualTo(900));
+      expect(find.byKey(const Key('confirmed-note')), findsNothing);
+    });
+
+    testWidgets('參加者、已確認：顯示「你已確認這局的紀錄」，沒有按鈕', (tester) async {
+      await pumpMatches(
+        tester,
+        detail,
+        repo: FakeMatchesRepository(match: finished(meConfirmed: true)),
+      );
+      expect(find.byKey(const Key('confirm')), findsNothing);
+      final note = find.byKey(const Key('confirmed-note'));
+      expect(note, findsOneWidget);
+      expect(
+        tester.getTopLeft(note).dy,
+        lessThan(tester.getTopLeft(find.text('參加者')).dy),
+      );
+    });
+
+    testWidgets('不是參加者：沒有按鈕也沒有確認狀態', (tester) async {
+      await pumpMatches(
+        tester,
+        detail,
+        repo: FakeMatchesRepository(match: finished()),
+        userId: 'u-other',
+      );
+      expect(find.byKey(const Key('confirm')), findsNothing);
+      expect(find.byKey(const Key('confirmed-note')), findsNothing);
     });
   });
 }
