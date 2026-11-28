@@ -7,6 +7,7 @@ import '../../domains/groups/pages/widgets/group_notifications_list.dart';
 import '../../domains/groups/state/group_notifications_state.dart';
 import '../../domains/matches/pages/widgets/match_notifications_list.dart';
 import '../../domains/matches/state/match_notifications_state.dart';
+import '../../core/layout/breakpoints.dart';
 import '../../core/widgets/pill_badge.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
@@ -230,6 +231,8 @@ class _Segment extends StatelessWidget {
     final controller = DefaultTabController.of(context);
     final badge = unreadBadgeLabel(count);
     final text = Theme.of(context).textTheme;
+    // 斷點用 core/layout 既有的手機定義（< 600），不另外新增
+    final showIcon = context.screenSize != ScreenSize.mobile;
     return AnimatedBuilder(
       animation: controller,
       builder: (context, _) {
@@ -266,14 +269,17 @@ class _Segment extends StatelessWidget {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(
-                        icon,
-                        size: AppSizes.inlineIcon,
-                        color: selected
-                            ? AppColors.primaryText
-                            : AppColors.inkMuted,
-                      ),
-                      const SizedBox(width: AppSpacing.small),
+                      // 手機寬度不顯示圖示：三個分頁在 360 寬放不下圖示＋文字＋未讀數
+                      if (showIcon) ...[
+                        Icon(
+                          icon,
+                          size: AppSizes.inlineIcon,
+                          color: selected
+                              ? AppColors.primaryText
+                              : AppColors.inkMuted,
+                        ),
+                        const SizedBox(width: AppSpacing.small),
+                      ],
                       Text(
                         label,
                         style: text.labelLarge!.copyWith(

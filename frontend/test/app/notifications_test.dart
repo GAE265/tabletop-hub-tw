@@ -298,6 +298,51 @@ void main() {
       }
     });
 
+    /// 三個分頁上的小圖示（揪團、訂位、戰績）。
+    Finder tabIcons() => find.descendant(
+      of: find.byKey(const Key('notifications-tabs')),
+      matching: find.byType(Icon),
+    );
+
+    testWidgets('手機寬度（390）：分頁不顯示圖示，只有文字', (tester) async {
+      await pumpNotifications(
+        tester,
+        location: '/notifications',
+        size: const Size(390, 800),
+      );
+      expect(tabIcons(), findsNothing);
+      for (final label in ['揪團', '訂位', '戰績']) {
+        expect(
+          find.descendant(
+            of: find.byKey(const Key('notifications-tabs')),
+            matching: find.text(label),
+          ),
+          findsOneWidget,
+        );
+      }
+    });
+
+    testWidgets('600 寬以上：分頁顯示圖示', (tester) async {
+      await pumpNotifications(
+        tester,
+        location: '/notifications',
+        size: const Size(600, 900),
+      );
+      for (final icon in [
+        Icons.groups_outlined,
+        Icons.event_seat_outlined,
+        Icons.emoji_events_outlined,
+      ]) {
+        expect(
+          find.descendant(
+            of: find.byKey(const Key('notifications-tabs')),
+            matching: find.byIcon(icon),
+          ),
+          findsOneWidget,
+        );
+      }
+    });
+
     testWidgets('沒有未讀：不顯示未讀數', (tester) async {
       await pumpNotifications(tester, location: '/notifications');
       expect(find.textContaining('則未讀'), findsNothing);
