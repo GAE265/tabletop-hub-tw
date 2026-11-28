@@ -12,7 +12,7 @@ from sqlalchemy import Engine, text
 
 from tests.conftest import TEST_PLAYER
 from tests.matches.conftest import OUTSIDER, PLAYER_B, PLAYER_C
-from tests.matches.support import BASE, error_code, result_body
+from tests.matches.support import BASE, error_code, match_body, result_body
 
 NOTIFICATIONS = "/api/v1/match-notifications"
 FIVE_SEATS = {1: "rose", 2: "rose", 3: "blood_blade", 4: "blood_blade", 5: "rose"}
@@ -85,6 +85,27 @@ def test_overwrite_marks_previous_unread_as_read(api, five: str):
     newest, older = body["items"]
     assert newest["read_at"] is None
     assert older["read_at"] is not None
+
+
+def test_overwrite_keeps_unread_notifications_of_other_matches(api, white_rose_id: int, five: str):
+    """覆蓋只作廢「這一局」的舊通知：同一個人在另一局的戰績通知維持未讀。"""
+    created = api(TEST_PLAYER, "POST", BASE, json=match_body(white_rose_id))
+    assert created.status_code == 201, created.text
+    other = created.json()["id"]
+    joined = api(PLAYER_B, "POST", f"{BASE}/{other}/participants", json={})
+    assert joined.status_code == 201, joined.text
+    other_result = put_result(api, TEST_PLAYER, other, factions={1: "rose", 2: "blood_blade"})
+    assert other_result.status_code == 200, other_result.text
+
+    put_result(api, TEST_PLAYER, five)
+    put_result(api, TEST_PLAYER, five, overwrite=True)
+
+    body = mine(api, PLAYER_B)
+    # 另一局 1 則（未讀）＋這一局 2 則（舊的已讀、新的未讀）
+    assert (body["total"], body["unread_count"]) == (3, 2)
+    in_other = [n for n in body["items"] if n["match"]["id"] == other]
+    assert len(in_other) == 1
+    assert in_other[0]["read_at"] is None
 
 
 def test_duplicate_result_sends_no_notification(api, db: Engine, five: str):
