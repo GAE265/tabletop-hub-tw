@@ -6,17 +6,21 @@ import '../../domains/booking/state/booking_notifications_state.dart';
 import '../theme/app_colors.dart';
 import '../theme/thick_widgets.dart';
 import '../../domains/groups/state/group_notifications_state.dart';
+import '../../domains/matches/state/match_notifications_state.dart';
 
-/// 揪團與訂位的未讀數總和；兩邊都查詢失敗時為 null，只有一邊失敗時只算另一邊
-/// （add-booking-notifications D4）。
+/// 揪團、訂位與戰績的未讀數總和；三邊都查詢失敗時為 null，有一邊失敗時只算其他邊
+/// （add-booking-notifications D4；戰績見 feature-matches-notifications）。
 final totalUnreadCountProvider = Provider<int?>((ref) {
-  final groups = ref.watch(groupUnreadCountProvider);
-  final bookings = ref.watch(bookingUnreadCountProvider);
-  if (groups == null && bookings == null) return null;
-  return (groups ?? 0) + (bookings ?? 0);
+  final counts = [
+    ref.watch(groupUnreadCountProvider),
+    ref.watch(bookingUnreadCountProvider),
+    ref.watch(matchUnreadCountProvider),
+  ];
+  if (counts.every((c) => c == null)) return null;
+  return counts.fold<int>(0, (sum, c) => sum + (c ?? 0));
 });
 
-/// 導覽列的通知鈴鐺：有未讀時顯示揪團與訂位的總數，點下前往通知頁 `/notifications`。
+/// 導覽列的通知鈴鐺：有未讀時顯示揪團、訂位與戰績的總數，點下前往通知頁 `/notifications`。
 /// 查詢失敗時只顯示鈴鐺，不顯示數字、不跳錯誤。
 ///
 /// [thick] 時是有厚度、按得下去的白色圓形按鈕（手機頂部列）。

@@ -5,8 +5,9 @@ import '../../../core/api/api_client.dart';
 import '../../../core/api/api_exception.dart';
 import 'game_match.dart';
 import 'match_input.dart';
+import 'match_notification.dart';
 
-/// 記錄一局遊戲的 API（8 個端點）。所有錯誤都轉成 [ApiException]。
+/// 記錄一局遊戲的 API（8 個端點）與戰績通知（2 個端點）。所有錯誤都轉成 [ApiException]。
 abstract interface class MatchesRepository {
   /// `GET /api/v1/matches`：依日期由新到舊。
   Future<MatchPage> list({
@@ -52,6 +53,15 @@ abstract interface class MatchesRepository {
     ResultInput input, {
     bool overwrite = false,
   });
+
+  /// `GET /api/v1/match-notifications`：自己的戰績通知，新的在前；附全部未讀數。
+  Future<MatchNotificationPage> listNotifications({
+    int page = 1,
+    int pageSize = 20,
+  });
+
+  /// `PATCH /api/v1/match-notifications/{id}`：標成已讀。
+  Future<MatchNotification> markNotificationRead(String id);
 }
 
 class HttpMatchesRepository implements MatchesRepository {
@@ -161,6 +171,29 @@ class HttpMatchesRepository implements MatchesRepository {
       queryParameters: overwrite ? {'overwrite': 'true'} : null,
     );
     return GameMatch.fromJson(response.data!);
+  });
+
+  static const _notifications = '/api/v1/match-notifications';
+
+  @override
+  Future<MatchNotificationPage> listNotifications({
+    int page = 1,
+    int pageSize = 20,
+  }) => _call(() async {
+    final response = await _dio.get<Map<String, dynamic>>(
+      _notifications,
+      queryParameters: {'page': page, 'page_size': pageSize},
+    );
+    return MatchNotificationPage.fromJson(response.data!);
+  });
+
+  @override
+  Future<MatchNotification> markNotificationRead(String id) => _call(() async {
+    final response = await _dio.patch<Map<String, dynamic>>(
+      '$_notifications/$id',
+      data: {'read': true},
+    );
+    return MatchNotification.fromJson(response.data!);
   });
 }
 

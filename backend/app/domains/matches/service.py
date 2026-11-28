@@ -5,7 +5,7 @@
 """
 
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
 from typing import Any, Protocol
 
@@ -14,11 +14,15 @@ from pydantic import ValidationError
 from app.core.auth import CurrentUser
 from app.core.errors import AppError, PermissionDenied
 from app.domains.matches.game_definitions import GameDefinition, get_definition
+from app.domains.matches.models import MatchNotificationType
 from app.domains.matches.schemas import (
     GameRef,
     MatchCreate,
     MatchListResponse,
+    MatchNotificationListResponse,
+    MatchNotificationResponse,
     MatchResponse,
+    NotificationMatchRef,
     ParticipantConfirm,
     ParticipantCreate,
     ParticipantResponse,
@@ -67,6 +71,23 @@ class MatchesRepositoryProtocol(Protocol):
         recorded_by: uuid.UUID,
     ) -> Any: ...
     def turns_using_seat(self, match_id: uuid.UUID, seat_number: int) -> list[int]: ...
+    def add_notifications(
+        self,
+        match_id: uuid.UUID,
+        user_ids: Sequence[uuid.UUID],
+        recorded_by: uuid.UUID,
+        type_: str,
+        created_at: datetime,
+    ) -> None: ...
+    def mark_match_notifications_read(
+        self, match_id: uuid.UUID, type_: str, read_at: datetime
+    ) -> None: ...
+    def list_notifications(
+        self, user_id: uuid.UUID, offset: int, limit: int
+    ) -> tuple[list[Any], int, int]: ...
+    def find_notification(self, notification_id: uuid.UUID) -> Any: ...
+    def mark_read(self, notification_id: uuid.UUID, read_at: datetime) -> None: ...
+    def get_notification(self, notification_id: uuid.UUID) -> Any: ...
 
 
 class GameReader(Protocol):
@@ -93,6 +114,10 @@ def _utc_now() -> datetime:
 
 def _not_found() -> AppError:
     return AppError(404, "MATCH_NOT_FOUND", "找不到這一局")
+
+
+def _notification_not_found() -> AppError:
+    return AppError(404, "MATCH_NOTIFICATION_NOT_FOUND", "找不到這則通知")
 
 
 def _participant_not_found() -> AppError:
@@ -427,7 +452,70 @@ class MatchesService:
                     "result": {"type": "faction", "winning_faction": data.winning_faction},
                 },
             )
+            self._notify_result_recorded(user, match_id, participants)
         return self._load(match_id)
+
+    # --- 通知 ---
+
+    def list_notifications(
+        self, user: CurrentUser, *, page: int = 1, page_size: int = 20
+    ) -> MatchNotificationListResponse:
+        views, total, unread = self._repo.list_notifications(
+            user.id, offset=(page - 1) * page_size, limit=page_size
+        )
+        game_names: dict[int, str] = {}
+        users: dict[uuid.UUID, UserRef] = {}
+        items = [self._to_notification(v, game_names, users) for v in views]
+        return MatchNotificationListResponse(items=items, total=total, unread_count=unread)
+
+    def mark_notification_read(
+        self, user: CurrentUser, notification_id: uuid.UUID
+    ) -> MatchNotificationResponse:
+        with self._repo.transaction():
+            record = self._repo.find_notification(notification_id)
+            # 別人的通知視同不存在，不透露 id 是否存在（照 groups／booking）
+            if record is None or record.user_id != user.id:
+                raise _notification_not_found()
+            self._repo.mark_read(notification_id, self._now())
+        view = self._repo.get_notification(notification_id)
+        if view is None:
+            raise _notification_not_found()
+        return self._to_notification(view, {}, {})
+
+    def _notify_result_recorded(
+        self, recorder: CurrentUser, match_id: uuid.UUID, participants: list[Any]
+    ) -> None:
+        """在目前的交易裡，通知記錄者以外、有帳號的參加者去確認。
+
+        覆蓋時這一局舊的未讀通知都已作廢（確認被清掉了），先標成已讀再新增，鈴鐺只多一則。
+        """
+        now = self._now()
+        type_ = MatchNotificationType.RESULT_RECORDED
+        recipients = [
+            p.user_id for p in participants if p.user_id is not None and p.user_id != recorder.id
+        ]
+        self._repo.mark_match_notifications_read(match_id, type_, now)
+        self._repo.add_notifications(match_id, recipients, recorder.id, type_, now)
+
+    def _to_notification(
+        self, view: Any, game_names: dict[int, str], users: dict[uuid.UUID, UserRef]
+    ) -> MatchNotificationResponse:
+        """同一頁裡重複的遊戲與記錄者只讀一次。"""
+        if view.game_id not in game_names:
+            game_names[view.game_id] = self._games.get_game(view.game_id).name
+        if view.recorded_by not in users:
+            account = self._users.get_user(view.recorded_by)
+            users[view.recorded_by] = UserRef(id=account.id, display_name=account.display_name)
+        return MatchNotificationResponse(
+            id=view.id,
+            type=view.type,
+            match=NotificationMatchRef(
+                id=view.match_id, game_name=game_names[view.game_id], played_on=view.played_on
+            ),
+            recorded_by=users[view.recorded_by],
+            read_at=view.read_at,
+            created_at=view.created_at,
+        )
 
     # --- 內部 ---
 

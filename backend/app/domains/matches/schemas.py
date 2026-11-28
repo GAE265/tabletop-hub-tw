@@ -144,3 +144,41 @@ class MatchResponse(BaseModel):
 class MatchListResponse(BaseModel):
     items: list[MatchResponse]
     total: int
+
+
+# --- 通知 ---
+
+MatchNotificationType = Literal[
+    # 這一局的結果被記錄（第一次或帶 overwrite 覆蓋），收件人需要（重新）確認；
+    # 例：玩家甲記錄白薔薇「薔薇陣營獲勝」，有帳號的玩家乙、丙各收到一則
+    "match_result_recorded",
+]
+
+
+class NotificationMatchRef(BaseModel):
+    id: uuid.UUID
+    game_name: str
+    played_on: date
+
+
+class MatchNotificationResponse(BaseModel):
+    id: uuid.UUID
+    type: MatchNotificationType
+    match: NotificationMatchRef
+    # 記錄（或覆蓋）結果、觸發這則通知的人
+    recorded_by: UserRef
+    # null 代表未讀
+    read_at: datetime | None
+    created_at: datetime
+
+
+class MatchNotificationListResponse(BaseModel):
+    items: list[MatchNotificationResponse]
+    total: int
+    # 目前使用者全部未讀的數量，不受分頁影響
+    unread_count: int
+
+
+class MatchNotificationUpdate(BaseModel):
+    # 只能標成已讀
+    read: Literal[True]

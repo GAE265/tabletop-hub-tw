@@ -6,7 +6,9 @@ repository（MatchesRepository）：
     transaction()、add_match(**values)、get_match(id)、lock_match(id)、update_match(id, values)、
     list_matches(...)、add_participant(...)、find_participant(...)、list_participants(id)、
     update_participant(id, values)、clear_confirmations(...)、delete_participant(id)、
-    add_turn(...)、find_turn(...)、list_turns(id)、update_turn(...)、turns_using_seat(...)
+    add_turn(...)、find_turn(...)、list_turns(id)、update_turn(...)、turns_using_seat(...)、
+    通知：add_notifications(...)、mark_match_notifications_read(...)、list_notifications(...)、
+    find_notification(id)、mark_read(id, read_at)、get_notification(id)
 共用表與揪團的讀取（各自一個小介面，正式實作見 design.md D8）：
     games.get_game(id)、shops.get_shop(id)、users.get_user(id)、
     groups.get_members(id)（揪團不存在回 None；否則回正式成員，依加入順序，不含候補）
@@ -63,6 +65,31 @@ class TurnRecord:
     recorded_by: uuid.UUID
     created_at: datetime
     updated_at: datetime
+
+
+@dataclass
+class NotificationRecord:
+    id: uuid.UUID
+    user_id: uuid.UUID
+    match_id: uuid.UUID
+    recorded_by: uuid.UUID
+    type: str
+    read_at: datetime | None
+    created_at: datetime
+
+
+@dataclass
+class NotificationView:
+    """通知加上那一局的遊戲與日期（正式實作 JOIN matches）。"""
+
+    id: uuid.UUID
+    type: str
+    match_id: uuid.UUID
+    game_id: int
+    played_on: date
+    recorded_by: uuid.UUID
+    read_at: datetime | None
+    created_at: datetime
 
 
 @dataclass
@@ -140,6 +167,7 @@ class FakeMatchesRepository:
         self.matches: dict[uuid.UUID, MatchRecord] = {}
         self.participants: list[ParticipantRecord] = []
         self.turns: list[TurnRecord] = []
+        self.notifications: list[NotificationRecord] = []
         self.committed = 0
         self.rolled_back = 0
 
@@ -305,3 +333,70 @@ class FakeMatchesRepository:
             if turn.seat_number == seat_number or seat_number in played:
                 numbers.append(turn.turn_number)
         return numbers
+
+    # --- 通知 ---
+
+    def add_notifications(
+        self,
+        match_id: uuid.UUID,
+        user_ids: Sequence[uuid.UUID],
+        recorded_by: uuid.UUID,
+        type_: str,
+        created_at: datetime,
+    ) -> None:
+        for user_id in user_ids:
+            self.notifications.append(
+                NotificationRecord(
+                    id=uuid.uuid4(),
+                    user_id=user_id,
+                    match_id=match_id,
+                    recorded_by=recorded_by,
+                    type=type_,
+                    read_at=None,
+                    created_at=created_at,
+                )
+            )
+
+    def mark_match_notifications_read(
+        self, match_id: uuid.UUID, type_: str, read_at: datetime
+    ) -> None:
+        """這一局這種通知中，還沒讀的全部標成已讀（不刪除）。"""
+        for n in self.notifications:
+            if n.match_id == match_id and n.type == type_ and n.read_at is None:
+                n.read_at = read_at
+
+    def _view(self, record: NotificationRecord) -> NotificationView:
+        match = self.matches[record.match_id]
+        return NotificationView(
+            id=record.id,
+            type=record.type,
+            match_id=record.match_id,
+            game_id=match.game_id,
+            played_on=match.played_on,
+            recorded_by=record.recorded_by,
+            read_at=record.read_at,
+            created_at=record.created_at,
+        )
+
+    def list_notifications(
+        self, user_id: uuid.UUID, offset: int, limit: int
+    ) -> tuple[list[NotificationView], int, int]:
+        """回傳（這一頁的通知，總數，未讀數），新的在前（同時間時後加的在前）。"""
+        mine = [n for n in self.notifications if n.user_id == user_id]
+        ordered = list(reversed(mine))
+        ordered.sort(key=lambda n: n.created_at, reverse=True)
+        unread = sum(1 for n in mine if n.read_at is None)
+        return [self._view(n) for n in ordered[offset : offset + limit]], len(mine), unread
+
+    def find_notification(self, notification_id: uuid.UUID) -> NotificationRecord | None:
+        return next((n for n in self.notifications if n.id == notification_id), None)
+
+    def mark_read(self, notification_id: uuid.UUID, read_at: datetime) -> None:
+        """只在未讀時寫入，重複標成已讀不改時間。"""
+        record = self.find_notification(notification_id)
+        if record is not None and record.read_at is None:
+            record.read_at = read_at
+
+    def get_notification(self, notification_id: uuid.UUID) -> NotificationView | None:
+        record = self.find_notification(notification_id)
+        return None if record is None else self._view(record)

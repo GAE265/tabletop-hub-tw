@@ -1,5 +1,6 @@
-// 合併的通知鈴鐺、通知頁的兩個分頁、訂位通知列表
-// （spec：add-booking-notifications 的 notifications-page）。
+// 合併的通知鈴鐺、通知頁的三個分頁（揪團、訂位、戰績）、訂位通知列表
+// （spec：add-booking-notifications 的 notifications-page；戰績見
+// docs/mr_info/feature-matches-notifications.md）。
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -16,6 +17,8 @@ import 'package:tabletop_hub/domains/booking/state/booking_overtime.dart';
 import 'package:tabletop_hub/domains/groups/data/groups_repository.dart';
 import 'package:tabletop_hub/domains/groups/state/current_user.dart';
 import 'package:tabletop_hub/domains/groups/state/group_clock.dart';
+import 'package:tabletop_hub/domains/matches/data/matches_repository.dart';
+import 'package:tabletop_hub/domains/matches/state/match_notifications_state.dart';
 
 import '../domains/groups/support.dart';
 import '../support/fakes.dart';
@@ -28,9 +31,11 @@ Future<GoRouter> pumpNotifications(
   WidgetTester tester, {
   FakeGroupsRepository? groups,
   FakeBookingRepository? bookings,
+  FakeMatchesRepository? matches,
   String location = '/',
+  Size size = const Size(400, 900),
 }) async {
-  tester.view.physicalSize = const Size(400, 900);
+  tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
   Widget stub(String text) => Scaffold(body: Center(child: Text(text)));
@@ -71,6 +76,10 @@ Future<GoRouter> pumpNotifications(
         ),
         currentDevUserProvider.overrideWithValue(player),
         bookingClockProvider.overrideWithValue(() => nowUtc),
+        matchesRepositoryProvider.overrideWithValue(
+          matches ?? FakeMatchesRepository(),
+        ),
+        matchNotificationsClockProvider.overrideWithValue(() => nowUtc),
       ],
       child: MaterialApp.router(
         theme: buildAppTheme(const FakeAppFonts()),
@@ -90,6 +99,11 @@ FakeGroupsRepository groupsUnread(int count) => FakeGroupsRepository()
 FakeBookingRepository bookingsUnread(int count) => FakeBookingRepository()
   ..notifications = [
     for (var i = count; i >= 1; i--) fakeBookingNotification(id: 'bn-$i'),
+  ];
+
+FakeMatchesRepository matchesUnread(int count) => FakeMatchesRepository()
+  ..notifications = [
+    for (var i = count; i >= 1; i--) fakeMatchNotification(id: 'mn-$i'),
   ];
 
 Finder badgeText(String text) => find.descendant(
@@ -140,6 +154,39 @@ void main() {
         tester,
         groups: FakeGroupsRepository()..notificationsError = failure,
         bookings: FakeBookingRepository()..notificationsError = failure,
+      );
+      expect(find.byKey(const Key('bell')), findsOneWidget);
+      expect(bellCount(), findsNothing);
+      expect(find.text('伺服器忙碌中'), findsNothing);
+    });
+
+    testWidgets('揪團 1、訂位 1、戰績 2 則：顯示 4', (tester) async {
+      await pumpNotifications(
+        tester,
+        groups: groupsUnread(1),
+        bookings: bookingsUnread(1),
+        matches: matchesUnread(2),
+      );
+      expect(badgeText('4'), findsOneWidget);
+    });
+
+    testWidgets('戰績查詢失敗：只算揪團與訂位，不跳錯誤', (tester) async {
+      await pumpNotifications(
+        tester,
+        groups: groupsUnread(1),
+        bookings: bookingsUnread(1),
+        matches: FakeMatchesRepository()..notificationsError = failure,
+      );
+      expect(badgeText('2'), findsOneWidget);
+      expect(find.text('伺服器忙碌中'), findsNothing);
+    });
+
+    testWidgets('三邊都失敗：鈴鐺照常顯示、沒有數字、不跳錯誤', (tester) async {
+      await pumpNotifications(
+        tester,
+        groups: FakeGroupsRepository()..notificationsError = failure,
+        bookings: FakeBookingRepository()..notificationsError = failure,
+        matches: FakeMatchesRepository()..notificationsError = failure,
       );
       expect(find.byKey(const Key('bell')), findsOneWidget);
       expect(bellCount(), findsNothing);
@@ -198,12 +245,12 @@ void main() {
       );
     });
 
-    testWidgets('分段切換：頁首有說明，兩個分頁在同一條軌道裡、一樣寬', (tester) async {
+    testWidgets('分段切換：頁首有說明，三個分頁在同一條軌道裡、一樣寬', (tester) async {
       await pumpNotifications(tester, location: '/notifications');
       expect(
         find.descendant(
           of: find.byKey(const Key('notifications-header')),
-          matching: find.text('揪團與訂位的最新消息'),
+          matching: find.text('揪團、訂位與戰績的最新消息'),
         ),
         findsOneWidget,
       );
@@ -211,18 +258,89 @@ void main() {
       for (final key in [
         'notifications-tab-groups',
         'notifications-tab-booking',
+        'notifications-tab-matches',
       ]) {
         expect(
           find.descendant(of: track, matching: find.byKey(Key(key))),
           findsOneWidget,
         );
       }
-      expect(
-        tester.getSize(find.byKey(const Key('notifications-tab-groups'))).width,
-        tester
-            .getSize(find.byKey(const Key('notifications-tab-booking')))
-            .width,
+      final width = tester
+          .getSize(find.byKey(const Key('notifications-tab-groups')))
+          .width;
+      for (final key in [
+        'notifications-tab-booking',
+        'notifications-tab-matches',
+      ]) {
+        expect(tester.getSize(find.byKey(Key(key))).width, width);
+      }
+    });
+
+    testWidgets('360 寬、三個分頁都有未讀：放得下，沒有溢出', (tester) async {
+      await pumpNotifications(
+        tester,
+        groups: groupsUnread(12),
+        bookings: bookingsUnread(34),
+        matches: matchesUnread(56),
+        location: '/notifications',
+        size: const Size(360, 800),
       );
+      // 溢出時 Flutter 會記錄 RenderFlex overflowed 的例外
+      expect(tester.takeException(), isNull);
+      for (final count in ['12', '34', '56']) {
+        expect(
+          find.descendant(
+            of: find.byKey(const Key('notifications-tabs')),
+            matching: find.text(count),
+          ),
+          findsOneWidget,
+        );
+      }
+    });
+
+    /// 三個分頁上的小圖示（揪團、訂位、戰績）。
+    Finder tabIcons() => find.descendant(
+      of: find.byKey(const Key('notifications-tabs')),
+      matching: find.byType(Icon),
+    );
+
+    testWidgets('手機寬度（390）：分頁不顯示圖示，只有文字', (tester) async {
+      await pumpNotifications(
+        tester,
+        location: '/notifications',
+        size: const Size(390, 800),
+      );
+      expect(tabIcons(), findsNothing);
+      for (final label in ['揪團', '訂位', '戰績']) {
+        expect(
+          find.descendant(
+            of: find.byKey(const Key('notifications-tabs')),
+            matching: find.text(label),
+          ),
+          findsOneWidget,
+        );
+      }
+    });
+
+    testWidgets('600 寬以上：分頁顯示圖示', (tester) async {
+      await pumpNotifications(
+        tester,
+        location: '/notifications',
+        size: const Size(600, 900),
+      );
+      for (final icon in [
+        Icons.groups_outlined,
+        Icons.event_seat_outlined,
+        Icons.emoji_events_outlined,
+      ]) {
+        expect(
+          find.descendant(
+            of: find.byKey(const Key('notifications-tabs')),
+            matching: find.byIcon(icon),
+          ),
+          findsOneWidget,
+        );
+      }
     });
 
     testWidgets('沒有未讀：不顯示未讀數', (tester) async {
@@ -236,9 +354,23 @@ void main() {
       final controller = DefaultTabController.of(
         tester.element(find.byKey(Key(key))),
       );
-      final index = key == 'notifications-tab-groups' ? 0 : 1;
-      return controller.index == index;
+      const indexes = {
+        'notifications-tab-groups': 0,
+        'notifications-tab-booking': 1,
+        'notifications-tab-matches': 2,
+      };
+      return controller.index == indexes[key];
     }
+
+    testWidgets('只有戰績有未讀：預設開「戰績」', (tester) async {
+      await pumpNotifications(
+        tester,
+        matches: matchesUnread(1),
+        location: '/notifications',
+      );
+      expect(selected(tester, 'notifications-tab-matches'), isTrue);
+      expect(find.byKey(const Key('match-notifications-list')), findsOneWidget);
+    });
 
     testWidgets('只有訂位有未讀：預設開「訂位」', (tester) async {
       await pumpNotifications(
